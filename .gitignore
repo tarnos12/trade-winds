@@ -1,0 +1,19 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Node (only if a dev/test toolchain is added later)
+node_modules/
+npm-debug.log*
+
+# Local scratch / logs
+*.log
+/tmp/
+scratch/
