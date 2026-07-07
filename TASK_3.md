@@ -46,7 +46,7 @@ Definition of done:
 
 - Status: 🔵 PR open — T2 `TW.MapGen` implemented, tested, verified.
 - Branch pushed: `claude/phase1-mapgen`
-- PR: see GitHub (opened against `main`).
+- PR: #1 — https://github.com/tarnos12/trade-winds/pull/1 (base `main`).
 - Questions/blockers for #1: none — not blocked on #2.
 
 ### What landed
