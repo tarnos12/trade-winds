@@ -424,6 +424,161 @@ Sim.priceFor = function (town, goodId) {
 };
 // === GOODS-PRICES END ===
 
+// === SIM-CORE START ===  (T4 / slot #2 — production + consumption economy tick)
+// Pure, deterministic economy step (GDD §4.3, §5). No DOM / canvas / I/O — the
+// only inputs are the passed State + the constant CONFIG; the only effect is
+// mutating the towns in State. Composes with the T5 price model (Sim.priceFor)
+// and the shared Town contract. Runs headless (test/sim.test.js) and is wired
+// into the 500ms×gameSpeed accumulator in the browser loop. Same state in ⇒ same
+// state out (no Math.random, no time) so it is safe to fast-forward / autoplay.
+
+// Needs / population constants — merged non-destructively into CONFIG so this
+// composes with the Phase-1 CONFIG and the T5 goods/prices merge.
+Object.assign(CONFIG, {
+  needs: {
+    // Food is a CATEGORY (GDD §5.1 "food = fish / bread"): a town eats whatever
+    // food it has; each unit satisfies `foodValue` of hunger (bread counts 2x).
+    // Eaten in this fixed priority (best value first) so the tick is deterministic.
+    foodOrder: ["bread", "fish", "grain"],
+    foodValue: { bread: 2, fish: 1, grain: 1 },
+    // Per-resident consumption per tick, by tier (GDD §4.2 needs table).
+    perCapita: {
+      peasants: { food: 0.10 },
+      workers:  { food: 0.10, beer: 0.05 },
+      burghers: { food: 0.10, beer: 0.05, clothes: 0.03 },
+    },
+    // Max total population by town-center level (GDD §4.1).
+    capByLevel: { 1: 15, 2: 30, 3: 55, 4: 90 },
+    growthThreshold: 0.9999, // satisfaction at/above this => grow toward cap
+    declineThreshold: 0.5,   // sustained satisfaction below this => decline
+    declineAfterTicks: 3,    // consecutive low-satisfaction ticks before decline
+    growthRate: 0.03,        // fraction of free house capacity added per tick
+    declineRate: 0.05,       // fraction of population lost per decline tick
+    // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
+    effMin: 0.5, effMax: 1.2,
+  },
+});
+
+// One deterministic good-satisfaction pass (beer/clothes): records demand, eats
+// from stock, returns satisfaction in 0..1. Hoisted, used by Sim.tick below.
+function simConsume(stock, gid, req, addDemand) {
+  if (req <= 0) return 1;
+  addDemand(gid, req);
+  const have = stock[gid] || 0;
+  const consume = Math.min(have, req);
+  stock[gid] = have - consume;
+  return consume / req;
+}
+
+// Advance the whole economy by one tick. Mutates every town in State.towns:
+// production → consumption → happiness → population → demand/prices → clamp.
+Sim.tick = function (State) {
+  if (!State || !State.towns) return State;
+  const N = CONFIG.needs;
+  const clamp0 = (x) => (x > 0 ? x : 0);
+
+  for (const town of State.towns) {
+    if (!town) continue;
+    if (!town.stock) town.stock = {};
+    if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0 };
+    const stock = town.stock;
+    const pop = town.pop;
+    const demand = {};                 // rebuilt every tick (drives Sim.priceFor)
+    const addDemand = (g, amt) => { if (amt > 0) demand[g] = (demand[g] || 0) + amt; };
+
+    // Work efficiency from the PREVIOUS tick's happiness (default 100 => 1.2x).
+    const h = (typeof town.happiness === "number") ? town.happiness : 100;
+    const hf = N.effMin + (Math.min(100, Math.max(0, h)) / 100) * (N.effMax - N.effMin);
+
+    // --- 1. Production -------------------------------------------------
+    // Each staffed building outputs ratePerWorker × effectiveWorkers × happiness,
+    // consuming its per-worker inputs; throughput is throttled by missing inputs
+    // and the available labour pool (workerSlots is the per-building cap).
+    let labor = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    const buildings = town.buildings || [];
+    for (const b of buildings) {
+      const type = CONFIG.buildings[b.typeId];
+      if (!type || !type.output) continue;
+      const w = Math.min(b.workers || 0, type.workerSlots || 0, labor);
+      if (w <= 0) continue;
+      // Inputs cap effective workers; record full desired input as demand.
+      let effW = w;
+      const inputs = type.inputs;
+      if (inputs) {
+        for (const gid in inputs) {
+          const qty = inputs[gid];
+          if (qty > 0) effW = Math.min(effW, (stock[gid] || 0) / qty);
+          addDemand(gid, qty * w);
+        }
+      }
+      if (effW <= 0) continue;          // inputs missing → building idles this tick
+      labor -= w;
+      if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
+      const out = type.output;
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf;
+    }
+
+    // --- 2. Consumption + per-need satisfaction ------------------------
+    const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    const sats = [];
+    if (totalPop > 0) {
+      // FOOD (every tier) — category need; best-value food eaten first.
+      const foodReq = N.perCapita.peasants.food * totalPop; // same food rate all tiers
+      let remaining = foodReq;
+      for (const gid of N.foodOrder) {
+        const val = N.foodValue[gid] || 1;
+        const wantUnits = remaining > 0 ? remaining / val : 0;
+        addDemand(gid, wantUnits);
+        if (remaining <= 0) continue;
+        const have = stock[gid] || 0;
+        const consume = Math.min(have, wantUnits);
+        stock[gid] = have - consume;
+        remaining -= consume * val;
+      }
+      sats.push(foodReq > 0 ? (foodReq - clamp0(remaining)) / foodReq : 1);
+
+      // BEER (workers + burghers), CLOTHES (burghers) — GDD §4.2.
+      const beerPop = (pop.workers || 0) + (pop.burghers || 0);
+      if (beerPop > 0) sats.push(simConsume(stock, "beer", N.perCapita.workers.beer * beerPop, addDemand));
+      if ((pop.burghers || 0) > 0) sats.push(simConsume(stock, "clothes", N.perCapita.burghers.clothes * pop.burghers, addDemand));
+    }
+    const avgSat = sats.length ? sats.reduce((a, b) => a + b, 0) / sats.length : 1;
+
+    // --- 3. Happiness (0..100) = average need satisfaction (GDD §4.3) --
+    town.happiness = totalPop > 0 ? avgSat * 100 : (town.happiness == null ? 100 : town.happiness);
+
+    // --- 4. Population: sustained starvation shrinks, plenty grows ------
+    const cap = N.capByLevel[town.level] || N.capByLevel[1];
+    if (totalPop > 0) {
+      if (avgSat >= N.growthThreshold) {
+        town._lowSatTicks = 0;
+        const headroom = cap - totalPop;
+        if (headroom > 0) pop.peasants = (pop.peasants || 0) + N.growthRate * headroom;
+      } else if (avgSat < N.declineThreshold) {
+        town._lowSatTicks = (town._lowSatTicks || 0) + 1;
+        if (town._lowSatTicks >= N.declineAfterTicks) {
+          const keep = 1 - N.declineRate;   // residents "move away" across all tiers
+          pop.peasants = clamp0((pop.peasants || 0) * keep);
+          pop.workers = clamp0((pop.workers || 0) * keep);
+          pop.burghers = clamp0((pop.burghers || 0) * keep);
+        }
+      } else {
+        town._lowSatTicks = 0;             // in the comfortable band: reset the streak
+      }
+    }
+
+    // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
+    town.demand = demand;
+    if (!town.prices) town.prices = {};
+    for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
+
+    // --- 6. No negative stockpiles ------------------------------------
+    for (const gid in stock) if (!(stock[gid] > 0)) stock[gid] = 0;
+  }
+  return State;
+};
+// === SIM-CORE END ===
+
 /* PURE_CORE_END */
 
 /* =====================================================================
@@ -876,13 +1031,9 @@ Sim.priceFor = function (town, goodId) {
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); });
   window.addEventListener("beforeunload", saveGame);
 
-  // ---------------------------------------------------------------
-  // Sim stub (Phase 2 fills this in). Kept so the two-clock loop is
-  // wired correctly from day one (GDD §9.2).
-  // ---------------------------------------------------------------
-  const Sim = {
-    tick(_state) { /* economy tick — no-op until Phase 2 */ },
-  };
+  // Economy tick: the pure Sim core (Sim.tick, defined above in the SIM-CORE
+  // block) is used directly — the loop below calls Sim.tick(state) each 500ms
+  // step. No local stub: the closure sees the top-level `Sim` namespace.
 
   // ---------------------------------------------------------------
   // Canvas sizing
