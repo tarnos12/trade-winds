@@ -15,6 +15,9 @@ the single integration point.
 ## Roles
 
 ### Manager — Session #1 (the coordinator)
+- **Works on `main` directly** — not a feature branch. Session #1 is the only
+  session that commits to `main`; it maintains the board here and integrates
+  every worker PR here.
 - **Owns the board (`TASKS.md`).** No other session edits it.
 - Assigns tasks, picks branch names, and writes each worker's assignment file
   (`TASK_<n>.md`).
@@ -57,6 +60,10 @@ without shared-file conflicts:
 ## Current session assignments
 
 - **Session #1 (this session):** Manager — task management, PR merging, conflict
-  resolution. Working branch: `claude/markdown-task-management-docs-jytqr2`.
-- **Sessions #2+:** unassigned. When one comes online, #1 creates its
-  `TASK_<n>.md` and names its branch.
+  resolution. Works directly on `main`.
+- **Session #2:** [TASK_2.md](TASK_2.md) — T1 scaffold + `HexMath`, branch
+  `claude/phase1-hexmath-scaffold`.
+- **Session #3:** [TASK_3.md](TASK_3.md) — T2 `MapGen`, branch
+  `claude/phase1-mapgen`.
+- **Session #4:** [TASK_4.md](TASK_4.md) — T3 `Renderer`/`Camera`, branch
+  `claude/phase1-renderer-camera`.
