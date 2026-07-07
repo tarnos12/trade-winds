@@ -456,44 +456,119 @@ Object.assign(CONFIG, {
     furniture: { id: "furniture", tier: 3, basePrice: 44, inputs: { planks: 2, tools: 1 } },
   },
 
-  // Tier 1–2 production buildings (GDD §5.2). Each:
-  //   { id, terrain?, adjacent?, inputs?, output:{goodId, ratePerWorker},
-  //     workerSlots, cost }
-  // `terrain` = the resource hex this must sit on (omit for processors that run
-  // anywhere in a town). `adjacent` = a terrain that must border the hex (fishery
-  // sits on buildable land next to water). `inputs` = goods consumed per tick per
-  // worker (T4's tick honours these). `cost` = one-off build cost incl. gold.
+  // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
+  // three `kind`s — no more auto-seed. Shape (shared data contract, TASKS.md):
+  //   { id, name, kind:'extractor'|'processor'|'house',
+  //     terrain:<terrainKey|null>, adjacent?:<terrainKey>,
+  //     output?:{goodId, ratePerWorker}, inputs?:{goodId:qty},
+  //     workerSlots?, workerTier?:'peasant'|'worker'|'burgher',
+  //     houseCapacity?, houseTier?:'peasant'|'worker'|'burgher',
+  //     cost:{goodId:qty,…, gold} }
+  // - Extractors sit ON their resource hex (`terrain`) or on land bordering it
+  //   (`adjacent`, e.g. fishery→water); staffed by peasants.
+  // - Processors sit on any buildable town hex (`terrain:null`); staffed by
+  //   workers; consume `inputs` per unit produced (Sim.tick honours these).
+  // - Houses hold no workers — they add `houseCapacity` of their `houseTier`.
   buildings: {
-    sawmill: {
-      id: "sawmill", terrain: "forest",
+    // --- extractors (peasant labour, sit on their resource hex) ---
+    lumberjack: {
+      id: "lumberjack", name: "Lumberjack", kind: "extractor",
+      terrain: "forest", workerTier: "peasant",
       output: { goodId: "wood", ratePerWorker: 1 },
-      workerSlots: 3, cost: { wood: 20, stone: 10, gold: 50 },
-    },
-    mine: {
-      id: "mine", terrain: "hills",
-      output: { goodId: "ore", ratePerWorker: 1 },
-      workerSlots: 3, cost: { wood: 15, stone: 25, gold: 80 },
+      workerSlots: 3, cost: { stone: 10, gold: 40 },
     },
     farm: {
-      id: "farm", terrain: "fertile",
+      id: "farm", name: "Farm", kind: "extractor",
+      terrain: "fertile", workerTier: "peasant",
       output: { goodId: "grain", ratePerWorker: 2 },
       workerSlots: 3, cost: { wood: 15, stone: 5, gold: 40 },
     },
+    miner: {
+      id: "miner", name: "Miner", kind: "extractor",
+      terrain: "hills", workerTier: "peasant",
+      output: { goodId: "ore", ratePerWorker: 1 },
+      workerSlots: 3, cost: { wood: 15, stone: 25, gold: 80 },
+    },
+    quarry: {
+      id: "quarry", name: "Quarry", kind: "extractor",
+      terrain: "mountains", workerTier: "peasant",
+      output: { goodId: "stone", ratePerWorker: 1 },
+      workerSlots: 3, cost: { wood: 20, gold: 70 },
+    },
     fishery: {
-      id: "fishery", adjacent: "water",
+      id: "fishery", name: "Fishery", kind: "extractor",
+      terrain: null, adjacent: "water", workerTier: "peasant",
       output: { goodId: "fish", ratePerWorker: 1 },
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
+    shepherd: {
+      id: "shepherd", name: "Shepherd", kind: "extractor",
+      terrain: "meadow", workerTier: "peasant",
+      output: { goodId: "wool", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 15, gold: 50 },
+    },
+    // --- processors (worker labour, any buildable town hex) ---
+    sawmill: {
+      id: "sawmill", name: "Sawmill", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { wood: 2 }, output: { goodId: "planks", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 20, stone: 10, gold: 60 },
+    },
     mill: {
-      id: "mill", inputs: { grain: 2 },
-      output: { goodId: "flour", ratePerWorker: 1 },
+      id: "mill", name: "Mill", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { grain: 2 }, output: { goodId: "flour", ratePerWorker: 1 },
       workerSlots: 2, cost: { wood: 20, stone: 15, gold: 90 },
     },
     bakery: {
-      id: "bakery", inputs: { flour: 2 },
-      output: { goodId: "bread", ratePerWorker: 1 },
+      id: "bakery", name: "Bakery", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { flour: 2 }, output: { goodId: "bread", ratePerWorker: 1 },
       workerSlots: 2, cost: { wood: 15, stone: 20, gold: 100 },
     },
+    brewery: {
+      id: "brewery", name: "Brewery", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { grain: 2 }, output: { goodId: "beer", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 20, stone: 15, gold: 95 },
+    },
+    smelter: {
+      id: "smelter", name: "Smelter", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { ore: 1, wood: 1 }, output: { goodId: "tools", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 20, stone: 25, gold: 120 },
+    },
+    weaver: {
+      id: "weaver", name: "Weaver", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { wool: 2 }, output: { goodId: "cloth", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 15, stone: 10, gold: 85 },
+    },
+    // --- houses (no workers; add population capacity by tier) ---
+    hut: {
+      id: "hut", name: "Hut", kind: "house",
+      terrain: null, houseTier: "peasant", houseCapacity: 10,
+      cost: { wood: 10, gold: 20 },
+    },
+    cottage: {
+      id: "cottage", name: "Cottage", kind: "house",
+      terrain: null, houseTier: "worker", houseCapacity: 8,
+      cost: { wood: 20, stone: 10, gold: 60 },
+    },
+    manor: {
+      id: "manor", name: "Manor", kind: "house",
+      terrain: null, houseTier: "burgher", houseCapacity: 5,
+      cost: { wood: 25, stone: 25, planks: 5, gold: 150 },
+    },
+  },
+
+  // Town-interior layout constants (GDD §4.1). slotCap is indexed by town level
+  // (index 0 unused); every placed building — house or producer — takes a slot.
+  town: {
+    slotCap: [0, 3, 5, 7, 9],   // buildings allowed by town-center level 1..4
+    radius: 2,                  // hexes from center a building may be placed in
+    baseWorkers: { peasants: 8 }, // starting pop before any houses are built
+    startStock: { grain: 30, fish: 10, bread: 8 }, // small food buffer at founding
   },
 });
 
@@ -695,6 +770,111 @@ Sim.tick = function (State) {
   return State;
 };
 // === SIM-CORE END ===
+
+// === BUILDINGS-CORE START ===  (TI-A / slot #2 — placement rules + housing)
+// Pure, deterministic placement/housing helpers for player-placed buildings.
+// No DOM / canvas / Math.random / I/O — reads the game State + CONFIG + HexMath
+// and mutates nothing. Composes with the redesigned CONFIG.buildings + CONFIG.town
+// above. Headless-tested in test/buildings.test.js.
+var Buildings = (typeof Buildings !== "undefined" && Buildings) || {};
+
+// tier singular (workerTier/houseTier) -> plural pop bucket key.
+const BUILDINGS_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+
+// Player-placeable building slots by town-center level (GDD §4.1: 3/5/7/9).
+// Index 0 is unused; unknown levels fall back to 3.
+Buildings.slotCap = function (level) {
+  const caps = CONFIG.town.slotCap;
+  return caps[level] || 3;
+};
+
+// Every placed building — house or producer — consumes one slot.
+Buildings.usedSlots = function (town) {
+  return (town && Array.isArray(town.buildings)) ? town.buildings.length : 0;
+};
+
+// Sum houseCapacity of placed houses, grouped by the tier they house.
+// Returns { peasants, workers, burghers }.
+Buildings.housingCapacity = function (town) {
+  const cap = { peasants: 0, workers: 0, burghers: 0 };
+  const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  for (const b of list) {
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.kind !== "house") continue;
+    const key = BUILDINGS_TIER_KEY[def.houseTier];
+    if (!key) continue;
+    cap[key] += def.houseCapacity || 0;
+  }
+  return cap;
+};
+
+// May `typeId` be placed at hex (q,r) for `town` in the game `state`?
+// Returns { ok:true } or { ok:false, reason:"…" }. Pure: reads only, no mutation.
+Buildings.canPlace = function (state, town, typeId, q, r) {
+  const def = CONFIG.buildings[typeId];
+  if (!def) return { ok: false, reason: "Unknown building type" };
+  if (!town) return { ok: false, reason: "No town" };
+
+  // (a) hex exists on the map and is within the town's build radius.
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  if (HexMath.dist(town.q, town.r, q, r) > CONFIG.town.radius) {
+    return { ok: false, reason: "Outside town radius" };
+  }
+
+  // (b) terrain rule.
+  const terr = hex.terrain;
+  const terrDef = CONFIG.terrain[terr];
+  const isLand = !!(terrDef && terrDef.buildable);
+  if (def.kind === "extractor" && def.adjacent) {
+    // sits on buildable land bordering the required terrain (e.g. fishery→water)
+    if (!isLand) return { ok: false, reason: "Needs buildable land" };
+    const near = HexMath.neighbors(q, r).some(n => {
+      const nh = map.hexes.get(HexMath.key(n.q, n.r));
+      return nh && nh.terrain === def.adjacent;
+    });
+    if (!near) return { ok: false, reason: "Must border " + def.adjacent };
+  } else if (def.kind === "extractor") {
+    // sits directly on its resource hex (may be non-town-buildable, e.g. mountains)
+    if (terr !== def.terrain) return { ok: false, reason: "Needs " + def.terrain + " terrain" };
+  } else {
+    // processor / house: any buildable land hex in the town.
+    if (!isLand) return { ok: false, reason: "Needs buildable land" };
+  }
+
+  // (c) hex must be free: not a road, not another town's center, not this town's
+  //     center, not already holding one of this town's buildings.
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t !== town && t.q === q && t.r === r) return { ok: false, reason: "Another town is here" };
+    }
+  }
+  if (town.q === q && town.r === r) return { ok: false, reason: "Town center is here" };
+  const placed = Array.isArray(town.buildings) ? town.buildings : [];
+  for (const b of placed) {
+    if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+  }
+
+  // (d) slot cap by town level.
+  if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level)) {
+    return { ok: false, reason: "No free building slots" };
+  }
+
+  // (e) affordability: gold + each resource in the cost.
+  const cost = def.cost || {};
+  if ((cost.gold || 0) > (town.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  const stock = town.stock || {};
+  for (const gid in cost) {
+    if (gid === "gold") continue;
+    if ((stock[gid] || 0) < cost[gid]) return { ok: false, reason: "Not enough " + gid };
+  }
+
+  return { ok: true };
+};
+// === BUILDINGS-CORE END ===
 
 // === PATHING START ===
 // Pure Dijkstra pathfinder over the road-node graph (GDD §9.1). No DOM/canvas,
