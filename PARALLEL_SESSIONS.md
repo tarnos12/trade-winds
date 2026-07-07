@@ -28,6 +28,12 @@ the single integration point.
 - Resolves all cross-session conflicts.
 
 ### Workers — Sessions #2, #3, …
+- **Always pull `main` before accepting a new task.**
+  `git fetch origin main && git checkout main && git pull origin main`, then cut
+  your task branch from that fresh base. This is non-negotiable — it's how you
+  pick up newly-pushed coordination files (including your `TASK_<n>.md`) and
+  guarantees you build on merged work. A session that skips this can't see its
+  assignment and ends up guessing its task.
 - Each reads/writes **only its own `TASK_<n>.md`** (never `TASKS.md`, never
   another worker's file).
 - Builds the assigned task **on the branch #1 named**, opens a PR, updates its
