@@ -45,25 +45,35 @@ worker told "you are Session #N" starts by reading `TASK_N.md`.
 
 ## Current status (update this section every commit)
 
-**Pre-Phase 1 — project scaffolding + multi-session dispatch set up.**
+**Phase 1 — The Board: DONE. Phase 2 — Towns & Production: assigned.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
 - GDD imported as [GDD.md](GDD.md) (the design/scope source of truth).
 - This handoff doc created and wired to the working rules.
 - Multi-session central-dispatch set up: [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md),
-  board [TASKS.md](TASKS.md), and worker assignments [TASK_2.md](TASK_2.md) /
-  [TASK_3.md](TASK_3.md) / [TASK_4.md](TASK_4.md). Session #1 = manager.
+  board [TASKS.md](TASKS.md), worker files [TASK_2.md](TASK_2.md) /
+  [TASK_3.md](TASK_3.md) / [TASK_4.md](TASK_4.md). Session #1 = manager (works on
+  `main`; workers pull `main` before each task and PR into it).
+- **Phase 1 — The Board** landed in `index.html`: `CONFIG`, `HexMath`, seeded
+  `MapGen` (mulberry32, quantile biomes, island falloff), fog, offscreen terrain
+  pre-render (1 `drawImage`/frame), camera pan/zoom, build mode (roads + town
+  markers + erase), two-clock loop (rAF render + 500ms×speed economy
+  accumulator). Headless test `test/board.test.js` (25/25). Verified in headless
+  Chromium: no console errors, canvas renders. DoD met.
 
 Next (recommended order):
-1. **Phase 1 — The Board** (assigned to workers): #2 scaffold + `HexMath`,
-   #3 `MapGen`, #4 `Renderer`/`Camera`. See [TASKS.md](TASKS.md). Manager merges
-   #2 → #3 → #4. Remaining Phase 1: build mode for roads + empty town markers.
-   DoD: generate map from a seed, move camera, place roads, 60 FPS.
-2. Phase 2 — Towns & Production; Phase 3 — Trade (riskiest); Phase 4 —
-   Progression; Phase 5 — Content & Polish. (GDD §10.)
+1. **Phase 2 — Towns & Production** (assigned to workers): #3 goods/buildings +
+   price model, #2 `Sim` production/consumption tick, #4 town entities + town
+   panel UI. See [TASKS.md](TASKS.md). Manager merges #3 → #2 → #4.
+   DoD (GDD §10): a single town can grow and starve; prices react to stockpiles.
+2. Phase 3 — Trade (riskiest); Phase 4 — Progression; Phase 5 — Content &
+   Polish. (GDD §10.)
 3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
-   goods count, win condition, title) — not blockers for Phase 1.
+   goods count, win condition, title) — not blockers yet.
+
+Note: terrain enum as built uses `fertile` (not `field`); the code is the source
+of truth — full set: `water, meadow, forest, hills, mountains, fertile, wasteland`.
 
 ## Architecture conventions (hold these)
 

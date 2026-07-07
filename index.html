@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trade Winds — Phase 1: The Board</title>
+<style>
+  :root {
+    --paper: #f2e6cf;
+    --ink: #3b2f22;
+    --panel: rgba(28, 22, 15, 0.86);
+    --panel-edge: #6b5636;
+    --accent: #c98a3c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #14110c; }
+  body {
+    font-family: "Georgia", "Iowan Old Style", serif;
+    color: var(--paper);
+    -webkit-user-select: none; user-select: none;
+  }
+  #game { position: fixed; inset: 0; display: block; cursor: grab; }
+  #game.panning { cursor: grabbing; }
+  #game.building { cursor: crosshair; }
+
+  /* ---- Top bar ---- */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: linear-gradient(180deg, rgba(20,16,10,0.92), rgba(20,16,10,0.0));
+    pointer-events: none;
+  }
+  #topbar > * { pointer-events: auto; }
+  .brand { font-weight: bold; font-size: 18px; letter-spacing: 0.5px; color: var(--accent); text-shadow: 0 1px 2px #000; }
+  .brand small { color: var(--paper); opacity: 0.6; font-weight: normal; font-size: 12px; }
+
+  .group {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 5px 8px;
+  }
+  label.seedlbl { font-size: 12px; opacity: 0.8; }
+  input#seed {
+    width: 120px; background: #1c160f; color: var(--paper);
+    border: 1px solid var(--panel-edge); border-radius: 5px;
+    padding: 4px 6px; font-family: inherit; font-size: 13px;
+  }
+  button {
+    font-family: inherit; font-size: 13px; color: var(--paper);
+    background: #3a2e1d; border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover { background: #4d3c24; }
+  button.tool.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  .spacer { flex: 1; }
+
+  /* ---- Bottom hint ---- */
+  #hint {
+    position: fixed; left: 12px; bottom: 12px;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 8px 12px; font-size: 12.5px; max-width: 420px;
+    line-height: 1.5; opacity: 0.92;
+  }
+  #hint b { color: var(--accent); }
+  kbd {
+    display: inline-block; background: #1c160f; border: 1px solid var(--panel-edge);
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px;
+    font-family: inherit;
+  }
+
+  /* ---- HUD (perf/status) ---- */
+  #hud {
+    position: fixed; right: 12px; bottom: 12px;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 7px 10px; font-size: 12px;
+    font-variant-numeric: tabular-nums; text-align: right; line-height: 1.45;
+  }
+  #hud .fps { color: var(--accent); font-weight: bold; }
+  #hud .warn { color: #e06b4a; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="topbar">
+  <div class="brand">Trade&nbsp;Winds <small>· Phase&nbsp;1 · The Board</small></div>
+
+  <div class="group">
+    <label class="seedlbl" for="seed">Seed</label>
+    <input id="seed" type="text" spellcheck="false" />
+    <button id="btnGen" title="Generate a fresh map from this seed">Generate</button>
+    <button id="btnRandom" title="Random seed">🎲</button>
+  </div>
+
+  <div class="group">
+    <button class="tool" data-mode="pan" title="Pan the camera (drag)">✋ Pan</button>
+    <button class="tool" data-mode="road" title="Paint roads (drag to draw)">🛣 Road</button>
+    <button class="tool" data-mode="town" title="Place an empty town marker">🏰 Town</button>
+    <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="group">
+    <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Fog</button>
+    <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
+  </div>
+</div>
+
+<div id="hint">
+  <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
+  <b>Scroll</b> to zoom · pick <b>Road</b>/<b>Town</b> to build.
+  Placing a town clears the fog around it.
+</div>
+
+<div id="hud">
+  <div><span class="fps" id="fps">—</span> fps</div>
+  <div id="stat">—</div>
+</div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   PURE CORE  —  no DOM, no canvas, deterministic. Headless-testable.
+   (The Node test in test/board.test.js evals everything between the
+    PURE_CORE_START / PURE_CORE_END markers.)
+   ===================================================================== */
+/* PURE_CORE_START */
+
+// Single source of truth for all balance/layout constants (GDD §9.1).
+const CONFIG = {
+  saveVersion: 1,
+  // Biome mix is quantile-driven (see MapGen.generate): these are *target
+  // fractions* of the board, so the map stays varied for any seed.
+  map: {
+    radius: 14, hexSize: 24, edgeFalloff: 0.55,
+    frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // of whole board / elevation bands
+            forest: 0.28, fertile: 0.20, wasteland: 0.16 }, // of flat land / moisture bands
+  },
+  fog:    { castleReveal: 2, townReveal: 3 },
+  camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
+  econ:   { baseTickMs: 500 },
+  terrain: {
+    // buildable = a town marker / road may sit here (water needs a bridge, later)
+    water:     { color: "#3f6079", buildable: false, road: false },
+    meadow:    { color: "#8ba75a", buildable: true,  road: true  },
+    forest:    { color: "#4d7738", buildable: true,  road: true  },
+    hills:     { color: "#ac9560", buildable: true,  road: true  },
+    mountains: { color: "#877f77", buildable: false, road: false },
+    fertile:   { color: "#c2ad46", buildable: true,  road: true  },
+    wasteland: { color: "#9c8b70", buildable: true,  road: true  },
+  },
+  fogColor: "#1b1710",
+};
+
+// Seeded PRNG — mulberry32 (GDD §9.1: MapGen uses mulberry32).
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Turn any string seed into a 32-bit integer (so seeds can be words).
+function hashSeed(str) {
+  str = String(str);
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// Pointy-top axial hex math (GDD §3.1, §9.1).
+const HexMath = {
+  DIRS: [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]],
+  key(q, r) { return q + "," + r; },
+  hexToPixel(q, r, size) {
+    return { x: size * Math.sqrt(3) * (q + r / 2), y: size * 1.5 * r };
+  },
+  pixelToHex(x, y, size) {
+    const q = (Math.sqrt(3) / 3 * x - 1 / 3 * y) / size;
+    const r = (2 / 3 * y) / size;
+    return HexMath.hexRound(q, r);
+  },
+  hexRound(q, r) {
+    const s = -q - r;
+    let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+    const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+    if (dq > dr && dq > ds) rq = -rr - rs;
+    else if (dr > ds) rr = -rq - rs;
+    return { q: rq, r: rr };
+  },
+  neighbors(q, r) {
+    return HexMath.DIRS.map(d => ({ q: q + d[0], r: r + d[1] }));
+  },
+  dist(aq, ar, bq, br) {
+    return (Math.abs(aq - bq) + Math.abs(ar - br) + Math.abs(aq + ar - bq - br)) / 2;
+  },
+  // All hexes within distance n of (cq,cr).
+  range(cq, cr, n) {
+    const out = [];
+    for (let dq = -n; dq <= n; dq++) {
+      const lo = Math.max(-n, -dq - n), hi = Math.min(n, -dq + n);
+      for (let dr = lo; dr <= hi; dr++) out.push({ q: cq + dq, r: cr + dr });
+    }
+    return out;
+  },
+};
+
+// Value-noise field with fractal Brownian motion (GDD §9.1: noise → biomes).
+function makeValueNoise(seed) {
+  function hash(ix, iy) {
+    let h = (Math.imul(ix | 0, 374761393) + Math.imul(iy | 0, 668265263)) ^ seed;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  const smooth = t => t * t * (3 - 2 * t);
+  function noise2(x, y) {
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const sx = smooth(x - x0), sy = smooth(y - y0);
+    const n00 = hash(x0, y0), n10 = hash(x0 + 1, y0);
+    const n01 = hash(x0, y0 + 1), n11 = hash(x0 + 1, y0 + 1);
+    const ix0 = n00 + (n10 - n00) * sx;
+    const ix1 = n01 + (n11 - n01) * sx;
+    return ix0 + (ix1 - ix0) * sy;
+  }
+  return function fbm(x, y, octaves) {
+    octaves = octaves || 4;
+    let amp = 1, freq = 1, sum = 0, norm = 0;
+    for (let o = 0; o < octaves; o++) {
+      sum += amp * noise2(x * freq, y * freq);
+      norm += amp; amp *= 0.5; freq *= 2;
+    }
+    return sum / norm;
+  };
+}
+
+// Deterministic seeded map generation (GDD §3).
+const MapGen = {
+  // Value at fraction f (0..1) through a sorted ascending array.
+  quantile(sortedAsc, f) {
+    if (sortedAsc.length === 0) return 0;
+    const i = Math.min(sortedAsc.length - 1, Math.max(0, Math.round(f * (sortedAsc.length - 1))));
+    return sortedAsc[i];
+  },
+  // Returns { seed, radius, hexes: Map<key, hex> }.
+  // Two passes: (1) sample raw elevation+moisture noise per hex; (2) pick
+  // biome thresholds by quantile so the terrain mix matches CONFIG.map.frac
+  // for any seed (fixed cutoffs drift with the noise's mean; quantiles don't).
+  generate(seedInput, radius) {
+    radius = radius || CONFIG.map.radius;
+    const F = CONFIG.map.frac;
+    const seed = hashSeed(seedInput);
+    const elevN = makeValueNoise(seed);
+    const moistN = makeValueNoise(seed ^ 0x9e3779b9);
+
+    // ---- pass 1: sample fields ----
+    const hexes = new Map();
+    for (let q = -radius; q <= radius; q++) {
+      const lo = Math.max(-radius, -q - radius), hi = Math.min(radius, -q + radius);
+      for (let r = lo; r <= hi; r++) {
+        const d = HexMath.dist(0, 0, q, r) / radius;     // 0 centre → 1 rim
+        const falloff = d * d * CONFIG.map.edgeFalloff;  // island bias: rim sinks
+        const elev = elevN(q * 0.11 + 100, r * 0.11 + 100, 4) - falloff;
+        const moist = moistN(q * 0.13 + 40, r * 0.13 + 40, 4);
+        hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, moisture: moist, revealed: false });
+      }
+    }
+    const all = Array.from(hexes.values());
+
+    // ---- pass 2: quantile thresholds → biomes ----
+    const elevs = all.map(h => h.elevation).sort((a, b) => a - b);
+    const seaT  = MapGen.quantile(elevs, F.water);
+    // elevation bands are measured over LAND only (above sea)
+    const landElevs = elevs.filter(e => e >= seaT);
+    const mtnT  = MapGen.quantile(landElevs, 1 - F.mountains);
+    const hillT = MapGen.quantile(landElevs, 1 - F.mountains - F.hills);
+
+    // moisture bands are measured over FLAT land (not hill/mountain)
+    const flatMoist = all
+      .filter(h => h.elevation >= seaT && h.elevation < hillT)
+      .map(h => h.moisture).sort((a, b) => a - b);
+    const forestT = MapGen.quantile(flatMoist, 1 - F.forest);
+    const fertT   = MapGen.quantile(flatMoist, 1 - F.forest - F.fertile);
+    const wasteT  = MapGen.quantile(flatMoist, F.wasteland);
+
+    for (const h of all) {
+      if (h.elevation < seaT)       h.terrain = "water";
+      else if (h.elevation >= mtnT) h.terrain = "mountains";
+      else if (h.elevation >= hillT) h.terrain = "hills";
+      else if (h.moisture >= forestT) h.terrain = "forest";
+      else if (h.moisture >= fertT)   h.terrain = "fertile";
+      else if (h.moisture <  wasteT)  h.terrain = "wasteland";
+      else                            h.terrain = "meadow";
+    }
+
+    // The castle hub sits at map centre and must be buildable ground (GDD §3.3).
+    const c = hexes.get(HexMath.key(0, 0));
+    if (c && !CONFIG.terrain[c.terrain].buildable) { c.terrain = "meadow"; }
+    return { seed, radius, hexes };
+  },
+};
+
+/* PURE_CORE_END */
+
+/* =====================================================================
+   BROWSER LAYER  —  state, rendering, input, persistence.
+   ===================================================================== */
+(function () {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const SAVE_KEY = "tradewinds.save";
+
+  // ---- Mutable game state ----
+  const state = {
+    seedInput: "",
+    map: null,                 // { seed, radius, hexes }
+    roads: new Set(),          // hex keys carrying road
+    towns: [],                 // [{ q, r }]  (empty markers in Phase 1)
+    revealed: new Set(),       // hex keys the player can see
+    revealAll: false,          // debug fog toggle
+    mode: "pan",               // pan | road | town | erase
+    cam: { x: 0, y: 0 },       // world-space camera target
+    zoom: 1,
+    gameSpeed: 1,
+  };
+
+  // Offscreen terrain layer (GDD §9.3: pre-rendered, redrawn only on fog change).
+  let terrainCanvas = document.createElement("canvas");
+  let terrainCtx = terrainCanvas.getContext("2d");
+  let terrainOrigin = { x: 0, y: 0 };   // world coords of terrainCanvas (0,0)
+  let terrainDirty = true;
+
+  // ---------------------------------------------------------------
+  // Geometry helpers (browser-side; use CONFIG.map.hexSize)
+  // ---------------------------------------------------------------
+  const SIZE = CONFIG.map.hexSize;
+
+  function hexCorners(cx, cy) {
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 180 * (60 * i - 30);   // pointy-top
+      pts.push([cx + SIZE * Math.cos(a), cy + SIZE * Math.sin(a)]);
+    }
+    return pts;
+  }
+
+  function worldBounds() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const h of state.map.hexes.values()) {
+      const p = HexMath.hexToPixel(h.q, h.r, SIZE);
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    return { minX: minX - SIZE, minY: minY - SIZE, maxX: maxX + SIZE, maxY: maxY + SIZE };
+  }
+
+  // ---------------------------------------------------------------
+  // Fog
+  // ---------------------------------------------------------------
+  function reveal(cq, cr, radius) {
+    for (const h of HexMath.range(cq, cr, radius)) {
+      const k = HexMath.key(h.q, h.r);
+      if (state.map.hexes.has(k) && !state.revealed.has(k)) {
+        state.revealed.add(k);
+        const hex = state.map.hexes.get(k);
+        hex.revealed = true;
+      }
+    }
+    terrainDirty = true;
+  }
+
+  function isVisible(k) { return state.revealAll || state.revealed.has(k); }
+
+  // ---------------------------------------------------------------
+  // Terrain pre-render
+  // ---------------------------------------------------------------
+  function renderTerrain() {
+    const b = worldBounds();
+    const w = Math.ceil(b.maxX - b.minX), h = Math.ceil(b.maxY - b.minY);
+    if (terrainCanvas.width !== w || terrainCanvas.height !== h) {
+      terrainCanvas.width = w; terrainCanvas.height = h;
+    }
+    terrainOrigin = { x: b.minX, y: b.minY };
+    const g = terrainCtx;
+    g.clearRect(0, 0, w, h);
+
+    for (const hex of state.map.hexes.values()) {
+      const p = HexMath.hexToPixel(hex.q, hex.r, SIZE);
+      const cx = p.x - terrainOrigin.x, cy = p.y - terrainOrigin.y;
+      const visible = isVisible(HexMath.key(hex.q, hex.r));
+      const pts = hexCorners(cx, cy);
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 6; i++) g.lineTo(pts[i][0], pts[i][1]);
+      g.closePath();
+
+      if (visible) {
+        g.fillStyle = CONFIG.terrain[hex.terrain].color;
+        g.fill();
+        g.lineWidth = 1;
+        g.strokeStyle = "rgba(30,22,12,0.28)";
+        g.stroke();
+      } else {
+        g.fillStyle = CONFIG.fogColor;
+        g.fill();
+        g.lineWidth = 1;
+        g.strokeStyle = "rgba(255,255,255,0.03)";
+        g.stroke();
+      }
+    }
+    terrainDirty = false;
+  }
+
+  // ---------------------------------------------------------------
+  // Coordinate transforms (world <-> screen)
+  // ---------------------------------------------------------------
+  function screenToWorld(sx, sy) {
+    return {
+      x: (sx - canvas.clientWidth / 2) / state.zoom + state.cam.x,
+      y: (sy - canvas.clientHeight / 2) / state.zoom + state.cam.y,
+    };
+  }
+  function hexAtScreen(sx, sy) {
+    const w = screenToWorld(sx, sy);
+    return HexMath.pixelToHex(w.x, w.y, SIZE);
+  }
+
+  // ---------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------
+  let hoverHex = null;
+
+  function drawRoads() {
+    if (state.roads.size === 0) return;
+    ctx.lineCap = "round";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#5a4326";
+    // connect adjacent road hexes (draw each undirected edge once)
+    for (const k of state.roads) {
+      const [q, r] = k.split(",").map(Number);
+      const p = HexMath.hexToPixel(q, r, SIZE);
+      for (const n of HexMath.neighbors(q, r)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (state.roads.has(nk) && nk > k) {
+          const np = HexMath.hexToPixel(n.q, n.r, SIZE);
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(np.x, np.y); ctx.stroke();
+        }
+      }
+    }
+    // node dots
+    ctx.fillStyle = "#6b5230";
+    for (const k of state.roads) {
+      const [q, r] = k.split(",").map(Number);
+      const p = HexMath.hexToPixel(q, r, SIZE);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function drawTowns() {
+    for (const t of state.towns) {
+      const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      // shadow
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + SIZE * 0.5, SIZE * 0.55, SIZE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+      // token
+      ctx.fillStyle = "#d9b26b";
+      ctx.strokeStyle = "#7a5a2c"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // little house glyph
+      ctx.fillStyle = "#7a5a2c";
+      const s = SIZE * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - s);
+      ctx.lineTo(p.x + s, p.y);
+      ctx.lineTo(p.x - s, p.y);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(p.x - s * 0.7, p.y, s * 1.4, s * 0.9);
+    }
+  }
+
+  function drawCastle() {
+    const p = HexMath.hexToPixel(0, 0, SIZE);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + SIZE * 0.55, SIZE * 0.7, SIZE * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#c98a3c";
+    ctx.strokeStyle = "#5a3d16"; ctx.lineWidth = 2.5;
+    const w = SIZE * 0.9, hh = SIZE * 0.7;
+    ctx.beginPath(); ctx.rect(p.x - w / 2, p.y - hh / 2, w, hh); ctx.fill(); ctx.stroke();
+    // crenellations
+    ctx.fillStyle = "#c98a3c";
+    const cw = w / 5;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(p.x - w / 2 + i * 2 * cw, p.y - hh / 2 - cw, cw, cw);
+    }
+    // flag
+    ctx.strokeStyle = "#5a3d16"; ctx.beginPath();
+    ctx.moveTo(p.x, p.y - hh / 2 - cw); ctx.lineTo(p.x, p.y - hh / 2 - cw - SIZE * 0.5); ctx.stroke();
+    ctx.fillStyle = "#e0553f";
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - hh / 2 - cw - SIZE * 0.5);
+    ctx.lineTo(p.x + SIZE * 0.35, p.y - hh / 2 - cw - SIZE * 0.38);
+    ctx.lineTo(p.x, p.y - hh / 2 - cw - SIZE * 0.26);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawHoverGhost() {
+    if (!hoverHex || state.mode === "pan") return;
+    const k = HexMath.key(hoverHex.q, hoverHex.r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return;
+    const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
+    const pts = hexCorners(p.x, p.y);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    const ok = canPlace(hoverHex.q, hoverHex.r);
+    ctx.fillStyle = ok ? "rgba(230,200,120,0.35)" : "rgba(224,80,60,0.30)";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
+    ctx.stroke();
+  }
+
+  // ---------------------------------------------------------------
+  // Build actions
+  // ---------------------------------------------------------------
+  function canPlace(q, r) {
+    const k = HexMath.key(q, r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return false;
+    if (state.mode === "road") {
+      if (!CONFIG.terrain[hex.terrain].road) return false;
+      if (state.roads.has(k)) return false;
+      return true;
+    }
+    if (state.mode === "town") {
+      if (!CONFIG.terrain[hex.terrain].buildable) return false;
+      if (q === 0 && r === 0) return false;                       // castle sits here
+      if (state.towns.some(t => t.q === q && t.r === r)) return false;
+      if (state.roads.has(k)) return false;
+      return true;
+    }
+    if (state.mode === "erase") {
+      return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
+    }
+    return false;
+  }
+
+  function place(q, r) {
+    const k = HexMath.key(q, r);
+    if (state.mode === "road") {
+      if (canPlace(q, r)) { state.roads.add(k); scheduleSave(); }
+    } else if (state.mode === "town") {
+      if (canPlace(q, r)) {
+        state.towns.push({ q, r });
+        reveal(q, r, CONFIG.fog.townReveal);
+        scheduleSave();
+      }
+    } else if (state.mode === "erase") {
+      let changed = false;
+      if (state.roads.delete(k)) changed = true;
+      const ti = state.towns.findIndex(t => t.q === q && t.r === r);
+      if (ti >= 0) { state.towns.splice(ti, 1); changed = true; }
+      if (changed) scheduleSave();
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Input: pan (drag / WASD), zoom (wheel), build (click / paint)
+  // ---------------------------------------------------------------
+  const keys = new Set();
+  let dragging = false, dragPanned = false, panButton = false;
+  let last = { x: 0, y: 0 };
+  let lastPaintKey = null;
+
+  function isPanGesture(e) {
+    // right / middle button, or left button in pan mode
+    return e.button === 1 || e.button === 2 || (e.button === 0 && state.mode === "pan");
+  }
+
+  canvas.addEventListener("mousedown", (e) => {
+    canvas.focus();
+    dragging = true; dragPanned = false;
+    panButton = isPanGesture(e);
+    last = { x: e.clientX, y: e.clientY };
+    if (!panButton && e.button === 0) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      lastPaintKey = HexMath.key(h.q, h.r);
+      place(h.q, h.r);
+    }
+    if (panButton) canvas.classList.add("panning");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    const h = hexAtScreen(e.clientX, e.clientY);
+    hoverHex = h;
+    if (!dragging) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) dragPanned = true;
+    last = { x: e.clientX, y: e.clientY };
+    if (panButton) {
+      state.cam.x -= dx / state.zoom;
+      state.cam.y -= dy / state.zoom;
+    } else if (state.mode === "road" || state.mode === "erase") {
+      const k = HexMath.key(h.q, h.r);
+      if (k !== lastPaintKey) { lastPaintKey = k; place(h.q, h.r); }
+    }
+  });
+
+  window.addEventListener("mouseup", () => {
+    dragging = false; panButton = false; lastPaintKey = null;
+    canvas.classList.remove("panning");
+    scheduleSave();
+  });
+
+  canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const before = screenToWorld(e.clientX, e.clientY);
+    const factor = e.deltaY < 0 ? CONFIG.camera.wheelStep : 1 / CONFIG.camera.wheelStep;
+    state.zoom = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, state.zoom * factor));
+    const after = screenToWorld(e.clientX, e.clientY);
+    // keep the point under the cursor fixed while zooming
+    state.cam.x += before.x - after.x;
+    state.cam.y += before.y - after.y;
+    scheduleSave();
+  }, { passive: false });
+
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    if (["w", "a", "s", "d"].includes(k)) keys.add(k);
+    if (e.target && e.target.id === "seed") return;
+    if (k === "1") setMode("pan");
+    if (k === "2") setMode("road");
+    if (k === "3") setMode("town");
+    if (k === "4") setMode("erase");
+  });
+  window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+
+  function applyKeyPan(dt) {
+    const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
+    if (keys.has("w")) state.cam.y -= v;
+    if (keys.has("s")) state.cam.y += v;
+    if (keys.has("a")) state.cam.x -= v;
+    if (keys.has("d")) state.cam.x += v;
+  }
+
+  // ---------------------------------------------------------------
+  // Toolbar / UI wiring
+  // ---------------------------------------------------------------
+  const toolButtons = Array.from(document.querySelectorAll("button.tool"));
+  function setMode(mode) {
+    state.mode = mode;
+    toolButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    canvas.classList.toggle("building", mode !== "pan");
+  }
+  toolButtons.forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+  document.getElementById("btnGen").addEventListener("click", () => {
+    newGame(document.getElementById("seed").value.trim() || randomSeed());
+  });
+  document.getElementById("btnRandom").addEventListener("click", () => {
+    const s = randomSeed();
+    document.getElementById("seed").value = s;
+    newGame(s);
+  });
+  document.getElementById("btnReveal").addEventListener("click", () => {
+    state.revealAll = !state.revealAll;
+    terrainDirty = true;
+  });
+  document.getElementById("btnCenter").addEventListener("click", () => {
+    state.cam.x = 0; state.cam.y = 0;
+  });
+
+  function randomSeed() {
+    // avoid Math.random dependency on a specific value; any string works as a seed
+    const words = ["harbor", "amber", "clover", "willow", "ember", "cobble", "marsh", "birch", "flint", "haven"];
+    const t = Date.now().toString(36);
+    return words[t.charCodeAt(t.length - 1) % words.length] + "-" + t.slice(-4);
+  }
+
+  // ---------------------------------------------------------------
+  // New game / reset
+  // ---------------------------------------------------------------
+  function newGame(seedInput) {
+    state.seedInput = seedInput;
+    state.map = MapGen.generate(seedInput, CONFIG.map.radius);
+    state.roads = new Set();
+    state.towns = [];
+    state.revealed = new Set();
+    state.cam = { x: 0, y: 0 };
+    state.zoom = 1;
+    document.getElementById("seed").value = seedInput;
+    reveal(0, 0, CONFIG.fog.castleReveal);      // clear fog around the castle
+    terrainDirty = true;
+    scheduleSave();
+  }
+
+  // ---------------------------------------------------------------
+  // Persistence (versioned; GDD §9.4)
+  // ---------------------------------------------------------------
+  let saveTimer = null;
+  function scheduleSave() {
+    if (saveTimer) return;
+    saveTimer = setTimeout(() => { saveTimer = null; saveGame(); }, 800);
+  }
+  function saveGame() {
+    try {
+      const data = {
+        saveVersion: CONFIG.saveVersion,
+        seed: state.seedInput,
+        cam: state.cam, zoom: state.zoom, mode: state.mode,
+        revealAll: state.revealAll,
+        roads: Array.from(state.roads),
+        towns: state.towns,
+        revealed: Array.from(state.revealed),
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    } catch (err) { /* private mode / quota — ignore */ }
+  }
+  function migrate(data) {
+    // Future save versions get upgraded here; v1 is the baseline.
+    if (!data || typeof data !== "object") return null;
+    if (data.saveVersion !== CONFIG.saveVersion) return null;
+    return data;
+  }
+  function loadGame() {
+    let data = null;
+    try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) {}
+    data = migrate(data);
+    if (!data) return false;
+    newGame(data.seed);
+    state.roads = new Set(data.roads || []);
+    state.towns = data.towns || [];
+    state.revealAll = !!data.revealAll;
+    for (const k of (data.revealed || [])) {
+      state.revealed.add(k);
+      const hex = state.map.hexes.get(k);
+      if (hex) hex.revealed = true;
+    }
+    state.cam = data.cam || { x: 0, y: 0 };
+    state.zoom = data.zoom || 1;
+    setMode(data.mode || "pan");
+    terrainDirty = true;
+    return true;
+  }
+
+  // autosave every 30s + on hide (GDD §9.4)
+  setInterval(saveGame, 30000);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); });
+  window.addEventListener("beforeunload", saveGame);
+
+  // ---------------------------------------------------------------
+  // Sim stub (Phase 2 fills this in). Kept so the two-clock loop is
+  // wired correctly from day one (GDD §9.2).
+  // ---------------------------------------------------------------
+  const Sim = {
+    tick(_state) { /* economy tick — no-op until Phase 2 */ },
+  };
+
+  // ---------------------------------------------------------------
+  // Canvas sizing
+  // ---------------------------------------------------------------
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    // The frame's drawWithDpr() folds DPR into its world transform each frame.
+    DPR = dpr;
+  }
+  let DPR = 1;
+  window.addEventListener("resize", resize);
+
+  // ---------------------------------------------------------------
+  // Two-clock main loop (GDD §9.2)
+  //   render on rAF; economy on fixed 500ms * gameSpeed accumulator
+  // ---------------------------------------------------------------
+  let lastTime = performance.now();
+  let econAcc = 0;
+  let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
+
+  const fpsEl = document.getElementById("fps");
+  const statEl = document.getElementById("stat");
+
+  function frame(now) {
+    const dt = Math.min(100, now - lastTime);
+    lastTime = now;
+
+    // economy clock — paused when tab hidden (GDD §9.2 default)
+    if (state.gameSpeed > 0 && !document.hidden) {
+      econAcc += dt * state.gameSpeed;
+      const step = CONFIG.econ.baseTickMs;
+      let guard = 0;
+      while (econAcc >= step && guard++ < 8) { Sim.tick(state); econAcc -= step; }
+    }
+
+    applyKeyPan(dt);
+    drawWithDpr();
+
+    // FPS meter
+    fpsFrames++; fpsTimer += dt;
+    if (fpsTimer >= 500) {
+      fpsSmoothed = Math.round(fpsFrames * 1000 / fpsTimer);
+      fpsFrames = 0; fpsTimer = 0;
+      fpsEl.textContent = fpsSmoothed;
+      fpsEl.className = "fps" + (fpsSmoothed < 50 ? " warn" : "");
+      statEl.textContent =
+        `${state.map.hexes.size} hexes · ${state.towns.length} towns · ${state.roads.size} roads · z${state.zoom.toFixed(2)}`;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // wraps draw() so the device-pixel-ratio scale is applied on top of the
+  // world transform (draw() calls setTransform itself, so multiply DPR in)
+  function drawWithDpr() {
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = "#14110c";
+    ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(
+      state.zoom * DPR, 0, 0, state.zoom * DPR,
+      (W / 2 - state.cam.x * state.zoom) * DPR,
+      (H / 2 - state.cam.y * state.zoom) * DPR
+    );
+    if (terrainDirty) renderTerrain();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
+    drawRoads();
+    drawTowns();
+    drawCastle();
+    drawHoverGhost();
+  }
+
+  // ---------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------
+  resize();
+  if (!loadGame()) newGame(randomSeed());
+  setMode(state.mode);
+  requestAnimationFrame(frame);
+
+  // expose a little for debugging in the console
+  window.TW = { state, CONFIG, HexMath, MapGen, newGame };
+})();
+</script>
+</body>
+</html>
