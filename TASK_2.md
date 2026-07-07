@@ -1,50 +1,55 @@
 # TASK_2 — Session #2
 
 **You are Session #2 (a worker).** If you were told "you are Session #2," this is
-your file. Read [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md) for the protocol and
-[TASKS.md](TASKS.md) for the shared data contract, then do the task below.
+your file. **First pull `main`**
+(`git fetch origin main && git checkout main && git pull origin main`), then read
+[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md) (protocol) and [TASKS.md](TASKS.md)
+(shared data contract), and do the task below.
 
 **Rules for you:** edit **only this file** (`TASK_2.md`) among coordination
-files. Do your code work on your branch. Never edit `TASKS.md`, `TASK_3.md`, or
-`TASK_4.md`. When done, open a PR and report in the Status section below; then
-wait for Session #1 to assign your next task.
+files; cut your task branch from fresh `main`; build **only your slice**, not the
+whole phase. Never edit `TASKS.md`, `TASK_3.md`, or `TASK_4.md`. When done, open a
+PR into `main` and report in the Status section; then wait for #1's next task.
 
 ---
 
 ## Assignment / Inbox (Session #1 writes here)
 
-**Task T1 — Scaffold + `CONFIG` + `HexMath` + two-clock game loop.**
+**Task T4 — `Sim` core: production + consumption economy tick.**
 
-Branch: **`claude/phase1-hexmath-scaffold`** (create from latest `main`).
+Branch: **`claude/phase2-sim-core`** (from latest `main`).
 
-You lay the foundation the other two tasks build on, so land it clean.
+You built the Phase 1 board, so you own the architectural cornerstone: the one
+pure `Sim` core (GDD §9.1, §4.3, §5).
 
 Scope (in):
-- Create `index.html`: a single file with `<style>`, a fullscreen `<canvas>`, a
-  DOM UI layer over it, and a `<script>`. Zero external dependencies, no build
-  step (GDD §9.1).
-- `TW.CONFIG` — the single source of truth object: hex size, `mapRadius: 14`,
-  terrain colors (one per terrain in the contract), camera pan/zoom speeds,
-  economy timestep `500`. No magic numbers elsewhere.
-- `TW.HexMath` — pointy-top **axial** coords: `hexToPixel(q,r)`,
-  `pixelToHex(x,y)`, `neighbors(q,r)`, `distance(a,b)`, and `key(q,r)` returning
-  `` `${q},${r}` `` (the canonical hex key in the contract).
-- Two-clock loop skeleton (GDD §9.2): render on `requestAnimationFrame`; a fixed
-  `500ms * gameSpeed` accumulator for the economy tick (tick body can be a
-  no-op stub for now). Pause when the tab is hidden.
+- Add a **pure, deterministic `Sim` module** to `index.html` (no DOM, no canvas,
+  no I/O) — fence it in a marked block (e.g. `// === SIM-CORE START/END ===`).
+- `Sim.tick(State)` advances one economy step for every town in `State.towns`:
+  1. **Production:** each building produces `output.ratePerWorker × workers ×
+     happinessFactor`, consuming its `inputs` from town stock (skip if inputs
+     missing). Respect `workerSlots` and available population.
+  2. **Consumption:** population consumes food/goods per tier (GDD §4.3);
+     unmet needs reduce satisfaction.
+  3. **Happiness (0–100):** average need satisfaction; drives a 0.5×–1.2× work
+     efficiency factor used in step 1.
+  4. **Population:** satisfaction sustained <50% → slow decline; 100% → slow
+     growth up to house capacity.
+  Clamp stock ≥ 0. Keep it all arithmetic on small arrays (budget <5ms).
+- **Wire it into the existing two-clock loop:** replace the no-op economy tick in
+  the 500ms×gameSpeed accumulator with `Sim.tick(State)`.
+- Consume `CONFIG.goods` / `CONFIG.buildings` / the `Town` shape from the
+  contract (T5 defines the catalog; until it merges, stub a tiny local catalog
+  matching the shape so you're not blocked — note it in your PR).
 
-Scope (out): map generation (#3), rendering/camera internals (#4), any economy
-logic. Leave clearly-named stubs/hooks for `TW.MapGen`, `TW.Renderer`,
-`TW.Camera` so #3/#4 slot in without touching your code.
+Scope (out): the goods/buildings *catalog* and price model (that's #3/T5); the
+town panel UI and town placement (that's #4/T6). Don't add DOM.
 
 Definition of done:
-- `index.html` opens in a browser with no console errors.
-- **Headless test** (small Node script, GDD "fastest feedback loop"): assert
-  `HexMath` round-trips (`pixelToHex(hexToPixel(q,r)) === (q,r)`), `distance`,
-  and `neighbors` count = 6. Say how to run it in your PR.
-
-Notes: hold the shared data contract in `TASKS.md` exactly — the terrain enum,
-hex key format, and `TW.*` namespaces are what let #3 and #4 merge on top of you.
+- **Headless test** `test/sim.test.js` (Node, like `board.test.js`): a town with
+  a farm grows stock over ticks; a town with no food sees satisfaction and then
+  population fall ("grow and starve"); `Sim.tick` is deterministic (same state in
+  ⇒ same state out). Say how to run it in your PR.
 
 ---
 

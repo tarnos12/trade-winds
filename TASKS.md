@@ -1,56 +1,72 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
 Only Session #1 edits this file. Workers update **their own** `TASK_<n>.md`.
-Protocol: [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). Scope: [GDD.md](GDD.md) §10 Phase 1.
+Protocol: [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). Scope: [GDD.md](GDD.md).
 
-## How a worker joins
+## How a worker joins (read this every time)
 
-You were told "you are Session #2" (or #3 / #4). Open your file —
-**`TASK_2.md`, `TASK_3.md`, or `TASK_4.md`** — and follow it. That file names
-your task, your branch, your scope boundaries, and where to report status. Do
-**not** edit `TASKS.md` or any other worker's file.
+You were told "you are Session #2 / #3 / #4." **First pull `main`**
+(`git fetch origin main && git checkout main && git pull origin main`), then open
+your file — **`TASK_2.md`, `TASK_3.md`, or `TASK_4.md`** — and follow it. Cut your
+task branch from fresh `main`. Do **not** edit `TASKS.md` or another worker's
+file. Build only your assigned slice — not the whole phase.
 
-## Milestone: Phase 1 — The Board
+## Status: Phase 1 — The Board ✅ DONE
 
-DoD (GDD §10): generate a map from a seed, move the camera, place roads, 60 FPS.
+Landed in `index.html` on `main`: `CONFIG`, `HexMath`, seeded `MapGen`, fog,
+offscreen terrain pre-render, camera pan/zoom, build mode (roads/town/erase),
+two-clock loop. Test: `node test/board.test.js` (25/25). This is the base you
+build on — read it before starting Phase 2.
+
+## Milestone: Phase 2 — Towns & Production
+
+Goal (GDD §10): towns produce and consume, population reacts; a town panel; a
+local price model (no trade yet — prices just visible).
+**DoD:** a single town can grow and starve; prices react to stockpiles.
 
 ## Shared data contract (all sessions hold these — prevents merge conflicts)
 
-Agreed up front so the three tasks compose in one `index.html`:
+Extends the Phase 1 code. Add constants to the existing `CONFIG` object via a
+non-destructive `Object.assign(CONFIG, {...})`-style merge; fence new logic in
+clearly-marked module blocks so the single `index.html` merges cleanly.
 
-- **Axial hex key:** string `` `${q},${r}` `` used everywhere a hex is keyed.
-- **Terrain enum (strings):** `meadow`, `forest`, `hills`, `mountains`, `water`,
-  `field`, `wasteland` (GDD §3.1).
-- **`Hex` shape:** `{ q, r, terrain, revealed }` (`revealed` boolean, fog).
-- **`GameMap` shape:** `{ seed, radius, hexes }` where `hexes` is a `Map` keyed
-  by the axial hex key → `Hex`.
-- **`CONFIG`** is the single source of truth for constants (hex size, map radius
-  ~14, colors, camera speeds). Add your constants there, don't scatter literals.
-- **Module namespaces** on a single global `TW` object: `TW.HexMath`,
-  `TW.MapGen`, `TW.Renderer`, `TW.Camera`, `TW.CONFIG`. This keeps the
-  single-file additions modular and non-overlapping.
+- **Terrain enum (as built):** `water, meadow, forest, hills, mountains,
+  fertile, wasteland`. (Code is truth — note it's `fertile`, not `field`.)
+- **`CONFIG.goods[id]`** = `{ id, tier (1–3), basePrice, inputs?: {goodId: qty} }`.
+- **`CONFIG.buildings[id]`** = `{ id, terrain?: <resource hex req>, inputs?:
+  {goodId: qty}, output: {goodId, ratePerWorker}, workerSlots, cost }`.
+- **`Town`** = `{ id, q, r, level (1–4), gold, pop: {peasants, workers,
+  burghers}, stock: {goodId: qty}, prices: {goodId: price}, buildings:
+  [{typeId, q, r, workers}], happiness }`.
+- **Towns live in `State.towns`** (array). Town centers are placed with the
+  existing `town` build-mode tool.
+- **`Sim`** is a new pure, deterministic module (GDD §9.1): no DOM/canvas/I/O.
+  `Sim.tick(State)` advances one economy step. It's wired into the existing
+  500ms×speed accumulator (currently a no-op).
+- **`Sim.priceFor(town, goodId)`** computes local price from stock vs demand.
 
 ## Board
 
 | Task | Session | Branch | Depends on | Status |
 |---|---|---|---|---|
-| T1 — Scaffold + `CONFIG` + `HexMath` + two-clock loop | #2 | `claude/phase1-hexmath-scaffold` | — | 🔲 assigned |
-| T2 — `MapGen` (seeded RNG, noise, biomes, fog init) | #3 | `claude/phase1-mapgen` | HexMath keys + terrain enum (contract above) | 🔲 assigned |
-| T3 — `Renderer` (terrain pre-render) + `Camera` (pan/zoom) | #4 | `claude/phase1-renderer-camera` | `Hex`/`GameMap` shapes + `HexMath.hexToPixel` (contract above) | 🔲 assigned |
+| T5 — Goods + buildings catalog + local price model | #3 | `claude/phase2-goods-prices` | contract only | 🔲 assigned |
+| T4 — `Sim` core: production + consumption tick | #2 | `claude/phase2-sim-core` | goods/buildings shapes (T5) | 🔲 assigned |
+| T6 — Town entities + town panel UI (DOM) | #4 | `claude/phase2-town-ui` | `Town` shape + price model | 🔲 assigned |
 
 Status legend: 🔲 assigned · 🟡 in progress · 🔵 PR open · ✅ merged.
 
 ## Merge order (manager)
 
-Merge **#2 first** (it lands the scaffold, `CONFIG`, `HexMath`, and the shared
-shapes), then **#3** and **#4** (rebased on the merged scaffold). Workers may
-start immediately against the data contract above — they don't need to wait, but
-their PRs merge in this order.
+Merge **#3 first** (goods/buildings/prices — the data everything references),
+then **#2** (`Sim` tick consuming that data), then **#4** (UI reading towns +
+prices). All three can start immediately against the contract above — they don't
+need to wait, but PRs merge in this order and I resolve `index.html` conflicts.
 
-## Notes / decisions
+## Lessons applied (Phase 1 retro)
 
-- Single-file constraint (`index.html`) means every task edits the same file.
-  Conflicts are expected and are the manager's job to resolve at merge — that is
-  the whole point of serial merging. Keep additions in your own module block to
-  minimize overlap.
-- GDD §13 open questions are not blockers for Phase 1.
+- Two sessions independently rebuilt the *entire* Phase 1 board because slices
+  weren't distinct enough. Phase 2 slices are split by concern (data / sim / UI)
+  with an explicit contract. **Build only your slice.**
+- Workers must **pull `main` before each task** (now a rule in
+  `PARALLEL_SESSIONS.md`) — a stale checkout is why a session couldn't find its
+  assignment.

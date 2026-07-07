@@ -1,44 +1,56 @@
 # TASK_3 — Session #3
 
 **You are Session #3 (a worker).** If you were told "you are Session #3," this is
-your file. Read [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md) for the protocol and
-[TASKS.md](TASKS.md) for the shared data contract, then do the task below.
+your file. **First pull `main`**
+(`git fetch origin main && git checkout main && git pull origin main`), then read
+[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md) (protocol) and [TASKS.md](TASKS.md)
+(shared data contract), and do the task below.
 
 **Rules for you:** edit **only this file** (`TASK_3.md`) among coordination
-files. Do your code work on your branch. Never edit `TASKS.md`, `TASK_2.md`, or
-`TASK_4.md`. When done, open a PR and report in the Status section below; then
-wait for Session #1 to assign your next task.
+files; cut your task branch from fresh `main`; build **only your slice**, not the
+whole phase. Never edit `TASKS.md`, `TASK_2.md`, or `TASK_4.md`. When done, open a
+PR into `main` and report in the Status section; then wait for #1's next task.
+
+> Note: your earlier standalone MapGen PR (#1) was superseded — a complete Phase
+> 1 board (including seeded map generation) already landed on `main`. Your new
+> task builds on that base. Nothing to salvage from the old branch.
 
 ---
 
 ## Assignment / Inbox (Session #1 writes here)
 
-**Task T2 — `TW.MapGen`: seeded map generation, biomes, and fog init.**
+**Task T5 — Goods + buildings catalog + local price model.**
 
-Branch: **`claude/phase1-mapgen`** (create from latest `main`).
+Branch: **`claude/phase2-goods-prices`** (from latest `main`).
 
-Build the pure, deterministic map generator (GDD §3.1, §9.1).
+You define the data the whole economy references — merges first, so keep it
+clean and additive.
 
 Scope (in):
-- `TW.MapGen.generate(seed, radius)` → a `GameMap` = `{ seed, radius, hexes }`
-  where `hexes` is a `Map` keyed by the canonical hex key `` `${q},${r}` `` →
-  `Hex` = `{ q, r, terrain, revealed }` (contract in `TASKS.md`).
-- Seeded RNG: **mulberry32**. Value noise → biome assignment across the terrain
-  enum (`meadow`, `forest`, `hills`, `mountains`, `water`, `field`,
-  `wasteland`). Same seed ⇒ identical map (deterministic).
-- Hex field covers axial radius `radius` (~14, ≈600 hexes).
-- Fog init: all hexes `revealed: false` except ~7 around the center castle hex
-  `(0,0)` set `revealed: true` (GDD §3.2).
+- **`CONFIG.goods`** — the 14 goods across 3 tiers (GDD §5.1): tier 1 `wood,
+  stone, ore, grain, fish, wool`; tier 2 `planks, tools, flour, beer, cloth`;
+  tier 3 `bread, clothes, jewelry, furniture`. Each: `{ id, tier, basePrice,
+  inputs? }`. Add via a non-destructive merge into the existing `CONFIG`.
+- **`CONFIG.buildings`** — at least the 6 tier 1–2 buildings for Phase 2 (GDD
+  §5.2): e.g. `sawmill` (forest→wood), `mine` (hills→ore), `farm` (fertile→
+  grain), `fishery` (water-adjacent→fish), `mill` (grain→flour), `bakery`
+  (flour→bread). Each: `{ id, terrain?, inputs?, output:{goodId, ratePerWorker},
+  workerSlots, cost }`.
+- **Local price model** as a pure function `Sim.priceFor(town, goodId)` (or a
+  standalone `Prices` module if `Sim` isn't present yet — coordinate via the
+  contract): implement GDD §6.1 —
+  `ratio = stock / (demand * bufferTarget)`,
+  `price = clamp(basePrice * (1.6 - 0.8*ratio), basePrice*0.4, basePrice*3.0)`,
+  with the 10%/tick lerp smoothing. `bufferTarget ≈ 2.0` in `CONFIG`.
 
-Scope (out): rendering (that's #4), the game-loop/scaffold (that's #2). Depend on
-`TW.HexMath.key`/`neighbors` from #2 — you may replicate the tiny key helper
-locally against the agreed format so you're not blocked; #1 reconciles at merge.
+Scope (out): the production/consumption tick itself (that's #2/T4); the town
+panel UI (that's #4/T6). Pure data + pure functions only — no DOM.
 
 Definition of done:
-- **Headless test** (Node): `generate(42, 14)` twice ⇒ deep-equal maps
-  (determinism); hex count matches the axial-radius formula
-  `3*r*(r+1)+1`; every hex's `terrain` is in the enum; ~7 hexes revealed at
-  start. Say how to run it in your PR.
+- **Headless test** `test/prices.test.js` (Node): surplus stock ⇒ price near the
+  0.4× floor; scarcity ⇒ near the 3.0× ceiling; a mid ratio ⇒ ~basePrice; every
+  good has a valid tier and any `inputs` reference real goods; smoothing moves
+  price gradually. Say how to run it in your PR.
 
 ---
 
