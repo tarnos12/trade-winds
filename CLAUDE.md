@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phase 1 — The Board: DONE. Phase 2 — Towns & Production: assigned.**
+**Phase 1 — The Board: DONE. Phase 2 — Towns & Production: DONE. Phase 3 — Trade: next.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -65,13 +65,19 @@ Done:
   accumulator). Headless test `test/board.test.js` (25/25). Verified in headless
   Chromium: no console errors, canvas renders. DoD met.
 
+- **Phase 2 — Towns & Production** landed via the agent team (merge order T5 →
+  T4 → T6): `CONFIG.goods`/`CONFIG.buildings` + `Sim.priceFor` price model
+  (§6.1), the pure `Sim.tick` production→consumption→happiness→population step
+  wired to the 500ms accumulator, and town entities + a 4-tab DOM town panel.
+  Tests: `board` 25 · `prices` 51 · `sim` 27; integrated headless smoke clean.
+  DoD met (a town grows/starves; prices react to stockpiles).
+
 Next (recommended order):
-1. **Phase 2 — Towns & Production** (assigned to workers): #3 goods/buildings +
-   price model, #2 `Sim` production/consumption tick, #4 town entities + town
-   panel UI. See [TASKS.md](TASKS.md). Manager merges #3 → #2 → #4.
-   DoD (GDD §10): a single town can grow and starve; prices react to stockpiles.
-2. Phase 3 — Trade (riskiest); Phase 4 — Progression; Phase 5 — Content &
-   Polish. (GDD §10.)
+1. **Phase 3 — Trade** (riskiest): road graph + Dijkstra, cart agents with the
+   route-selection algorithm, transactions + tariff + treasury, cart animation,
+   castle warehouse. DoD (GDD §10): 3 specialized towns reach a stable trade
+   equilibrium unattended; cutting a road causes a visible price crisis.
+2. Phase 4 — Progression; Phase 5 — Content & Polish. (GDD §10.)
 3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
    goods count, win condition, title) — not blockers yet.
 

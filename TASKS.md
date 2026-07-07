@@ -8,6 +8,14 @@ slices below, spawns one **worktree-isolated subagent** per slice, and integrate
 results into `main` in the stated merge order. "#2/#3/#4" are task slots, not
 separate sessions.
 
+## Status: Phase 2 — Towns & Production ✅ DONE
+
+All three slices merged (T5 → T4 → T6). `index.html` now has the goods/buildings
+catalog + price model, the `Sim.tick` production/consumption economy tick wired
+to the 500ms accumulator, and town entities + a 4-tab DOM town panel. Tests:
+`board` 25 · `prices` 51 · `sim` 27, all green; integrated headless smoke clean.
+DoD met (a town grows/starves; prices react to stockpiles). Next: Phase 3 — Trade.
+
 ## Status: Phase 1 — The Board ✅ DONE
 
 Landed in `index.html` on `main`: `CONFIG`, `HexMath`, seeded `MapGen`, fog,
@@ -46,7 +54,7 @@ module blocks so the single `index.html` merges cleanly.
 |---|---|---|---|---|
 | T5 — goods + buildings catalog + local price model | #3 | `claude/phase2-goods-prices` | contract only | ✅ merged |
 | T4 — `Sim` core: production + consumption tick | #2 | `claude/phase2-sim-core` | goods/buildings shapes (T5) | ✅ merged |
-| T6 — town entities + town panel UI (DOM) | #4 | `claude/phase2-town-ui` | `Town` shape + price model | 🟡 in progress |
+| T6 — town entities + town panel UI (DOM) | #4 | `claude/phase2-town-ui` | `Town` shape + price model | ✅ merged |
 
 Status legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
 **Merge order: #3 → #2 → #4.**
