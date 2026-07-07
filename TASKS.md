@@ -45,7 +45,7 @@ module blocks so the single `index.html` merges cleanly.
 | Task | Slot | Subagent branch/worktree | Depends on | Status |
 |---|---|---|---|---|
 | T5 — goods + buildings catalog + local price model | #3 | `claude/phase2-goods-prices` | contract only | ✅ merged |
-| T4 — `Sim` core: production + consumption tick | #2 | `claude/phase2-sim-core` | goods/buildings shapes (T5) | 🟡 in progress |
+| T4 — `Sim` core: production + consumption tick | #2 | `claude/phase2-sim-core` | goods/buildings shapes (T5) | ✅ merged |
 | T6 — town entities + town panel UI (DOM) | #4 | `claude/phase2-town-ui` | `Town` shape + price model | 🟡 in progress |
 
 Status legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
