@@ -1,109 +1,102 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
-This is the manager's board for the **in-session agent team** model
-(see [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)). Scope: [GDD.md](GDD.md).
+Manager's board for the **in-session agent team** ([PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)).
+Scope: [GDD.md](GDD.md). The manager works on `main`, splits each phase into
+non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
+integrates into `main` in the merge order below. "#2/#3/#4" are task slots.
 
-The manager (Session #1) works on `main`, splits each phase into non-overlapping
-slices below, spawns one **worktree-isolated subagent** per slice, and integrates
-results into `main` in the stated merge order. "#2/#3/#4" are task slots, not
-separate sessions.
+## Done
 
-## Status: Phase 2 — Towns & Production ✅ DONE
+- **Phase 1 — The Board ✅** — `CONFIG`, `HexMath`, seeded `MapGen`, fog,
+  offscreen terrain pre-render, camera, build mode (roads/town/erase), two-clock
+  loop. Test: `board` 25/25.
+- **Phase 2 — Towns & Production ✅** — goods/buildings catalog + `Sim.priceFor`
+  price model, `Sim.tick` (production→consumption→happiness→population) wired to
+  the 500ms accumulator, town entities + 4-tab DOM town panel. Tests: `prices`
+  51, `sim` 27.
 
-All three slices merged (T5 → T4 → T6). `index.html` now has the goods/buildings
-catalog + price model, the `Sim.tick` production/consumption economy tick wired
-to the 500ms accumulator, and town entities + a 4-tab DOM town panel. Tests:
-`board` 25 · `prices` 51 · `sim` 27, all green; integrated headless smoke clean.
-DoD met (a town grows/starves; prices react to stockpiles). Next: Phase 3 — Trade.
+## Milestone: Phase 3 — Trade ⭐ (riskiest phase)
 
-## Status: Phase 1 — The Board ✅ DONE
+Goal (GDD §6, §10): carts travel roads on their own and equalize markets; the
+player earns a tariff on every inter-town transaction.
+**DoD:** 3 specialized towns reach a stable trade equilibrium unattended; cutting
+a road causes a visible price crisis.
+**Risk:** price oscillation / carts stuck in loops → mitigate with the existing
+price smoothing, a profit threshold, top-3 route randomness, and a cart cap.
 
-Landed in `index.html` on `main`: `CONFIG`, `HexMath`, seeded `MapGen`, fog,
-offscreen terrain pre-render, camera pan/zoom, build mode (roads/town/erase),
-two-clock loop. Test: `node test/board.test.js` (25/25). This is the base Phase 2
-builds on.
+### Shared data contract (every subagent holds these)
 
-## Milestone: Phase 2 — Towns & Production
+Builds on the Phase 1/2 `index.html`. Add to the existing `state` object and
+`CONFIG` non-destructively; fence new logic in marked blocks.
 
-Goal (GDD §10): towns produce and consume, population reacts; a town panel; a
-local price model (no trade yet — prices just visible).
-**DoD:** a single town can grow and starve; prices react to stockpiles.
+- **`state.carts = []`** — new top-level array of live carts. Add to state init,
+  the save serializer (~line 1062), and load.
+- **`state.treasury = 0`** — player tariff income (gold). Distinct from a town's
+  own `town.gold`. Shown in the HUD by T9.
+- **Town↔road connection:** a town at `(q,r)` is on the network if its hex or a
+  `HexMath.neighbors` hex is in `state.roads`. Carts path between town hexes over
+  the road graph.
+- **`Pathing`** (T7, pure, fenced module):
+  - `Pathing.route(state, fromKey, toKey)` → `{ path:[hexKey...], cost }` or
+    `null` if unreachable. `path` includes both endpoints; `cost` = Σ step costs
+    (uniform 1/step for dirt roads — roads are a plain `Set`, no level yet).
+  - Nodes = road hex keys + the two town access hexes; edges connect adjacent
+    (`HexMath.neighbors`) nodes. **Dijkstra.**
+  - **Route cache** invalidated on any road change: expose `Pathing.invalidate()`
+    and call it at every `state.roads.add(...)` / `state.roads.delete(...)` site.
+- **`Cart` shape** (created by T8, drawn by T9):
+  `{ id, fromId, toId, goodId, qty, unitBuy, path:[keys], progress (0..1 along
+  path length), phase:'outbound'|'return', done:false }`.
+- **`CONFIG.trade`** (non-destructive merge): `{ tariffRate:0.25,
+  profitThreshold, distanceCostPerStep, cartCapacity, cartSpeed, maxCartsPerTown
+  (1–3 by town level), topRandom:3 }`.
+- **Determinism:** cart route randomness MUST use a **seeded RNG** (reuse
+  `MapGen`'s mulberry32 with a stream stored in `state`), never `Math.random` —
+  the sim/trade step stays deterministic and testable.
+- **Trade step** runs as `Trade.tick(state)` (pure) called from the 500ms
+  accumulator **right after `Sim.tick(state)`**.
 
-## Shared data contract (every subagent holds these — prevents merge conflicts)
+### Board
 
-Add constants to the existing `CONFIG` object via a non-destructive
-`Object.assign(CONFIG, {...})`-style merge; fence new logic in clearly-marked
-module blocks so the single `index.html` merges cleanly.
+| Task | Slot | Depends on | Status |
+|---|---|---|---|
+| T7 — `Pathing`: road graph + Dijkstra + route cache | #2 | contract only | 🔲 assigned |
+| T8 — `Trade`: cart dispatch + transactions + tariff→treasury | #3 | Pathing (T7) + price model | 🔲 assigned |
+| T9 — cart entities render/animation + treasury HUD + castle warehouse | #4 | Cart shape (T8) + Pathing | 🔲 assigned |
 
-- **Terrain enum (as built):** `water, meadow, forest, hills, mountains,
-  fertile, wasteland`. (Code is truth — it's `fertile`, not `field`.)
-- **`CONFIG.goods[id]`** = `{ id, tier (1–3), basePrice, inputs?: {goodId: qty} }`.
-- **`CONFIG.buildings[id]`** = `{ id, terrain?, inputs?, output: {goodId,
-  ratePerWorker}, workerSlots, cost }`.
-- **`Town`** = `{ id, q, r, level (1–4), gold, pop: {peasants, workers,
-  burghers}, stock: {goodId: qty}, prices: {goodId: price}, buildings:
-  [{typeId, q, r, workers}], happiness }`; towns live in `State.towns`.
-- **`Sim`** = a new pure, deterministic module (no DOM/canvas/I/O).
-  `Sim.tick(State)` advances one economy step; wired into the existing
-  500ms×speed accumulator (currently a no-op). `Sim.priceFor(town, goodId)`
-  computes local price from stock vs demand.
+Legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
+**Merge order: T7 → T8 → T9.** T7 lands first (foundation); then T8/T9 in parallel.
 
-## Board
+### Task specs
 
-| Task | Slot | Subagent branch/worktree | Depends on | Status |
-|---|---|---|---|---|
-| T5 — goods + buildings catalog + local price model | #3 | `claude/phase2-goods-prices` | contract only | ✅ merged |
-| T4 — `Sim` core: production + consumption tick | #2 | `claude/phase2-sim-core` | goods/buildings shapes (T5) | ✅ merged |
-| T6 — town entities + town panel UI (DOM) | #4 | `claude/phase2-town-ui` | `Town` shape + price model | ✅ merged |
+**T7 (#2) — Pathing.** Pure `Pathing` module (fenced, in the PURE_CORE region so
+the headless harness can eval it). Build the road-node graph from `state.roads` +
+town access hexes; `Pathing.route(state, fromKey, toKey)` via Dijkstra returning
+`{path, cost}` or `null`; a route cache invalidated by `Pathing.invalidate()`,
+which must be called wherever roads are added/deleted. **DoD:** `test/pathing.test.js`
+— straight road returns the expected path/cost; no-road-between returns `null`;
+cache returns same result then reflects an invalidation after a road change.
 
-Status legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
-**Merge order: #3 → #2 → #4.**
+**T8 (#3) — Trade.** Pure `Trade.tick(state)` called after `Sim.tick`. For each
+town with level ≥2 holding an idle cart (≤ `maxCartsPerTown`): gather offers over
+reachable towns (`Pathing.route`), `profit = (priceDest − priceHome)*load −
+distanceCostPerStep*cost`; pick the best profit above `profitThreshold` with
+seeded top-3 randomness; create a `Cart`, deduct goods/gold at home. Advance each
+cart's `progress` by `cartSpeed`/tick; on arrival execute the transaction (dest
+pays gold + gains stock), add **25%** tariff to `state.treasury`, then return or
+retire. **DoD:** `test/trade.test.js` — 3 complementary towns + roads: goods flow
+and prices converge over N ticks; treasury grows; **remove a road ⇒
+`Pathing.route` null and prices diverge** (the crisis). Deterministic (seeded RNG).
 
-## Task specs
+**T9 (#4) — Carts & castle.** `drawCarts()` added to `frame()` after
+`drawTowns()`: draw each cart interpolated along `path` by `progress` (dots when
+zoomed out). HUD shows `state.treasury` (+ tariff rate). Castle warehouse UI at
+center `(0,0)`: manual buy-low/sell-high against the local market (capacity-
+limited), the player's only direct market touch. **DoD:** open `index.html`, build
+roads between towns, watch carts move and treasury tick up; open the castle panel
+and buy/sell. No console errors (headless smoke).
 
-### T5 (#3) — Goods + buildings catalog + local price model
-- `CONFIG.goods`: the 14 goods across 3 tiers (GDD §5.1) — tier 1 `wood, stone,
-  ore, grain, fish, wool`; tier 2 `planks, tools, flour, beer, cloth`; tier 3
-  `bread, clothes, jewelry, furniture`. Each `{id, tier, basePrice, inputs?}`.
-- `CONFIG.buildings`: ≥6 tier 1–2 buildings (GDD §5.2) — e.g. `sawmill`
-  (forest→wood), `mine` (hills→ore), `farm` (fertile→grain), `fishery`
-  (water-adjacent→fish), `mill` (grain→flour), `bakery` (flour→bread). Each
-  `{id, terrain?, inputs?, output:{goodId, ratePerWorker}, workerSlots, cost}`.
-- Price model `Sim.priceFor(town, goodId)` (GDD §6.1): `ratio = stock /
-  (demand*bufferTarget)`; `price = clamp(basePrice*(1.6 - 0.8*ratio),
-  basePrice*0.4, basePrice*3.0)`; 10%/tick lerp smoothing; `bufferTarget ≈ 2.0`.
-- Pure data + pure functions, no DOM.
-- **DoD:** `test/prices.test.js` — surplus ⇒ ~0.4× floor; scarcity ⇒ ~3.0×
-  ceiling; mid ratio ⇒ ~basePrice; every good has a valid tier and any `inputs`
-  reference real goods; smoothing moves price gradually.
-
-### T4 (#2) — `Sim` core: production + consumption tick
-- Pure `Sim` module (fenced block). `Sim.tick(State)` per town: **production**
-  (`output.ratePerWorker × workers × happinessFactor`, consuming `inputs`),
-  **consumption** (population needs by tier, GDD §4.3), **happiness** (0–100 avg
-  satisfaction → 0.5×–1.2× efficiency), **population** (sustained <50% → decline;
-  100% → growth to house cap). Clamp stock ≥ 0.
-- Wire into the two-clock loop: replace the no-op 500ms tick with `Sim.tick`.
-- Consume `CONFIG.goods`/`buildings`/`Town` from the contract (stub a tiny local
-  catalog if T5 isn't integrated yet).
-- **DoD:** `test/sim.test.js` — a town with a farm grows stock; a foodless town's
-  satisfaction then population falls ("grow and starve"); `Sim.tick` deterministic.
-
-### T6 (#4) — Town entities + town panel UI (DOM)
-- Town creation via the existing `town` build tool → a `Town` (contract shape) in
-  `State.towns`; buildings attach within radius 1–2 (GDD §4.1).
-- DOM panel over the canvas on town click: tabs **Overview / Stock+Prices /
-  Buildings / Population**, live stock, `Sim.priceFor` prices with ▲▼ trend
-  arrows (GDD §8), pop by tier, happiness. Doesn't block panning.
-- Consume the contract; stub one town + tiny catalog if #2/#3 not integrated yet.
-- **DoD:** open `index.html` → place a town, click it, all four tabs populate from
-  live state; prices show trend arrows; panel updates as the economy ticks; no
-  console errors.
-
-## Lessons applied (Phase 1 retro)
-
-- Phase 1's 3-way split let two agents rebuild the *entire* board. Phase 2 is
-  split by concern (data / sim / UI) with an explicit contract — each subagent
-  builds **only its slice**.
-- Subagents run with **worktree isolation** so their parallel `index.html` edits
-  don't collide; the manager integrates serially in the merge order above.
+## Lessons applied
+- Slices split by concern (graph / trade logic / visuals+UI) with an explicit
+  contract; each subagent builds **only its slice** in an isolated worktree; the
+  manager integrates serially in merge order.
