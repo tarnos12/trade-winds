@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Trade Winds — Phase 1: The Board</title>
+<title>Trade Winds</title>
 <style>
   :root {
     --paper: #f2e6cf;
@@ -129,13 +129,45 @@
   .trend.flat { color: var(--paper); opacity: 0.5; }
   .tp-empty { opacity: 0.6; font-style: italic; padding: 6px 0; }
   /* === TOWN-UI CSS END === */
+
+  /* === CASTLE-UI CSS START === (T9 / slot #4 — treasury HUD + castle warehouse) */
+  /* Treasury line in the shared HUD (keeps existing fps/stat intact). */
+  #hud .treasury { color: var(--accent); font-weight: bold; }
+  #hud .treasury .rate { color: var(--paper); opacity: 0.55; font-weight: normal; font-size: 11px; }
+  /* Castle warehouse panel — reuses the generic .tp-* look, own position/id. */
+  #castlePanel {
+    position: fixed; top: 56px; right: 12px; width: 340px;
+    max-height: calc(100vh - 84px);
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+    font-size: 13px; z-index: 21; overflow: hidden;
+  }
+  #castlePanel.hidden { display: none; }
+  .cw-summary { display: flex; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--panel-edge); }
+  .cw-summary .box { flex: 1; text-align: center; }
+  .cw-summary .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+  .cw-summary .box .v { font-variant-numeric: tabular-nums; font-weight: bold; color: var(--accent); }
+  .cw-cap { height: 6px; border-radius: 3px; background: #1c160f; border: 1px solid var(--panel-edge); overflow: hidden; margin: 0 12px 8px; }
+  .cw-cap > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
+  table.cw-tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.cw-tbl th, table.cw-tbl td { padding: 3px 5px; text-align: right; }
+  table.cw-tbl th:first-child, table.cw-tbl td:first-child { text-align: left; }
+  table.cw-tbl th { font-size: 10.5px; opacity: 0.7; border-bottom: 1px solid var(--panel-edge); font-weight: normal; }
+  table.cw-tbl tr.dim td { opacity: 0.45; }
+  .cw-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.4); }
+  .cw-btn { padding: 1px 8px; font-size: 11px; line-height: 1.5; margin-left: 3px; }
+  .cw-btn.buy { border-color: #6fbf73; color: #a6e0a8; }
+  .cw-btn.sell { border-color: #e0844a; color: #f0b892; }
+  .cw-btn:disabled { opacity: 0.3; cursor: default; }
+  /* === CASTLE-UI CSS END === */
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
 <div id="topbar">
-  <div class="brand">Trade&nbsp;Winds <small>· Phase&nbsp;1 · The Board</small></div>
+  <div class="brand">Trade&nbsp;Winds <small>· build · trade · tariff</small></div>
 
   <div class="group">
     <label class="seedlbl" for="seed">Seed</label>
@@ -166,6 +198,8 @@
 </div>
 
 <div id="hud">
+  <!-- CASTLE-UI: player tariff treasury (T9) -->
+  <div class="treasury">👑 <span id="treasuryVal">0</span> g <span class="rate" id="tariffVal"></span></div>
   <div><span class="fps" id="fps">—</span> fps</div>
   <div id="stat">—</div>
 </div>
@@ -185,6 +219,22 @@
   <div class="tp-body" id="tpBody"></div>
 </div>
 <!-- === TOWN-UI HTML END === -->
+
+<!-- === CASTLE-UI HTML START === (T9 / slot #4 — castle warehouse panel) -->
+<div id="castlePanel" class="hidden" aria-hidden="true">
+  <div class="tp-head">
+    <div class="tp-title">👑 Castle Warehouse</div>
+    <button id="cwClose" class="tp-close" title="Close">✕</button>
+  </div>
+  <div class="cw-summary">
+    <div class="box"><div class="k">Treasury</div><div class="v" id="cwTreasury">0 g</div></div>
+    <div class="box"><div class="k">Market</div><div class="v" id="cwMarket">—</div></div>
+    <div class="box"><div class="k">Storage</div><div class="v" id="cwCapText">0 / 0</div></div>
+  </div>
+  <div class="cw-cap"><span id="cwCapBar" style="width:0%"></span></div>
+  <div class="tp-body" id="cwBody"></div>
+</div>
+<!-- === CASTLE-UI HTML END === -->
 
 
 <script>
@@ -1272,6 +1322,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     state.carts = [];
     state.treasury = 0;
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
+    state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -1302,6 +1353,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         treasury: state.treasury,
         tradeSeed: state.tradeSeed,
         revealed: Array.from(state.revealed),
+        warehouse: state.warehouse,        // CASTLE-UI (T9): player warehouse
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }
@@ -1323,6 +1375,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
+    state.warehouse = data.warehouse || {};   // CASTLE-UI (T9)
     state.revealAll = !!data.revealAll;
     for (const k of (data.revealed || [])) {
       state.revealed.add(k);
@@ -1417,6 +1470,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
     drawRoads();
     drawTowns();
+    drawCarts();      // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawHoverGhost();
   }
@@ -1496,7 +1550,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const town = {
       id: nextTownId(),
       q, r,
-      level: 1,
+      // Start at level 2 so towns maintain a cart and trade autonomously on
+      // placement (Phase 3 core loop). Proper tariff-funded town leveling is
+      // Phase 4 progression; until then new towns are trade-capable by default.
+      level: 2,
       gold: 200,
       pop: { peasants: 20, workers: 8, burghers: 2 },
       stock: {
@@ -1676,6 +1733,263 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
                     get activeTown() { return activeTown; } };
   // === TOWN-UI END ===
+
+  // === CARTS + CASTLE-UI START === (T9 / slot #4)
+  // Reads the shared Phase-3 contract produced by T8 (state.carts, state.treasury,
+  // CONFIG.trade) DEFENSIVELY — everything guarded so this slice also runs before
+  // T8 merges. Owns ONLY the player warehouse (state.warehouse) + CONFIG.castle.
+  // No trade logic here: carts are positioned purely from cart.progress.
+
+  // My own config (additive; T8 owns CONFIG.trade, not touched here).
+  CONFIG.castle = Object.assign({ warehouseCapacity: 300, tradeUnit: 5 }, CONFIG.castle);
+
+  // Player warehouse — a flat { goodId: qty }. Owned by this slice.
+  if (!state.warehouse || typeof state.warehouse !== "object") state.warehouse = {};
+
+  // Per-good token colours for the cart dot (goods have no colour in CONFIG).
+  const GOOD_COLORS = {
+    wood: "#8a5a2b", planks: "#b07a3c", stone: "#9aa0a6", ore: "#6b7078",
+    grain: "#d9b44a", flour: "#e8d59a", fish: "#5aa6c9", wool: "#e2ddce",
+    bread: "#c8863c", beer: "#c9902c", cloth: "#7a9bd4", clothes: "#5566c0",
+    tools: "#aab0b6", jewelry: "#e6c93f", furniture: "#a56a38",
+  };
+  function goodColor(id) {
+    if (GOOD_COLORS[id]) return GOOD_COLORS[id];
+    let h = 0; const s = String(id);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return `hsl(${h % 360},55%,58%)`;
+  }
+
+  // ---- cart rendering ----------------------------------------------------
+  // Position derives from cart.progress interpolated along the hex-key `path`.
+  // I read the contract shape { path:[hexKey...], progress:0..1, phase, goodId,
+  // done }. For 'return' I mirror the fraction (1-progress) so a cart that reset
+  // progress to 0 on the way home walks the SAME path backwards — see integration
+  // notes if T8 keeps progress running instead of resetting.
+  function cartPixel(cart) {
+    const path = cart && cart.path;
+    if (!Array.isArray(path) || path.length === 0) return null;
+    const pts = [];
+    for (const k of path) {
+      if (typeof k !== "string") return null;
+      const [q, r] = k.split(",").map(Number);
+      if (!Number.isFinite(q) || !Number.isFinite(r)) return null;
+      pts.push(HexMath.hexToPixel(q, r, SIZE));
+    }
+    if (pts.length === 1) return pts[0];
+    let f = Math.max(0, Math.min(1, Number(cart.progress) || 0));
+    if (cart.phase === "return") f = 1 - f;
+    // walk cumulative segment lengths to the fraction f of total length
+    let total = 0; const seg = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const l = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+      seg.push(l); total += l;
+    }
+    if (total === 0) return pts[0];
+    let d = f * total;
+    for (let i = 0; i < seg.length; i++) {
+      if (d <= seg[i] || i === seg.length - 1) {
+        const t = seg[i] ? d / seg[i] : 0;
+        return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t,
+                 y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+      }
+      d -= seg[i];
+    }
+    return pts[pts.length - 1];
+  }
+
+  const cartRender = {};   // cart.id -> smoothed {x,y} for render-dt lerp
+
+  function drawCartToken(x, y, color) {
+    const w = SIZE * 0.52, h = SIZE * 0.34;
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath(); ctx.ellipse(x, y + h * 0.62, w * 0.5, h * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#6b4a22"; ctx.strokeStyle = "#3c2a12"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#2a1c0c";
+    ctx.beginPath(); ctx.arc(x - w * 0.28, y + h * 0.5, h * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w * 0.28, y + h * 0.5, h * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.45)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y - h * 0.08, h * 0.36, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+
+  function drawCarts() {
+    const carts = state.carts || [];
+    if (!carts.length) return;
+    const zoomedOut = state.zoom < 0.6;   // dots-only when far out (GDD §8)
+    const live = new Set();
+    for (const cart of carts) {
+      if (!cart || cart.done) continue;
+      const target = cartPixel(cart);
+      if (!target) continue;
+      live.add(cart.id);
+      // smooth motion between the 500ms progress steps (position still derives
+      // from progress; this only interpolates the visual toward it each frame)
+      let rp = cartRender[cart.id];
+      if (!rp) rp = cartRender[cart.id] = { x: target.x, y: target.y };
+      else { rp.x += (target.x - rp.x) * 0.25; rp.y += (target.y - rp.y) * 0.25; }
+      const gc = goodColor(cart.goodId);
+      if (zoomedOut) {
+        ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(rp.x, rp.y, SIZE * 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      } else {
+        drawCartToken(rp.x, rp.y, gc);
+      }
+    }
+    // prune render cache for carts that vanished/finished
+    for (const id in cartRender) if (!live.has(isNaN(+id) ? id : +id) && !live.has(id)) delete cartRender[id];
+  }
+
+  // ---- treasury HUD ------------------------------------------------------
+  const treasuryValEl = document.getElementById("treasuryVal");
+  const tariffValEl = document.getElementById("tariffVal");
+  function tariffRate() {
+    const tr = CONFIG.trade && CONFIG.trade.tariffRate;
+    return typeof tr === "number" ? tr : 0.25;   // GDD §6.3 baseline
+  }
+  function updateTreasuryHud() {
+    treasuryValEl.textContent = Math.round(state.treasury || 0).toLocaleString();
+    tariffValEl.textContent = "· " + Math.round(tariffRate() * 100) + "% tariff";
+  }
+
+  // ---- castle warehouse panel -------------------------------------------
+  const castleEl = document.getElementById("castlePanel");
+  const cwBodyEl = document.getElementById("cwBody");
+  const cwTreasuryEl = document.getElementById("cwTreasury");
+  const cwMarketEl = document.getElementById("cwMarket");
+  const cwCapTextEl = document.getElementById("cwCapText");
+  const cwCapBarEl = document.getElementById("cwCapBar");
+  let castleOpen = false;
+
+  function nearestTownToCastle() {
+    let best = null, bd = Infinity;
+    for (const t of state.towns) {
+      const d = HexMath.dist(0, 0, t.q, t.r);
+      if (d < bd) { bd = d; best = t; }
+    }
+    return best;
+  }
+  // Local market price the player trades against: the nearest town's price, or
+  // the good's base price if there are no towns yet.
+  function castlePriceOf(goodId) {
+    const t = nearestTownToCastle();
+    if (t) return priceOf(t, goodId);
+    const g = CONFIG.goods[goodId];
+    return g ? g.basePrice : 0;
+  }
+  function warehouseUsed() {
+    let s = 0; const w = state.warehouse || {};
+    for (const k in w) s += w[k] || 0;
+    return s;
+  }
+
+  function castleBuy(goodId) {
+    const unit = CONFIG.castle.tradeUnit;
+    const cap = CONFIG.castle.warehouseCapacity;
+    const price = castlePriceOf(goodId);
+    const cost = price * unit;
+    const treas = state.treasury || 0;
+    if (treas < cost) return;                       // can't afford
+    if (warehouseUsed() + unit > cap) return;       // capacity limited
+    state.treasury = treas - cost;                  // player spends tariff gold
+    state.warehouse[goodId] = (state.warehouse[goodId] || 0) + unit;
+    afterCastleTrade();
+  }
+  function castleSell(goodId) {
+    const have = state.warehouse[goodId] || 0;
+    if (have <= 0) return;
+    const unit = Math.min(CONFIG.castle.tradeUnit, have);
+    const price = castlePriceOf(goodId);
+    state.warehouse[goodId] = have - unit;
+    if (state.warehouse[goodId] <= 0) delete state.warehouse[goodId];
+    state.treasury = (state.treasury || 0) + price * unit;   // player earns gold
+    afterCastleTrade();
+  }
+  function afterCastleTrade() {
+    renderCastlePanel();
+    updateTreasuryHud();
+    scheduleSave();
+  }
+
+  function renderCastlePanel() {
+    if (!castleOpen) return;
+    const unit = CONFIG.castle.tradeUnit;
+    const cap = CONFIG.castle.warehouseCapacity;
+    const used = warehouseUsed();
+    const treas = state.treasury || 0;
+    const town = nearestTownToCastle();
+    cwTreasuryEl.textContent = Math.round(treas).toLocaleString() + " g";
+    cwMarketEl.textContent = town ? ("Town #" + town.id) : "base prices";
+    cwCapTextEl.textContent = Math.round(used) + " / " + cap;
+    cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
+
+    const ids = Object.keys(CONFIG.goods).sort((a, b) =>
+      CONFIG.goods[a].tier - CONFIG.goods[b].tier || a.localeCompare(b));
+    let rows = "";
+    for (const id of ids) {
+      const price = castlePriceOf(id);
+      const held = state.warehouse[id] || 0;
+      const canBuy = treas >= price * unit && used + unit <= cap;
+      const canSell = held > 0;
+      rows += `<tr class="${held > 0 ? "" : "dim"}">
+        <td><span class="cw-dot" style="background:${goodColor(id)}"></span>${esc(GOOD_LABEL(id))}</td>
+        <td>${fmt(price)}g</td>
+        <td>${fmt(held)}</td>
+        <td>
+          <button class="cw-btn buy" data-buy="${id}" ${canBuy ? "" : "disabled"}>Buy ${unit}</button>
+          <button class="cw-btn sell" data-sell="${id}" ${canSell ? "" : "disabled"}>Sell ${unit}</button>
+        </td></tr>`;
+    }
+    cwBodyEl.innerHTML = `<table class="cw-tbl">
+      <tr><th>Good</th><th>Price</th><th>Held</th><th></th></tr>${rows}</table>`;
+  }
+
+  function openCastlePanel() {
+    // mutually exclusive with the town panel
+    if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
+    castleOpen = true;
+    castleEl.classList.remove("hidden");
+    castleEl.setAttribute("aria-hidden", "false");
+    renderCastlePanel();
+  }
+  function closeCastlePanel() {
+    castleOpen = false;
+    castleEl.classList.add("hidden");
+    castleEl.setAttribute("aria-hidden", "true");
+  }
+
+  // buy/sell via delegation (rows are re-rendered each trade)
+  cwBodyEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-buy]");
+    const s = e.target.closest("button[data-sell]");
+    if (b) castleBuy(b.dataset.buy);
+    else if (s) castleSell(s.dataset.sell);
+  });
+  document.getElementById("cwClose").addEventListener("click", closeCastlePanel);
+
+  // Castle-click detection at the center hex (0,0), pan-mode only. Own down-pos
+  // so a camera drag is not read as a click (mirrors the TOWN-UI pattern).
+  let castleDown = null;
+  canvas.addEventListener("mousedown", (e) => { if (e.button === 0) castleDown = { x: e.clientX, y: e.clientY }; });
+  canvas.addEventListener("click", (e) => {
+    const down = castleDown; castleDown = null;
+    if (!down) return;
+    if (Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 5) return;
+    if (state.mode !== "pan") return;
+    const h = hexAtScreen(e.clientX, e.clientY);
+    if (h.q === 0 && h.r === 0) openCastlePanel();
+    else if (castleOpen) closeCastlePanel();
+  });
+
+  // Live refresh: keep treasury HUD + open castle panel current as prices/trade tick.
+  updateTreasuryHud();
+  setInterval(() => { updateTreasuryHud(); if (castleOpen) renderCastlePanel(); }, 500);
+
+  // Expose for the headless smoke test / console debugging.
+  window.CastleUI = { openCastlePanel, closeCastlePanel, castleBuy, castleSell,
+                      updateTreasuryHud, drawCarts, cartPixel,
+                      get isOpen() { return castleOpen; } };
+  // === CARTS + CASTLE-UI END ===
 
   // ---------------------------------------------------------------
   // Boot
