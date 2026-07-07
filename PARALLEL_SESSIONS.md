@@ -43,11 +43,3 @@ end-to-end with no manual per-session prompting.
 
 Serial integration into `main` is the one intentional bottleneck — the single
 clean integration point.
-
-## Alternative: separate real sessions (not used here)
-
-If you ever need durable, independent sessions (separate machines, spread token
-cost, long-lived agents), use the older **central-dispatch across real sessions**
-model instead — `coordination` branch, one `TASK_<n>.md` per session, a PR per
-worker, manager merges serially. It's documented in the claude-rules template.
-For this project we use the agent-team model above.
