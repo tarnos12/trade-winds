@@ -17,3 +17,6 @@ npm-debug.log*
 *.log
 /tmp/
 scratch/
+
+# Claude Code ephemeral subagent worktrees (agent-team model) — never commit
+.claude/worktrees/
