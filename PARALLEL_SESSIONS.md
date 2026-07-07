@@ -1,75 +1,53 @@
-# Parallel Sessions — Coordination Protocol (Trade Winds)
+# Parallel Work — In-Session Agent Team (Trade Winds)
 
-Adapted from the central-dispatch protocol in
+How this project runs multi-part work: a single **manager session** (Session #1)
+works on `main` and executes tasks through a team of **worktree-isolated
+subagents it spawns** — not separate human-launched sessions. Author is Mariusz
+(GitHub `tarnos12`). Canonical protocol:
 <https://raw.githubusercontent.com/tarnos12/claude-rules/master/templates/PARALLEL_SESSIONS.md>.
-Include/keep this only while several Claude Code sessions run at once. Author is
-Mariusz (GitHub `tarnos12`).
 
-## Core principle
+## Model
 
-**Each session writes exactly ONE coordination file.** No two sessions ever
-write the same file, so their pushes never collide. Task-tracking files live in
-the repo alongside code; PRs are the integration mechanism and the manager is
-the single integration point.
+- **Manager — Session #1 (this session):** works on `main` directly; is the sole
+  committer to `main`. Owns the board ([TASKS.md](TASKS.md)) and the shared data
+  contract. Splits a phase into non-overlapping slices, **spawns one subagent per
+  slice**, integrates each result into `main` in a defined order, and resolves
+  conflicts.
+- **Workers = subagents:** spawned by the manager via the Agent tool with
+  **`isolation: "worktree"`**, so each works on its own checkout and parallel
+  edits to the single `index.html` don't collide. Each gets one task, builds it,
+  runs its headless test / smoke check, and returns its diff + how-to-verify to
+  the manager. Subagents are **ephemeral** — they live only for their task. There
+  are no durable #2/#3/#4 sessions; "#2/#3/#4" now just label task slots.
 
-## Roles
+## Why this model (vs separate real sessions)
 
-### Manager — Session #1 (the coordinator)
-- **Works on `main` directly** — not a feature branch. Session #1 is the only
-  session that commits to `main`; it maintains the board here and integrates
-  every worker PR here.
-- **Owns the board (`TASKS.md`).** No other session edits it.
-- Assigns tasks, picks branch names, and writes each worker's assignment file
-  (`TASK_<n>.md`).
-- **Merges PRs one at a time** (rebase + resolve conflicts) into the default
-  branch. Serial merging is the intentional bottleneck that keeps integration
-  clean.
-- Keeps the board current in the same commit as each merge.
-- Resolves all cross-session conflicts.
+One filesystem and one integrator means we can drop all the cross-session
+machinery: **no `coordination` branch, no per-worker `TASK_<n>.md` files, no
+one-file-per-session push-race rule.** Worktree isolation gives each parallel
+subagent a clean separate working copy, and the manager drives the whole loop
+end-to-end with no manual per-session prompting.
 
-### Workers — Sessions #2, #3, …
-- **Always pull `main` before accepting a new task.**
-  `git fetch origin main && git checkout main && git pull origin main`, then cut
-  your task branch from that fresh base. This is non-negotiable — it's how you
-  pick up newly-pushed coordination files (including your `TASK_<n>.md`) and
-  guarantees you build on merged work. A session that skips this can't see its
-  assignment and ends up guessing its task.
-- Each reads/writes **only its own `TASK_<n>.md`** (never `TASKS.md`, never
-  another worker's file).
-- Builds the assigned task **on the branch #1 named**, opens a PR, updates its
-  own `TASK_<n>.md` status, then waits for the next assignment.
-- Never edits the shared board or another worker's files.
+## Workflow
 
-## Files
+1. **Split & contract.** Manager breaks the phase into non-overlapping slices and
+   writes a shared data contract in `TASKS.md` so the slices compose in the
+   single file.
+2. **Fan out.** Manager spawns one worktree-isolated subagent per slice, handing
+   it its task spec (from `TASKS.md`) and the contract.
+3. **Build & verify.** Each subagent builds in its worktree, runs the headless
+   test / smoke check, and returns its diff + verification notes.
+4. **Integrate.** Manager applies results to `main` in the stated **merge order**,
+   runs the test suite after each, resolves `index.html` conflicts, and updates
+   `TASKS.md` + the `CLAUDE.md` "Current status" in the same commit.
 
-| File | Owner | Purpose |
-|---|---|---|
-| `TASKS.md` | Manager (#1) | The board: task list, status, assignments, branch names. |
-| `TASK_2.md`, `TASK_3.md`, … | The matching worker | Per-worker assignment + status + message outbox. Manager writes the assignment; the worker updates status. |
-| `PARALLEL_SESSIONS.md` | Manager (#1) | This protocol doc. |
+Serial integration into `main` is the one intentional bottleneck — the single
+clean integration point.
 
-## Assignment / message flow
+## Alternative: separate real sessions (not used here)
 
-Each `TASK_<n>.md` has two message areas so questions route through the manager
-without shared-file conflicts:
-- **Assignment / Inbox (manager writes):** the current task, branch name, notes.
-- **Status / Outbox (worker writes):** progress, PR link, questions, blockers.
-
-## Merge workflow (manager)
-
-1. Worker opens a PR from its assigned branch.
-2. Manager reviews, rebases onto the current default branch, resolves any
-   conflicts, merges **one PR at a time**.
-3. Manager updates `TASKS.md` (mark done, assign next) and the project
-   `CLAUDE.md` "Current status" in the same commit as the merge.
-
-## Current session assignments
-
-- **Session #1 (this session):** Manager — task management, PR merging, conflict
-  resolution. Works directly on `main`.
-- **Session #2:** [TASK_2.md](TASK_2.md) — T1 scaffold + `HexMath`, branch
-  `claude/phase1-hexmath-scaffold`.
-- **Session #3:** [TASK_3.md](TASK_3.md) — T2 `MapGen`, branch
-  `claude/phase1-mapgen`.
-- **Session #4:** [TASK_4.md](TASK_4.md) — T3 `Renderer`/`Camera`, branch
-  `claude/phase1-renderer-camera`.
+If you ever need durable, independent sessions (separate machines, spread token
+cost, long-lived agents), use the older **central-dispatch across real sessions**
+model instead — `coordination` branch, one `TASK_<n>.md` per session, a PR per
+worker, manager merges serially. It's documented in the claude-rules template.
+For this project we use the agent-team model above.

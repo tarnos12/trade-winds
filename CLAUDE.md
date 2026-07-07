@@ -23,14 +23,17 @@ offline-first, no build step, desktop-first. See [GDD.md](GDD.md) for full scope
 
 Repo: GitHub `tarnos12/trade-winds` (default branch `main`).
 
-## Sessions (multi-session coordination)
+## Parallel work — in-session agent team
 
-This project runs the **central-dispatch** protocol — see
-[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). **Session #1 is the manager**: owns
-the board [TASKS.md](TASKS.md), assigns work, merges PRs one at a time, resolves
-conflicts. **Workers #2/#3/#4** each read/write only their own file
-([TASK_2.md](TASK_2.md), [TASK_3.md](TASK_3.md), [TASK_4.md](TASK_4.md)) — a
-worker told "you are Session #N" starts by reading `TASK_N.md`.
+This project runs multi-part work as an **in-session agent team** — see
+[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). **Session #1 is the manager**: it
+works on `main`, owns the board [TASKS.md](TASKS.md), splits each phase into
+non-overlapping slices, **spawns one worktree-isolated subagent per slice** (the
+Agent tool, `isolation: "worktree"`), and integrates results into `main` in a
+defined merge order, resolving conflicts. "#2/#3/#4" are task slots, not separate
+sessions — workers are ephemeral subagents, so there are no per-worker files and
+no coordination branch. (For truly independent long-lived sessions, the older
+central-dispatch model is in the claude-rules template; not used here.)
 
 ## Run & test
 
