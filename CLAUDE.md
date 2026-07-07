@@ -21,7 +21,16 @@ the King's castle. **Stack:** a single `index.html`, Canvas 2D, **zero external
 dependencies**, saves in `localStorage`. Hard constraints: single-file,
 offline-first, no build step, desktop-first. See [GDD.md](GDD.md) for full scope.
 
-Repo: local (branch `main`, no remote yet).
+Repo: GitHub `tarnos12/trade-winds` (default branch `main`).
+
+## Sessions (multi-session coordination)
+
+This project runs the **central-dispatch** protocol — see
+[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). **Session #1 is the manager**: owns
+the board [TASKS.md](TASKS.md), assigns work, merges PRs one at a time, resolves
+conflicts. **Workers #2/#3/#4** each read/write only their own file
+([TASK_2.md](TASK_2.md), [TASK_3.md](TASK_3.md), [TASK_4.md](TASK_4.md)) — a
+worker told "you are Session #N" starts by reading `TASK_N.md`.
 
 ## Run & test
 
@@ -36,21 +45,25 @@ Repo: local (branch `main`, no remote yet).
 
 ## Current status (update this section every commit)
 
-**Pre-Phase 1 — project scaffolding.**
+**Pre-Phase 1 — project scaffolding + multi-session dispatch set up.**
 
 Done:
-- Git repo initialized (branch `main`).
+- Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
 - GDD imported as [GDD.md](GDD.md) (the design/scope source of truth).
 - This handoff doc created and wired to the working rules.
+- Multi-session central-dispatch set up: [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md),
+  board [TASKS.md](TASKS.md), and worker assignments [TASK_2.md](TASK_2.md) /
+  [TASK_3.md](TASK_3.md) / [TASK_4.md](TASK_4.md). Session #1 = manager.
 
 Next (recommended order):
-1. Resolve the open questions in GDD §13 (combat scope, tab-hidden behavior,
-   tariff range, goods count, win condition, title) before Phase 1 code.
-2. **Phase 1 — The Board:** `HexMath`, seeded map gen + biomes + fog, camera
-   pan/zoom, terrain pre-render, build mode for roads + empty town markers.
+1. **Phase 1 — The Board** (assigned to workers): #2 scaffold + `HexMath`,
+   #3 `MapGen`, #4 `Renderer`/`Camera`. See [TASKS.md](TASKS.md). Manager merges
+   #2 → #3 → #4. Remaining Phase 1: build mode for roads + empty town markers.
    DoD: generate map from a seed, move camera, place roads, 60 FPS.
-3. Phase 2 — Towns & Production; Phase 3 — Trade (riskiest); Phase 4 —
+2. Phase 2 — Towns & Production; Phase 3 — Trade (riskiest); Phase 4 —
    Progression; Phase 5 — Content & Polish. (GDD §10.)
+3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
+   goods count, win condition, title) — not blockers for Phase 1.
 
 ## Architecture conventions (hold these)
 
