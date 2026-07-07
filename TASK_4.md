@@ -55,7 +55,7 @@ Definition of done:
 
 - Status: 🔵 PR open — T6 town entities + town panel done
 - Branch pushed: `claude/phase2-town-ui`
-- PR: (opening into `main`)
+- PR: #2 — https://github.com/tarnos12/trade-winds/pull/2
 - Questions/blockers for #1: none blocking. See merge notes below.
 
 ### What landed (all additive, fenced under `Phase 2 · T6` markers)
