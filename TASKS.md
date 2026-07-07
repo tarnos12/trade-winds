@@ -15,7 +15,19 @@ integrates into `main` in the merge order below. "#2/#3/#4" are task slots.
   the 500ms accumulator, town entities + 4-tab DOM town panel. Tests: `prices`
   51, `sim` 27.
 
-## Milestone: Phase 3 — Trade ⭐ (riskiest phase)
+## Milestone: Phase 3 — Trade ✅ DONE
+
+All slices merged (T7 → T8 → T9). `Pathing` (Dijkstra road graph), `Trade.tick`
+(autonomous carts, transactions, 25% tariff → `state.treasury`), and cart
+rendering + treasury HUD + castle warehouse are live. Towns start at level 2 so
+they trade on placement. Verified end-to-end (headless): 3 specialized towns +
+road → carts trade, treasury grows, goods flow; cutting a road nulls the route.
+Tests: `pathing` 24 · `trade` 28 (+ board 25, prices 51, sim 27). DoD met.
+**Next: Phase 4 — Progression** (research, tiers, King's quests, castle levels,
+events, Kingdom screen). Note: town leveling/upgrade is a Phase 4 deliverable
+(currently towns auto-start at level 2 as a bridge).
+
+## Milestone (done): Phase 3 — Trade ⭐ (was the riskiest phase)
 
 Goal (GDD §6, §10): carts travel roads on their own and equalize markets; the
 player earns a tariff on every inter-town transaction.
@@ -61,8 +73,8 @@ Builds on the Phase 1/2 `index.html`. Add to the existing `state` object and
 | Task | Slot | Depends on | Status |
 |---|---|---|---|
 | T7 — `Pathing`: road graph + Dijkstra + route cache | #2 | contract only | ✅ merged |
-| T8 — `Trade`: cart dispatch + transactions + tariff→treasury | #3 | Pathing (T7) + price model | 🔲 assigned |
-| T9 — cart entities render/animation + treasury HUD + castle warehouse | #4 | Cart shape (T8) + Pathing | 🔲 assigned |
+| T8 — `Trade`: cart dispatch + transactions + tariff→treasury | #3 | Pathing (T7) + price model | ✅ merged |
+| T9 — cart entities render/animation + treasury HUD + castle warehouse | #4 | Cart shape (T8) + Pathing | ✅ merged |
 
 Legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
 **Merge order: T7 → T8 → T9.** T7 lands first (foundation); then T8/T9 in parallel.

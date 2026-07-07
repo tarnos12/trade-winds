@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phase 1 — The Board: DONE. Phase 2 — Towns & Production: DONE. Phase 3 — Trade: next.**
+**Phases 1–3 DONE (Board · Towns & Production · Trade). Phase 4 — Progression: next.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -72,12 +72,21 @@ Done:
   Tests: `board` 25 · `prices` 51 · `sim` 27; integrated headless smoke clean.
   DoD met (a town grows/starves; prices react to stockpiles).
 
+- **Phase 3 — Trade** landed via the agent team (merge order T7 → T8 → T9):
+  `Pathing` (Dijkstra road graph + route cache), pure `Trade.tick` (autonomous
+  carts pick top-3 profitable routes, transactions, 25% tariff → `state.treasury`,
+  seeded/deterministic), and cart rendering + treasury HUD + castle warehouse.
+  Towns start at level 2 so they trade on placement. Tests: `pathing` 24 ·
+  `trade` 28. Verified end-to-end headless (carts trade, treasury grows, goods
+  flow; road cut nulls the route). DoD met.
+
 Next (recommended order):
-1. **Phase 3 — Trade** (riskiest): road graph + Dijkstra, cart agents with the
-   route-selection algorithm, transactions + tariff + treasury, cart animation,
-   castle warehouse. DoD (GDD §10): 3 specialized towns reach a stable trade
-   equilibrium unattended; cutting a road causes a visible price crisis.
-2. Phase 4 — Progression; Phase 5 — Content & Polish. (GDD §10.)
+1. **Phase 4 — Progression** (GDD §7): research tree (15 nodes), population tiers
+   + tier-3 goods, King's requests + prestige + castle levels, random events,
+   Kingdom screen + alerts. **Includes proper town leveling/upgrade** (towns
+   currently auto-start at level 2 as a Phase 3 bridge — replace with tariff/
+   requirement-gated upgrades).
+2. Phase 5 — Content & Polish. (GDD §10.)
 3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
    goods count, win condition, title) — not blockers yet.
 
