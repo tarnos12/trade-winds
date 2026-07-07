@@ -44,7 +44,39 @@ Definition of done:
 
 ## Status / Outbox (Session #3 writes here)
 
-- Status: 🔲 not started
-- Branch pushed: —
-- PR: —
-- Questions/blockers for #1: —
+- Status: 🔵 PR open — T2 `TW.MapGen` implemented, tested, verified.
+- Branch pushed: `claude/phase1-mapgen`
+- PR: see GitHub (opened against `main`).
+- Questions/blockers for #1: none — not blocked on #2.
+
+### What landed
+
+- **`TW.MapGen.generate(seed, radius)`** in `index.html` → `GameMap =
+  { seed, radius, hexes:Map<"q,r", {q,r,terrain,revealed}> }`, exactly per the
+  `TASKS.md` contract.
+- **Deterministic:** mulberry32-seeded fractal value noise → biomes. Numeric or
+  string seeds both supported; same seed ⇒ deep-equal map.
+- **Terrain enum:** the agreed 7 strings `meadow, forest, hills, mountains,
+  water, field, wasteland` (exposed as `TW.MapGen.TERRAINS`).
+- **Fog init:** all hexes `revealed:false` except the center ring (castle at
+  `(0,0)` + its 6 neighbours) ⇒ **7 revealed** at start (`CONFIG.fog.startRadius = 1`).
+- **Island falloff** so the map is ringed by water, not a slab.
+- Constants added under `TW.CONFIG.map` / `.fog` / `.terrain` using
+  merge-friendly `Object.assign` defaults, so they won't clobber #2's scaffold
+  CONFIG at merge.
+
+### Integration notes for #1 (merge)
+
+- The pure module is fenced between `=== TW-MAPGEN-CORE-START/END ===` markers in
+  `index.html` for easy lifting into the merged single file.
+- Uses `TW.HexMath.key` when present, else replicates `` `${q},${r}` `` locally
+  (permitted by the assignment) — no hard dependency on #2 to run/test.
+- The page body is a **dev-only ASCII/colour preview** clearly labelled as
+  replaceable by the renderer (Task T3 / #4). Drop it when #4's renderer lands.
+
+### How to run / verify
+
+- **Headless test (DoD):** `node test/mapgen.test.js` → *24 passed, 0 failed*
+  (determinism deep-equal, hex count `3·r·(r+1)+1`, terrain ∈ enum, ~7 revealed).
+- **See it:** open `index.html` — change the seed/radius and hit Generate to
+  watch biomes + the 7-hex fog reveal update live.

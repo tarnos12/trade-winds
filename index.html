@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trade Winds — MapGen (T2 dev preview)</title>
+<style>
+  body { margin: 0; padding: 20px; background: #2c241a; color: #efe6d2;
+         font-family: Georgia, "Times New Roman", serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #d59a5c; }
+  .sub { opacity: 0.75; font-size: 13px; margin-bottom: 14px; }
+  .controls { margin-bottom: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input, button { font-family: inherit; font-size: 14px; padding: 5px 9px;
+    border: 1px solid #c9b79a; border-radius: 5px; background: #fffdf6; color: #3a2f22; }
+  button { cursor: pointer; }
+  #ascii { line-height: 1.0; font-family: "Courier New", monospace; font-size: 12px;
+    letter-spacing: 1px; white-space: pre; }
+  #legend, #stats { font-size: 13px; margin-top: 12px; }
+  .note { margin-top: 18px; opacity: 0.6; font-size: 12px; max-width: 640px; line-height: 1.5; }
+  code { background: #3a2f22; padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>⚓ Trade Winds — MapGen dev preview</h1>
+<div class="sub">Task&nbsp;T2 (Session&nbsp;#3): seeded terrain + biomes + fog init. This ASCII
+dump is a temporary harness so <code>TW.MapGen</code> is viewable without the renderer
+(that's Task&nbsp;T3 / #4) — it gets replaced at integration.</div>
+
+<div class="controls">
+  <label>Seed <input id="seed" type="text" value="42" /></label>
+  <label>Radius <input id="radius" type="number" value="8" min="1" max="20" style="width:60px" /></label>
+  <button id="gen">Generate</button>
+</div>
+
+<div id="ascii"></div>
+<div id="legend"></div>
+<div id="stats"></div>
+
+<div class="note">
+  Contract (TASKS.md): <code>TW.MapGen.generate(seed, radius)</code> →
+  <code>{ seed, radius, hexes:Map&lt;"q,r", {q,r,terrain,revealed}&gt; }</code>.
+  Deterministic (mulberry32). Headless test: <code>node test/mapgen.test.js</code>.
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+ *  Trade Winds — Task T2: TW.MapGen (Session #3)
+ *  Pure, deterministic seeded map generation + biomes + fog init.
+ *  GDD §3.1 (board), §3.2 (fog), §9.1 (module layout).
+ *
+ *  Composes into the shared single-file index.html. Everything between the
+ *  TW-MAPGEN-CORE markers is DOM-free and headless-testable (see
+ *  test/mapgen.test.js). Rendering is Task T3 (#4); scaffold + HexMath is
+ *  Task T1 (#2). We depend only on the agreed data contract and replicate the
+ *  tiny hex-key helper locally when TW.HexMath isn't present yet.
+ * ========================================================================== */
+
+/* === TW-MAPGEN-CORE-START === */
+var TW = (globalThis.TW = globalThis.TW || {});
+
+/* --- Shared CONFIG (single source of truth). Fill only the keys MapGen owns;
+ *     never clobber values a sibling module (scaffold #2) may already have set. */
+TW.CONFIG = TW.CONFIG || {};
+TW.CONFIG.map = Object.assign({
+  radius: 14,          // axial radius → 3·r·(r+1)+1 ≈ 631 hexes
+  noiseFreq: 0.13,     // biome noise frequency
+  octaves: 4,          // fractal octaves
+  waterLevel: 0.34,    // elevation below this → water
+  hillLevel: 0.62,
+  mountainLevel: 0.74,
+  edgeFalloff: 0.55,   // lowers elevation toward the rim → an island, not a slab
+}, TW.CONFIG.map);
+TW.CONFIG.fog = Object.assign({
+  startRadius: 1,      // reveal center + ring 1 → 7 hexes at start (GDD §3.2)
+}, TW.CONFIG.fog);
+
+/* Terrain enum — the agreed strings (TASKS.md contract). `colors` are a
+ * convenience for previews/renderer; the enum itself is the load-bearing part. */
+TW.CONFIG.terrain = TW.CONFIG.terrain || {
+  meadow:    { color: '#9fc16a', buildable: true,  passable: true  },
+  forest:    { color: '#5c8a45', buildable: true,  passable: true  },
+  hills:     { color: '#bfa06a', buildable: false, passable: true  },
+  mountains: { color: '#94867a', buildable: false, passable: false },
+  water:     { color: '#6ba6c9', buildable: false, passable: false },
+  field:     { color: '#cdb85a', buildable: true,  passable: true  },
+  wasteland: { color: '#b7ab8f', buildable: false, passable: true  },
+};
+TW.MapGen = TW.MapGen || {};
+TW.MapGen.TERRAINS = ['meadow', 'forest', 'hills', 'mountains', 'water', 'field', 'wasteland'];
+
+/* --- Seeded RNG: mulberry32 (GDD §9.1) --- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* Any seed (number or string) → a stable 32-bit integer for mulberry32. */
+function seedToInt(seed) {
+  if (typeof seed === 'number' && Number.isFinite(seed)) return seed | 0;
+  let h = 2166136261 >>> 0;
+  const s = String(seed);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h | 0;
+}
+
+/* --- Fractal value noise (hash-based, deterministic in the map seed) --- */
+function _hash2(ix, iy, seed) {
+  let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263)) ^ Math.imul(seed | 0, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+function _smooth(t) { return t * t * (3 - 2 * t); }
+function _valueNoise(x, y, seed) {
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const xf = x - x0, yf = y - y0;
+  const tl = _hash2(x0, y0, seed),     tr = _hash2(x0 + 1, y0, seed);
+  const bl = _hash2(x0, y0 + 1, seed), br = _hash2(x0 + 1, y0 + 1, seed);
+  const u = _smooth(xf), v = _smooth(yf);
+  const top = tl + (tr - tl) * u, bot = bl + (br - bl) * u;
+  return top + (bot - top) * v;
+}
+function _fractalNoise(x, y, seed, octaves) {
+  let amp = 1, freq = 1, sum = 0, norm = 0;
+  for (let i = 0; i < octaves; i++) {
+    sum += amp * _valueNoise(x * freq, y * freq, (seed + i * 1013) | 0);
+    norm += amp; amp *= 0.5; freq *= 2;
+  }
+  return sum / norm; // ~[0,1]
+}
+
+/* Canonical axial hex key. Prefer #2's TW.HexMath.key when present so the key
+ * format is guaranteed identical after merge; otherwise replicate it (the
+ * contract explicitly allows this so #3 isn't blocked on #2). */
+function hexKey(q, r) {
+  return (TW.HexMath && TW.HexMath.key) ? TW.HexMath.key(q, r) : (q + ',' + r);
+}
+/* Axial (cube) distance — small local helper for fog init; avoids depending on
+ * TW.HexMath.neighbors before the scaffold lands. */
+function axialDistance(aq, ar, bq, br) {
+  return (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+}
+
+/* --- Biome classification for one hex --- */
+function classify(q, r, seedInt, radius, m) {
+  const distNorm = radius > 0 ? axialDistance(0, 0, q, r) / radius : 0; // 0 center → 1 rim
+  const nx = q * m.noiseFreq, ny = r * m.noiseFreq;
+  let elev = _fractalNoise(nx, ny, seedInt, m.octaves);
+  elev -= m.edgeFalloff * distNorm * distNorm;             // island falloff
+  const moist = _fractalNoise(nx + 100, ny + 100, (seedInt + 7777) | 0, m.octaves);
+
+  if (elev < m.waterLevel) return 'water';
+  if (elev > m.mountainLevel) return 'mountains';
+  if (elev > m.hillLevel) return 'hills';
+  if (moist > 0.60) return 'forest';
+  if (moist > 0.42) return 'field';
+  if (moist > 0.22) return 'meadow';
+  return 'wasteland';
+}
+
+/**
+ * Generate a deterministic map.
+ * @param {number|string} seed
+ * @param {number} [radius=CONFIG.map.radius]
+ * @returns {{seed:(number|string), radius:number, hexes:Map<string,{q:number,r:number,terrain:string,revealed:boolean}>}}
+ */
+TW.MapGen.generate = function generate(seed, radius) {
+  const m = TW.CONFIG.map;
+  const R = (radius == null ? m.radius : radius) | 0;
+  const seedInt = seedToInt(seed);
+  const hexes = new Map();
+
+  for (let q = -R; q <= R; q++) {
+    const rLo = Math.max(-R, -q - R);
+    const rHi = Math.min(R, -q + R);
+    for (let r = rLo; r <= rHi; r++) {
+      hexes.set(hexKey(q, r), {
+        q, r,
+        terrain: classify(q, r, seedInt, R, m),
+        revealed: false,
+      });
+    }
+  }
+
+  // Castle sits at the center (GDD §3.3) — guarantee its hex is land, not sea.
+  const center = hexes.get(hexKey(0, 0));
+  if (center && !TW.CONFIG.terrain[center.terrain].buildable) center.terrain = 'meadow';
+
+  // Fog init: reveal the ring around the castle (~7 hexes at startRadius 1).
+  const fogR = TW.CONFIG.fog.startRadius;
+  for (const hex of hexes.values()) {
+    if (axialDistance(0, 0, hex.q, hex.r) <= fogR) hex.revealed = true;
+  }
+
+  return { seed, radius: R, hexes };
+};
+
+/* Expose the pure helpers for headless testing / sibling modules. */
+TW.MapGen._internals = { mulberry32, seedToInt, fractalNoise: _fractalNoise, axialDistance, classify };
+
+if (typeof module !== 'undefined' && module.exports) { module.exports = TW; }
+/* === TW-MAPGEN-CORE-END === */
+
+
+/* ----------------------------------------------------------------------------
+ *  Dev preview only (browser). NOT part of the game — the renderer (Task T3)
+ *  replaces this. Draws an ASCII terrain map + fog + a biome histogram so the
+ *  author can open index.html and see MapGen working today.
+ * -------------------------------------------------------------------------- */
+if (typeof document !== 'undefined') (function () {
+  const GLYPH = {
+    meadow: '"', forest: '♣', hills: '∩', mountains: '▲',
+    water: '~', field: '≈', wasteland: '·',
+  };
+  const asciiEl = document.getElementById('ascii');
+  const legendEl = document.getElementById('legend');
+  const statsEl = document.getElementById('stats');
+
+  function render() {
+    const seedRaw = document.getElementById('seed').value.trim();
+    const seed = /^-?\d+$/.test(seedRaw) ? Number(seedRaw) : (seedRaw || 'tradewinds');
+    const R = Math.max(1, Math.min(20, Number(document.getElementById('radius').value) || 8));
+    const map = TW.MapGen.generate(seed, R);
+
+    // Colored grid: offset each row (pointy-top look). Full terrain is shown so
+    // biomes are visible; unrevealed (fogged) hexes are dimmed.
+    const rows = [];
+    const counts = {};
+    let revealed = 0;
+    for (let r = -R; r <= R; r++) {
+      let line = '&nbsp;'.repeat(Math.abs(r));
+      for (let q = -R; q <= R; q++) {
+        const hex = map.hexes.get(q + ',' + r);
+        if (!hex) { line += '&nbsp;&nbsp;'; continue; }
+        counts[hex.terrain] = (counts[hex.terrain] || 0) + 1;
+        if (hex.revealed) revealed++;
+        const g = GLYPH[hex.terrain] || '?';
+        const col = TW.CONFIG.terrain[hex.terrain].color;
+        const op = hex.revealed ? '1' : '0.30';
+        line += `<span style="color:${col};opacity:${op}">${g}</span>&nbsp;`;
+      }
+      rows.push(line);
+    }
+    asciiEl.innerHTML = rows.join('<br>');
+
+    legendEl.innerHTML = 'Legend: ' + Object.keys(GLYPH)
+      .map(t => `<b style="color:${TW.CONFIG.terrain[t].color}">${GLYPH[t]}</b> ${t}`).join('  ');
+
+    const total = map.hexes.size;
+    const hist = TW.MapGen.TERRAINS
+      .map(t => `${t} ${counts[t] || 0}`).join(' · ');
+    statsEl.innerHTML =
+      `<b>seed</b> ${JSON.stringify(seed)} · <b>radius</b> ${R} · <b>hexes</b> ${total} ` +
+      `(formula 3·r·(r+1)+1 = ${3 * R * (R + 1) + 1}) · <b>revealed</b> ${revealed}<br>` +
+      `<span style="opacity:.8">${hist}</span>`;
+  }
+
+  document.getElementById('gen').addEventListener('click', render);
+  document.getElementById('seed').addEventListener('keydown', e => { if (e.key === 'Enter') render(); });
+  render();
+})();
+</script>
+</body>
+</html>
