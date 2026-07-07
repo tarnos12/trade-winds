@@ -60,7 +60,7 @@ Builds on the Phase 1/2 `index.html`. Add to the existing `state` object and
 
 | Task | Slot | Depends on | Status |
 |---|---|---|---|
-| T7 — `Pathing`: road graph + Dijkstra + route cache | #2 | contract only | 🔲 assigned |
+| T7 — `Pathing`: road graph + Dijkstra + route cache | #2 | contract only | ✅ merged |
 | T8 — `Trade`: cart dispatch + transactions + tariff→treasury | #3 | Pathing (T7) + price model | 🔲 assigned |
 | T9 — cart entities render/animation + treasury HUD + castle warehouse | #4 | Cart shape (T8) + Pathing | 🔲 assigned |
 
