@@ -729,6 +729,154 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
 })();
 // === PATHING END ===
 
+// === TRADE START ===  (T8 / slot #3 — cart dispatch + transactions + tariff)
+// Pure, deterministic trade layer (GDD §6.2–6.3). No DOM / canvas / I/O and NO
+// Math.random — every cart-route decision draws from a seeded stream stored on
+// State (state.tradeSeed), so the whole sim+trade step is reproducible and safe
+// to fast-forward / autoplay. Wired into the 500ms accumulator right AFTER
+// Sim.tick(state). It only READS prices (Sim.tick already republished them via
+// Sim.priceFor) and mutates only town.stock / town.gold, state.carts and
+// state.treasury (the player's tariff income). Mitigates the GDD §10 risk of
+// carts looping/oscillating with a profit threshold, top-3 route randomness, and
+// a per-town cart cap.
+Object.assign(CONFIG, {
+  trade: {
+    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3)
+    profitThreshold: 5,        // min gross profit for a route to be worth dispatching
+    distanceCostPerStep: 0.5,  // gold cost per road step, subtracted from route profit
+    cartCapacity: 10,          // max units one cart carries per trip
+    cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
+    maxCartsPerTown: 3,        // hard cap; the per-town cap also scales with level (1–3)
+    topRandom: 3,              // pick among the top-N most profitable routes (anti-herding)
+  },
+});
+
+var Trade = (typeof Trade !== "undefined" && Trade) || {};
+(function () {
+  // Current local price of a good in a town. Sim.tick republishes every price
+  // each tick (Sim.priceFor), so we READ the stored value and only fall back to a
+  // fresh computation when a town was never ticked — Trade never re-lerps a price,
+  // staying a read-only observer of the price model (no hidden side effects).
+  function priceOf(town, gid) {
+    const p = town.prices && town.prices[gid];
+    return (typeof p === "number") ? p : Sim.priceFor(town, gid);
+  }
+
+  const townKey = (t) => HexMath.key(t.q, t.r);
+
+  // How many carts a town may run at once: capped by config AND by level
+  // (level 2 → 1, level 3 → 2, level 4+ → 3) — the GDD's "1–3 carts by level".
+  function cartCapFor(town, cfg) {
+    return Math.max(0, Math.min(cfg.maxCartsPerTown, (town.level || 1) - 1));
+  }
+
+  // Count a town's live (not-done) outbound-or-returning carts.
+  function activeCarts(carts, townId) {
+    let n = 0;
+    for (const c of carts) if (!c.done && c.fromId === townId) n++;
+    return n;
+  }
+
+  // Advance the whole trade layer by one tick. Mutates State only.
+  Trade.tick = function (state) {
+    if (!state) return state;
+    if (!Array.isArray(state.carts)) state.carts = [];
+    if (typeof state.treasury !== "number") state.treasury = 0;
+    if (typeof state.tradeSeed !== "number") state.tradeSeed = 0;
+    const cfg = CONFIG.trade;
+    const towns = state.towns || [];
+    const byId = new Map(towns.map(t => [t.id, t]));
+
+    // Deterministic per-tick RNG: seed from state.tradeSeed, then advance the seed
+    // by a fixed LCG step (independent of how many draws we make this tick) so the
+    // stream evolves reproducibly across ticks and never touches Math.random.
+    const rng = mulberry32(state.tradeSeed | 0);
+    state.tradeSeed = (Math.imul(state.tradeSeed | 0, 1664525) + 1013904223) | 0;
+
+    // --- 1. Dispatch: each eligible town looks to SELL a surplus good abroad ---
+    for (const home of towns) {
+      if (!home || (home.level || 1) < 2 || !home.stock) continue;
+      if (activeCarts(state.carts, home.id) >= cartCapFor(home, cfg)) continue;
+
+      const fromKey = townKey(home);
+      const offers = [];
+      for (const dest of towns) {
+        if (dest === home || !dest) continue;
+        const route = Pathing.route(state, fromKey, townKey(dest));
+        if (!route) continue;
+        for (const gid in CONFIG.goods) {
+          const available = home.stock[gid] || 0;
+          if (available <= 0) continue;
+          const load = Math.min(cfg.cartCapacity, available);
+          const priceHome = priceOf(home, gid);
+          const priceDest = priceOf(dest, gid);
+          // GDD §6.2: profit = (priceThere − priceHere)*load − distanceCost.
+          const profit = (priceDest - priceHome) * load - cfg.distanceCostPerStep * route.cost;
+          if (profit > cfg.profitThreshold) {
+            offers.push({ dest, gid, load, unitBuy: priceHome, route, profit });
+          }
+        }
+      }
+      if (!offers.length) continue;
+      // Best profit first, with a stable tiebreak (dest id, then good id) so the
+      // top-N slate is deterministic before the seeded pick chooses within it.
+      offers.sort((a, b) =>
+        b.profit - a.profit ||
+        a.dest.id - b.dest.id ||
+        (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
+      const slate = offers.slice(0, cfg.topRandom);
+      const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))];
+
+      // Load the cargo: the home town ships the goods and fronts the buy cost.
+      home.stock[pick.gid] = (home.stock[pick.gid] || 0) - pick.load;
+      home.gold = (home.gold || 0) - pick.unitBuy * pick.load;
+
+      state.carts.push({
+        id: (state._nextCartId = (state._nextCartId || 0) + 1),
+        fromId: home.id, toId: pick.dest.id,
+        goodId: pick.gid, qty: pick.load, unitBuy: pick.unitBuy,
+        path: pick.route.path.slice(),        // home → dest hex keys (contract shape)
+        progress: 0, phase: "outbound", done: false,
+        _proceeds: 0,                         // net sale proceeds carried home on return
+      });
+    }
+
+    // --- 2. Advance carts; settle the transaction on arrival -----------------
+    for (const cart of state.carts) {
+      if (cart.done) continue;
+      cart.progress += cfg.cartSpeed;
+      if (cart.progress < 1) continue;
+      cart.progress = 1;
+
+      if (cart.phase === "outbound") {
+        const dest = byId.get(cart.toId);
+        if (!dest) { cart.done = true; continue; }   // destination vanished → scrap
+        if (!dest.stock) dest.stock = {};
+        const priceDest = priceOf(dest, cart.goodId);
+        const value = priceDest * cart.qty;                  // transaction value
+        const tariff = cfg.tariffRate * value;               // GDD §6.3: 25% cut
+        dest.stock[cart.goodId] = (dest.stock[cart.goodId] || 0) + cart.qty; // dest gains stock
+        dest.gold = (dest.gold || 0) - value;                // dest pays gold
+        state.treasury += tariff;                            // → player's treasury
+        cart._proceeds = value - tariff;                     // merchant nets value − tariff
+        cart.phase = "return";                               // head home along the reversed path
+        cart.progress = 0;
+        cart.path = cart.path.slice().reverse();
+      } else {
+        const home = byId.get(cart.fromId);                  // home again: bank proceeds, retire
+        if (home) home.gold = (home.gold || 0) + cart._proceeds;
+        cart.done = true;
+      }
+    }
+
+    // --- 3. Prune retired carts ---------------------------------------------
+    if (state.carts.some(c => c.done)) state.carts = state.carts.filter(c => !c.done);
+
+    return state;
+  };
+})();
+// === TRADE END ===
+
 /* PURE_CORE_END */
 
 /* =====================================================================
@@ -745,6 +893,9 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     map: null,                 // { seed, radius, hexes }
     roads: new Set(),          // hex keys carrying road
     towns: [],                 // [{ q, r }]  (empty markers in Phase 1)
+    carts: [],                 // live trade carts (Trade.tick owns; T9 draws)
+    treasury: 0,               // player tariff income (gold) — distinct from town.gold
+    tradeSeed: 0,              // seeded RNG stream for deterministic cart routing
     revealed: new Set(),       // hex keys the player can see
     revealAll: false,          // debug fog toggle
     mode: "pan",               // pan | road | town | erase
@@ -1118,6 +1269,9 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     state.map = MapGen.generate(seedInput, CONFIG.map.radius);
     state.roads = new Set();
     state.towns = [];
+    state.carts = [];
+    state.treasury = 0;
+    state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -1144,6 +1298,9 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
         towns: state.towns,
+        carts: state.carts,
+        treasury: state.treasury,
+        tradeSeed: state.tradeSeed,
         revealed: Array.from(state.revealed),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1163,6 +1320,9 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     newGame(data.seed);
     state.roads = new Set(data.roads || []);
     state.towns = data.towns || [];
+    state.carts = Array.isArray(data.carts) ? data.carts : [];
+    state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
+    if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
     state.revealAll = !!data.revealAll;
     for (const k of (data.revealed || [])) {
       state.revealed.add(k);
@@ -1181,9 +1341,10 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); });
   window.addEventListener("beforeunload", saveGame);
 
-  // Economy tick: the pure Sim core (Sim.tick, defined above in the SIM-CORE
-  // block) is used directly — the loop below calls Sim.tick(state) each 500ms
-  // step. No local stub: the closure sees the top-level `Sim` namespace.
+  // Economy tick: the pure cores defined above in PURE_CORE are used directly —
+  // each 500ms step the loop below calls Sim.tick(state) (production/consumption/
+  // prices) then Trade.tick(state) (cart dispatch + transactions + tariff). No
+  // local stubs: the closure sees the top-level `Sim` / `Trade` namespaces.
 
   // ---------------------------------------------------------------
   // Canvas sizing
@@ -1220,7 +1381,7 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
       econAcc += dt * state.gameSpeed;
       const step = CONFIG.econ.baseTickMs;
       let guard = 0;
-      while (econAcc >= step && guard++ < 8) { Sim.tick(state); econAcc -= step; }
+      while (econAcc >= step && guard++ < 8) { Sim.tick(state); Trade.tick(state); econAcc -= step; }
     }
 
     applyKeyPan(dt);
