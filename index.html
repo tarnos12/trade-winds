@@ -79,6 +79,40 @@
   }
   #hud .fps { color: var(--accent); font-weight: bold; }
   #hud .warn { color: #e06b4a; }
+
+  /* ===== Phase 2 · T6 — Town panel (Session #4) ===== */
+  #townpanel {
+    position: fixed; top: 60px; right: 12px; width: 320px;
+    max-height: calc(100vh - 84px); display: none; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    overflow: hidden; z-index: 20;
+  }
+  #townpanel.show { display: flex; }
+  #townpanel .tp-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 8px; padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(201,138,60,0.20), transparent);
+    border-bottom: 1px solid var(--panel-edge);
+  }
+  #townpanel .tp-title { font-size: 16px; font-weight: bold; color: var(--accent); }
+  #townpanel .tp-sub { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+  #townpanel .tp-close { padding: 2px 8px; align-self: flex-start; }
+  #townpanel .tp-tabs { display: flex; gap: 4px; padding: 8px 8px 0; flex-wrap: wrap; }
+  #townpanel .tp-tab { font-size: 12px; padding: 4px 8px; opacity: 0.75; }
+  #townpanel .tp-tab.active { opacity: 1; background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  #townpanel .tp-body { padding: 10px 12px 14px; overflow-y: auto; }
+  #townpanel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  #townpanel th, #townpanel td { text-align: left; padding: 3px 4px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  #townpanel th { opacity: 0.6; font-weight: normal; }
+  #townpanel td.num, #townpanel th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #townpanel .up { color: #7fd07f; } #townpanel .down { color: #e06b4a; } #townpanel .flat { opacity: 0.4; }
+  #townpanel .kv { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
+  #townpanel .kv span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+  #townpanel .bar { height: 8px; border-radius: 4px; background: #1c160f; overflow: hidden; margin: 4px 0 8px; }
+  #townpanel .bar > i { display: block; height: 100%; background: var(--accent); }
+  #townpanel .muted { opacity: 0.6; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+  #townpanel code { background: #1c160f; padding: 0 4px; border-radius: 3px; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -118,6 +152,19 @@
 <div id="hud">
   <div><span class="fps" id="fps">—</span> fps</div>
   <div id="stat">—</div>
+</div>
+
+<!-- Phase 2 · T6 — Town panel (Session #4); populated by TownPanel in the script -->
+<div id="townpanel" aria-hidden="true">
+  <div class="tp-head">
+    <div>
+      <div class="tp-title">Town</div>
+      <div class="tp-sub">—</div>
+    </div>
+    <button class="tp-close" title="Close (Esc)">✕</button>
+  </div>
+  <div class="tp-tabs"></div>
+  <div class="tp-body"></div>
 </div>
 
 <script>
@@ -562,15 +609,21 @@ const MapGen = {
       if (canPlace(q, r)) { state.roads.add(k); scheduleSave(); }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
-        state.towns.push({ q, r });
+        const town = makeTown(q, r);          // Phase 2: a full Town, not just a marker
+        state.towns.push(town);
         reveal(q, r, CONFIG.fog.townReveal);
+        TownPanel.open(town);                 // reveal the new town's window immediately
         scheduleSave();
       }
     } else if (state.mode === "erase") {
       let changed = false;
       if (state.roads.delete(k)) changed = true;
       const ti = state.towns.findIndex(t => t.q === q && t.r === r);
-      if (ti >= 0) { state.towns.splice(ti, 1); changed = true; }
+      if (ti >= 0) {
+        const removed = state.towns.splice(ti, 1)[0];
+        if (removed && TownPanel.openId() === removed.id) TownPanel.close();
+        changed = true;
+      }
       if (changed) scheduleSave();
     }
   }
@@ -582,6 +635,7 @@ const MapGen = {
   let dragging = false, dragPanned = false, panButton = false;
   let last = { x: 0, y: 0 };
   let lastPaintKey = null;
+  let downBtn = -1;
 
   function isPanGesture(e) {
     // right / middle button, or left button in pan mode
@@ -590,7 +644,7 @@ const MapGen = {
 
   canvas.addEventListener("mousedown", (e) => {
     canvas.focus();
-    dragging = true; dragPanned = false;
+    dragging = true; dragPanned = false; downBtn = e.button;
     panButton = isPanGesture(e);
     last = { x: e.clientX, y: e.clientY };
     if (!panButton && e.button === 0) {
@@ -617,8 +671,18 @@ const MapGen = {
     }
   });
 
-  window.addEventListener("mouseup", () => {
-    dragging = false; panButton = false; lastPaintKey = null;
+  window.addEventListener("mouseup", (e) => {
+    // A click (no drag) with the left button on a town center opens its panel;
+    // an empty click in pan mode closes the panel. Panning still works because
+    // this only fires when the gesture didn't move (dragPanned stays false).
+    if (downBtn === 0 && !dragPanned && e.target === canvas &&
+        (state.mode === "pan" || state.mode === "town")) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      const town = state.towns.find(t => t.q === h.q && t.r === h.r);
+      if (town) TownPanel.open(town);
+      else if (state.mode === "pan") TownPanel.close();
+    }
+    dragging = false; panButton = false; lastPaintKey = null; downBtn = -1;
     canvas.classList.remove("panning");
     scheduleSave();
   });
@@ -742,7 +806,8 @@ const MapGen = {
     if (!data) return false;
     newGame(data.seed);
     state.roads = new Set(data.roads || []);
-    state.towns = data.towns || [];
+    state.towns = (data.towns || []).map(normalizeTown);   // upgrade Phase 1 markers
+    _nextTownId = state.towns.reduce((m, t) => Math.max(m, (t.id || 0) + 1), _nextTownId);
     state.revealAll = !!data.revealAll;
     for (const k of (data.revealed || [])) {
       state.revealed.add(k);
@@ -768,6 +833,236 @@ const MapGen = {
   const Sim = {
     tick(_state) { /* economy tick — no-op until Phase 2 */ },
   };
+
+  /* =================================================================
+     Phase 2 · T6 — Town entities + town panel (Session #4)
+     Real deliverable: makeTown() (Town shape per contract) + TownPanel.
+     ---------------------------------------------------------------
+     DEV STUBS (marked below) stand in for slices not yet merged:
+       · CONFIG.goods / CONFIG.buildings   → #3 / T5
+       · Sim.priceFor / demand + economy   → #3 / T5 (prices), #2 / T4 (tick)
+     They are defensively guarded (only define if absent) and confined to
+     this block, so the manager can delete the DEV-STUB section wholesale
+     once T5/T4 land — the Town factory + TownPanel keep working on top of
+     the real data.
+     ================================================================= */
+
+  /* ---- DEV STUB: goods + buildings catalog (shape per TASKS.md contract) ---- */
+  const TW_DEV_ECONOMY = true;   // gentle stock drift so the panel visibly moves; remove with T4
+  if (!CONFIG.goods) Object.assign(CONFIG, {
+    goods: {
+      grain:  { id: "grain",  tier: 1, basePrice: 4  },
+      fish:   { id: "fish",   tier: 1, basePrice: 5  },
+      wood:   { id: "wood",   tier: 1, basePrice: 3  },
+      flour:  { id: "flour",  tier: 2, basePrice: 9,  inputs: { grain: 2 } },
+      planks: { id: "planks", tier: 2, basePrice: 7,  inputs: { wood: 2 } },
+      bread:  { id: "bread",  tier: 3, basePrice: 16, inputs: { flour: 2 } },
+    },
+  });
+  if (!CONFIG.buildings) Object.assign(CONFIG, {
+    buildings: {
+      farm:    { id: "farm",    terrain: "fertile", output: { goodId: "grain", ratePerWorker: 2 }, workerSlots: 3, cost: { wood: 20, gold: 50 } },
+      fishery: { id: "fishery", terrain: "water",   output: { goodId: "fish",  ratePerWorker: 2 }, workerSlots: 2, cost: { wood: 15, gold: 40 } },
+      sawmill: { id: "sawmill", terrain: "forest",  output: { goodId: "wood",  ratePerWorker: 2 }, workerSlots: 3, cost: { wood: 10, gold: 40 } },
+      mill:    { id: "mill",    inputs: { grain: 2 }, output: { goodId: "flour", ratePerWorker: 1 }, workerSlots: 2, cost: { wood: 25, gold: 60 } },
+      bakery:  { id: "bakery",  inputs: { flour: 2 }, output: { goodId: "bread", ratePerWorker: 1 }, workerSlots: 2, cost: { wood: 25, gold: 70 } },
+    },
+  });
+
+  /* ---- Town defaults (starting pop/gold/stock) ---- */
+  if (!CONFIG.town) Object.assign(CONFIG, {
+    town: {
+      startGold: 120,
+      startPop: { peasants: 6, workers: 0, burghers: 0 },
+      startHappiness: 70,
+      defaultStock: 12,
+      buildRadius: 2,          // buildings attach within radius 1–2 (GDD §4.1)
+    },
+  });
+
+  /* ---- DEV STUB: local price model (GDD §6.1) — replaced by #3 / T5 ---- */
+  if (!Sim.priceFor) {
+    Sim.demandFor = function (town, goodId) {
+      const pop = town.pop.peasants + town.pop.workers + town.pop.burghers;
+      const g = CONFIG.goods[goodId];
+      let demand = 0;
+      if (g && g.tier === 1) demand += pop * 0.6;             // raw goods feed the town
+      for (const b of town.buildings) {                       // + building inputs
+        const bt = CONFIG.buildings[b.typeId];
+        if (bt && bt.inputs && bt.inputs[goodId]) demand += bt.inputs[goodId] * (b.workers || 0);
+      }
+      return Math.max(1, demand);
+    };
+    Sim.priceFor = function (town, goodId) {
+      const g = CONFIG.goods[goodId];
+      if (!g) return 0;
+      const stock = town.stock[goodId] || 0;
+      const demand = Sim.demandFor(town, goodId);
+      const ratio = stock / (demand * 2.0);                   // bufferTarget ≈ 2.0
+      return Math.max(g.basePrice * 0.4, Math.min(g.basePrice * 3.0, g.basePrice * (1.6 - 0.8 * ratio)));
+    };
+  }
+
+  /* ---- DEV STUB: oscillate stocks each tick so prices/arrows visibly move.
+     Sets stock to sweep the price band (ratio ~0.4..1.4) per good so the
+     panel's ▲▼ trend arrows demonstrate live movement. Purely a stand-in for
+     #2's real production/consumption tick — delete with the DEV-STUB block. ---- */
+  let _devTick = 0;
+  const _prevTick = Sim.tick.bind(Sim);
+  Sim.tick = function (st) {
+    _prevTick(st);
+    if (!TW_DEV_ECONOMY) return;
+    _devTick++;
+    const goods = CONFIG.goods || {};
+    for (const t of st.towns) {
+      for (const id in goods) {
+        const phase = id.charCodeAt(0) + id.length * 7;
+        const buffer = Sim.demandFor(t, id) * 2;         // demand × bufferTarget
+        const mid = buffer * 0.9, amp = buffer * 0.5;    // centre near ratio 0.9, swing ±0.5
+        t.stock[id] = Math.max(0, mid + amp * Math.sin((_devTick + phase) * 0.2));
+      }
+    }
+  };
+
+  /* ---- Town factory + normalizer (the real T6 data work) ---- */
+  let _nextTownId = 1;
+  const TOWN_NAMES = ["Ashford", "Brightwater", "Cobbleton", "Dunmere", "Elmbrook",
+                      "Fenwick", "Greenhollow", "Harport", "Ironvale", "Juniper"];
+  function makeTown(q, r) {
+    const goods = CONFIG.goods || {};
+    const stock = {}, prices = {};
+    for (const id in goods) { stock[id] = CONFIG.town.defaultStock; prices[id] = goods[id].basePrice; }
+    const idx = _nextTownId - 1;
+    return {
+      id: _nextTownId++,
+      name: TOWN_NAMES[idx % TOWN_NAMES.length] + (idx >= TOWN_NAMES.length ? " " + (Math.floor(idx / TOWN_NAMES.length) + 1) : ""),
+      q, r, level: 1,
+      gold: CONFIG.town.startGold,
+      pop: Object.assign({ peasants: 0, workers: 0, burghers: 0 }, CONFIG.town.startPop),
+      stock, prices,
+      buildings: [],
+      happiness: CONFIG.town.startHappiness,
+    };
+  }
+  function normalizeTown(t) {
+    if (!t) return t;
+    if (t.id == null) return Object.assign(makeTown(t.q, t.r), { q: t.q, r: t.r }); // Phase 1 marker → Town
+    t.pop = Object.assign({ peasants: 0, workers: 0, burghers: 0 }, t.pop);
+    t.stock = t.stock || {}; t.prices = t.prices || {}; t.buildings = t.buildings || [];
+    if (t.happiness == null) t.happiness = CONFIG.town.startHappiness;
+    if (t.gold == null) t.gold = CONFIG.town.startGold;
+    if (t.level == null) t.level = 1;
+    return t;
+  }
+
+  /* ---- TownPanel: DOM window over the canvas (Overview / Stock+Prices / Buildings / Population) ---- */
+  const TownPanel = (function () {
+    const el = document.getElementById("townpanel");
+    const titleEl = el.querySelector(".tp-title");
+    const subEl = el.querySelector(".tp-sub");
+    const tabsEl = el.querySelector(".tp-tabs");
+    const bodyEl = el.querySelector(".tp-body");
+    const TABS = [["overview", "Overview"], ["stock", "Stock + Prices"], ["buildings", "Buildings"], ["population", "Population"]];
+    let openId = null, activeTab = "overview", prevPrice = {}, rlast = 0;
+
+    TABS.forEach(([id, lbl]) => {
+      const b = document.createElement("button");
+      b.className = "tool tp-tab"; b.dataset.tab = id; b.textContent = lbl;
+      b.addEventListener("click", () => { activeTab = id; render(); });
+      tabsEl.appendChild(b);
+    });
+    el.querySelector(".tp-close").addEventListener("click", close);
+
+    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const goodLabel = id => { const g = CONFIG.goods[id]; return (g && g.name) || cap(id); };
+    const bldLabel = id => { const b = CONFIG.buildings[id]; return (b && b.name) || cap(id); };
+    const townById = id => state.towns.find(t => t.id === id) || null;
+    const popTotal = t => t.pop.peasants + t.pop.workers + t.pop.burghers;
+    const clampPct = v => Math.max(0, Math.min(100, v));
+
+    function overviewHTML(t) {
+      const hex = state.map.hexes.get(HexMath.key(t.q, t.r));
+      return `
+        <div class="kv"><span>Level</span><span>${t.level}</span></div>
+        <div class="kv"><span>Gold</span><span>${Math.round(t.gold)}</span></div>
+        <div class="kv"><span>Population</span><span>${popTotal(t)}</span></div>
+        <div class="kv"><span>Buildings</span><span>${t.buildings.length}</span></div>
+        <div class="kv"><span>Location</span><span>${t.q}, ${t.r}${hex ? " · " + hex.terrain : ""}</span></div>
+        <div style="margin-top:8px">Happiness · ${Math.round(t.happiness)}%</div>
+        <div class="bar"><i style="width:${clampPct(t.happiness)}%"></i></div>`;
+    }
+    function stockHTML(t) {
+      const goods = CONFIG.goods || {};
+      const ids = Object.keys(goods).sort((a, b) => goods[a].tier - goods[b].tier || a.localeCompare(b));
+      let rows = "";
+      for (const id of ids) {
+        const qty = t.stock[id] || 0;
+        const price = Sim.priceFor(t, id);
+        const prev = prevPrice[id];
+        let arrow = '<span class="flat">–</span>';
+        if (prev != null) {
+          if (price > prev + 0.05) arrow = '<span class="up">▲</span>';
+          else if (price < prev - 0.05) arrow = '<span class="down">▼</span>';
+        }
+        prevPrice[id] = price;
+        rows += `<tr><td>${goodLabel(id)}</td><td class="num">${qty.toFixed(1)}</td><td class="num">${price.toFixed(1)} ${arrow}</td></tr>`;
+      }
+      return `<table><thead><tr><th>Good</th><th class="num">Stock</th><th class="num">Price</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="muted">Prices from <code>Sim.priceFor</code> (stock vs demand). ▲▼ = change since last tick.</div>`;
+    }
+    function buildingsHTML(t) {
+      const cat = CONFIG.buildings || {};
+      const built = t.buildings.length
+        ? t.buildings.map(b => `<div class="kv"><span>${bldLabel(b.typeId)}</span><span>${b.workers || 0} wk</span></div>`).join("")
+        : `<div class="muted">No buildings yet — placing them on resource hexes lands in a later task.</div>`;
+      const types = Object.keys(cat).map(id => {
+        const b = cat[id];
+        const req = b.terrain ? " · needs " + b.terrain : (b.inputs ? " · processor" : "");
+        return `<div class="kv"><span>${bldLabel(id)}${req}</span><span>→ ${b.output.goodId}</span></div>`;
+      }).join("");
+      return `<div class="muted">Built here</div>${built}<div class="muted">Available types (GDD §5.2)</div>${types}`;
+    }
+    function populationHTML(t) {
+      const tot = popTotal(t) || 1;
+      const row = (name, n) => `<div class="kv"><span>${name}</span><span>${n}</span></div><div class="bar"><i style="width:${(n / tot * 100)}%"></i></div>`;
+      return row("Peasants", t.pop.peasants) + row("Workers", t.pop.workers) + row("Burghers", t.pop.burghers) +
+        `<div style="margin-top:6px">Happiness · ${Math.round(t.happiness)}%</div>
+         <div class="bar"><i style="width:${clampPct(t.happiness)}%"></i></div>
+         <div class="muted">Happiness drives work efficiency and growth (GDD §4.3).</div>`;
+    }
+
+    function render() {
+      const t = townById(openId);
+      if (!t) { close(); return; }
+      titleEl.textContent = t.name || ("Town " + t.id);
+      subEl.textContent = `Level ${t.level} · pop ${popTotal(t)} · ${Math.round(t.gold)}g`;
+      bodyEl.innerHTML =
+        activeTab === "overview" ? overviewHTML(t) :
+        activeTab === "stock" ? stockHTML(t) :
+        activeTab === "buildings" ? buildingsHTML(t) : populationHTML(t);
+      Array.from(tabsEl.children).forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
+    }
+    function open(town) {
+      if (openId !== town.id) { openId = town.id; prevPrice = {}; }
+      el.classList.add("show"); el.setAttribute("aria-hidden", "false");
+      render();
+    }
+    function close() {
+      openId = null; el.classList.remove("show"); el.setAttribute("aria-hidden", "true");
+    }
+    // called from the render loop; refresh ~4×/s so stock + price arrows track economy ticks
+    function frameTick(now) {
+      if (openId == null) return;
+      if (now - rlast < 250) return;
+      rlast = now;
+      render();
+    }
+    return { open, close, render, frameTick, openId: () => openId };
+  })();
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") TownPanel.close();
+  });
 
   // ---------------------------------------------------------------
   // Canvas sizing
@@ -809,6 +1104,7 @@ const MapGen = {
 
     applyKeyPan(dt);
     drawWithDpr();
+    TownPanel.frameTick(now);   // refresh the open town's live figures
 
     // FPS meter
     fpsFrames++; fpsTimer += dt;
@@ -853,7 +1149,7 @@ const MapGen = {
   requestAnimationFrame(frame);
 
   // expose a little for debugging in the console
-  window.TW = { state, CONFIG, HexMath, MapGen, newGame };
+  window.TW = { state, CONFIG, HexMath, MapGen, Sim, newGame, makeTown, TownPanel };
 })();
 </script>
 </body>

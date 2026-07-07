@@ -53,7 +53,39 @@ Definition of done:
 
 ## Status / Outbox (Session #4 writes here)
 
-- Status: 🔲 not started
-- Branch pushed: —
-- PR: —
-- Questions/blockers for #1: —
+- Status: 🔵 PR open — T6 town entities + town panel done
+- Branch pushed: `claude/phase2-town-ui`
+- PR: (opening into `main`)
+- Questions/blockers for #1: none blocking. See merge notes below.
+
+### What landed (all additive, fenced under `Phase 2 · T6` markers)
+- **Town factory** `makeTown(q,r)` — the `town` build tool now creates a full
+  `Town` (exact contract shape: `id, name, q, r, level, gold, pop{peasants,
+  workers, burghers}, stock, prices, buildings[], happiness`) into `state.towns`.
+  `normalizeTown()` upgrades any Phase-1 `{q,r}` markers from old saves.
+- **Town panel (DOM)** `#townpanel` + `TownPanel` module — click a town center
+  (pan or town mode) to open; tabs **Overview / Stock+Prices / Buildings /
+  Population**. Stock+Prices reads `Sim.priceFor` with ▲▼ trend arrows; refreshes
+  ~4×/s so it tracks economy ticks. Esc / ✕ closes; panning still works.
+- Placing a town auto-opens its panel; erasing a town closes it if open.
+
+### Merge notes for #1 (please read before merging)
+- I only edited `index.html` + this file. Nothing in `TASKS.md`/`TASK_2`/`TASK_3`.
+- All my logic is in clearly-marked `Phase 2 · T6` blocks (one CSS block, one
+  `<div id="townpanel">`, one JS module block) + a few one-line hooks in
+  `place()`, `mouseup`, `loadGame`, `frame()`, and the `window.TW` export.
+- **DEV STUBS** (guarded `if (!CONFIG.goods)…`, `if (!Sim.priceFor)…`, and a
+  `Sim.tick` wrapper) stand in for **#3/T5** (goods+buildings+price formula) and
+  **#2/T4** (production tick). They're defensive (only define if absent), so when
+  T5/T4 merge first (per the merge order #3→#2→#4) the real catalog/price/tick
+  win and my stubs no-op. The whole `DEV STUB` section can be deleted on merge;
+  the Town factory + panel keep working on the real data. `Sim.priceFor` I call
+  matches the contract signature `(town, goodId)`.
+
+### How to see it running
+Open `index.html` → **Town** tool → click buildable land (or 👁 Fog to reveal
+first). The town's panel opens; switch tabs; watch Stock+Prices arrows move.
+Verified headless in Chromium (seed `greenhollow`): town shape matches the
+contract, all 4 tabs populate, grain price moved across 6 ticks with ▲/▼ arrows
+rendered, Esc closes, **zero console errors**, 60 FPS. Pure-core test
+`test/board.test.js` still 25/25 (my changes are outside the pure-core markers).
