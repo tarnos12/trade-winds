@@ -309,6 +309,121 @@ const MapGen = {
   },
 };
 
+// === GOODS-PRICES START ===  (T5 / slot #3 — goods + buildings catalog + local price model)
+// Pure data + pure functions only (GDD §5, §6.1). No DOM, no canvas, no I/O.
+// Added to the shared CONFIG via a NON-DESTRUCTIVE merge so it composes with
+// the Phase-1 CONFIG and with the other Phase-2 slices (T4 sim, T6 UI).
+Object.assign(CONFIG, {
+  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier; `inputs`
+  // (goodId → qty consumed per unit produced) reference other goods by id.
+  // NB: "beer = grain + water" in the GDD — water is ambient, not a tracked
+  // good, so only grain appears here.
+  goods: {
+    // --- tier 1 (raw) ---
+    wood:   { id: "wood",   tier: 1, basePrice: 5 },
+    stone:  { id: "stone",  tier: 1, basePrice: 6 },
+    ore:    { id: "ore",    tier: 1, basePrice: 8 },
+    grain:  { id: "grain",  tier: 1, basePrice: 4 },
+    fish:   { id: "fish",   tier: 1, basePrice: 5 },
+    wool:   { id: "wool",   tier: 1, basePrice: 7 },
+    // --- tier 2 (processed) ---
+    planks: { id: "planks", tier: 2, basePrice: 12, inputs: { wood: 2 } },
+    tools:  { id: "tools",  tier: 2, basePrice: 20, inputs: { ore: 1, wood: 1 } },
+    flour:  { id: "flour",  tier: 2, basePrice: 10, inputs: { grain: 2 } },
+    beer:   { id: "beer",   tier: 2, basePrice: 14, inputs: { grain: 2 } },
+    cloth:  { id: "cloth",  tier: 2, basePrice: 16, inputs: { wool: 2 } },
+    // --- tier 3 (luxury) ---
+    bread:     { id: "bread",     tier: 3, basePrice: 22, inputs: { flour: 2 } },
+    clothes:   { id: "clothes",   tier: 3, basePrice: 36, inputs: { cloth: 2 } },
+    jewelry:   { id: "jewelry",   tier: 3, basePrice: 60, inputs: { ore: 3 } },
+    furniture: { id: "furniture", tier: 3, basePrice: 44, inputs: { planks: 2, tools: 1 } },
+  },
+
+  // Tier 1–2 production buildings (GDD §5.2). Each:
+  //   { id, terrain?, adjacent?, inputs?, output:{goodId, ratePerWorker},
+  //     workerSlots, cost }
+  // `terrain` = the resource hex this must sit on (omit for processors that run
+  // anywhere in a town). `adjacent` = a terrain that must border the hex (fishery
+  // sits on buildable land next to water). `inputs` = goods consumed per tick per
+  // worker (T4's tick honours these). `cost` = one-off build cost incl. gold.
+  buildings: {
+    sawmill: {
+      id: "sawmill", terrain: "forest",
+      output: { goodId: "wood", ratePerWorker: 1 },
+      workerSlots: 3, cost: { wood: 20, stone: 10, gold: 50 },
+    },
+    mine: {
+      id: "mine", terrain: "hills",
+      output: { goodId: "ore", ratePerWorker: 1 },
+      workerSlots: 3, cost: { wood: 15, stone: 25, gold: 80 },
+    },
+    farm: {
+      id: "farm", terrain: "fertile",
+      output: { goodId: "grain", ratePerWorker: 2 },
+      workerSlots: 3, cost: { wood: 15, stone: 5, gold: 40 },
+    },
+    fishery: {
+      id: "fishery", adjacent: "water",
+      output: { goodId: "fish", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
+    },
+    mill: {
+      id: "mill", inputs: { grain: 2 },
+      output: { goodId: "flour", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 20, stone: 15, gold: 90 },
+    },
+    bakery: {
+      id: "bakery", inputs: { flour: 2 },
+      output: { goodId: "bread", ratePerWorker: 1 },
+      workerSlots: 2, cost: { wood: 15, stone: 20, gold: 100 },
+    },
+  },
+});
+
+// bufferTarget lives under econ (existing key) — merge in place so we don't
+// clobber baseTickMs or anything a sibling slice added.
+Object.assign(CONFIG.econ, {
+  bufferTarget: 2.0,   // "comfortable" stock = bufferTarget × demand (GDD §6.1)
+  priceSmoothing: 0.10, // lerp factor toward the target price each tick
+  minDemand: 0.5,      // demand floor so priceFor never divides by ~0
+});
+
+// Sim — pure, deterministic economy namespace. THIS SLICE OWNS ONLY priceFor;
+// the production/consumption tick (Sim.tick) is T4's slice. Declared with a
+// guard so whichever Phase-2 slice loads first creates the namespace and the
+// other just adds to it (single-file, no module system).
+var Sim = (typeof Sim !== "undefined" && Sim) || {};
+
+// Local price of one good in one town from stock vs demand (GDD §6.1):
+//   ratio = stock / (demand * bufferTarget)
+//   target = clamp(basePrice * (1.6 - 0.8*ratio), basePrice*0.4, basePrice*3.0)
+// then lerp the town's stored price 10%/tick toward the target (anti-jitter).
+// Demand is read from town.demand[goodId] when the sim provides it (T4), else a
+// small floor keeps this well-defined. First read (no stored price) snaps to the
+// target; later reads move gradually. Mutates town.prices[goodId] and returns it.
+Sim.priceFor = function (town, goodId) {
+  const good = CONFIG.goods[goodId];
+  if (!good) return 0;
+  const base = good.basePrice;
+  const buffer = CONFIG.econ.bufferTarget;
+
+  const stock = (town.stock && town.stock[goodId]) || 0;
+  const rawDemand = (town.demand && town.demand[goodId]);
+  const demand = Math.max(CONFIG.econ.minDemand, rawDemand || 0);
+
+  const ratio = stock / (demand * buffer);
+  const target = Math.min(base * 3.0, Math.max(base * 0.4, base * (1.6 - 0.8 * ratio)));
+
+  if (!town.prices) town.prices = {};
+  const prev = town.prices[goodId];
+  const next = (prev === undefined || prev === null)
+    ? target                                        // first read: snap to target
+    : prev + (target - prev) * CONFIG.econ.priceSmoothing; // else: 10%/tick lerp
+  town.prices[goodId] = next;
+  return next;
+};
+// === GOODS-PRICES END ===
+
 /* PURE_CORE_END */
 
 /* =====================================================================
