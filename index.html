@@ -483,10 +483,25 @@
   #tutSkip { padding: 2px 8px; font-size: 11px; }
   #tutorial.celebrate { border-color: #6fbf73; box-shadow: 0 6px 22px rgba(111,191,115,0.35); }
   /* === TUTORIAL CSS END === */
+  /* === VERSION / PATCH NOTES === */
+  #verBadge { font: inherit; font-size: 11px; color: var(--accent); background: rgba(201,138,60,0.12);
+    border: 1px solid var(--panel-edge); border-radius: 6px; padding: 1px 7px; margin-left: 6px; cursor: pointer; }
+  #verBadge:hover { border-color: var(--accent); }
+  #patchPanel { position: fixed; left: 12px; top: 46px; width: 320px; max-height: 70vh; overflow-y: auto;
+    z-index: 60; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
+    box-shadow: 0 8px 26px rgba(0,0,0,0.5); padding: 10px 13px 13px; font-size: 12.5px; }
+  #patchPanel.hidden { display: none; }
+  #patchPanel h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); display: flex; justify-content: space-between; }
+  #patchPanel .pn-close { cursor: pointer; opacity: 0.7; border: none; background: none; color: var(--paper); font-size: 14px; }
+  #patchPanel .pn-ver { margin: 9px 0 3px; font-weight: bold; color: var(--paper); }
+  #patchPanel .pn-ver span { color: var(--accent); }
+  #patchPanel ul { margin: 0 0 6px; padding-left: 16px; line-height: 1.5; opacity: 0.9; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- === PATCH NOTES === -->
+<div id="patchPanel" class="hidden"><h3>Patch notes <button class="pn-close" id="pnClose">✕</button></h3><div id="pnBody"></div></div>
 
 <!-- === START-SCREEN === -->
 <div id="startScreen" class="hidden" role="dialog" aria-label="Trade Winds — start">
@@ -514,7 +529,7 @@
 <!-- === START-SCREEN END === -->
 
 <div id="topbar">
-  <div class="brand">Trade&nbsp;Winds <small>· build · trade · tariff</small></div>
+  <div class="brand">Trade&nbsp;Winds <button id="verBadge" title="Patch notes">v0.8.0</button></div>
 
   <div class="group">
     <label class="seedlbl" for="seed">Seed</label>
@@ -5561,6 +5576,51 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   })();
   window.Tutorial = Tutorial;   // exposed for headless smoke + console
   // === TUTORIAL END ===
+
+  // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
+  const GAME_VERSION = "0.8.0";
+  const PATCH_NOTES = [
+    { v: "0.8.0", notes: [
+      "Categorized build menu: Build / Peasant / Worker / Burgher (Worker & Burgher unlock via research)",
+      "Population shown as whole numbers; version + patch notes added",
+    ] },
+    { v: "0.7.0", notes: [
+      "Kingdom treasury (10,000 g) pays for all placement; cities pay resources to build",
+      "City cards up top with Give / Take gold (± happiness); kingdom gold shown top-left",
+      "City happiness (~50% base) drives population from housing — build a house to grow",
+      "Trade rework: cities buy what they lack (works from level 1); reserved goods + agreed prices",
+      "Trade UI: buy/sell arrows, trader bars & hover; internal-trader porters",
+    ] },
+    { v: "0.6.0", notes: [
+      "Contiguous cities: buildings attach to the nearest city; gaps between cities",
+      "Terrain icons (forest, hills, mountains, water, fields…); bigger starting view",
+      "Town interiors: place buildings on valid terrain; houses generate workers",
+    ] },
+    { v: "0.5.0", notes: [
+      "Phase 4 — research tree, King's quests, prestige, castle levels (L5 = victory), Kingdom screen, events",
+      "Phase 5 — start screen, tutorial, speed controls (⏸/1×/2×/4×), tariff slider, audio, visual juice",
+    ] },
+    { v: "0.4.0", notes: [
+      "Phase 3 — autonomous cart trade between towns; 25% tariff to your treasury; castle warehouse",
+    ] },
+    { v: "0.1–0.3", notes: [
+      "The board (hex map, fog, camera), roads, and town production & prices",
+    ] },
+  ];
+  (function () {
+    const badge = document.getElementById("verBadge");
+    const panel = document.getElementById("patchPanel");
+    const body = document.getElementById("pnBody");
+    if (!badge || !panel || !body) return;
+    badge.textContent = "v" + GAME_VERSION;
+    body.innerHTML = PATCH_NOTES.map(p =>
+      '<div class="pn-ver"><span>v' + p.v + '</span></div><ul>' +
+      p.notes.map(n => "<li>" + n.replace(/</g, "&lt;") + "</li>").join("") + "</ul>"
+    ).join("");
+    const toggle = (show) => panel.classList.toggle("hidden", show === undefined ? !panel.classList.contains("hidden") : !show);
+    badge.addEventListener("click", () => toggle());
+    document.getElementById("pnClose").addEventListener("click", () => toggle(false));
+  })();
 
   // ---------------------------------------------------------------
   // Boot

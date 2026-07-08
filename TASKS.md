@@ -178,6 +178,19 @@ priority order, closed slots, delivery); CB-B visuals (build-state look,
 missing-resource + trader cargo icons + priority routing); CB-C per-building click
 panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
 
+## Milestone: Balance + castle overhaul — IN PROGRESS (author, via subagents)
+- **BAL — balance + starting buildings:** rebalance costs/rates/prices/research; only
+  **hut (house) / lumberjack (woodcutter) / farm / sawmill** available at start; every
+  other building gated per-building by a research node (`unlockedBy`); build menu shows
+  locked buildings + the required research.
+- **CP — castle click panel:** clicking the castle opens a panel (like city panels)
+  holding castle info (prestige, castle level+upgrade, warehouse, tariff) — moved OUT
+  of the bottom-right HUD; kingdom-gold chip stays top-left. → then:
+- **CRE — castle research economy:** research requires RESOURCES; the castle owns **10
+  traders** (like city external traders) that buy requested research materials from
+  cities using treasury gold; the castle only requests materials **when selected**.
+  Builds on CP.
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
