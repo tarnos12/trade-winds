@@ -362,6 +362,30 @@
   #ssContinue:disabled { opacity: 0.35; cursor: not-allowed; }
   .ss-foot { margin-top: 20px; font-size: 11px; opacity: 0.45; }
   /* === START-SCREEN END === */
+  /* === TUTORIAL CSS START === (P5D-C / slot #4 — onboarding coach) */
+  #tutorial {
+    position: fixed; left: 12px; top: 60px; width: 258px; z-index: 25;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 10px 12px 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    font-size: 12.5px; line-height: 1.45;
+  }
+  #tutorial.hidden { display: none; }
+  #tutorial .tut-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  #tutorial .tut-head b { color: var(--accent); font-size: 13px; letter-spacing: 0.3px; }
+  #tutStep { margin: 2px 0 8px; }
+  #tutStep .tut-now { font-weight: bold; color: var(--paper); }
+  #tutStep .tut-tip { opacity: 0.82; font-size: 11.5px; margin-top: 3px; }
+  #tutStep .tut-cheer { color: #6fbf73; font-weight: bold; font-size: 13px; }
+  #tutList { list-style: none; margin: 0; padding: 0; }
+  #tutList li { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; opacity: 0.5; font-size: 11.5px; }
+  #tutList li.cur { opacity: 1; color: var(--accent); }
+  #tutList li.done { opacity: 0.82; }
+  #tutList li .mk { width: 13px; display: inline-block; text-align: center; }
+  #tutList li.done .mk { color: #6fbf73; }
+  #tutSkip { padding: 2px 8px; font-size: 11px; }
+  #tutorial.celebrate { border-color: #6fbf73; box-shadow: 0 6px 22px rgba(111,191,115,0.35); }
+  /* === TUTORIAL CSS END === */
 </style>
 </head>
 <body>
@@ -449,6 +473,14 @@
   <div><span class="fps" id="fps">—</span> fps</div>
   <div id="stat">—</div>
 </div>
+
+<!-- === TUTORIAL HTML START === (P5D-C / slot #4 — onboarding coach) -->
+<div id="tutorial" class="hidden" aria-live="polite" aria-hidden="true">
+  <div class="tut-head"><b>👑 Getting started</b><button id="tutSkip" title="Dismiss the tutorial">Skip</button></div>
+  <div id="tutStep"></div>
+  <ul id="tutList"></ul>
+</div>
+<!-- === TUTORIAL HTML END === -->
 
 <!-- === TOWN-UI HTML START === (T6 / slot #4 — town panel, DOM over canvas) -->
 <div id="townPanel" class="hidden" aria-hidden="true">
@@ -2042,6 +2074,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     event: null,               // current active event { id, ticksLeft, goodId?, roadKey? } or null
     eventSeed: 0,              // seeded RNG stream for deterministic event timing
     eventCooldown: 0,          // ticks until another event may start
+    // P5D-C — onboarding coach. Live tracking for the tutorial step machine
+    // (Tutorial module owns it; mirrored to a localStorage flag for gating).
+    tutorial: null,            // { step:int, done:bool } once started, else null
   };
 
   // Offscreen terrain layer (GDD §9.3: pre-rendered, redrawn only on fog change).
@@ -2477,11 +2512,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   document.getElementById("btnGen").addEventListener("click", () => {
     newGame(document.getElementById("seed").value.trim() || randomSeed());
+    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
   });
   document.getElementById("btnRandom").addEventListener("click", () => {
     const s = randomSeed();
     document.getElementById("seed").value = s;
     newGame(s);
+    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
   });
   document.getElementById("btnReveal").addEventListener("click", () => {
     state.revealAll = !state.revealAll;
@@ -2681,6 +2718,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
           Events.tick(state);
           if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
         }
+        if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
       }
     }
@@ -4209,11 +4247,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       newGame(seed);
       setMode(state.mode);
       begin();
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: onboarding on a new game
     }
     function continueSave() {
       if (!loadGame()) { refreshContinue(); return false; }   // no valid save
       setMode(state.mode);
       begin();
+      if (typeof Tutorial !== "undefined") Tutorial.resume();     // P5D-C: resume an in-progress tutorial
       return true;
     }
 
@@ -4226,6 +4266,164 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   })();
   window.StartScreen = StartScreen;
   // === START-SCREEN END ===
+  // === TUTORIAL START === (P5D-C / slot #4 — onboarding coach; state-detected)
+  // A cozy, skippable corner coach that walks a fresh player through the core
+  // loop. Steps advance by DETECTING real game state (not scripted clicks): a
+  // poll runs each ~750ms and each econ tick. Persistence is a small localStorage
+  // flag ({done, step}) so the coach never re-nags returning players; it only
+  // shows for a fresh game (or resumes a fresh game still in progress). All
+  // transient tracking is module-local or in the single `state.tutorial` field.
+  const Tutorial = (function () {
+    const LS_KEY = "tradewinds.tutorial";
+
+    // Ordered steps. `done(state)` polls real state — no click scripting.
+    const STEPS = [
+      { icon: "🏰", title: "Found your first town",
+        tip: "Pick the 🏰 Town tool up top, then click a revealed land hex.",
+        done: s => s.towns.length >= 1 },
+      { icon: "🌾", title: "Place an extractor",
+        tip: "Open a town, go to its Buildings tab, and place a Farm on fertile land (or a Lumberjack in forest).",
+        done: s => townsHaveKind(s, "extractor") },
+      { icon: "🏠", title: "Build a house",
+        tip: "Add a Hut in the Buildings tab — housing grows the workers that staff your buildings.",
+        done: s => townsHaveKind(s, "house") },
+      { icon: "⬆️", title: "Grow a town to level 2",
+        tip: "Keep the town happy and populated, then upgrade it. A town must reach Lv 2 before it will trade.",
+        done: s => s.towns.some(t => (t.level || 1) >= 2) },
+      { icon: "🛣", title: "Connect two towns with a road",
+        tip: "Pick the 🛣 Road tool and drag a path between towns so carts can travel.",
+        done: s => s.roads.size > 0 },
+      { icon: "👑", title: "Earn your first tariff",
+        tip: "When towns trade over your roads you skim a tariff. Watch the 👑 treasury climb.",
+        done: s => (s.treasury || 0) > startTreasury },
+    ];
+
+    let startTreasury = 0;   // baseline for the tariff step (captured at start)
+    let active = false;      // panel shown & advancing
+    let celebrating = false; // showing the completion cheer
+    let polling = false;
+    let elRoot = null, elStep = null, elList = null, elBtn = null;
+
+    function townsHaveKind(s, kind) {
+      for (const t of s.towns) {
+        for (const b of (t.buildings || [])) {
+          const def = CONFIG.buildings[b.typeId];
+          if (def && def.kind === kind) return true;
+        }
+      }
+      return false;
+    }
+
+    function loadFlag() {
+      try {
+        const j = JSON.parse(localStorage.getItem(LS_KEY));
+        if (j && typeof j === "object") return { done: !!j.done, step: j.step | 0 };
+      } catch (e) {}
+      return { done: false, step: 0 };
+    }
+    function saveFlag() {
+      try {
+        const t = state.tutorial || {};
+        localStorage.setItem(LS_KEY, JSON.stringify({ done: !!t.done, step: t.step | 0 }));
+      } catch (e) { /* private mode / quota — ignore */ }
+    }
+
+    function ensureEls() {
+      if (elRoot) return;
+      elRoot = document.getElementById("tutorial");
+      elStep = document.getElementById("tutStep");
+      elList = document.getElementById("tutList");
+      elBtn  = document.getElementById("tutSkip");
+      if (elBtn) elBtn.addEventListener("click", onSkip);
+    }
+    function show() { if (elRoot) { elRoot.classList.remove("hidden"); elRoot.setAttribute("aria-hidden", "false"); } }
+    function hide() { if (elRoot) { elRoot.classList.add("hidden"); elRoot.setAttribute("aria-hidden", "true"); elRoot.classList.remove("celebrate"); } }
+
+    function render() {
+      if (!elRoot || !state.tutorial) return;
+      const i = Math.min(state.tutorial.step | 0, STEPS.length);
+      if (celebrating) {
+        elStep.innerHTML = '<div class="tut-cheer">🎉 You\'ve mastered the basics!</div>' +
+          '<div class="tut-tip">The winds are yours to shape — build, connect, and prosper.</div>';
+      } else if (STEPS[i]) {
+        const s = STEPS[i];
+        elStep.innerHTML = '<div class="tut-now">' + s.icon + " " + s.title + "</div>" +
+          '<div class="tut-tip">' + s.tip + "</div>";
+      }
+      let html = "";
+      for (let k = 0; k < STEPS.length; k++) {
+        const isDone = k < i;
+        const isCur = k === i && !celebrating;
+        const cls = isDone ? "done" : (isCur ? "cur" : "");
+        const mk = isDone ? "✓" : (isCur ? "▶" : "○");
+        html += '<li class="' + cls + '"><span class="mk">' + mk + "</span><span>" + STEPS[k].title + "</span></li>";
+      }
+      elList.innerHTML = html;
+    }
+
+    // Poll: advance through any satisfied steps; celebrate + retire at the end.
+    function tick() {
+      if (!active || !state.tutorial || state.tutorial.done) return;
+      const t = state.tutorial;
+      let advanced = false;
+      while (t.step < STEPS.length && STEPS[t.step].done(state)) { t.step++; advanced = true; }
+      if (advanced) saveFlag();
+      if (t.step >= STEPS.length) { celebrate(); return; }   // celebrate() renders the cheer
+      if (advanced) render();
+    }
+
+    function celebrate() {
+      const t = state.tutorial;
+      t.done = true; t.step = STEPS.length;
+      saveFlag();
+      celebrating = true; active = false;
+      if (elRoot) elRoot.classList.add("celebrate");
+      render();
+      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
+      setTimeout(() => { celebrating = false; hide(); }, 5200);
+    }
+
+    function onSkip() {
+      state.tutorial = state.tutorial || { step: 0, done: false };
+      state.tutorial.done = true;
+      state.tutorial.step = STEPS.length;
+      saveFlag();
+      active = false; celebrating = false;
+      hide();
+    }
+
+    // Fresh game (boot with no save, or an explicit New/Generate). Shows from
+    // step 0 unless the player has already finished/skipped the tutorial before.
+    function startFresh() {
+      ensureEls();
+      const flag = loadFlag();
+      if (flag.done) { state.tutorial = { step: STEPS.length, done: true }; active = false; hide(); return; }
+      state.tutorial = { step: 0, done: false };
+      startTreasury = state.treasury || 0;
+      celebrating = false; active = true;
+      if (elRoot) elRoot.classList.remove("celebrate");
+      saveFlag(); show(); render(); tick();
+    }
+
+    // Loaded game: only resume a fresh-game tutorial that was still in progress
+    // (step > 0, not done). Returning players who finished/skipped stay untouched.
+    function resume() {
+      ensureEls();
+      const flag = loadFlag();
+      if (flag.done || flag.step <= 0) { state.tutorial = { step: flag.step, done: !!flag.done }; active = false; hide(); return; }
+      state.tutorial = { step: Math.min(flag.step, STEPS.length), done: false };
+      startTreasury = state.treasury || 0;   // baseline for the tariff step on resume
+      celebrating = false; active = true;
+      show(); render(); tick();
+    }
+
+    function startPolling() { if (polling) return; polling = true; setInterval(tick, 750); }
+
+    return { STEPS, startFresh, resume, tick, startPolling, hide,
+             isActive: () => active };
+  })();
+  window.Tutorial = Tutorial;   // exposed for headless smoke + console
+  // === TUTORIAL END ===
 
   // ---------------------------------------------------------------
   // Boot
@@ -4238,6 +4436,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   setMode(state.mode);
   setSpeed(state.gameSpeed);   // === SPEED-UI === (P5D-A) reflect speed in the toolbar at boot
   StartScreen.show();          // === START-SCREEN === (P5D-B) gate gameplay until New/Continue
+  Tutorial.startPolling();     // === TUTORIAL === (P5D-C) detection loop; the coach only
+                               // appears once a game starts (StartScreen fires startFresh/resume)
   requestAnimationFrame(frame);
 
   // expose a little for debugging in the console
