@@ -165,10 +165,24 @@ MapGen presets + start screen → TV2-C research-tree & balance wiring.
 - **Oil Maker** — fish → **oil** (new good); used for research + later systems.
 **Needs model (Workers):** basic = bread (+wood assumed for heating — confirm);
 luxury = mead + clothes.
-**Open (awaiting author's Citizen list):** Smelter (iron+coal→tools) assumed to
-move to the CITIZEN band (LTT Forge analog); Jeweler (gold→jewelry) citizen-tier.
-All new buildings get unlock nodes in the WORKER research band + materials;
-research-tree pos/prereqs mirror the LTT reference layout loosely.
+**Definitive CITIZEN building list (author, 2026-07-08):**
+- **Pottery** — clay → pottery.
+- **Distillery** — mead + pottery → **alcohol** (T3) = LUXURY for Citizens.
+- **Goldsmith** — gold + iron tool → **gold ring** (raw mined gold/iron used
+  as-is, no smelting; REPLACES the old Jeweler/jewelry).
+- **Lamp Maker** — oil → **lamp**.
+- **Forge** — wood + iron → **iron tool** (SUPERSEDES the earlier "Smelter:
+  tools = iron + coal" — Smelter RETIRED; 'tools' good becomes iron_tool or
+  migrates).
+- **Armory** — coal + iron → **iron armor** (future knights/quests sink).
+- **Carpentry** — planks + oil → **chairs** (REPLACES old furniture chain).
+- **Luxury Tailor** — clothes (T2, from Tailoring) + gold ring → **luxury
+  clothes**.
+New T3 goods: pottery, alcohol, iron tool, gold ring, lamp, iron armor, chairs,
+luxury clothes. Citizen unlock nodes in the CITIZEN research band.
+**Open (manager assumption, author to confirm):** Citizen needs — basic = bread
+(+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
+consumption good (reserved for future military/quests).
 
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
 4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
