@@ -178,7 +178,7 @@ priority order, closed slots, delivery); CB-B visuals (build-state look,
 missing-resource + trader cargo icons + priority routing); CB-C per-building click
 panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
 
-## Milestone: Balance + castle overhaul — IN PROGRESS (author, via subagents)
+## Milestone: Balance + castle overhaul ✅ DONE (BAL/CP/CRE merged)
 - **BAL — balance + starting buildings:** rebalance costs/rates/prices/research; only
   **hut (house) / lumberjack (woodcutter) / farm / sawmill** available at start; every
   other building gated per-building by a research node (`unlockedBy`); build menu shows
@@ -191,7 +191,7 @@ panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
   cities using treasury gold; the castle only requests materials **when selected**.
   Builds on CP.
 
-## Milestone: Economy v3 (needs + taxes + caps) — QUEUED (after BAL/CP/CRE)
+## Milestone: Economy v3 (needs + taxes + caps) ✅ DONE (v0.10.0)
 Author directives (supersede parts of the BAL balance pass — apply these specifics):
 - **City storage cap:** each city holds **≤ 80 per resource** (warehouse limit).
   *(Assumption: per-good cap 80; confirm if it means 80 total.)*
