@@ -137,6 +137,7 @@
   .rg-chip:hover { border-color: var(--panel-edge); }
   .rg-chip.active { border-color: var(--accent); background: #241c11; }
   .rg-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset; }
+  .rg-ico { font-size: 13px; line-height: 1; flex: 0 0 auto; }
   .rg-tot { flex: 1; color: var(--paper); font-weight: bold; font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .rg-price { color: #d9c169; font-size: 10.5px; flex: 0 0 auto; }
   .rg-tr { width: 11px; text-align: center; font-size: 10px; flex: 0 0 auto; }
@@ -3884,29 +3885,31 @@ Market.summary = function (state) {
     const alpha = opts.alpha == null ? 1 : opts.alpha;
     const muted = !!opts.muted;
     const label = String(num);
-    const dotR = Math.max(2.5, SIZE * 0.085);
     const fontPx = Math.max(9, Math.round(SIZE * 0.19));
+    const icoPx = Math.max(10, Math.round(SIZE * 0.22));   // ICONS: emoji glyph replaces the color dot
+    const ico = goodIcon(gid);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     const tw = ctx.measureText(label).width;
+    ctx.font = icoPx + "px system-ui, sans-serif";
+    const iw = ctx.measureText(ico).width;
     const padX = Math.max(2, SIZE * 0.05), gap = Math.max(2, SIZE * 0.05);
-    const totalW = padX * 2 + dotR * 2 + gap + tw;
-    const totalH = Math.max(dotR * 2 + 3, fontPx + 3);
+    const totalW = padX * 2 + iw + gap + tw;
+    const totalH = Math.max(icoPx + 3, fontPx + 3);
     const bx = cx - totalW / 2, by = cy - totalH / 2;
     // legibility pill
     ctx.fillStyle = "rgba(18,12,5,0.62)";
     cbChipRect(bx, by, totalW, totalH, totalH * 0.5); ctx.fill();
-    // dot
-    const col = goodColor(gid);
-    ctx.lineWidth = 1;
-    if (muted) { ctx.fillStyle = "#8f8a80"; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, dotR * 0.4); }
-    else { ctx.fillStyle = col; ctx.strokeStyle = "rgba(0,0,0,0.5)"; }
-    ctx.beginPath(); ctx.arc(bx + padX + dotR, cy, dotR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // icon (dimmed when muted = requested/en-route, matching the old grey dot)
+    if (muted) ctx.globalAlpha = alpha * 0.55;
+    ctx.fillText(ico, bx + padX, cy + 0.5);
+    ctx.globalAlpha = alpha;
     // number
-    ctx.fillStyle = "#f4ecdd";
-    ctx.fillText(label, bx + padX + dotR * 2 + gap, cy + 0.5);
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.fillStyle = muted ? "#b8b2a6" : "#f4ecdd";
+    ctx.fillText(label, bx + padX + iw + gap, cy + 0.5);
     ctx.restore();
   }
   // Stack the top-3 owed goods for an under-construction building above its circle.
@@ -4665,6 +4668,17 @@ Market.summary = function (state) {
   const GOOD_LABEL = id => id.charAt(0).toUpperCase() + id.slice(1);
   const fmt = n => (Math.round(n * 10) / 10).toLocaleString();
 
+  // === ICONS: per-good emoji (author request — no external images, single-file).
+  // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
+  const GOOD_ICON = {
+    wood: "🪵", stone: "🪨", ore: "⛏️", grain: "🌾", potato: "🥔",
+    fish: "🐟", wool: "🧶", planks: "🪚", tools: "🔨", flour: "🌸",
+    beer: "🍺", cloth: "🧵", bread: "🍞", clothes: "👕", jewelry: "💍",
+    furniture: "🪑",
+  };
+  const goodIcon = id => GOOD_ICON[id] || "📦";
+  // === /ICONS ===
+
   function trendArrow(town, goodId, price) {
     const key = town.id + ":" + goodId;
     const prev = trendPrev[key];
@@ -4716,7 +4730,7 @@ Market.summary = function (state) {
   function externalActivity(t) {
     const c = externalCart(t);
     if (!c) return "Idle — no external trader out right now.";
-    const good = GOOD_LABEL(c.goodId || "goods");
+    const good = (c.goodId ? goodIcon(c.goodId) + " " : "") + GOOD_LABEL(c.goodId || "goods");
     const qty = fmt(c.qty || 0);
     if (c.phase === "loading")
       return `Loading ${fmt(c.loaded || 0)}/${qty} ${good} at City #${c.toId}.`;
@@ -4818,7 +4832,7 @@ Market.summary = function (state) {
         : `<span class="tw-neu">—</span>`;
       const rowDim = (qty > 0 || tm.qty != null) ? "" : "dim";
       rows += `<tr class="${rowDim}">
-        <td>${esc(GOOD_LABEL(id))}<span style="opacity:.5"> · T${CONFIG.goods[id].tier}</span></td>
+        <td>${goodIcon(id)} ${esc(GOOD_LABEL(id))}<span style="opacity:.5"> · T${CONFIG.goods[id].tier}</span></td>
         <td>${fmt(qty)}</td>
         <td>${fmt(price)}g ${arrow}</td>
         <td>${tradeCell}</td>
@@ -4961,8 +4975,8 @@ Market.summary = function (state) {
 
   function bbCostStr(cost) {
     const parts = [];
-    if (cost && cost.gold) parts.push(cost.gold + "g");
-    for (const gid in (cost || {})) { if (gid === "gold") continue; parts.push(cost[gid] + " " + gid); }
+    if (cost && cost.gold) parts.push(cost.gold + "🪙");
+    for (const gid in (cost || {})) { if (gid === "gold") continue; parts.push(cost[gid] + " " + goodIcon(gid)); }
     return parts.join(" · ") || "free";
   }
   function bbTerrainReq(def) {
@@ -5385,11 +5399,11 @@ Market.summary = function (state) {
       let chips = "";
       for (const gid in rc) {
         const c = goodColor(gid);
-        chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
+        chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
       }
       html += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const need = bpConstructionNeed(b);
-      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + GOOD_LABEL(g)).join(" · ");
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
       html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
     }
 
@@ -5397,13 +5411,13 @@ Market.summary = function (state) {
     if (def.output) {
       const c = goodColor(def.output.goodId);
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${def.output.ratePerWorker}/wkr</span></div>`;
+        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${def.output.ratePerWorker}/wkr</span></div>`;
     }
     if (def.inputs && Object.keys(def.inputs).length) {
       html += `<div class="tp-sec">Inputs / unit</div>`;
       for (const gid in def.inputs) {
         const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
+        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
       }
     }
     if (def.kind === "house") {
@@ -5464,7 +5478,7 @@ Market.summary = function (state) {
     let chips = "";
     for (const gid in rc) {
       const c = goodColor(gid);
-      chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
+      chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
     }
     return chips;
   }
@@ -5844,7 +5858,7 @@ Market.summary = function (state) {
       const canBuy = treas >= price * unit && used + unit <= cap;
       const canSell = held > 0;
       rows += `<tr class="${held > 0 ? "" : "dim"}">
-        <td><span class="cw-dot" style="background:${goodColor(id)}"></span>${esc(GOOD_LABEL(id))}</td>
+        <td><span class="cw-dot" style="background:${goodColor(id)}"></span>${goodIcon(id)} ${esc(GOOD_LABEL(id))}</td>
         <td>${fmt(price)}g</td>
         <td>${fmt(held)}</td>
         <td>
@@ -6137,9 +6151,9 @@ Market.summary = function (state) {
       const root = document.createElement("div");
       root.className = "rg-chip";
       root.title = GOOD_LABEL(gid);
-      root.innerHTML = '<span class="rg-dot"></span><span class="rg-tot"></span>' +
+      root.innerHTML = '<span class="rg-ico"></span><span class="rg-tot"></span>' +
                        '<span class="rg-price"></span><span class="rg-tr"></span>';
-      root.querySelector(".rg-dot").style.background = goodColor(gid);
+      root.querySelector(".rg-ico").textContent = goodIcon(gid);
       const c = { root: root, tot: root.querySelector(".rg-tot"),
                   price: root.querySelector(".rg-price"), tr: root.querySelector(".rg-tr") };
       root.addEventListener("click", () => { if (openGood === gid) close(); else open(gid); });
@@ -6214,7 +6228,7 @@ Market.summary = function (state) {
       detailEl.classList.remove("hidden");
       detailEl.setAttribute("aria-hidden", "false");
       if (rdDot) rdDot.style.background = goodColor(gid);
-      if (rdName) rdName.textContent = GOOD_LABEL(gid);
+      if (rdName) rdName.textContent = goodIcon(gid) + " " + GOOD_LABEL(gid);
       for (const [g, c] of chips) c.root.classList.toggle("active", g === gid);
       refreshDetail();
     }
@@ -6351,7 +6365,7 @@ Market.summary = function (state) {
         const have = Math.floor(cs[gid] || 0);
         const req = mats[gid];
         const done = have >= req;
-        out += '<tr><td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + esc(GOOD_LABEL(gid)) + '</td>' +
+        out += '<tr><td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + goodIcon(gid) + ' ' + esc(GOOD_LABEL(gid)) + '</td>' +
                '<td>' + have + ' / ' + req + '</td><td>' + (done ? '✓' : '…') + '</td></tr>';
       }
       out += '</table>';
@@ -6620,7 +6634,7 @@ Market.summary = function (state) {
     for (const gid in mats) {
       const qty = mats[gid];
       const val = qty * ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
-      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${esc(GOOD_LABEL(gid))} ${qty} = ${fmt(val)} 🪙</div>`;
+      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qty} = ${fmt(val)} 🪙</div>`;
     }
     return html;
   }
@@ -7750,8 +7764,11 @@ Market.summary = function (state) {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.14.0";
+  const GAME_VERSION = "0.14.1";
   const PATCH_NOTES = [
+    { v: "0.14.1", notes: [
+      "Every resource now has a proper icon (🪵🪨🥔🐟🧶…) across panels, chips, carts and tooltips",
+    ] },
     { v: "0.14.0", notes: [
       "Full-screen research TREE (🔬): bands bottom-up Peasants → Workers → Citizen + kingdom side column",
       "Every building is now unlocked by its own research node; upgrade levels are per-level pips (II/III/IV)",
