@@ -1499,25 +1499,37 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
 })();
 // === PATHING END ===
 
-// === TRADE START ===  (T8 / slot #3 — cart dispatch + transactions + tariff)
+// === TRADE START ===  (TR-A — external-buyer trade model; supersedes the T8 sell model)
 // Pure, deterministic trade layer (GDD §6.2–6.3). No DOM / canvas / I/O and NO
-// Math.random — every cart-route decision draws from a seeded stream stored on
-// State (state.tradeSeed), so the whole sim+trade step is reproducible and safe
-// to fast-forward / autoplay. Wired into the 500ms accumulator right AFTER
-// Sim.tick(state). It only READS prices (Sim.tick already republished them via
-// Sim.priceFor) and mutates only town.stock / town.gold, state.carts and
-// state.treasury (the player's tariff income). Mitigates the GDD §10 risk of
-// carts looping/oscillating with a profit threshold, top-3 route randomness, and
-// a per-town cart cap.
+// Math.random — every decision draws from a seeded stream stored on State
+// (state.tradeSeed), so the whole sim+trade step is reproducible and safe to
+// fast-forward / autoplay. Wired into the 500ms accumulator right AFTER
+// Sim.tick(state).
+//
+// MODEL (TR-A): each city runs ONE external trader that BUYS the good it is most
+// short on from a road-connected city holding a genuine surplus. Selling is
+// PASSIVE — a city only "sells" when another city's trader arrives to buy from
+// it. The trader is available from LEVEL 1 (the old `level >= 2` gate is gone),
+// so a connected town trades the moment it has a shortfall and a reachable seller
+// — fixing the "towns stuck at L1 never trade" bug. The player still earns the
+// effective tariff (state.tariffRate + research tariffBonus, × Events multiplier,
+// clamped) on every purchase → state.treasury.
+//
+// It only READS prices (Sim.tick already republished them via Sim.priceFor) and
+// mutates only town.stock / town.gold, state.carts and state.treasury. Anti-
+// herding: a min-shortfall threshold, seeded top-N seller/shortfall picks, and a
+// one-trader-per-city cap (research `extraCarts` may add more). Carts carry
+// `kind:'external'` so TR-B can render internal vs external traders distinctly.
 Object.assign(CONFIG, {
   trade: {
     tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3)
-    profitThreshold: 5,        // min gross profit for a route to be worth dispatching
-    distanceCostPerStep: 0.5,  // gold cost per road step, subtracted from route profit
-    cartCapacity: 10,          // max units one cart carries per trip
+    profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
+    distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
+    cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
-    maxCartsPerTown: 3,        // hard cap; the per-town cap also scales with level (1–3)
-    topRandom: 3,              // pick among the top-N most profitable routes (anti-herding)
+    maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
+    topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
+    buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
   },
@@ -1536,19 +1548,12 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
   const townKey = (t) => HexMath.key(t.q, t.r);
 
-  // How many carts a town may run at once: capped by config AND by level
-  // (level 2 → 1, level 3 → 2, level 4+ → 3) — the GDD's "1–3 carts by level".
-  // P5-A: `extra` (from the `extraCarts` research effect) lifts both caps so the
-  // caravan techs actually add carts even for a maxed-out town. Defaults to 0.
-  function cartCapFor(town, cfg, extra) {
-    extra = extra || 0;
-    return Math.max(0, Math.min(cfg.maxCartsPerTown + extra, (town.level || 1) - 1 + extra));
-  }
-
-  // Count a town's live (not-done) outbound-or-returning carts.
+  // Count a city's live (not-done) external traders (carts it owns as buyer).
+  // All state.carts are external traders in this model; a cart missing `kind`
+  // (e.g. an old save) is treated as external. Used to enforce one-trader/city.
   function activeCarts(carts, townId) {
     let n = 0;
-    for (const c of carts) if (!c.done && c.fromId === townId) n++;
+    for (const c of carts) if (!c.done && c.fromId === townId && (c.kind || "external") === "external") n++;
     return n;
   }
 
@@ -1585,55 +1590,75 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       baseTariff + rEffect("tariffBonus", 0)));                          // tax ledgers / bureaucracy
     // === /TARIFF-SLIDER ===
 
-    // --- 1. Dispatch: each eligible town looks to SELL a surplus good abroad ---
+    // "Comfortable" stock for a good in a town = demand × bufferTarget — the SAME
+    // denominator the price model uses (Sim.priceFor: ratio = stock/(demand·buffer)),
+    // so a city "wants" a good until its price ratio reaches ~1 and a seller only
+    // parts with what it holds ABOVE that line. demand covers processor inputs +
+    // pop food/beer/clothes (Sim publishes them all onto town.demand).
+    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+
+    // --- 1. Dispatch: each city's ONE external trader BUYS its biggest shortfall
+    //        from a road-connected city with a real surplus (available at L1). ---
     for (const home of towns) {
-      if (!home || (home.level || 1) < 2 || !home.stock) continue;
-      if (activeCarts(state.carts, home.id) >= cartCapFor(home, cfg, extraCarts)) continue;
+      if (!home || !home.stock) continue;                     // no level gate: L1 cities trade
+      const cap = 1 + Math.max(0, Math.round(extraCarts));    // one trader/city (+research caravans)
+      if (activeCarts(state.carts, home.id) >= cap) continue;
 
       const fromKey = townKey(home);
-      const offers = [];
-      for (const dest of towns) {
-        if (dest === home || !dest) continue;
-        const route = Pathing.route(state, fromKey, townKey(dest));
-        if (!route) continue;
-        for (const gid in CONFIG.goods) {
-          const available = home.stock[gid] || 0;
-          if (available <= 0) continue;
-          const load = Math.min(cartCapacity, available);
-          const priceHome = priceOf(home, gid);
-          const priceDest = priceOf(dest, gid);
-          // GDD §6.2: profit = (priceThere − priceHere)*load − distanceCost.
-          const profit = (priceDest - priceHome) * load - cfg.distanceCostPerStep * route.cost;
-          if (profit > cfg.profitThreshold) {
-            offers.push({ dest, gid, load, unitBuy: priceHome, route, profit });
-          }
-        }
-      }
-      if (!offers.length) continue;
-      // Best profit first, with a stable tiebreak (dest id, then good id) so the
-      // top-N slate is deterministic before the seeded pick chooses within it.
-      offers.sort((a, b) =>
-        b.profit - a.profit ||
-        a.dest.id - b.dest.id ||
-        (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
-      const slate = offers.slice(0, cfg.topRandom);
-      const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))];
 
-      // Load the cargo: the home town ships the goods and fronts the buy cost.
-      home.stock[pick.gid] = (home.stock[pick.gid] || 0) - pick.load;
-      home.gold = (home.gold || 0) - pick.unitBuy * pick.load;
+      // (a) Biggest shortfall (need − stock) across every good the city demands.
+      const gaps = [];
+      for (const gid in CONFIG.goods) {
+        const need = needOf(home, gid);
+        if (need <= 0) continue;                              // city doesn't want this good
+        const shortfall = need - (home.stock[gid] || 0);
+        if (shortfall > cfg.buyThreshold) gaps.push({ gid, shortfall });
+      }
+      if (!gaps.length) continue;
+      gaps.sort((a, b) => b.shortfall - a.shortfall || (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
+      // Seeded pick among the top-N near-tied shortfalls (anti-herding). One draw.
+      const gapSlate = gaps.slice(0, cfg.topRandom);
+      const want = gapSlate[Math.min(gapSlate.length - 1, Math.floor(rng() * gapSlate.length))];
+
+      // (b) Best seller: a reachable city holding a genuine surplus of want.gid.
+      //     Rank by larger surplus, then cheaper price, then shorter route, id.
+      const offers = [];
+      for (const seller of towns) {
+        if (seller === home || !seller || !seller.stock) continue;
+        const surplus = (seller.stock[want.gid] || 0) - needOf(seller, want.gid);
+        if (surplus <= 0) continue;
+        const route = Pathing.route(state, fromKey, townKey(seller));
+        if (!route) continue;
+        offers.push({ seller, surplus, route, price: priceOf(seller, want.gid) });
+      }
+      if (!offers.length) continue;                           // shortfall persists (no reachable seller)
+      offers.sort((a, b) =>
+        b.surplus - a.surplus ||
+        a.price - b.price ||
+        a.route.cost - b.route.cost ||
+        a.seller.id - b.seller.id);
+      const slate = offers.slice(0, cfg.topRandom);
+      const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))]; // one draw
+
+      // (c) Dispatch: qty capped by cart capacity, seller surplus, buyer shortfall,
+      //     and what the buyer can currently afford (payment happens on arrival).
+      const price = pick.price;
+      const affordable = price > 0 ? (home.gold || 0) / price : cartCapacity;
+      const qty = Math.min(cartCapacity, pick.surplus, want.shortfall, affordable);
+      if (!(qty > 0)) continue;
 
       state.carts.push({
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
-        fromId: home.id, toId: pick.dest.id,
-        goodId: pick.gid, qty: pick.load, unitBuy: pick.unitBuy,
-        path: pick.route.path.slice(),        // home → dest hex keys (contract shape)
+        kind: "external",                     // TR-B renders external vs internal traders
+        fromId: home.id, toId: pick.seller.id, // fromId = buyer (owns the trader); toId = seller
+        goodId: want.gid, qty: qty, unitBuy: price,
+        path: pick.route.path.slice(),        // buyer → seller hex keys (contract shape)
         progress: 0, phase: "outbound", done: false,
-        _proceeds: 0,                         // net sale proceeds carried home on return
       });
     }
 
-    // --- 2. Advance carts; settle the transaction on arrival -----------------
+    // --- 2. Advance traders; buy at the seller (its passive sale), deliver home --
     for (const cart of state.carts) {
       if (cart.done) continue;
       cart.progress += cartSpeed;
@@ -1641,25 +1666,37 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       cart.progress = 1;
 
       if (cart.phase === "outbound") {
-        const dest = byId.get(cart.toId);
-        if (!dest) { cart.done = true; continue; }   // destination vanished → scrap
-        if (!dest.stock) dest.stock = {};
-        const priceDest = priceOf(dest, cart.goodId);
-        const value = priceDest * cart.qty;                  // transaction value
+        // Arrived at the SELLER — execute the purchase (the seller sells passively).
+        const seller = byId.get(cart.toId);
+        const buyer = byId.get(cart.fromId);
+        if (!seller || !buyer) { cart.done = true; continue; } // a town vanished → scrap
+        if (!seller.stock) seller.stock = {};
+        // Re-clamp to what the seller still holds and the buyer can still pay for
+        // (other traders may have drained either since dispatch).
+        const price = priceOf(seller, cart.goodId);
+        let qty = Math.min(cart.qty, seller.stock[cart.goodId] || 0);
+        if (price > 0) qty = Math.min(qty, (buyer.gold || 0) / price);
+        if (!(qty > 0)) { cart.done = true; continue; }        // nothing left to buy → scrap
+        cart.qty = qty;
+        const value = price * qty;                             // transaction value
         // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
         const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
           ? Events.tariffMultiplier(state) : 1;
-        const tariff = tariffRate * value * tariffMult;      // GDD §6.3: 25% cut (+ research bonus)
-        dest.stock[cart.goodId] = (dest.stock[cart.goodId] || 0) + cart.qty; // dest gains stock
-        dest.gold = (dest.gold || 0) - value;                // dest pays gold
-        state.treasury += tariff;                            // → player's treasury
-        cart._proceeds = value - tariff;                     // merchant nets value − tariff
-        cart.phase = "return";                               // head home along the reversed path
+        const tariff = tariffRate * value * tariffMult;        // GDD §6.3: 25% cut (+ research bonus)
+        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - qty; // passive sale: goods leave
+        seller.gold = (seller.gold || 0) + (value - tariff);   // seller nets value − tariff
+        buyer.gold = (buyer.gold || 0) - value;                // buyer pays the full value
+        state.treasury += tariff;                              // → player's treasury
+        cart.phase = "return";                                 // carry the goods home
         cart.progress = 0;
-        cart.path = cart.path.slice().reverse();
+        cart.path = cart.path.slice().reverse();               // seller → buyer
       } else {
-        const home = byId.get(cart.fromId);                  // home again: bank proceeds, retire
-        if (home) home.gold = (home.gold || 0) + cart._proceeds;
+        // Arrived HOME — deliver the purchased goods into the buyer's stock.
+        const buyer = byId.get(cart.fromId);
+        if (buyer) {
+          if (!buyer.stock) buyer.stock = {};
+          buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + cart.qty;
+        }
         cart.done = true;
       }
     }
