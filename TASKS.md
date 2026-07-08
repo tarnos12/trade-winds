@@ -59,6 +59,14 @@ Two independent slices; merge order TR-A → TR-B.
 | TR-A — external-buyer trade logic (pure `Trade.tick`) | #2 | one external trader per road-connected city (from level 1) buys its biggest shortfall from a reachable surplus city; seller passively sells; tariff (`state.tariffRate`) → treasury; deterministic; update `trade.test.js` | 🔲 |
 | TR-B — internal trader visuals | #4 | per-city internal traders (small carts shuttling produced goods between buildings and the city center — read-only over state, module-local like Juice); visually distinguish external-trader carts | 🔲 |
 
+## Economy overhaul — Round 1 (logic) ✅ DONE
+EC-A (money model: treasury pays placement, city stock pays resources, city 1000g/
+0 pop/wood/7 slots, house cap 2, costs), EC-B (happiness ~50% baseline, pop scales
+with happiness, happyMods channel + State.tick), EC-D (trade reservation + carried
+gold + agreed price, cap 10). baseWorkers=0. Tests reconciled. 372 total, green.
+Verified in-browser (treasury 10k; city 0 pop/1000g/50%; hut → 1 peasant @50%).
+**Round 2 (UI): EC-C city cards + EC-E trade UI — in progress.**
+
 ## Economy overhaul — shared contract (rounds: logic EC-A/B/D → UI EC-C/E)
 - **Money pools:** `state.treasury` = Kingdom gold (start **10000**); pays the GOLD
   cost of ALL placement (city founding **1000**, buildings, roads, bridges).
