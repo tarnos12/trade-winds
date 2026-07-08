@@ -3208,7 +3208,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (!req) return `<div class="up-box"><div class="up-max">Level ${t.level} — maximum</div></div>`;
     const res = Town.canUpgrade(t);
     const pop = Town.popTotal(t);
-    const note = t.level < 2 ? ' <span style="opacity:.7">(unlocks trade)</span>' : "";
+    const note = ' <span style="opacity:.7">(+build slots)</span>';
     return `<div class="up-box">
       <div class="up-line"><b>Upgrade to Level ${t.level + 1}</b>${note}</div>
       <div class="up-req">Requires ${req.pop} pop (have ${pop}) · ${req.gold} g (have ${Math.floor(t.gold || 0)} g)</div>
@@ -4773,13 +4773,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         tip: "Pick the 🏰 Town tool up top, then click a revealed land hex.",
         done: s => s.towns.length >= 1 },
       { icon: "🌾", title: "Place an extractor",
-        tip: "Open a town, go to its Buildings tab, and place a Farm on fertile land (or a Lumberjack in forest).",
+        tip: "Pick a building from the build bar at the bottom, then place a Farm on fertile land (or a Lumberjack in forest) next to a city.",
         done: s => townsHaveKind(s, "extractor") },
       { icon: "🏠", title: "Build a house",
-        tip: "Add a Hut in the Buildings tab — housing grows the workers that staff your buildings.",
+        tip: "Add a Hut from the build bar at the bottom — housing grows the workers that staff your buildings.",
         done: s => townsHaveKind(s, "house") },
       { icon: "⬆️", title: "Grow a town to level 2",
-        tip: "Keep the town happy and populated, then upgrade it. A town must reach Lv 2 before it will trade.",
+        tip: "Keep the town happy and populated, then upgrade it for more build slots.",
         done: s => s.towns.some(t => (t.level || 1) >= 2) },
       { icon: "🛣", title: "Connect two towns with a road",
         tip: "Pick the 🛣 Road tool and drag a path between towns so carts can travel.",
