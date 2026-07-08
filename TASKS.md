@@ -95,6 +95,53 @@ happiness %.
 Order: PP-A (workflow, reviews) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (worktrees) → merge
 B→C→D→E → verify → version bump.
 
+## Milestone: Terrain & resources v2 (TV2) — SPEC'D, awaiting author's follow-up details before launch
+Author directives (2026-07-08, after the PP batch). Replaces the current terrain
+enum (`water, meadow, forest, hills, mountains, fertile, wasteland`).
+**Generic buildable tiles** (ANY building unless it requires a resource tile):
+- **Barren Land**, **Desert**, **Fertile Soil** (grassland).
+- **Fertile Soil is REQUIRED for farm buildings:** Potato Farm (T1), Wheat Farm,
+  Shepherd/wool (T1) — Shepherd moves meadow→fertile.
+- **Wheat Farm:** unlock node lives in the WORKER band of the research tree
+  (needs research) but the building is STAFFED BY PEASANTS (workerTier stays
+  'peasant'). [Author: "more details after this" — hold for follow-up.]
+**Resource tiles** (only their extractor):
+- **Water** — nothing buildable (future: harbor).
+- **Fish tile** — water-with-fish; the **Fishery is placed ON it** (author-
+  confirmed; replaces adjacent-to-water rule). Roads still can't cross water.
+- **Stone Deposit** (T1) → Quarry. **Forest** (T1) → Lumberjack.
+- **Clay Deposit** (T2 worker) → Clay Pit → clay → **Brickworks** → **bricks**
+  (T2 building material used in higher-tier construction/upgrade costs, like
+  Stone is T1).
+- **Iron / Gold / Coal Deposits** (T2 worker) → Iron/Gold/Coal Mines.
+  **Author-confirmed chains:** iron REPLACES generic 'ore' (display + internal
+  migration); **Smelter: tools = iron + coal**; **Jeweler: jewelry = gold**.
+- **Iceland (snow)** — HOUSES ONLY for now.
+- **Mountains** — kept as pure OBSTACLES: block roads/traders AND building
+  (no extraction on them; stone/iron come from deposits).
+**MapGen v2 (author follow-up, 2026-07-08):** balanced maps with LIMITED
+resources spread around. **Start-screen PRESETS** determine water/barren/desert/
+grassland shares + resource abundance. Terrain (wood/forest, grassland, barren,
+desert) **clumps in small batches**. **T2 resources (Iron, Coal, Gold) spawn
+FURTHER OUT from the center/castle** — wheat is T2 but grows on Fertile Soil, so
+it's naturally available wherever grassland is (fine per author). Presets:
+- **Oasis** — water in the middle + a few grassland patches; everything else
+  mostly barren/desert with small oasis patches and very few grassland (1–3).
+- **Fertile Land** — lots of grassland and forests.
+- **Big World** — only basic (T1) resources near the start; T2/T3 deposits
+  further out.
+Implies: MapGen v2 (preset-parameterized clumped biomes + distance-ringed
+deposits + snow region + mountain ridges), start-screen preset picker,
+CONFIG.terrain rewrite, placement-rule updates (fish-tile building, snow
+houses-only, deposit gating), new goods (clay, bricks, coal, gold; ore→iron),
+new buildings (Clay Pit, Brickworks, Iron/Gold/Coal Mines; Miner retired/renamed),
+research-tree nodes for the new buildings (worker band; wheat unlock in worker
+band but peasant-staffed), cost/upgrade rebalance to use bricks at T2+, save
+migration, tests (board/mapgen, buildings, sim, trade, research). Sequence: run
+parallel with PP-B..E after PP-A merges (TV2 = pure core on live tree, PP UI in
+worktrees). Slices: TV2-A terrain+goods+buildings+placement (pure) → TV2-B
+MapGen presets + start screen → TV2-C research-tree & balance wiring.
+
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
 4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
 (luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
