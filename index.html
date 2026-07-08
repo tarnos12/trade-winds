@@ -207,16 +207,36 @@
     background: var(--panel); border: 1px solid var(--panel-edge);
     border-radius: 10px; padding: 7px 9px; box-shadow: 0 6px 22px rgba(0,0,0,0.45);
   }
-  #buildBarGroups { display: flex; gap: 9px; align-items: stretch; overflow-x: auto; padding-bottom: 2px; }
-  .bb-group { display: flex; flex-direction: column; gap: 3px; padding-right: 9px; border-right: 1px solid var(--panel-edge); }
-  .bb-group:last-child { border-right: none; padding-right: 0; }
-  .bb-glabel { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); opacity: 0.85; font-weight: bold; }
-  .bb-row { display: flex; gap: 3px; }
+  /* CBM (Categorized build menu): a row of category buttons; each opens a flyout
+     submenu (popover above the bar) listing that category's items. */
+  #buildBarCats { display: flex; gap: 6px; align-items: stretch; }
+  .bb-cat { display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 4px 12px; min-width: 72px; border: 1px solid var(--panel-edge);
+    border-radius: 8px; background: #1c160f; cursor: pointer; white-space: nowrap; }
+  .bb-cat:hover { background: #2a2015; border-color: var(--accent); }
+  .bb-cat.open { background: var(--accent); color: #201607; border-color: #e0a860; }
+  .bb-cat.locked { opacity: 0.42; cursor: not-allowed; }
+  .bb-cat.locked:hover { background: #1c160f; border-color: var(--panel-edge); }
+  .bb-cat .bb-cat-icon { font-size: 17px; line-height: 1.1; }
+  .bb-cat .bb-cat-label { font-size: 11px; font-weight: bold; }
+  .bb-cat .bb-cat-lock { font-size: 10px; }
+  /* Flyout popover, anchored above the clicked category button. */
+  #buildBarFlyout { position: absolute; bottom: 100%; margin-bottom: 8px;
+    min-width: 150px; max-width: min(92vw, 340px); max-height: 52vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 3px; z-index: 16;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 7px; box-shadow: 0 6px 22px rgba(0,0,0,0.45); }
+  #buildBarFlyout.hidden { display: none; }
+  .bb-fly-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent); opacity: 0.85; font-weight: bold; margin: 0 2px 2px; }
+  .bb-fly-lock { font-size: 11px; color: #e0503c; padding: 3px 2px 1px; max-width: 240px; white-space: normal; }
   .bb-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-    padding: 3px 6px; min-width: 62px; border: 1px solid var(--panel-edge);
-    border-radius: 6px; background: #1c160f; cursor: pointer; white-space: nowrap; }
+    padding: 4px 7px; min-width: 62px; border: 1px solid var(--panel-edge);
+    border-radius: 6px; background: #1c160f; cursor: pointer; white-space: nowrap; text-align: left; }
   .bb-btn:hover { background: #2a2015; border-color: var(--accent); }
   .bb-btn.active { background: var(--accent); color: #201607; border-color: #e0a860; }
+  .bb-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+  .bb-btn.disabled:hover { background: #1c160f; border-color: var(--panel-edge); }
   .bb-btn .bb-name { font-weight: bold; font-size: 11.5px; }
   .bb-btn .bb-cost { font-size: 9.5px; opacity: 0.8; font-variant-numeric: tabular-nums; }
   .bb-btn.active .bb-cost { opacity: 0.95; }
@@ -505,9 +525,9 @@
 
   <div class="group">
     <button class="tool" data-mode="pan" title="Pan the camera (drag)">✋ Pan</button>
-    <button class="tool" data-mode="road" title="Paint roads (drag to draw)">🛣 Road</button>
-    <button class="tool" data-mode="town" title="Place an empty town marker">🏰 Town</button>
     <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
+    <!-- CBM: Road & Town moved into the bottom build bar's 🏗 Build category. -->
+
   </div>
 
   <!-- === SPEED-UI === speed & pause controls (P5D-A) -->
@@ -562,9 +582,10 @@
 <!-- Not tied to a selected town: clicking a type enters placement mode and the
      owning city is resolved on click by footprint adjacency (canPlaceBuilding). -->
 <div id="buildBar" aria-label="Build menu">
-  <div id="buildBarGroups"></div>
+  <div id="buildBarFlyout" class="hidden" role="menu"></div>
+  <div id="buildBarCats"></div>
   <div id="buildBarFoot">
-    <span id="buildBarHint">Pick a building, then click a hex bordering a city.</span>
+    <span id="buildBarHint">Pick a category, then a building to place.</span>
     <button id="buildBarCancel" class="hidden" title="Stop placing (Esc)">Cancel</button>
   </div>
 </div>
@@ -3644,10 +3665,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // per-hex on click by Buildings.canPlaceBuilding (res.town), and cost is charged
   // to THAT city.
   const buildBarEl = document.getElementById("buildBar");
-  const buildBarGroupsEl = document.getElementById("buildBarGroups");
+  const buildBarCatsEl = document.getElementById("buildBarCats");
+  const buildBarFlyoutEl = document.getElementById("buildBarFlyout");
   const buildBarHintEl = document.getElementById("buildBarHint");
   const buildBarCancelEl = document.getElementById("buildBarCancel");
-  const BB_DEFAULT_HINT = "Pick a building, then click a hex bordering a city.";
+  const BB_DEFAULT_HINT = "Pick a category, then a building to place.";
 
   function bbCostStr(cost) {
     const parts = [];
@@ -3660,35 +3682,145 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (def.kind === "extractor" && def.terrain) return def.terrain + " hex";
     return "any land";
   }
-  // Build the grouped buttons once (CONFIG.buildings is static).
-  function buildBuildBar() {
-    const groups = [["extractor", "Extractors"], ["processor", "Processors"], ["house", "Houses"]];
-    let html = "";
-    for (const [kind, label] of groups) {
-      const defs = Object.values(CONFIG.buildings).filter(d => d.kind === kind);
-      if (!defs.length) continue;
-      html += `<div class="bb-group"><div class="bb-glabel">${esc(label)}</div><div class="bb-row">`;
-      for (const def of defs) {
-        const tip = esc(def.name + " — " + bbTerrainReq(def) + " · " + bbCostStr(def.cost));
-        html += `<button type="button" class="bb-btn" data-typeid="${esc(def.id)}" title="${tip}">
-          <span class="bb-name">${esc(def.name)}</span>
-          <span class="bb-cost">${esc(bbCostStr(def.cost))}</span></button>`;
-      }
-      html += `</div></div>`;
-    }
-    buildBarGroupsEl.innerHTML = html;
+
+  // === CBM (Categorized build menu) ===
+  // A row of category buttons; clicking one opens a flyout submenu above the bar.
+  // Buildings are grouped at build time by their existing kind/workerTier/houseTier
+  // (a new building drops into the right category automatically). The upper tiers
+  // are UI-gated behind a research node — the gate is cosmetic only; the pure
+  // placement logic (Buildings.canPlaceBuilding / chargeBuilding) is untouched.
+  //  1. 🏗 Build  — City (town mode) · Road (road mode) · Bridge (coming soon).
+  //  2. 🌾 Peasant — hut + every workerTier:'peasant' building. Always open.
+  //  3. 🔨 Worker  — cottage + every workerTier:'worker' building. Gated: guild_halls.
+  //  4. 👑 Burgher — manor + every workerTier:'burgher' building. Gated: master_crafts.
+  const BUILD_CATEGORIES = [
+    { id: "build",   icon: "🏗", label: "Build",   kind: "special" },
+    { id: "peasant", icon: "🌾", label: "Peasant", kind: "tier", tier: "peasant" },
+    { id: "worker",  icon: "🔨", label: "Worker",  kind: "tier", tier: "worker",  gate: "guild_halls" },
+    { id: "burgher", icon: "👑", label: "Burgher", kind: "tier", tier: "burgher", gate: "master_crafts" },
+  ];
+  // Buildings whose worker/house tier matches (houses first, then producers).
+  function bbTierBuildings(tier) {
+    const all = Object.values(CONFIG.buildings);
+    const houses = all.filter(d => d.kind === "house" && d.houseTier === tier);
+    const producers = all.filter(d => d.kind !== "house" && d.workerTier === tier);
+    return houses.concat(producers);
   }
-  // Reflect the active type + cancel button; reset the hint when idle.
+  // A gated category is locked until its research node is unlocked.
+  function bbCatLocked(cat) {
+    return !!(cat.gate && !(typeof Research !== "undefined" && Research.has(state, cat.gate)));
+  }
+  function bbGateName(cat) {
+    const node = (typeof Research !== "undefined" && Research.get) ? Research.get(cat.gate) : null;
+    return node ? node.name : cat.gate;
+  }
+
+  let bbOpenCat = null;   // id of the category whose flyout is open (or null)
+
+  // Build the category button row once (categories/buildings are static).
+  function buildBuildBar() {
+    let html = "";
+    for (const cat of BUILD_CATEGORIES) {
+      html += `<button type="button" class="bb-cat" data-cat="${esc(cat.id)}">
+        <span class="bb-cat-icon">${cat.icon}</span>
+        <span class="bb-cat-label">${esc(cat.label)}</span></button>`;
+    }
+    buildBarCatsEl.innerHTML = html;
+    refreshCatButtons();
+  }
+  // Reflect locked/open state on the category buttons (research can unlock live).
+  function refreshCatButtons() {
+    buildBarCatsEl.querySelectorAll(".bb-cat").forEach(btn => {
+      const cat = BUILD_CATEGORIES.find(c => c.id === btn.dataset.cat);
+      const locked = cat ? bbCatLocked(cat) : false;
+      btn.classList.toggle("locked", locked);
+      btn.classList.toggle("open", bbOpenCat === btn.dataset.cat);
+      btn.setAttribute("aria-disabled", locked ? "true" : "false");
+      btn.title = locked ? ("Research " + bbGateName(cat) + " to unlock") : (cat ? cat.label : "");
+    });
+  }
+  // Render the flyout body for a category into buildBarFlyoutEl.
+  function renderFlyout(cat) {
+    if (cat.kind === "special") {
+      // Build: City / Road / Bridge. City & Road switch build mode; Bridge is a stub.
+      const items = [
+        { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
+        { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
+        { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
+      ];
+      let html = `<div class="bb-fly-title">🏗 Build</div>`;
+      for (const it of items) {
+        html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}"
+          data-action="${esc(it.action)}"${it.disabled ? " aria-disabled=\"true\"" : ""} title="${esc(it.tip)}">
+          <span class="bb-name">${esc(it.name)}</span>
+          <span class="bb-cost">${esc(it.sub)}</span></button>`;
+      }
+      buildBarFlyoutEl.innerHTML = html;
+      return;
+    }
+    // Tier category (Peasant/Worker/Burgher).
+    if (bbCatLocked(cat)) {
+      buildBarFlyoutEl.innerHTML = `<div class="bb-fly-title">${cat.icon} ${esc(cat.label)}</div>
+        <div class="bb-fly-lock">🔒 Locked — research <b>${esc(bbGateName(cat))}</b> to unlock ${esc(cat.label.toLowerCase())} construction.</div>`;
+      return;
+    }
+    const defs = bbTierBuildings(cat.tier);
+    let html = `<div class="bb-fly-title">${cat.icon} ${esc(cat.label)}</div>`;
+    for (const def of defs) {
+      const tip = esc(def.name + " — " + bbTerrainReq(def) + " · " + bbCostStr(def.cost));
+      const active = placing && placing.typeId === def.id;
+      html += `<button type="button" class="bb-btn${active ? " active" : ""}" data-typeid="${esc(def.id)}" title="${tip}">
+        <span class="bb-name">${esc(def.name)}</span>
+        <span class="bb-cost">${esc(bbCostStr(def.cost))}</span></button>`;
+    }
+    buildBarFlyoutEl.innerHTML = html;
+  }
+  // Open a category's flyout (locked categories don't open). Toggles closed if
+  // the same category is clicked again. Positions the popover above the button.
+  function openCategory(catId) {
+    const cat = BUILD_CATEGORIES.find(c => c.id === catId);
+    if (!cat) return;
+    if (bbOpenCat === catId) { closeFlyout(); return; }
+    if (bbCatLocked(cat)) {
+      closeFlyout();
+      buildBarHintEl.className = "bad";
+      buildBarHintEl.textContent = "🔒 Research " + bbGateName(cat) + " to unlock " + cat.label + ".";
+      refreshCatButtons();
+      return;
+    }
+    bbOpenCat = catId;
+    renderFlyout(cat);
+    buildBarFlyoutEl.classList.remove("hidden");
+    // Anchor the flyout above the clicked button (clamped within the bar).
+    const btn = buildBarCatsEl.querySelector(`.bb-cat[data-cat="${catId}"]`);
+    if (btn) {
+      const left = Math.max(0, Math.min(btn.offsetLeft, buildBarEl.clientWidth - buildBarFlyoutEl.offsetWidth - 4));
+      buildBarFlyoutEl.style.left = left + "px";
+    }
+    refreshCatButtons();
+  }
+  function closeFlyout() {
+    if (bbOpenCat === null) return;
+    bbOpenCat = null;
+    buildBarFlyoutEl.classList.add("hidden");
+    refreshCatButtons();
+  }
+  // Reflect the active type + cancel button; reset the hint when idle. Also keeps
+  // the flyout item highlight and category lock state in sync.
   function updateBuildBar() {
-    const active = placing ? placing.typeId : null;
-    buildBarGroupsEl.querySelectorAll(".bb-btn").forEach(b =>
-      b.classList.toggle("active", b.dataset.typeid === active));
+    if (bbOpenCat) {
+      const cat = BUILD_CATEGORIES.find(c => c.id === bbOpenCat);
+      if (cat) renderFlyout(cat);   // refresh active-item highlight
+    }
+    refreshCatButtons();
     if (placing) {
       buildBarCancelEl.classList.remove("hidden");
     } else {
       buildBarCancelEl.classList.add("hidden");
-      buildBarHintEl.className = "";
-      buildBarHintEl.textContent = BB_DEFAULT_HINT;
+      if (!buildBarHintEl.classList.contains("bad")) {
+        buildBarHintEl.className = "";
+        buildBarHintEl.textContent = BB_DEFAULT_HINT;
+      }
     }
   }
 
@@ -3699,6 +3831,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (placing && placing.typeId === typeId) { cancelPlacing(); return; }
     setMode("pan");
     placing = { typeId };
+    closeFlyout();   // CBM: selecting an item closes the submenu
     buildBarHintEl.className = "";
     buildBarHintEl.textContent = "Placing " + (CONFIG.buildings[typeId].name || typeId) +
       " — click a hex bordering a city.";
@@ -3744,11 +3877,35 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // Bottom-bar wiring.
   buildBuildBar();
   updateBuildBar();
-  buildBarGroupsEl.addEventListener("click", (e) => {
+  // Category button row: open/toggle the flyout for the clicked category.
+  buildBarCatsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".bb-cat");
+    if (btn) openCategory(btn.dataset.cat);
+  });
+  // Flyout item clicks: a building typeId enters placement; a Build action
+  // (City/Road) switches build mode; Bridge is a disabled stub.
+  buildBarFlyoutEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".bb-btn");
-    if (btn) startPlacing(btn.dataset.typeid);
+    if (!btn || btn.classList.contains("disabled")) return;
+    if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
+    const action = btn.dataset.action;
+    if (action === "town" || action === "road") {
+      cancelPlacing();          // leaving building placement for a map tool
+      closeFlyout();
+      setMode(action);
+      buildBarHintEl.className = "";
+      buildBarHintEl.textContent = action === "town"
+        ? "Click a valid site to found a city."
+        : "Drag across land to lay roads.";
+    }
   });
   buildBarCancelEl.addEventListener("click", () => cancelPlacing());
+  // Click outside the build bar closes an open flyout.
+  document.addEventListener("mousedown", (e) => {
+    if (bbOpenCat && !buildBarEl.contains(e.target)) closeFlyout();
+  });
+  // Keep category lock state live as research completes (accumulator unlocks it).
+  setInterval(refreshCatButtons, 500);
 
   // Town-panel clicks (delegated — the panel now only carries the upgrade action).
   tpBodyEl.addEventListener("click", (e) => {
@@ -3787,7 +3944,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     }
   });
   // Esc cancels placement.
-  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && placing) cancelPlacing(); });
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (bbOpenCat) { closeFlyout(); return; }   // CBM: Esc closes the flyout first
+    if (placing) cancelPlacing();
+  });
 
   // Town-click detection: a non-drag left click on a town center opens the panel.
   // We track our own down-position so a camera drag (which still fires a `click`)
@@ -3815,8 +3976,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // Expose for headless smoke test / console debugging.
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
                     startPlacing, cancelPlacing, tryPlaceBuilding,
+                    openCategory, closeFlyout, refreshCatButtons,   // CBM
                     get activeTown() { return activeTown; },
                     get placing() { return placing; },
+                    get openCat() { return bbOpenCat; },
                     get state() { return state; } };
   // === TOWN-UI END ===
 
