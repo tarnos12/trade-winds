@@ -925,7 +925,23 @@ Sim.tick = function (State) {
       // P4-C hook: a "bumper harvest" event boosts farm output (light, guarded).
       const evMult = (type.id === "farm" && typeof Events !== "undefined" && Events.farmMultiplier)
         ? Events.farmMultiplier(State) : 1;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult;
+      // P5-A hook: research output multipliers (guarded; 1x when no research).
+      //   globalOutput always; extractorOutput for extractors (+ mineOutput for
+      //   ore/stone mines); processorOutput for processors. Keys end in "Output"
+      //   so Research.effect multiplies unlocked nodes, defaulting to 1.
+      let resMult = 1;
+      if (typeof Research !== "undefined" && Research.effect) {
+        resMult = Research.effect(State, "globalOutput", 1);
+        if (type.kind === "extractor") {
+          resMult *= Research.effect(State, "extractorOutput", 1);
+          if (type.terrain === "hills" || type.terrain === "mountains") {
+            resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: miners & quarries
+          }
+        } else if (type.kind === "processor") {
+          resMult *= Research.effect(State, "processorOutput", 1);
+        }
+      }
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult;
     }
 
     // --- 2. Consumption + per-need satisfaction ------------------------
@@ -968,7 +984,7 @@ Sim.tick = function (State) {
     // --- 4. Population from housing: grow when a tier's needs are met, ---
     //         shrink (after a sustained low streak) when they are not.
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
-      ? Buildings.housingCapacity(town)
+      ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
       : { peasants: 0, workers: 0, burghers: 0 };
     const capacity = {
       peasants: (base.peasants || 0) + (housing.peasants || 0),
@@ -1041,10 +1057,16 @@ var Buildings = (typeof Buildings !== "undefined" && Buildings) || {};
 const BUILDINGS_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
 
 // Player-placeable building slots by town-center level (GDD §4.1: 3/5/7/9).
-// Index 0 is unused; unknown levels fall back to 3.
-Buildings.slotCap = function (level) {
+// Index 0 is unused; unknown levels fall back to 3. Optional `state`: when passed,
+// P5-A applies the `slotBonus` research effect (town_charters → +1 slot). Callers
+// without research (e.g. buildings.test.js) omit it and get the base cap.
+Buildings.slotCap = function (level, state) {
   const caps = CONFIG.town.slotCap;
-  return caps[level] || 3;
+  let cap = caps[level] || 3;
+  if (state && typeof Research !== "undefined" && Research.effect) {
+    cap += Research.effect(state, "slotBonus", 0);   // additive (sums unlocked nodes)
+  }
+  return cap;
 };
 
 // Every placed building — house or producer — consumes one slot.
@@ -1053,8 +1075,11 @@ Buildings.usedSlots = function (town) {
 };
 
 // Sum houseCapacity of placed houses, grouped by the tier they house.
-// Returns { peasants, workers, burghers }.
-Buildings.housingCapacity = function (town) {
+// Returns { peasants, workers, burghers }. Optional `state`: when passed, P5-A
+// scales housing by the `housingBonus` research effect (royal_census → houses
+// shelter more). Callers without research (e.g. buildings.test.js) omit it and
+// get the base capacity.
+Buildings.housingCapacity = function (town, state) {
   const cap = { peasants: 0, workers: 0, burghers: 0 };
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
@@ -1063,6 +1088,10 @@ Buildings.housingCapacity = function (town) {
     const key = BUILDINGS_TIER_KEY[def.houseTier];
     if (!key) continue;
     cap[key] += def.houseCapacity || 0;
+  }
+  if (state && typeof Research !== "undefined" && Research.effect) {
+    const hb = Research.effect(state, "housingBonus", 1);   // multiplier (1x default)
+    if (hb !== 1) { cap.peasants *= hb; cap.workers *= hb; cap.burghers *= hb; }
   }
   return cap;
 };
@@ -1117,8 +1146,8 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
     if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
   }
 
-  // (d) slot cap by town level.
-  if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level)) {
+  // (d) slot cap by town level (P5-A: town_charters research grants +1 slot).
+  if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level, state)) {
     return { ok: false, reason: "No free building slots" };
   }
 
@@ -1237,6 +1266,8 @@ Object.assign(CONFIG, {
     cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
     maxCartsPerTown: 3,        // hard cap; the per-town cap also scales with level (1–3)
     topRandom: 3,              // pick among the top-N most profitable routes (anti-herding)
+    pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
+    maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
   },
 });
 
@@ -1255,8 +1286,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
   // How many carts a town may run at once: capped by config AND by level
   // (level 2 → 1, level 3 → 2, level 4+ → 3) — the GDD's "1–3 carts by level".
-  function cartCapFor(town, cfg) {
-    return Math.max(0, Math.min(cfg.maxCartsPerTown, (town.level || 1) - 1));
+  // P5-A: `extra` (from the `extraCarts` research effect) lifts both caps so the
+  // caravan techs actually add carts even for a maxed-out town. Defaults to 0.
+  function cartCapFor(town, cfg, extra) {
+    extra = extra || 0;
+    return Math.max(0, Math.min(cfg.maxCartsPerTown + extra, (town.level || 1) - 1 + extra));
   }
 
   // Count a town's live (not-done) outbound-or-returning carts.
@@ -1282,10 +1316,20 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const rng = mulberry32(state.tradeSeed | 0);
     state.tradeSeed = (Math.imul(state.tradeSeed | 0, 1664525) + 1013904223) | 0;
 
+    // --- P5-A: research effects (guarded; identical to base when no research) ---
+    const hasResearch = (typeof Research !== "undefined" && Research.effect);
+    const rEffect = (key, fb) => hasResearch ? Research.effect(state, key, fb) : fb;
+    const rHas = (id) => (typeof Research !== "undefined" && Research.has) ? Research.has(state, id) : false;
+    const extraCarts  = rEffect("extraCarts", 0);                        // more carts on the road
+    const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
+    const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
+    const tariffRate = Math.max(0, Math.min(cfg.maxTariffRate,
+      cfg.tariffRate + rEffect("tariffBonus", 0)));                      // tax ledgers / bureaucracy
+
     // --- 1. Dispatch: each eligible town looks to SELL a surplus good abroad ---
     for (const home of towns) {
       if (!home || (home.level || 1) < 2 || !home.stock) continue;
-      if (activeCarts(state.carts, home.id) >= cartCapFor(home, cfg)) continue;
+      if (activeCarts(state.carts, home.id) >= cartCapFor(home, cfg, extraCarts)) continue;
 
       const fromKey = townKey(home);
       const offers = [];
@@ -1296,7 +1340,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         for (const gid in CONFIG.goods) {
           const available = home.stock[gid] || 0;
           if (available <= 0) continue;
-          const load = Math.min(cfg.cartCapacity, available);
+          const load = Math.min(cartCapacity, available);
           const priceHome = priceOf(home, gid);
           const priceDest = priceOf(dest, gid);
           // GDD §6.2: profit = (priceThere − priceHere)*load − distanceCost.
@@ -1333,7 +1377,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     // --- 2. Advance carts; settle the transaction on arrival -----------------
     for (const cart of state.carts) {
       if (cart.done) continue;
-      cart.progress += cfg.cartSpeed;
+      cart.progress += cartSpeed;
       if (cart.progress < 1) continue;
       cart.progress = 1;
 
@@ -1346,7 +1390,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
         const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
           ? Events.tariffMultiplier(state) : 1;
-        const tariff = cfg.tariffRate * value * tariffMult;  // GDD §6.3: 25% cut
+        const tariff = tariffRate * value * tariffMult;      // GDD §6.3: 25% cut (+ research bonus)
         dest.stock[cart.goodId] = (dest.stock[cart.goodId] || 0) + cart.qty; // dest gains stock
         dest.gold = (dest.gold || 0) - value;                // dest pays gold
         state.treasury += tariff;                            // → player's treasury
@@ -2690,7 +2734,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // TI-C: Buildings tab = build menu (grouped) + placement banner + placed list.
   function renderBuildings(t) {
     const used = Buildings.usedSlots(t);
-    const cap = Buildings.slotCap(t.level);
+    const cap = Buildings.slotCap(t.level, state);   // P5-A: reflect slotBonus research
     const full = used >= cap;
     let html = `<div class="tp-row"><span class="k">Building slots</span><span class="v">${used} / ${cap}</span></div>`;
 
@@ -2826,7 +2870,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     }
     town.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
     scheduleSave();
-    if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level)) cancelPlacing();
+    if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level, state)) cancelPlacing();
     renderTownPanel();
   }
 
@@ -3043,10 +3087,17 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     for (const k in w) s += w[k] || 0;
     return s;
   }
+  // P5-A: effective warehouse capacity = base + `warehouseCap` research (guarded;
+  // "Warehousing" adds +200). Base value when no research is unlocked.
+  function warehouseCapEff() {
+    let cap = CONFIG.castle.warehouseCapacity;
+    if (typeof Research !== "undefined" && Research.effect) cap += Research.effect(state, "warehouseCap", 0);
+    return cap;
+  }
 
   function castleBuy(goodId) {
     const unit = CONFIG.castle.tradeUnit;
-    const cap = CONFIG.castle.warehouseCapacity;
+    const cap = warehouseCapEff();
     const price = castlePriceOf(goodId);
     const cost = price * unit;
     const treas = state.treasury || 0;
@@ -3075,7 +3126,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function renderCastlePanel() {
     if (!castleOpen) return;
     const unit = CONFIG.castle.tradeUnit;
-    const cap = CONFIG.castle.warehouseCapacity;
+    const cap = warehouseCapEff();
     const used = warehouseUsed();
     const treas = state.treasury || 0;
     const town = nearestTownToCastle();
