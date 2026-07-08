@@ -152,6 +152,10 @@
   /* Treasury line in the shared HUD (keeps existing fps/stat intact). */
   #hud .treasury { color: var(--accent); font-weight: bold; }
   #hud .treasury .rate { color: var(--paper); opacity: 0.55; font-weight: normal; font-size: 11px; }
+  /* TARIFF-SLIDER (P5D-D): player-adjustable tariff, shown once researched */
+  #hud .tariffCtl { margin-top: 3px; font-size: 11px; color: var(--paper); opacity: 0.85; }
+  #hud .tariffCtl input[type=range] { vertical-align: middle; width: 92px; margin-left: 4px; }
+  #hud .tariffCtl b { color: var(--accent); }
   /* Castle warehouse panel — reuses the generic .tp-* look, own position/id. */
   #castlePanel {
     position: fixed; top: 56px; right: 12px; width: 340px;
@@ -347,6 +351,9 @@
 <div id="hud">
   <!-- CASTLE-UI: player tariff treasury (T9) -->
   <div class="treasury">👑 <span id="treasuryVal">0</span> g <span class="rate" id="tariffVal"></span></div>
+  <!-- TARIFF-SLIDER (P5D-D): 10–40% tariff dial, gated on the Tariff Office research -->
+  <div class="tariffCtl" id="tariffCtl" style="display:none">Tariff <b id="tariffPct">25%</b>
+    <input type="range" id="tariffSlider" min="10" max="40" step="1" value="25" title="Higher tariff earns more per trade but makes fewer routes profitable (GDD §6.3)"></div>
   <!-- PROGRESS-UI (P4-B): prestige + castle level -->
   <div class="prestige">✨ <span id="prestigeVal">0</span> prestige · 🏰 Lv <span id="castleLvlVal">1</span></div>
   <div><span class="fps" id="fps">—</span> fps</div>
@@ -1324,8 +1331,15 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const extraCarts  = rEffect("extraCarts", 0);                        // more carts on the road
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
     const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
-    const tariffRate = Math.max(0, Math.min(cfg.maxTariffRate,
-      cfg.tariffRate + rEffect("tariffBonus", 0)));                      // tax ledgers / bureaucracy
+    // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
+    // replaces the CONFIG constant as the base; research tariffBonus still adds on top,
+    // Events.tariffMultiplier still applies below. Clamp the composed rate to [0.10, 0.40]
+    // (bounded by cfg.maxTariffRate). Falls back to cfg.tariffRate when a state/save
+    // predates the slider, so default behaviour stays 0.25.
+    const baseTariff = (typeof state.tariffRate === "number") ? state.tariffRate : cfg.tariffRate;
+    const tariffRate = Math.max(0.10, Math.min(Math.min(0.40, cfg.maxTariffRate),
+      baseTariff + rEffect("tariffBonus", 0)));                          // tax ledgers / bureaucracy
+    // === /TARIFF-SLIDER ===
 
     // --- 1. Dispatch: each eligible town looks to SELL a surplus good abroad ---
     for (const home of towns) {
@@ -1921,6 +1935,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     towns: [],                 // [{ q, r }]  (empty markers in Phase 1)
     carts: [],                 // live trade carts (Trade.tick owns; T9 draws)
     treasury: 0,               // player tariff income (gold) — distinct from town.gold
+    tariffRate: CONFIG.trade.tariffRate, // TARIFF-SLIDER (P5D-D): player-set base tariff (GDD §6.3, 10–40%)
     research: { unlocked: [], active: null, progress: 0, spent: 0 }, // RESEARCH (P4-A)
     tradeSeed: 0,              // seeded RNG stream for deterministic cart routing
     prestige: 0,               // P4-B: earned from King's quests; gates castle levels
@@ -2379,6 +2394,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.towns = [];
     state.carts = [];
     state.treasury = 0;
+    state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 25%
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
@@ -2418,6 +2434,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         towns: state.towns,
         carts: state.carts,
         treasury: state.treasury,
+        tariffRate: state.tariffRate,      // TARIFF-SLIDER (P5D-D): player-set base tariff
         tradeSeed: state.tradeSeed,
         research: state.research,          // RESEARCH (P4-A): tech tree progress
         revealed: Array.from(state.revealed),
@@ -2451,6 +2468,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.towns = data.towns || [];
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
+    state.tariffRate = typeof data.tariffRate === "number" ? data.tariffRate : CONFIG.trade.tariffRate; // TARIFF-SLIDER (P5D-D)
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
     state.research = Research.normalize(data.research);   // RESEARCH (P4-A)
     state.warehouse = data.warehouse || {};   // CASTLE-UI (T9)
@@ -3071,12 +3089,47 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   const treasuryValEl = document.getElementById("treasuryVal");
   const tariffValEl = document.getElementById("tariffVal");
   function tariffRate() {
+    // TARIFF-SLIDER (P5D-D): the player-set base is the source of truth; fall back to
+    // the CONFIG baseline for pre-slider states/saves.
+    if (typeof state.tariffRate === "number") return state.tariffRate;
     const tr = CONFIG.trade && CONFIG.trade.tariffRate;
     return typeof tr === "number" ? tr : 0.25;   // GDD §6.3 baseline
   }
   function updateTreasuryHud() {
     treasuryValEl.textContent = Math.round(state.treasury || 0).toLocaleString();
     tariffValEl.textContent = "· " + Math.round(tariffRate() * 100) + "% tariff";
+    updateTariffCtl();
+  }
+
+  // ---- TARIFF-SLIDER (P5D-D): gated 10–40% tariff dial ------------------
+  const tariffCtlEl = document.getElementById("tariffCtl");
+  const tariffSliderEl = document.getElementById("tariffSlider");
+  const tariffPctEl = document.getElementById("tariffPct");
+  // Unlocked once the "Tariff Office" node (effect { tariff_slider: true }) is researched.
+  // Accept an id-named node too, in case the tree is renamed later.
+  function tariffSliderUnlocked() {
+    if (typeof Research === "undefined") return false;
+    if (Research.has && Research.has(state, "tariff_slider")) return true;
+    if (Research.effect) return !!Research.effect(state, "tariff_slider", false);
+    return false;
+  }
+  function updateTariffCtl() {
+    if (!tariffCtlEl) return;
+    const unlocked = tariffSliderUnlocked();
+    tariffCtlEl.style.display = unlocked ? "" : "none";
+    if (!unlocked) return;
+    const pct = Math.round(tariffRate() * 100);
+    if (document.activeElement !== tariffSliderEl) tariffSliderEl.value = String(pct);
+    tariffPctEl.textContent = pct + "%";
+  }
+  if (tariffSliderEl) {
+    tariffSliderEl.addEventListener("input", () => {
+      const pct = parseInt(tariffSliderEl.value, 10) || 25;
+      state.tariffRate = Math.max(0.10, Math.min(0.40, pct / 100));  // GDD §6.3 range
+      tariffPctEl.textContent = pct + "%";
+      tariffValEl.textContent = "· " + pct + "% tariff";
+      scheduleSave();
+    });
   }
 
   // ---- castle warehouse panel -------------------------------------------
