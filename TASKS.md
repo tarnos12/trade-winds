@@ -21,7 +21,10 @@ buildings until researched (already true).
   `Research.enqueue/dequeue/queued`; normalize + persist. 🔲 queued
 - **RT-B (UI, workflow):** the full-screen tree overlay itself + the **queue
   panel** on its left (ordered list, click-to-enqueue from the tree, ✕ remove,
-  active node shows progress at the top). 🔲 queued
+  active node shows progress at the top). Queue entries render as icons and
+  share the SAME hover tooltip as tree nodes (name, effect text, progress %,
+  status In Progress/queued, estimated cost with per-material gold breakdown).
+  🔲 queued
 - **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
 
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
