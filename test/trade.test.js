@@ -43,7 +43,7 @@ function farmTown()  { return mkTown({ id: 1, q: 0, r: 0,
   buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }],
   stock: { grain: 40, ore: 0 } }); }
 function mineTown()  { return mkTown({ id: 2, q: 6, r: 0,
-  buildings: [{ typeId: "mine", workers: 3 }, { typeId: "mine", workers: 3 }],
+  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }],
   stock: { ore: 40, grain: 15 } }); }
 function millTown()  { return mkTown({ id: 3, q: 3, r: 1,
   buildings: [{ typeId: "mill", workers: 2 }],

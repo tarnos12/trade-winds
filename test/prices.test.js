@@ -57,12 +57,14 @@ ok("basePrice climbs by tier (avg)", (() => {
 
 // ---- catalog: buildings ----
 ok("at least 6 buildings", Object.keys(CONFIG.buildings).length >= 6);
-for (const id of ["sawmill", "mine", "farm", "fishery", "mill", "bakery"]) {
+for (const id of ["lumberjack", "miner", "farm", "fishery", "mill", "bakery"]) {
   ok(`building ${id} exists`, !!CONFIG.buildings[id]);
 }
-ok("every building has valid output good", Object.values(CONFIG.buildings).every(b =>
+// Producers (extractors + processors) have an output good + worker slots; houses don't.
+const producers = Object.values(CONFIG.buildings).filter(b => b.kind !== "house");
+ok("every producer has valid output good", producers.every(b =>
   b.output && CONFIG.goods[b.output.goodId] && b.output.ratePerWorker > 0));
-ok("every building has workerSlots >= 1", Object.values(CONFIG.buildings).every(b => b.workerSlots >= 1));
+ok("every producer has workerSlots >= 1", producers.every(b => b.workerSlots >= 1));
 ok("every building has a cost object", Object.values(CONFIG.buildings).every(b => b.cost && typeof b.cost === "object"));
 ok("building inputs reference real goods", Object.values(CONFIG.buildings).every(b =>
   !b.inputs || Object.keys(b.inputs).every(inId => CONFIG.goods[inId])));
