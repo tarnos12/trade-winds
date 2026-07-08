@@ -128,6 +128,24 @@
   .trend.down { color: #e0503c; }
   .trend.flat { color: var(--paper); opacity: 0.5; }
   .tp-empty { opacity: 0.6; font-style: italic; padding: 6px 0; }
+  /* build menu (TI-C) */
+  .tp-build { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 5px 7px; margin: 3px 0; border: 1px solid var(--panel-edge); border-radius: 6px;
+    background: #1c160f; cursor: pointer; }
+  .tp-build:hover { background: #2a2015; border-color: var(--accent); }
+  .tp-build.active { background: var(--accent); color: #201607; border-color: var(--accent); }
+  .tp-build.disabled { opacity: 0.4; cursor: not-allowed; }
+  .tp-build.disabled:hover { background: #1c160f; border-color: var(--panel-edge); }
+  .tp-build .bn { font-weight: bold; }
+  .tp-build .bm { font-size: 10.5px; opacity: 0.8; text-align: right; white-space: nowrap; }
+  .tp-build.active .bm { opacity: 0.9; }
+  .tp-place { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    padding: 6px 8px; margin: 4px 0 8px; border-radius: 6px;
+    background: rgba(111,191,115,0.12); border: 1px solid #4f9d5a; font-size: 12px; }
+  .tp-place #tpPlaceHint { flex: 1 0 100%; font-size: 11px; opacity: 0.85; }
+  .tp-place #tpPlaceHint.ok { color: #6fbf73; }
+  .tp-place #tpPlaceHint.bad { color: #e0503c; }
+  .tp-cancel { padding: 2px 8px; font-size: 11px; }
   /* === TOWN-UI CSS END === */
 
   /* === CASTLE-UI CSS START === (T9 / slot #4 — treasury HUD + castle warehouse) */
@@ -1239,6 +1257,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   // Main render
   // ---------------------------------------------------------------
   let hoverHex = null;
+  // TI-C: active building-placement session — { town, typeId } or null. Shared by
+  // the render overlay (below) and the town-panel build menu (TOWN-UI section).
+  let placing = null;
 
   function drawRoads() {
     if (state.roads.size === 0) return;
@@ -1285,6 +1306,75 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       ctx.lineTo(p.x - s, p.y);
       ctx.closePath(); ctx.fill();
       ctx.fillRect(p.x - s * 0.7, p.y, s * 1.4, s * 0.9);
+    }
+  }
+
+  // TI-C: per-kind marker colour + glyph for a placed building.
+  const BUILDING_STYLE = {
+    extractor: { fill: "#4f9d5a", edge: "#2f6b39" },
+    processor: { fill: "#c98a3c", edge: "#7a5218" },
+    house:     { fill: "#9d6b4f", edge: "#5c3a26" },
+  };
+
+  // Draw every town's placed buildings as a small labelled token on its hex.
+  function drawBuildings() {
+    for (const t of state.towns) {
+      if (!Array.isArray(t.buildings)) continue;
+      for (const b of t.buildings) {
+        const def = CONFIG.buildings[b.typeId];
+        if (!def) continue;
+        const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+        const st = BUILDING_STYLE[def.kind] || BUILDING_STYLE.processor;
+        const rad = SIZE * 0.3;
+        ctx.fillStyle = st.fill;
+        ctx.strokeStyle = st.edge;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // one-letter glyph (building name initial)
+        ctx.fillStyle = "#201607";
+        ctx.font = "bold " + Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText((def.name || "?").charAt(0).toUpperCase(), p.x, p.y + 0.5);
+      }
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
+  // TI-C: while placing, tint every hex in the town's build radius green (valid)
+  // or red (invalid) via the pure Buildings.canPlace, and outline the hover hex.
+  function drawPlacementOverlay() {
+    if (!placing) return;
+    const town = placing.town;
+    if (!state.towns.includes(town)) { placing = null; return; }
+    const R = (CONFIG.town && CONFIG.town.radius) || 2;
+    for (const h of HexMath.range(town.q, town.r, R)) {
+      if (h.q === town.q && h.r === town.r) continue;
+      const k = HexMath.key(h.q, h.r);
+      if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+      const res = Buildings.canPlace(state, town, placing.typeId, h.q, h.r);
+      const p = HexMath.hexToPixel(h.q, h.r, SIZE);
+      const pts = hexCorners(p.x, p.y);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = res.ok ? "rgba(80,200,110,0.30)" : "rgba(224,80,60,0.16)";
+      ctx.fill();
+      ctx.lineWidth = res.ok ? 2 : 1;
+      ctx.strokeStyle = res.ok ? "#6fbf73" : "rgba(224,80,60,0.5)";
+      ctx.stroke();
+    }
+    if (hoverHex) {
+      const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
+      const pts = hexCorners(p.x, p.y);
+      const res = Buildings.canPlace(state, town, placing.typeId, hoverHex.q, hoverHex.r);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = res.ok ? "#8fe89a" : "#e0503c";
+      ctx.stroke();
     }
   }
 
@@ -1650,8 +1740,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
     drawRoads();
     drawTowns();
+    drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     drawCarts();      // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
+    drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
   }
 
@@ -1678,48 +1770,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return max + 1;
   }
 
-  function terrainAt(q, r) {
-    const h = state.map && state.map.hexes.get(HexMath.key(q, r));
-    return h ? h.terrain : null;
-  }
-  function hexHasNeighborTerrain(q, r, terr) {
-    return HexMath.neighbors(q, r).some(n => terrainAt(n.q, n.r) === terr);
-  }
-
-  // Attach a couple of starter buildings within radius 1–2 (GDD §4.1) so the
-  // Buildings tab has data. Terrain buildings snap to a matching resource hex;
-  // processors (no `terrain`) sit on any buildable town hex.
-  function seedBuildings(town) {
-    const cap = TOWN_BUILDING_CAP[town.level] || 3;
-    const out = [];
-    const ring = HexMath.range(town.q, town.r, 2)
-      .filter(h => !(h.q === town.q && h.r === town.r) && state.map.hexes.has(HexMath.key(h.q, h.r)));
-    const used = new Set();
-    const takeHex = (pred) => {
-      for (const h of ring) {
-        const k = HexMath.key(h.q, h.r);
-        if (used.has(k)) continue;
-        if (pred(h)) { used.add(k); return h; }
-      }
-      return null;
-    };
-    for (const def of Object.values(CONFIG.buildings)) {
-      if (out.length >= cap) break;
-      let hex = null;
-      if (def.terrain) {
-        hex = takeHex(h => terrainAt(h.q, h.r) === def.terrain);
-      } else if (def.adjacent) {
-        hex = takeHex(h => CONFIG.terrain[terrainAt(h.q, h.r)] &&
-                           CONFIG.terrain[terrainAt(h.q, h.r)].buildable &&
-                           hexHasNeighborTerrain(h.q, h.r, def.adjacent));
-      } else {
-        // processor: any buildable hex in the ring
-        hex = takeHex(h => { const tt = CONFIG.terrain[terrainAt(h.q, h.r)]; return tt && tt.buildable; });
-      }
-      if (hex) out.push({ typeId: def.id, q: hex.q, r: hex.r, workers: def.workerSlots });
-    }
-    return out;
-  }
+  // TI-C: the old auto-seed (seedBuildings) is gone — towns start with their
+  // center only and the player places every building via the Buildings tab.
 
   // Create a Town matching the shared data contract exactly (TASKS.md):
   //   { id, q, r, level, gold, pop:{peasants,workers,burghers}, stock:{goodId:qty},
@@ -1735,17 +1787,15 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       // Phase 4 progression; until then new towns are trade-capable by default.
       level: 2,
       gold: 200,
-      pop: { peasants: 20, workers: 8, burghers: 2 },
-      stock: {
-        wood: 40, stone: 24, ore: 10, grain: 34, fish: 16, wool: 12,
-        planks: 10, tools: 5, flour: 14, beer: 8, cloth: 6,
-        bread: 9, clothes: 2, jewelry: 0, furniture: 1,
-      },
+      // TI-C: no auto-seeded buildings — the town starts with its center only.
+      // Base peasants (CONFIG.town.baseWorkers) man the first buildings the
+      // player places; workers/burghers appear once housing is built (Sim.tick).
+      pop: { peasants: 0, workers: 0, burghers: 0, ...CONFIG.town.baseWorkers },
+      stock: { ...CONFIG.town.startStock },
       prices: {},
       buildings: [],
       happiness: 78,
     };
-    town.buildings = seedBuildings(town);
     // Prime prices once so the panel opens with meaningful numbers (priceFor
     // mutates town.prices; first read snaps to target).
     for (const id of Object.keys(CONFIG.goods)) priceOf(town, id);
@@ -1758,10 +1808,13 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (t.id == null) t.id = nextTownId();
     if (t.level == null) t.level = 1;
     if (t.gold == null) t.gold = 200;
-    if (!t.pop) t.pop = { peasants: 20, workers: 8, burghers: 2 };
-    if (!t.stock) t.stock = {};
+    if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0, ...CONFIG.town.baseWorkers };
+    if (!t.stock) t.stock = { ...CONFIG.town.startStock };
     if (!t.prices) t.prices = {};
-    if (!Array.isArray(t.buildings)) t.buildings = seedBuildings(t);
+    // TI-C: no more auto-seed. A bare {q,r} marker (old Phase-1 save) starts with
+    // no buildings; towns saved with a buildings array keep it (old auto-seeded
+    // saves still load — Sim.tick reassigns their workers).
+    if (!Array.isArray(t.buildings)) t.buildings = [];
     if (t.happiness == null) t.happiness = 78;
     return t;
   }
@@ -1822,21 +1875,76 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       <tr><th>Good</th><th>Stock</th><th>Price</th></tr>${rows}</table>`;
   }
 
-  function renderBuildings(t) {
-    if (!t.buildings.length) return `<div class="tp-empty">No production buildings yet.</div>`;
-    let rows = "";
-    for (const b of t.buildings) {
-      const def = CONFIG.buildings[b.typeId] || {};
-      const out = def.output ? `${GOOD_LABEL(def.output.goodId)} ×${def.output.ratePerWorker}/wkr` : "—";
-      const slots = def.workerSlots != null ? def.workerSlots : "?";
-      rows += `<tr>
-        <td>${esc(GOOD_LABEL(b.typeId))}</td>
-        <td>${esc(out)}</td>
-        <td>${b.workers}/${slots}</td>
-        <td>${b.q},${b.r}</td></tr>`;
+  // TI-C: describe a building type's terrain requirement in one short phrase.
+  function terrainReq(def) {
+    if (def.kind === "extractor" && def.adjacent) return "Borders " + def.adjacent;
+    if (def.kind === "extractor" && def.terrain) return GOOD_LABEL(def.terrain) + " hex";
+    return "Any land";
+  }
+  // TI-C: format a cost object as "40g · 10 wood" (gold first).
+  function costStr(cost) {
+    const parts = [];
+    if (cost && cost.gold) parts.push(cost.gold + "g");
+    for (const gid in (cost || {})) {
+      if (gid === "gold") continue;
+      parts.push(cost[gid] + " " + gid);
     }
-    return `<table class="tp-tbl">
-      <tr><th>Building</th><th>Output</th><th>Wkr</th><th>Hex</th></tr>${rows}</table>`;
+    return parts.join(" · ") || "free";
+  }
+
+  // TI-C: Buildings tab = build menu (grouped) + placement banner + placed list.
+  function renderBuildings(t) {
+    const used = Buildings.usedSlots(t);
+    const cap = Buildings.slotCap(t.level);
+    const full = used >= cap;
+    let html = `<div class="tp-row"><span class="k">Building slots</span><span class="v">${used} / ${cap}</span></div>`;
+
+    // Active placement banner (only for this town).
+    if (placing && placing.town === t) {
+      const def = CONFIG.buildings[placing.typeId] || {};
+      html += `<div class="tp-place">Placing <b>${esc(def.name || placing.typeId)}</b> — click a green hex.
+        <button class="tp-cancel" data-cancel>Cancel</button>
+        <span id="tpPlaceHint"></span></div>`;
+    }
+
+    // Grouped build menu.
+    const groups = [["extractor", "Extractors"], ["processor", "Processors"], ["house", "Houses"]];
+    for (const [kind, label] of groups) {
+      const defs = Object.values(CONFIG.buildings).filter(d => d.kind === kind);
+      if (!defs.length) continue;
+      html += `<div class="tp-sec">${label}</div>`;
+      for (const def of defs) {
+        const active = placing && placing.town === t && placing.typeId === def.id;
+        const cls = "tp-build" + (active ? " active" : "") + (full && !active ? " disabled" : "");
+        const attr = full && !active ? "" : ` data-build="${def.id}"`;
+        html += `<div class="${cls}"${attr}>
+          <span class="bn">${esc(def.name)}</span>
+          <span class="bm">${esc(terrainReq(def))}<br>${esc(costStr(def.cost))}</span></div>`;
+      }
+    }
+    if (full) html += `<div class="tp-empty">All building slots are full.</div>`;
+
+    // Placed buildings.
+    html += `<div class="tp-sec">Placed — ${t.buildings.length}</div>`;
+    if (!t.buildings.length) {
+      html += `<div class="tp-empty">No buildings placed yet. Pick one above to build.</div>`;
+    } else {
+      let rows = "";
+      for (const b of t.buildings) {
+        const def = CONFIG.buildings[b.typeId] || {};
+        const out = def.output ? `${GOOD_LABEL(def.output.goodId)} ×${def.output.ratePerWorker}/wkr`
+                  : (def.kind === "house" ? `+${def.houseCapacity || 0} ${def.houseTier || ""}` : "—");
+        const slots = def.workerSlots != null ? def.workerSlots : (def.kind === "house" ? "—" : "?");
+        rows += `<tr>
+          <td>${esc(def.name || b.typeId)}</td>
+          <td>${esc(out)}</td>
+          <td>${def.kind === "house" ? "—" : (b.workers || 0) + "/" + slots}</td>
+          <td>${b.q},${b.r}</td></tr>`;
+      }
+      html += `<table class="tp-tbl">
+        <tr><th>Building</th><th>Output</th><th>Wkr</th><th>Hex</th></tr>${rows}</table>`;
+    }
+    return html;
   }
 
   function renderPopulation(t) {
@@ -1877,10 +1985,63 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     renderTownPanel();
   }
   function closeTownPanel() {
+    cancelPlacing();
     activeTown = null;
     panelEl.classList.add("hidden");
     panelEl.setAttribute("aria-hidden", "true");
   }
+
+  // ---- TI-C: building placement ----
+  // Enter placement mode for `town`/`typeId`. Forces pan mode so the map stays
+  // draggable (look around while placing) and no other build tool interferes.
+  function startPlacing(town, typeId) {
+    if (!town || !CONFIG.buildings[typeId]) return;
+    // toggle off if re-selecting the same building
+    if (placing && placing.town === town && placing.typeId === typeId) { cancelPlacing(); return; }
+    setMode("pan");
+    placing = { town, typeId };
+    renderTownPanel();
+  }
+  function cancelPlacing() {
+    if (!placing) return;
+    placing = null;
+    if (activeTown) renderTownPanel();
+  }
+  // Attempt to place the active building at the screen point; deduct cost, push
+  // { typeId, q, r, workers:0 } (Sim.tick assigns real workers). Stays in
+  // placement mode so several can be placed; exits when slots fill.
+  function tryPlaceBuilding(sx, sy) {
+    if (!placing) return;
+    const town = placing.town;
+    if (!state.towns.includes(town)) { cancelPlacing(); return; }
+    const h = hexAtScreen(sx, sy);
+    const res = Buildings.canPlace(state, town, placing.typeId, h.q, h.r);
+    const hintEl = document.getElementById("tpPlaceHint");
+    if (!res.ok) {
+      if (hintEl) { hintEl.textContent = "✗ " + res.reason; hintEl.className = "bad"; }
+      return;
+    }
+    const def = CONFIG.buildings[placing.typeId];
+    const cost = def.cost || {};
+    town.gold = (town.gold || 0) - (cost.gold || 0);
+    if (!town.stock) town.stock = {};
+    for (const gid in cost) {
+      if (gid === "gold") continue;
+      town.stock[gid] = (town.stock[gid] || 0) - cost[gid];
+    }
+    town.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
+    scheduleSave();
+    if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level)) cancelPlacing();
+    renderTownPanel();
+  }
+
+  // Build-menu clicks (delegated — panel HTML is re-rendered each refresh).
+  tpBodyEl.addEventListener("click", (e) => {
+    const cancelBtn = e.target.closest("[data-cancel]");
+    if (cancelBtn) { cancelPlacing(); return; }
+    const buildRow = e.target.closest("[data-build]");
+    if (buildRow && activeTown) { startPlacing(activeTown, buildRow.dataset.build); }
+  });
 
   tpTabEls.forEach(btn => btn.addEventListener("click", () => {
     activeTab = btn.dataset.tab;
@@ -1888,6 +2049,19 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     renderTownPanel();
   }));
   document.getElementById("tpClose").addEventListener("click", closeTownPanel);
+
+  // Live placement hint: update the reason line as the cursor moves over hexes.
+  canvas.addEventListener("mousemove", (e) => {
+    if (!placing) return;
+    const hintEl = document.getElementById("tpPlaceHint");
+    if (!hintEl) return;
+    const h = hexAtScreen(e.clientX, e.clientY);
+    const res = Buildings.canPlace(state, placing.town, placing.typeId, h.q, h.r);
+    hintEl.textContent = res.ok ? "✓ valid — click to build" : "✗ " + res.reason;
+    hintEl.className = res.ok ? "ok" : "bad";
+  });
+  // Esc cancels placement.
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && placing) cancelPlacing(); });
 
   // Town-click detection: a non-drag left click on a town center opens the panel.
   // We track our own down-position so a camera drag (which still fires a `click`)
@@ -1899,6 +2073,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const down = tuiDown; tuiDown = null;
     if (!down) return;
     if (Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 5) return; // a drag
+    // TI-C: while placing, a non-drag left click drops the building (and never
+    // opens/closes the panel or is treated as a town click).
+    if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
     const town = state.towns.find(t => t.q === h.q && t.r === h.r);
@@ -1911,7 +2088,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
   // Expose for headless smoke test / console debugging.
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
-                    get activeTown() { return activeTown; } };
+                    startPlacing, cancelPlacing, tryPlaceBuilding,
+                    get activeTown() { return activeTown; },
+                    get placing() { return placing; },
+                    get state() { return state; } };
   // === TOWN-UI END ===
 
   // === CARTS + CASTLE-UI START === (T9 / slot #4)
