@@ -14,7 +14,14 @@ buildings until researched (already true).
   per-building unlock nodes, per-LEVEL upgrade nodes wired to CONFIG.upgrades,
   band/kind/pos metadata, materials for every node, save migration
   (old dev-branch ids → per-level sets), engine API unchanged. 🟡 running
-- **RT-B (UI, workflow):** the full-screen tree overlay itself. 🔲 queued
+- **RT-A2 (engine follow-up, after RT-A merges):** **Research Queue** (author,
+  from LTT's left-hand parchment panel) — `state.research.queue` (ordered ids);
+  when the active node completes, auto-start the next queued node whose prereqs
+  are met (skip-with-keep or drop unaffordable-yet entries — decide simplest);
+  `Research.enqueue/dequeue/queued`; normalize + persist. 🔲 queued
+- **RT-B (UI, workflow):** the full-screen tree overlay itself + the **queue
+  panel** on its left (ordered list, click-to-enqueue from the tree, ✕ remove,
+  active node shows progress at the top). 🔲 queued
 - **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
 
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
