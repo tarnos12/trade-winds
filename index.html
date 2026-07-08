@@ -479,6 +479,30 @@
   /* === RU-B CSS START === upgrade section extras */
   .bp-upgrade-next { margin-top: 2px; }
   /* === RU-B CSS END === */
+  /* === PP-D CSS START === house view: residents strip, needs rings, happiness meter */
+  .ppd-residents { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; font-size: 16px; }
+  .ppd-resident.empty { opacity: 0.35; }
+  .ppd-needs { display: flex; flex-wrap: wrap; gap: 9px; margin: 2px 0 8px; }
+  .ppd-need { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .ppd-ring { width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; }
+  .ppd-ring-core { width: 26px; height: 26px; border-radius: 50%; background: #1c160f;
+    border: 1px solid var(--panel-edge);
+    display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .ppd-rate { font-size: 10px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+  .ppd-happy { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
+  .ppd-face { font-size: 14px; }
+  .ppd-bar { position: relative; flex: 1; height: 14px; border-radius: 7px;
+    border: 1px solid var(--panel-edge);
+    background: linear-gradient(90deg, #b0402e 0%, #4f9d5a 52%, #4f9d5a 66%,
+                                #d9b44a 72%, #e6c93f 100%); }
+  .ppd-marker { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px;
+    background: #fff; border: 1px solid rgba(0,0,0,0.6); border-radius: 2px;
+    box-shadow: 0 0 3px rgba(0,0,0,0.8); }
+  .ppd-goldlabel { position: absolute; top: 0; bottom: 0; font-size: 9px; line-height: 13px;
+    padding-left: 4px; color: #201607; font-weight: bold; pointer-events: none;
+    white-space: nowrap; }
+  /* === PP-D CSS END === */
   /* === PROGRESS-UI CSS START === (P4-B — prestige HUD, quest banner, upgrades, win) */
   #hud .prestige { color: #d9c169; font-weight: bold; }
   /* Town-panel + castle-panel upgrade block (reuses .tp-* look). */
@@ -5905,10 +5929,15 @@ var CastleMarket = (function () {
         html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
       }
     }
+    // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
+    // income and a per-tier happiness meter — replaces the old bare Housing
+    // capacity row. Producers keep their existing Output/Inputs body above.
     if (def.kind === "house") {
-      html += `<div class="tp-sec">Housing</div>
-        <div class="tp-row"><span class="k">Capacity</span><span class="v">+${def.houseCapacity || 0} ${esc(tier)}</span></div>`;
+      const tl = PPD_TIER_LABEL[def.houseTier] || tier;
+      bpTierEl.textContent = (def.kind || "") + (tl ? " · " + tl : "");
+      html += renderHouseBody(town, b, def);
     }
+    // === /PP-D ===
 
     // --- workers + slot pips (producers only; houses have no workerTier) ---
     if (def.workerTier) {
@@ -6013,6 +6042,125 @@ var CastleMarket = (function () {
     return out;
   }
   // === /RU-B ===
+
+  // === PP-D === house-view helpers (UI only — reads Sim/Buildings, mutates nothing).
+  // Everything is guarded: legacy states without tierHappiness/tierIncome/pop, or
+  // missing Sim/Buildings helpers, fall back to sensible defaults and never throw.
+  const PPD_TIER_LABEL = { peasant: "Peasant", worker: "Worker", burgher: "Citizen" };
+  const PPD_TIER_GLYPH = { peasant: "🧑‍🌾", worker: "👷", burgher: "🎩" };
+  const PPD_TIER_KEY   = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+
+  // Effective capacity = base houseCapacity + upgrade capacityPlus (RU-A ladder).
+  function ppdHouseCapacity(b, def) {
+    let cap = (def && def.houseCapacity) || 0;
+    try {
+      if (typeof Buildings !== "undefined" && typeof Buildings.upgradeEffect === "function")
+        cap += (Buildings.upgradeEffect(b).capacityPlus || 0);
+    } catch (e) { /* legacy building shapes: base capacity only */ }
+    return cap;
+  }
+
+  // Occupants attributed to THIS house: the tier's live population split across
+  // that tier's houses by capacity share (same attribution as Sim.houseIncome).
+  function ppdOccupants(town, b, def) {
+    const key = PPD_TIER_KEY[def.houseTier];
+    const pop = (key && town.pop && town.pop[key]) || 0;
+    if (pop <= 0) return 0;
+    let totalCap = 0;
+    for (const ob of (town.buildings || [])) {
+      const d = CONFIG.buildings[ob.typeId];
+      if (!d || d.kind !== "house" || d.houseTier !== def.houseTier) continue;
+      totalCap += ppdHouseCapacity(ob, d);
+    }
+    const thisCap = ppdHouseCapacity(b, def);
+    return totalCap > 0 ? pop * (thisCap / totalCap) : 0;
+  }
+
+  // Per-good satisfaction 0..1 — APPROXIMATION: per-good satisfaction (Sim's
+  // `gsat`) is a tick-local and isn't persisted per town, so the ring shows
+  // stock COVERAGE: town stock vs ~10 ticks of this tier's demand. A tier with
+  // no demand (empty house) reads pure availability (stocked shelf = full ring).
+  function ppdCoverage(town, gid, ratePerTick, tierPop) {
+    const stock = (town.stock && town.stock[gid]) || 0;
+    const need = ratePerTick * tierPop * 10;
+    if (need <= 0) return stock > 0 ? 1 : 0;
+    return Math.max(0, Math.min(1, stock / need));
+  }
+
+  // One row of need rings: goodIcon inside a conic-gradient satisfaction ring
+  // (green fill % = coverage) + the per-resident consumption rate under it.
+  function ppdNeedsRow(title, goods, rates, town, tierPop) {
+    let cells = "";
+    for (const gid of (goods || [])) {
+      const r = (rates && rates[gid]) || 0;
+      if (r <= 0) continue;                       // this tier doesn't consume it
+      const cov = ppdCoverage(town, gid, r, tierPop);
+      const deg = Math.round(cov * 360);
+      const c = goodColor(gid);
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${r} / resident / tick">
+        <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
+          <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
+        </div>
+        <div class="ppd-rate">${r}/t</div>
+      </div>`;
+    }
+    if (!cells) return "";
+    return `<div class="tp-sec">${esc(title)}</div><div class="ppd-needs">${cells}</div>`;
+  }
+
+  // The house body: residents strip → basic/luxury need rings → income →
+  // happiness meter. Pure markup builder (renderBuildingPanel injects it).
+  function renderHouseBody(town, b, def) {
+    const N = CONFIG.needs || {};
+    const key = PPD_TIER_KEY[def.houseTier];
+    const rates = (key && N.perCapita && N.perCapita[key]) || {};
+    const tierPop = (key && town.pop && town.pop[key]) || 0;
+    const cap = ppdHouseCapacity(b, def);
+    const occN = Math.max(0, Math.min(cap, Math.round(ppdOccupants(town, b, def))));
+    const glyph = PPD_TIER_GLYPH[def.houseTier] || "🧑";
+    const tierLabel = PPD_TIER_LABEL[def.houseTier] || (def.houseTier || "");
+
+    // 1. occupant summary + residents strip (filled glyphs / empty squares).
+    let out = `<div class="tp-sec">Residents — ${occN} / ${cap}</div>`;
+    let strip = "";
+    for (let i = 0; i < cap; i++)
+      strip += `<span class="ppd-resident ${i < occN ? "filled" : "empty"}">${i < occN ? glyph : "◻"}</span>`;
+    out += `<div class="ppd-residents" data-ppd-residents>${strip}</div>`;
+    if (occN <= 0)
+      out += `<div class="tp-hint2">No residents yet — meet basic needs to attract settlers.</div>`;
+
+    // 2. needs rings (only goods this tier actually consumes).
+    out += ppdNeedsRow("Basic Needs", N.basicNeeds, rates, town, tierPop);
+    out += ppdNeedsRow("Luxury Needs", N.extraNeeds, rates, town, tierPop);
+
+    // 3. income: this house's capacity share of the tier's people-tax (PP-A).
+    let inc = 0;
+    try {
+      if (typeof Sim !== "undefined" && typeof Sim.houseIncome === "function")
+        inc = Sim.houseIncome(town, b) || 0;
+    } catch (e) { inc = 0; }
+    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${inc.toFixed(inc > 0 && inc < 0.1 ? 2 : 1)} 🪙/t</span></div>`;
+
+    // 4. happiness meter: red→green→gold bar; marker at THIS tier's happiness
+    // (PP-A tierHappiness; legacy fallback = town.happiness). Gold zone starts
+    // at peopleTax.happyBase (≥70% ⇒ above-base tax bonus).
+    let h = null;
+    if (town.tierHappiness && typeof town.tierHappiness[key] === "number") h = town.tierHappiness[key];
+    else if (typeof town.happiness === "number") h = town.happiness;
+    const hPct = Math.max(0, Math.min(100, (h == null ? 0 : h)));
+    const goldBase = Math.max(0, Math.min(100, (N.peopleTax && N.peopleTax.happyBase) || 70));
+    out += `<div class="tp-sec">${esc(tierLabel)} happiness — ${Math.round(hPct)}%</div>
+      <div class="ppd-happy" title="Above ${goldBase}% happiness residents pay bonus tax">
+        <span class="ppd-face">☹</span>
+        <div class="ppd-bar">
+          <div class="ppd-goldlabel" style="left:${goldBase}%">+🪙 bonus</div>
+          <div class="ppd-marker" data-ppd-marker style="left:${hPct}%"></div>
+        </div>
+        <span class="ppd-face">🙂</span>
+      </div>`;
+    return out;
+  }
+  // === /PP-D ===
 
   // Slot toggles + priority (event delegation; b.closedSlots is a count in [0,total]).
   bpBodyEl.addEventListener("click", (e) => {
