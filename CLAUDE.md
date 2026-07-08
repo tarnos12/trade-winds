@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next: two-part research + per-building upgrade ladders (now unblocked — depends on the per-building panel + delivery that landed). Going forward: orchestrate work via dynamic Workflows, delegating implementation to Sonnet/Opus subagents by complexity (author directive).**
+**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) + Two-part research & per-building upgrades (v0.13.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next candidates: content chains (cloth→clothing, chairs, wine), upgrade ladders for more buildings, or GDD §13 open questions. Standing directive: orchestrate work via dynamic Workflows (plan → implement → adversarial review), delegating to Sonnet/Opus subagents by complexity.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -87,6 +87,22 @@ Done:
   workers/burghers from housing as needs are met, build-menu UI + placement
   overlay, buildings rendered. Towns start center-only with a founding kit.
   Tests: `buildings` 37, `sim` 40.
+
+- **Two-part research + per-building upgrades (v0.13.0)** landed via dynamic
+  Workflows (RU-A logic by Opus w/ plan + dual adversarial review; RU-B UI by
+  Sonnet w/ Opus review). Part 1: a **'development' research branch** (4 chained
+  nodes: hut/lumberjack/farm/sawmill upgrades; materials in RESEARCH_MATERIALS)
+  unlocks upgrade *possibilities*. Part 2: click a building → buy its next level
+  (`Buildings.startUpgrade`) — **gold → treasury at purchase; resources delivered
+  from town.stock** by the shared CB-A delivery step (priority-first), pending
+  needs feed town demand. `CONFIG.upgrades` ladders: hut L2–4 (+1 capacity each,
+  L4 −30% basic consumption), lumberjack/farm L2–3 (output ×1.25/×1.5), sawmill
+  L2–3 (output + L3 +1 slot). `Buildings.upgradeEffect` wired into worker slots,
+  production, housingCapacity, and a capacity-weighted per-tier basic-consumption
+  multiplier. UI: building-panel Upgrades section (pending/available/locked/max),
+  🏗 Development research column, map level badges + pending-material chips,
+  `BuildingUI.startUpgrade` hook. Building fields `upgradeLevel`/`pendingUpgrade`.
+  Tests: buildings 109, sim 88, research 72 (496 total green).
 
 - **Gradual trade transfer (v0.12.0)**: trades are no longer instant. Each trader
   travels, then **parks to LOAD at the seller and UNLOAD at the buyer** over

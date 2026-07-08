@@ -243,7 +243,17 @@ Author directives (supersede parts of the BAL balance pass — apply these speci
 Sizeable — likely its own multi-slice pass (goods/needs model + potato content;
 storage caps + costs; people-tax income). Sequence after the castle/balance round.
 
-## Milestone: Two-part research + per-building upgrades — QUEUED (needs per-building panel + internal delivery)
+## Milestone: Two-part research + per-building upgrades ✅ DONE (v0.13.0, RU-A/RU-B)
+Delivered via dynamic Workflows (plan → implement → adversarial review; Opus for
+the pure-logic slice, Sonnet for UI, Opus reviewers). RU-A: 'development' research
+branch (4 chained unlock nodes + castle materials), CONFIG.upgrades ladders for the
+4 starters, Buildings.startUpgrade (gold → treasury; resources delivered via the
+shared CB-A delivery step; pending needs feed town demand), upgradeEffect wired
+into slots/output/housing + capacity-weighted basic-consumption multiplier.
+RU-B: building-panel Upgrades section (pending/available/locked/max states), 🏗
+Development research column, map level badge + pending-material chips,
+BuildingUI.startUpgrade hook. Tests: buildings 109, sim 88, research 72 (496
+total green); driven headless smoke clean. Original spec follows.
 - **Part 1 — global research (castle):** unlocks the *possibility* of an upgrade
   (e.g. "Hut Lv2" becomes available). Research only unlocks; it doesn't apply.
 - **Part 2 — per-building upgrade:** click a specific building → pick an unlocked

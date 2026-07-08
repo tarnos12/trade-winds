@@ -363,8 +363,12 @@
   .bp-slot:hover { border-color: var(--accent); }
   .bp-star { padding: 4px 12px; font-size: 13px; border-radius: 6px; }
   .bp-star.on { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  .bp-star:disabled { opacity: 0.45; cursor: default; }
   .tp-blist { line-height: 1.6; font-size: 12.5px; opacity: 0.9; margin: 2px 0 4px; }
   /* === CB-C CSS END === */
+  /* === RU-B CSS START === upgrade section extras */
+  .bp-upgrade-next { margin-top: 2px; }
+  /* === RU-B CSS END === */
   /* === PROGRESS-UI CSS START === (P4-B — prestige HUD, quest banner, upgrades, win) */
   #hud .prestige { color: #d9c169; font-weight: bold; }
   /* Town-panel + castle-panel upgrade block (reuses .tp-* look). */
@@ -3526,6 +3530,45 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   }
   // === /CB-B ===
 
+  // === RU-B: pending-upgrade chip stack (built buildings mid-upgrade) + level
+  // badge for buildings above Lv1. Mirrors drawConstructionNeed's layout/guards.
+  const ROMAN = { 2: "II", 3: "III", 4: "IV", 5: "V" };
+  function drawUpgradeNeed(b, p, rad) {
+    const need = (typeof Buildings !== "undefined" && Buildings.upgradeConstructionNeed)
+      ? Buildings.upgradeConstructionNeed(b) : null;
+    if (!need) return;
+    const entries = [];
+    for (const gid in need) { const q = Number(need[gid]); if (q > 0.05) entries.push([gid, q]); }
+    if (!entries.length) return;
+    entries.sort((a, c) => c[1] - a[1]);
+    const top = entries.slice(0, 3);
+    const step = Math.max(11, SIZE * 0.26);
+    const baseY = p.y - rad - step * 0.6;
+    for (let i = 0; i < top.length; i++) {
+      drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96, muted: true });
+    }
+  }
+  function drawUpgradeBadge(b, p, rad) {
+    const lvl = b && (b.upgradeLevel || 1);
+    if (!lvl || lvl < 2) return;
+    const label = ROMAN[lvl] || ("L" + lvl);
+    const fontPx = Math.max(8, Math.round(SIZE * 0.2));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    const bx = p.x + rad * 0.62, by = p.y + rad * 0.62;
+    const tw = ctx.measureText(label).width;
+    const r = Math.max(fontPx * 0.55, (tw + 5) / 2);
+    ctx.fillStyle = "rgba(18,12,5,0.75)";
+    ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffce4d"; ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#ffce4d";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, bx, by + 0.5);
+    ctx.restore();
+  }
+  // === /RU-B ===
+
   // Draw every town's placed buildings as a small labelled token on its hex.
   function drawBuildings() {
     for (const t of state.towns) {
@@ -3582,6 +3625,12 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         ctx.font = "bold " + Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText((def.name || "?").charAt(0).toUpperCase(), p.x, p.y + 0.5);
+        // === RU-B: level badge + pending-upgrade material chips (built only) ===
+        if (!(state.zoom < 0.6)) {
+          drawUpgradeBadge(b, p, rad);
+          if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
+        }
+        // === /RU-B ===
       }
     }
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
@@ -4977,8 +5026,86 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     html += `<div class="tp-sec">Priority</div>
       <button class="bp-star ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button>`;
 
+    // === RU-B: per-building upgrade section (only when this type has a ladder) ===
+    html += renderUpgradeSection(town, b);
+    // === /RU-B ===
+
     bpBodyEl.innerHTML = html;
   }
+
+  // === RU-B: builds the "Upgrades" section markup for the building panel.
+  // Guarded throughout — never throws when RU-A helpers / research / ladders
+  // are absent (legacy buildings, or a type with no CONFIG.upgrades entry).
+  function bpEffectSummary(effect) {
+    if (!effect) return "";
+    const parts = [];
+    if (effect.capacityPlus) parts.push(`+${effect.capacityPlus} capacity`);
+    if (effect.slotPlus) parts.push(`+${effect.slotPlus} worker slot${effect.slotPlus > 1 ? "s" : ""}`);
+    if (typeof effect.outputMult === "number" && effect.outputMult !== 1) {
+      const pct = Math.round((effect.outputMult - 1) * 100);
+      parts.push(`${pct >= 0 ? "+" : ""}${pct}% output`);
+    }
+    if (typeof effect.basicConsumptionMult === "number" && effect.basicConsumptionMult !== 1) {
+      const pct = Math.round((1 - effect.basicConsumptionMult) * 100);
+      parts.push(`${pct >= 0 ? "-" : "+"}${Math.abs(pct)}% basic consumption`);
+    }
+    return parts.join(" · ");
+  }
+  function bpUpgradeChips(rc, delivered) {
+    delivered = delivered || {};
+    let chips = "";
+    for (const gid in rc) {
+      const c = goodColor(gid);
+      chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
+    }
+    return chips;
+  }
+  function renderUpgradeSection(town, b) {
+    if (!b || typeof Buildings === "undefined" || typeof Buildings.upgradeLadder !== "function") return "";
+    const ladder = Buildings.upgradeLadder(b.typeId);
+    if (!Array.isArray(ladder) || !ladder.length) return "";   // no ladder for this type: hidden
+    const level = b.upgradeLevel || 1;
+    let out = `<div class="tp-sec">Upgrades</div><div class="tp-row"><span class="k">Level</span><span class="v">${level}</span></div>`;
+
+    if (b.pendingUpgrade) {
+      const rc = (typeof Buildings.upgradeResourceCost === "function") ? Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel) : {};
+      const chips = bpUpgradeChips(rc, b.pendingUpgrade.delivered);
+      out += `<div class="bp-status">⬆ Upgrading to Lv${b.pendingUpgrade.toLevel}...</div>`;
+      out += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
+      return out;
+    }
+
+    const nxt = (typeof Buildings.nextUpgrade === "function") ? Buildings.nextUpgrade(state, b) : null;
+    if (nxt) {
+      const rc = (typeof Buildings.upgradeResourceCost === "function") ? Buildings.upgradeResourceCost(b.typeId, nxt.level) : {};
+      const chips = bpUpgradeChips(rc, {});
+      const goldCost = (nxt.cost && nxt.cost.gold) || 0;
+      const effectStr = bpEffectSummary(nxt.effect);
+      const can = (typeof Buildings.canStartUpgrade === "function") ? Buildings.canStartUpgrade(state, town, b) : { ok: false, reason: "Unavailable" };
+      out += `<div class="bp-upgrade-next">
+        <div class="tp-row"><span class="k">${esc(nxt.name)}</span><span class="v">${fmt(goldCost)}g</span></div>
+        <div style="margin:4px 0 6px">${chips}</div>
+        ${effectStr ? `<div class="tp-hint2">${esc(effectStr)}</div>` : ""}
+        <button class="bp-star" data-upgrade ${can.ok ? "" : "disabled"} title="${can.ok ? "" : esc(can.reason || "")}">Upgrade${can.ok ? "" : " — " + esc(can.reason || "unavailable")}</button>
+      </div>`;
+      return out;
+    }
+
+    // Not the pending/next-available case — either locked (research needed) or maxed out.
+    const lockedEntry = (typeof Buildings.upgradeAt === "function") ? Buildings.upgradeAt(b.typeId, level + 1) : null;
+    if (lockedEntry) {
+      let nodeName = lockedEntry.unlockedBy;
+      if (typeof Research !== "undefined" && Research.get) {
+        const node = Research.get(lockedEntry.unlockedBy);
+        if (node && node.name) nodeName = node.name;
+      }
+      out += `<div class="tp-hint2">🔒 Research ${esc(nodeName || "")} to unlock Lv${lockedEntry.level}</div>`;
+    } else {
+      out += `<div class="tp-hint2">Max level.</div>`;
+    }
+    return out;
+  }
+  // === /RU-B ===
 
   // Slot toggles + priority (event delegation; b.closedSlots is a count in [0,total]).
   bpBodyEl.addEventListener("click", (e) => {
@@ -4994,6 +5121,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       return;
     }
     if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); }
+    // === RU-B: "Upgrade" button in the Upgrades section ===
+    const upgBtn = e.target.closest("[data-upgrade]");
+    if (upgBtn && !upgBtn.disabled) {
+      if (typeof Buildings !== "undefined" && typeof Buildings.startUpgrade === "function") {
+        Buildings.startUpgrade(state, bpTown, b);
+      }
+      renderBuildingPanel();
+    }
+    // === /RU-B ===
   });
   document.getElementById("bpClose").addEventListener("click", closeBuildingPanel);
 
@@ -5002,7 +5138,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   window.BuildingUI = { openBuildingPanel, closeBuildingPanel, buildingAtHex,
                         get openBuilding() { return bpBuilding; },
-                        get openBuildingTown() { return bpTown; } };
+                        get openBuildingTown() { return bpTown; },
+                        // === RU-B: smoke-test passthrough — starts the next upgrade on `b` and
+                        // re-renders the panel if it's the one currently open.
+                        startUpgrade(town, b) {
+                          const ok = (typeof Buildings !== "undefined" && typeof Buildings.startUpgrade === "function")
+                            ? Buildings.startUpgrade(state, town, b) : false;
+                          if (bpBuilding === b) renderBuildingPanel();
+                          return ok;
+                        } };
   // === /CB-C ===
 
   // Expose for headless smoke test / console debugging.
@@ -5586,7 +5730,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   const rsColsEl = document.getElementById("rsCols");
   const rsActiveEl = document.getElementById("rsActive");
   const btnResearch = document.getElementById("btnResearch");
-  const BRANCH_LABEL = { production: "🏭 Production", logistics: "🛣 Logistics", administration: "📜 Administration" };
+  // === RU-B: 4th research-panel column label ===
+  const BRANCH_LABEL = { production: "🏭 Production", logistics: "🛣 Logistics", administration: "📜 Administration", development: "🏗 Development" };
+  // === /RU-B ===
   let researchOpen = false;
 
   function nodeStateClass(id) {
@@ -6677,8 +6823,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.12.0";
+  const GAME_VERSION = "0.13.0";
   const PATCH_NOTES = [
+    { v: "0.13.0", notes: [
+      "Two-part research: a new 🏗 Development branch unlocks building upgrade LADDERS",
+      "Click a building to buy its next level — costs kingdom gold + city resources (delivered by traders)",
+      "Hut Lv2–4: +1 population each, final level −30% wood/potato use; Lumberjack/Farm/Sawmill get output boosts",
+      "Upgraded buildings wear a level badge on the map; pending upgrades show the materials they still need",
+      "City demand now includes upgrade materials — traders buy what your buildings are waiting on",
+    ] },
     { v: "0.12.0", notes: [
       "Trades are no longer instant — traders park to load and unload at 5 items/sec",
       "Traders glide smoothly along roads between economy ticks (frame-rate independent)",
