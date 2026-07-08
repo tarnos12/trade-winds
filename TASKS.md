@@ -166,9 +166,17 @@ A cohesive feature set (author requests). Sequence after the categorized build m
 - **Per-building click panel:** clicking a building on the map opens a panel with
   THAT building's info (type/tier, workers, output, inputs, construction status +
   missing materials) — building info moves OUT of the city panel.
-Likely slices: CB-A construction+delivery logic (Sim/placement/internal traders),
-CB-B visuals (build-state look, missing-resource + trader cargo icons), CB-C
-per-building click panel.
+- **Worker roster in city panel:** an icon per worker type available in the city;
+  hover → details (how many of that type exist vs how many are on a job/assigned).
+- **Building worker slots:** a placed building has open slots filled from available
+  workers by default; **click a slot to close it** (lock icon) so it won't be
+  staffed. (Sim respects closed slots.)
+- **Building priority star:** a ⭐ toggle per building; prioritized buildings get
+  workers assigned **first** and internal traders route to them **first**.
+Likely slices: CB-A construction+delivery + worker-assignment logic (Sim:
+priority order, closed slots, delivery); CB-B visuals (build-state look,
+missing-resource + trader cargo icons + priority routing); CB-C per-building click
+panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
 
 ## Done
 
