@@ -53,13 +53,18 @@ Two independent slices; merge order TR-A → TR-B.
 
 Author directives (implement as one balance pass + a city-cards UI slice):
 1. **Player starts with 10,000 gold** (`state.treasury` = player gold).
-2. **Founding a city costs 1000 player gold.**
-3. **Each city starts:** 1000 gold · **0 population** · enough **wood** to build a
+2. **Everything you PLACE costs gold from the Kingdom treasury:** founding a city
+   (1000 g), every building's gold cost, roads, and bridges all deduct from
+   `state.treasury`. (Not from city gold.)
+3. **Each city starts:** 1000 gold (its **trade budget** — the external trader buys
+   goods with it, NOT construction) · **0 population** · enough **wood** to build a
    lumberjack + a house · **8 build slots** (1 = the city center, so **7 buildable**).
 4. **A basic house gives 2 population** at max happiness (basic house cap = 2).
-5. **Building cost = gold + resources** (paid from the *city's* gold + stock, which
-   its internal traders supply). **Basic buildings = wood only**, then + stone/
-   planks, later + bricks (new good, deferred). Rebalance `CONFIG.buildings` costs.
+5. **Building construction is split:** the building's **gold** cost → Kingdom
+   treasury; its **resource** cost → that **city's own stock** (the city constructs
+   with its resources). **Basic buildings = wood only** (resources), then + stone/
+   planks, later + bricks (deferred). Roads/bridges cost treasury gold (+ stone
+   for bridges per GDD §6.4). Rebalance `CONFIG.buildings`/road costs accordingly.
 6. **City cards, top of screen:** one card per city — a colored avatar + name
    "City #1/#2/…". Colors from a **fixed predefined unique palette** (same color
    for City #N every game). Each card has **Give 1000 g** and **Take 1000 g**
