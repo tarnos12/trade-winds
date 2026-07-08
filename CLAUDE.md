@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) DONE. Remaining Phase 5: campaign scenarios + combat need author design input.**
+**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next: two-part research + per-building upgrade ladders (now unblocked — depends on the per-building panel + delivery that just landed).**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -87,6 +87,21 @@ Done:
   workers/burghers from housing as needs are met, build-menu UI + placement
   overlay, buildings rendered. Towns start center-only with a founding kit.
   Tests: `buildings` 37, `sim` 40.
+
+- **Construction & building logistics (v0.11.0)** landed via the agent team
+  (CB-A → CB-B → CB-C → CB-D): buildings are placed **under construction** —
+  placement charges only GOLD (treasury); the RESOURCE cost is delivered from the
+  city's own stock over time (`CONFIG.town.deliveryRate`) by a pure Sim step, and
+  each unbuilt building's remaining need feeds town demand (so the external trader
+  buys materials → "city demand from its own buildings"). Sim skips unbuilt
+  buildings, staffs effective slots (`workerSlots − closedSlots`), priority
+  buildings first. New `Buildings` helpers `resourceCost`/`isInstant`/
+  `constructionNeed`; building fields `built`/`delivered`/`closedSlots`/`priority`.
+  Visuals: under-construction scaffold + missing-resource chips on the map; trader
+  cargo icon+number (greyed = requested/en-route-to-buy). New **per-building click
+  panel** (info + construction + ⭐ priority + click-to-lock worker slots) — building
+  info moved OUT of the city panel; the Population tab gained a **workforce roster**
+  (assigned vs idle, hover breakdown). Tests: buildings 84, sim 76 (446 total green).
 
 - **Phase 4 — Progression** landed via the agent team (P4-A → P4-B → P4-C):
   research tree (15 nodes, treasury-funded, effects queryable), town leveling

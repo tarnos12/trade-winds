@@ -6426,8 +6426,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.10.0";
+  const GAME_VERSION = "0.11.0";
   const PATCH_NOTES = [
+    { v: "0.11.0", notes: [
+      "Buildings are now built over time — placement costs gold; resources are delivered from city stock",
+      "Under-construction buildings show a scaffold + the resources they still need on the map",
+      "Click any building to open its panel: workers, output, construction, ⭐ priority, lock/unlock worker slots",
+      "Traders show a cargo icon + number (greyed = requested / en route to buy)",
+      "City panel Population tab lists your workforce (assigned vs idle, hover for the breakdown)",
+    ] },
     { v: "0.10.0", notes: [
       "New needs: peasants want Wood + Potato (→70% happy), then Fish + Wool (→100%)",
       "New Potato good + Potato Farm; each city stores up to 80 of a resource",

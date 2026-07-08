@@ -150,7 +150,7 @@ Group by existing `workerTier`/`houseTier`; locked categories show a "research t
 unlock" hint. UI-only gate (canPlace logic unchanged; tests bypass the UI).
 Deferred content (future chain): potato farm, woodcutter, clothing/chairs/wine goods.
 
-## Milestone: Construction & building logistics — QUEUED (after build menu)
+## Milestone: Construction & building logistics ✅ DONE (v0.11.0, CB-A..D)
 A cohesive feature set (author requests). Sequence after the categorized build menu.
 - **Construction state:** a placed building starts **under construction** — its GOLD
   cost is paid to treasury at placement (as now), but its **resource** cost must be
@@ -203,10 +203,14 @@ units/tick from stock → `delivered`, priority buildings first).
 | Task | Slot | Depends on | Status |
 |---|---|---|---|
 | CB-A — construction + delivery + worker-assignment logic (pure) | #2 | contract | ✅ merged |
-| CB-B — visuals: build-state look + missing-resources on map + trader cargo icons + priority routing | #3 | CB-A fields | 🔲 |
-| CB-C — per-building click panel (info + slot lock/unlock + ⭐) | #4 | CB-A fields | 🔲 |
-| CB-D — city-panel worker roster (icons + hover available/assigned) | #2 | CB-A fields | 🔲 |
-**Merge order: CB-A → then CB-B ∥ CB-C ∥ CB-D.**
+| CB-B — visuals: build-state look + missing-resources on map + trader cargo icons + priority routing | #3 | CB-A fields | ✅ merged |
+| CB-C — per-building click panel (info + slot lock/unlock + ⭐) | #4 | CB-A fields | ✅ merged |
+| CB-D — city-panel worker roster (icons + hover available/assigned) | #2 | CB-A fields | ✅ merged |
+**Merge order: CB-A → CB-B → CB-C → CB-D. ✅ DONE (v0.11.0).** All merged clean,
+446 tests green, end-to-end headless smoke clean (place → construct → panel →
+roster, 0 console errors). Building info moved out of the city panel into the
+per-building click panel; construction is delivery-driven; city demand now
+derives from unbuilt buildings' material needs.
 
 ## Milestone: Balance + castle overhaul ✅ DONE (BAL/CP/CRE merged)
 - **BAL — balance + starting buildings:** rebalance costs/rates/prices/research; only
