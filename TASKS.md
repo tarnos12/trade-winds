@@ -59,6 +59,23 @@ Two independent slices; merge order TR-A → TR-B.
 | TR-A — external-buyer trade logic (pure `Trade.tick`) | #2 | one external trader per road-connected city (from level 1) buys its biggest shortfall from a reachable surplus city; seller passively sells; tariff (`state.tariffRate`) → treasury; deterministic; update `trade.test.js` | 🔲 |
 | TR-B — internal trader visuals | #4 | per-city internal traders (small carts shuttling produced goods between buildings and the city center — read-only over state, module-local like Juice); visually distinguish external-trader carts | 🔲 |
 
+## Economy overhaul — shared contract (rounds: logic EC-A/B/D → UI EC-C/E)
+- **Money pools:** `state.treasury` = Kingdom gold (start **10000**); pays the GOLD
+  cost of ALL placement (city founding **1000**, buildings, roads, bridges).
+  `town.gold` = city TRADE budget (start **1000**); only the external trader spends
+  it. `town.stock` = city resources; pays the RESOURCE cost of buildings.
+- **City start (makeTown, owned by EC-A):** `gold:1000, pop:{0,0,0}, happiness:50,
+  stock:{wood: enough for a lumberjack+house}`, buildings [].
+- **House cap 2** (basic). **slotCap L1 = 7** buildings (+center = 8).
+- **Happiness (owned by EC-B):** `town.happiness` 0–100, **baseline ~50** even with
+  no food; met needs raise toward 100, unmet lower. **Population per house =
+  round(cap × happiness/100)** (so cap-2 house → 1 worker @50%, 2 @100%). A
+  temporary modifier channel `town.happyMods = [{delta, untilTick}]` (or similar)
+  that Sim applies + decays; EC-C's give/take pushes entries onto it.
+- **Building costs (EC-A):** basic = **wood only** (+ small gold); mid + stone/
+  planks. Split at charge time: gold→treasury, resources→`town.stock`.
+- **Trade cart capacity 10; reservation + agreed price (EC-D).**
+
 ## Milestone: Trade correctness + trade UI — QUEUED (folds into/after Trade rework)
 
 Trade logic refinements (extend `Trade.tick`):
