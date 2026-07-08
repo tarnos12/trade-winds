@@ -40,7 +40,10 @@ function prodTown(typeId, extraStock) {
   return {
     id: 1, q: 0, r: 0, level: 4, gold: 0,
     pop: { peasants: 8, workers: 8, burghers: 0 },
-    stock: Object.assign({ wood: 200, grain: 200, ore: 200, wool: 200 }, extraStock || {}),
+    // EV3: start the MEASURED outputs (grain/ore/flour) below the storage cap (80)
+    // so one tick's production has headroom and isn't clamped away — otherwise the
+    // A/B research-multiplier comparison would read equal at the cap.
+    stock: Object.assign({ wood: 60, grain: 60, ore: 60, wool: 60 }, extraStock || {}),
     prices: {}, demand: {}, happiness: 100,
     buildings: [{ typeId, q: 0, r: 1, workers: 0 }],
   };
@@ -137,10 +140,12 @@ function homes() {
 function buildTradeState(seed, unlocked, farmLevel) {
   const roads = new Set();
   for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
+  // EV3: the FARM exports POTATO (the peasant food); the potato-less MINE (id 2) is
+  // the chronic food BUYER the cart tests probe. Wood is stocked as firewood (a basic).
   const towns = [
-    mkTradeTown({ id: 1, q: 0, r: 0, level: farmLevel || 4, buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()], stock: { grain: 5000 } }),
-    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()], stock: { ore: 5000 } }),
-    mkTradeTown({ id: 3, q: 3, r: 1, buildings: [{ typeId: "mill", workers: 2 }, ...homes()], stock: { grain: 500 } }),
+    mkTradeTown({ id: 1, q: 0, r: 0, level: farmLevel || 4, buildings: [{ typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, ...homes()], stock: { potato: 5000, wood: 5000 } }),
+    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()], stock: { ore: 5000, wood: 5000 } }),
+    mkTradeTown({ id: 3, q: 3, r: 1, buildings: [{ typeId: "mill", workers: 2 }, ...homes()], stock: { grain: 500, wood: 5000 } }),
   ];
   const st = { roads, towns, carts: [], treasury: 0, tradeSeed: seed >>> 0 };
   if (unlocked) st.research = withResearch(unlocked);
@@ -182,7 +187,7 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
 })();
 
 // --- 4c) cartCapacity — larger traders haul a bigger load. The buy load is capped
-//        by shortfall too, so we use a grain-HUNGRY city (huge pop, no grain) whose
+//        by shortfall too, so we use a POTATO-HUNGRY city (huge pop, no potato) whose
 //        shortfall exceeds cart capacity, making capacity the binding constraint. --
 (() => {
   function bigBuyerState(unlocked) {
@@ -190,8 +195,8 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
     for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
     const huts = []; for (let i = 0; i < 120; i++) huts.push({ typeId: "hut", q: i, r: 2 }); // EC-A hut cap 2 → 120 huts house ~240
     const towns = [
-      mkTradeTown({ id: 1, q: 0, r: 0, buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }], stock: { grain: 5000 } }),
-      mkTradeTown({ id: 2, q: 6, r: 0, pop: { peasants: 200, workers: 0, burghers: 0 }, buildings: huts, stock: { grain: 0 } }),
+      mkTradeTown({ id: 1, q: 0, r: 0, buildings: [{ typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }], stock: { potato: 5000, wood: 5000 } }),
+      mkTradeTown({ id: 2, q: 6, r: 0, pop: { peasants: 200, workers: 0, burghers: 0 }, buildings: huts, stock: { potato: 0, wood: 5000 } }),
     ];
     const st = { roads, towns, carts: [], treasury: 0, tradeSeed: 7 };
     if (unlocked) st.research = withResearch(unlocked);
@@ -222,8 +227,8 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
     noKey.treasury === emptyR.treasury);
   ok("no research key ≡ empty research: identical cart count",
     noKey.carts.length === emptyR.carts.length);
-  ok("no research key ≡ empty research: identical mine grain stock",
-    (noKey.towns[1].stock.grain || 0) === (emptyR.towns[1].stock.grain || 0));
+  ok("no research key ≡ empty research: identical mine ore stock",
+    (noKey.towns[1].stock.ore || 0) === (emptyR.towns[1].stock.ore || 0));
 })();
 
 // =========================================================================
@@ -234,7 +239,7 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
     Pathing.invalidate();
     const st = buildTradeState(313, ["crop_rotation", "deep_veins", "tax_ledgers", "larger_carts", "paved_roads", "extra_caravan"]);
     runTrade(st, 140);
-    return st.treasury + "|" + st.carts.length + "|" + (st.towns[1].stock.grain || 0);
+    return st.treasury + "|" + st.carts.length + "|" + (st.towns[1].stock.ore || 0);
   }
   ok("research effects are deterministic across identical runs", run() === run());
 })();

@@ -30,14 +30,13 @@ function town(goodId, stock, demand) {
 
 // ---- catalog: goods ----
 const EXPECTED = {
-  1: ["wood", "stone", "ore", "grain", "fish", "wool"],
+  1: ["wood", "stone", "ore", "grain", "potato", "fish", "wool"],  // EV3: +potato
   2: ["planks", "tools", "flour", "beer", "cloth"],
   3: ["bread", "clothes", "jewelry", "furniture"],
 };
-// NOTE: GDD §5.1 / TASKS.md call this "14 goods" but the enumerated list is
-// actually 15 (tier1=6, tier2=5, tier3=4). We implement every named good.
+// EV3 added `potato` (tier-1 basic food) → 16 goods (tier1=7, tier2=5, tier3=4).
 const enumeratedCount = EXPECTED[1].length + EXPECTED[2].length + EXPECTED[3].length;
-ok("goods count matches enumerated list (15)", Object.keys(CONFIG.goods).length === enumeratedCount);
+ok("goods count matches enumerated list (16)", Object.keys(CONFIG.goods).length === enumeratedCount);
 for (const tier of [1, 2, 3]) {
   for (const id of EXPECTED[tier]) {
     ok(`good ${id} exists in tier ${tier}`, CONFIG.goods[id] && CONFIG.goods[id].tier === tier);
