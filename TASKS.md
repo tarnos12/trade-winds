@@ -49,6 +49,28 @@ Two independent slices; merge order TR-A → TR-B.
 | TR-A — external-buyer trade logic (pure `Trade.tick`) | #2 | one external trader per road-connected city (from level 1) buys its biggest shortfall from a reachable surplus city; seller passively sells; tariff (`state.tariffRate`) → treasury; deterministic; update `trade.test.js` | 🔲 |
 | TR-B — internal trader visuals | #4 | per-city internal traders (small carts shuttling produced goods between buildings and the city center — read-only over state, module-local like Juice); visually distinguish external-trader carts | 🔲 |
 
+## Milestone: Trade correctness + trade UI — QUEUED (folds into/after Trade rework)
+
+Trade logic refinements (extend `Trade.tick`):
+- **Cart capacity 10** per external trade (a trader takes up to 10 items).
+- **Reserve/lock at dispatch:** when a city dispatches its trader to buy N of good
+  G from seller S, **lock N of G at S** (Sim consumption + other traders see only
+  the un-reserved remainder) AND **commit the buyer's gold** — the trader leaves
+  carrying `agreedPrice*N` gold deducted from the buyer's city gold at departure.
+- **Agreed price at departure:** the purchase is settled at the price agreed when
+  the trader LEFT, even if market prices change in transit (the carried gold is
+  exactly the agreed amount). On arrival: seller loses the reserved N + gains gold,
+  tariff → treasury; on return: buyer gains N in stock.
+- Release reservations/gold if a trade is somehow invalidated.
+
+Trade UI:
+- **City panel Stock/Prices:** per-good **↑ (wants to buy / shortfall)** and **↓
+  (selling / surplus)** arrows, plus a column for **how much** it wants to buy.
+- **City Overview:** progress bars for the **external trader** and **internal
+  traders** showing utilization (busy vs idle).
+- **Hover the external trader** → tooltip of active trades (buying G from City #N)
+  / "Idle" when not trading.
+
 ## Milestone: Economy rebalance + City cards — QUEUED (after Trade rework)
 
 Author directives (implement as one balance pass + a city-cards UI slice):
