@@ -37,12 +37,17 @@ charges that city); **gaps** enforced so different cities and the castle never
 touch (`canPlaceTown`). Town panel Buildings tab is read-only. Tests: `buildings`
 59. Also: terrain tile icons + starting fog reveal +2.
 
-## Milestone: Trade rework (internal + external traders) — NEXT
+## Milestone: Trade rework (internal + external traders) — IN PROGRESS
 Author model: each city has **internal traders** (move goods between its own
 buildings) and **one external trader** that BUYS shortfalls from other cities
 (selling is passive — a city only sells when bought from). External trader
 available early (not gated on level 2) so trade is visible; tariff → treasury.
-See CLAUDE.md status for the diagnosis of "no trading" (L1 gate + steps).
+Two independent slices; merge order TR-A → TR-B.
+
+| Task | Slot | Scope | Status |
+|---|---|---|---|
+| TR-A — external-buyer trade logic (pure `Trade.tick`) | #2 | one external trader per road-connected city (from level 1) buys its biggest shortfall from a reachable surplus city; seller passively sells; tariff (`state.tariffRate`) → treasury; deterministic; update `trade.test.js` | 🔲 |
+| TR-B — internal trader visuals | #4 | per-city internal traders (small carts shuttling produced goods between buildings and the city center — read-only over state, module-local like Juice); visually distinguish external-trader carts | 🔲 |
 
 ## Done
 
