@@ -308,10 +308,89 @@
     opacity: 0; transform: translateY(-8px); transition: opacity 0.25s, transform 0.25s; max-width: 80vw; text-align: center; }
   .toast.in { opacity: 1; transform: translateY(0); }
   /* === KINGDOM/EVENTS CSS END === */
+
+  /* === START-SCREEN === */
+  #startScreen {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(1200px 700px at 50% 30%, rgba(70,52,28,0.55), rgba(20,16,10,0.0)),
+      linear-gradient(160deg, rgba(20,16,10,0.94), rgba(20,16,10,0.88));
+    backdrop-filter: blur(2px);
+    opacity: 0; transition: opacity 0.35s ease;
+  }
+  #startScreen.in { opacity: 1; }
+  #startScreen.hidden { display: none; }
+  .ss-card {
+    width: min(520px, 92vw);
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 14px;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,220,160,0.06);
+    padding: 30px 34px 26px;
+    text-align: center;
+  }
+  .ss-title {
+    font-size: 46px; letter-spacing: 1px; font-weight: bold;
+    color: var(--accent); text-shadow: 0 2px 6px #000, 0 0 24px rgba(201,138,60,0.25);
+    margin: 0;
+  }
+  .ss-tagline { margin: 6px 0 0; font-size: 15px; opacity: 0.78; font-style: italic; }
+  .ss-blurb {
+    margin: 18px auto 0; max-width: 400px; font-size: 13px; line-height: 1.5;
+    opacity: 0.72; text-align: left;
+  }
+  .ss-blurb b { color: var(--accent); font-weight: bold; }
+  .ss-seedrow {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin: 22px 0 6px;
+  }
+  .ss-seedrow label { font-size: 12px; opacity: 0.8; }
+  #ssSeed {
+    width: 180px; background: #1c160f; color: var(--paper);
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    padding: 7px 9px; font-family: inherit; font-size: 14px; text-align: center;
+  }
+  #ssDice { padding: 7px 10px; }
+  .ss-actions { display: flex; gap: 12px; justify-content: center; margin-top: 18px; }
+  .ss-btn {
+    font-size: 16px; padding: 11px 26px; border-radius: 9px; font-weight: bold;
+    letter-spacing: 0.3px;
+  }
+  #ssNew { background: var(--accent); color: #201607; border-color: #e0a860; }
+  #ssNew:hover { background: #e0a860; }
+  #ssContinue:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ss-foot { margin-top: 20px; font-size: 11px; opacity: 0.45; }
+  /* === START-SCREEN END === */
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+
+<!-- === START-SCREEN === -->
+<div id="startScreen" class="hidden" role="dialog" aria-label="Trade Winds — start">
+  <div class="ss-card">
+    <h1 class="ss-title">Trade&nbsp;Winds</h1>
+    <p class="ss-tagline">Found towns, let them trade, tax the winds of commerce.</p>
+    <div class="ss-blurb">
+      <b>Found towns</b> on fertile land and coasts.<br />
+      <b>Place buildings</b> so each town produces and consumes goods.<br />
+      <b>Connect roads</b> so autonomous carts can trade between them.<br />
+      <b>Earn a tariff</b> on every sale and upgrade the King's castle.
+    </div>
+    <div class="ss-seedrow">
+      <label for="ssSeed">Seed</label>
+      <input id="ssSeed" type="text" spellcheck="false" />
+      <button id="ssDice" title="Random seed">🎲</button>
+    </div>
+    <div class="ss-actions">
+      <button id="ssNew" class="ss-btn">New Game</button>
+      <button id="ssContinue" class="ss-btn" disabled>Continue</button>
+    </div>
+    <div class="ss-foot">A Let&nbsp;Them&nbsp;Trade–inspired economy game · single file · offline</div>
+  </div>
+</div>
+<!-- === START-SCREEN END === -->
 
 <div id="topbar">
   <div class="brand">Trade&nbsp;Winds <small>· build · trade · tariff</small></div>
@@ -4082,13 +4161,83 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   });
   // === AUDIO END ===
 
+  // === START-SCREEN ===
+  // Title / start overlay + boot gating (P5D-B). The rAF render loop keeps
+  // running behind the overlay (the map is a paused backdrop), but the economy
+  // is halted (state.gameSpeed = 0) until the player picks New Game / Continue.
+  // A read-only save probe so we can enable Continue without mutating state.
+  function hasValidSave() {
+    let data = null;
+    try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
+    return !!migrate(data);
+  }
+
+  const StartScreen = (() => {
+    const overlay = document.getElementById("startScreen");
+    const seedEl = document.getElementById("ssSeed");
+    const btnNew = document.getElementById("ssNew");
+    const btnContinue = document.getElementById("ssContinue");
+    const btnDice = document.getElementById("ssDice");
+    let open = false;
+
+    function refreshContinue() {
+      const ok = hasValidSave();
+      btnContinue.disabled = !ok;
+      return ok;
+    }
+    function show() {
+      open = true;
+      state.gameSpeed = 0;                       // pause economy while the menu is up
+      overlay.classList.remove("hidden");
+      seedEl.value = state.seedInput || randomSeed();
+      refreshContinue();
+      requestAnimationFrame(() => overlay.classList.add("in"));
+    }
+    function hide() {
+      open = false;
+      overlay.classList.remove("in");
+      overlay.classList.add("hidden");
+    }
+    function begin() {                           // resume play + close the overlay
+      setSpeed(1);   // route through P5D-A so the speed toolbar syncs to 1x on start
+      hide();
+    }
+    function startNew(seedArg) {
+      const seed = (typeof seedArg === "string" && seedArg.trim())
+        ? seedArg.trim()
+        : (seedEl.value.trim() || randomSeed());
+      newGame(seed);
+      setMode(state.mode);
+      begin();
+    }
+    function continueSave() {
+      if (!loadGame()) { refreshContinue(); return false; }   // no valid save
+      setMode(state.mode);
+      begin();
+      return true;
+    }
+
+    btnNew.addEventListener("click", () => startNew());
+    btnContinue.addEventListener("click", () => continueSave());
+    btnDice.addEventListener("click", () => { seedEl.value = randomSeed(); });
+    seedEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); startNew(); } });
+
+    return { show, hide, isOpen: () => open, startNew, continueSave, refreshContinue };
+  })();
+  window.StartScreen = StartScreen;
+  // === START-SCREEN END ===
+
   // ---------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------
   resize();
+  // Pre-generate a backdrop map: load the existing save (so Continue is
+  // instant) if one is valid, else a fresh random map. The start overlay then
+  // gates gameplay — nothing auto-starts until New Game / Continue is chosen.
   if (!loadGame()) newGame(randomSeed());
   setMode(state.mode);
   setSpeed(state.gameSpeed);   // === SPEED-UI === (P5D-A) reflect speed in the toolbar at boot
+  StartScreen.show();          // === START-SCREEN === (P5D-B) gate gameplay until New/Continue
   requestAnimationFrame(frame);
 
   // expose a little for debugging in the console
