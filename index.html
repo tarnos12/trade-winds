@@ -332,6 +332,39 @@
     overflow: hidden; margin-top: 5px; }
   .rs-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
   /* === RESEARCH-UI CSS END === */
+  /* === CB-C CSS START === per-building detail panel (mirrors the .tp-* look) */
+  #buildingPanel {
+    position: fixed; top: 56px; right: 12px; width: 300px;
+    max-height: calc(100vh - 84px);
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+    font-size: 13px; z-index: 23; overflow: hidden;
+  }
+  #buildingPanel.hidden { display: none; }
+  .bp-status { font-weight: bold; }
+  .bp-status.built { color: #a6e0a8; }
+  .bp-chip {
+    display: inline-block; padding: 2px 8px; margin: 2px 5px 2px 0; border-radius: 10px;
+    font-size: 11px; font-variant-numeric: tabular-nums; background: #1c160f;
+    border: 1px solid var(--panel-edge);
+  }
+  .bp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.4); }
+  .bp-slots { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 6px; }
+  .bp-slot {
+    width: 27px; height: 27px; border-radius: 6px; border: 1px solid var(--panel-edge);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-size: 13px; background: #1c160f; user-select: none;
+  }
+  .bp-slot.filled { background: rgba(111,191,115,0.22); border-color: #4f9d5a; }
+  .bp-slot.open { border-color: #6fa8d6; }
+  .bp-slot.closed { background: #2a1c14; border-color: #7a4a3a; color: #e0844a; }
+  .bp-slot:hover { border-color: var(--accent); }
+  .bp-star { padding: 4px 12px; font-size: 13px; border-radius: 6px; }
+  .bp-star.on { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  .tp-blist { line-height: 1.6; font-size: 12.5px; opacity: 0.9; margin: 2px 0 4px; }
+  /* === CB-C CSS END === */
   /* === PROGRESS-UI CSS START === (P4-B — prestige HUD, quest banner, upgrades, win) */
   #hud .prestige { color: #d9c169; font-weight: bold; }
   /* Town-panel + castle-panel upgrade block (reuses .tp-* look). */
@@ -633,6 +666,16 @@
   <div class="tp-body" id="tpBody"></div>
 </div>
 <!-- === TOWN-UI HTML END === -->
+
+<!-- === CB-C HTML START === (per-building detail panel — opened by clicking a building) -->
+<div id="buildingPanel" class="hidden" aria-hidden="true">
+  <div class="tp-head">
+    <div class="tp-title"><span id="bpName">Building</span><span class="tp-lvl" id="bpTier"></span></div>
+    <button id="bpClose" class="tp-close" title="Close">✕</button>
+  </div>
+  <div class="tp-body" id="bpBody"></div>
+</div>
+<!-- === CB-C HTML END === -->
 
 <!-- === CASTLE-UI HTML START === (T9 / slot #4 — castle info + warehouse panel).
      CP: consolidates the castle/kingdom info (prestige, castle level + upgrade,
@@ -3920,20 +3963,16 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (!t.buildings.length) {
       html += `<div class="tp-empty">No buildings placed yet. Use the build bar to add one bordering this city.</div>`;
     } else {
-      let rows = "";
-      for (const b of t.buildings) {
+      // === CB-C: per-building detail now lives in the #buildingPanel (click a
+      // building on the map). Keep this tab a compact, read-only name list.
+      const names = t.buildings.map(b => {
         const def = CONFIG.buildings[b.typeId] || {};
-        const out = def.output ? `${GOOD_LABEL(def.output.goodId)} ×${def.output.ratePerWorker}/wkr`
-                  : (def.kind === "house" ? `+${def.houseCapacity || 0} ${def.houseTier || ""}` : "—");
-        const slots = def.workerSlots != null ? def.workerSlots : (def.kind === "house" ? "—" : "?");
-        rows += `<tr>
-          <td>${esc(def.name || b.typeId)}</td>
-          <td>${esc(out)}</td>
-          <td>${def.kind === "house" ? "—" : (b.workers || 0) + "/" + slots}</td>
-          <td>${b.q},${b.r}</td></tr>`;
-      }
-      html += `<table class="tp-tbl">
-        <tr><th>Building</th><th>Output</th><th>Wkr</th><th>Hex</th></tr>${rows}</table>`;
+        const uc = (b && b.built === false) ? " 🔧" : "";   // under construction
+        return esc(def.name || b.typeId) + uc;
+      });
+      html += `<div class="tp-blist">${names.join(", ")}</div>`;
+      html += `<div class="tp-hint2">Click a building on the map for its details, workers and slots.</div>`;
+      // === /CB-C ===
     }
     return html;
   }
@@ -4319,13 +4358,174 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
+    // === CB-C: a non-drag click on a BUILDING hex opens that building's detail
+    // panel (and never the town panel). Town-CENTRE clicks still open the town.
+    const hit = buildingAtHex(h.q, h.r);
+    if (hit) { openBuildingPanel(hit.town, hit.b); return; }
+    // === /CB-C ===
     const town = state.towns.find(t => t.q === h.q && t.r === h.r);
-    if (town) openTownPanel(town); else if (activeTown) closeTownPanel();
+    if (town) { closeBuildingPanel(); openTownPanel(town); }
+    else { if (activeTown) closeTownPanel(); if (bpBuilding) closeBuildingPanel(); }
   });
 
   // Live refresh: reflect stock/price/pop changes as the economy ticks (T4 later)
   // and keep prices lerping via priceFor even before Sim.tick exists.
   setInterval(() => { if (activeTown) renderTownPanel(); }, 500);
+
+  // === CB-C: per-building detail panel ======================================
+  // A DOM panel (#buildingPanel) mirroring the town panel look, showing ONE
+  // building: construction progress, output/inputs, workers, per-slot open/close
+  // toggles (b.closedSlots), and a priority star (b.priority). Everything is
+  // guarded so it runs before CB-A merges (legacy buildings lack the new fields)
+  // and cleanly uses CB-A's pure helpers once they exist.
+  const bpEl = document.getElementById("buildingPanel");
+  const bpNameEl = document.getElementById("bpName");
+  const bpTierEl = document.getElementById("bpTier");
+  const bpBodyEl = document.getElementById("bpBody");
+  let bpBuilding = null;     // the town.buildings[] entry currently shown
+  let bpTown = null;         // its owning town
+
+  // Local fallbacks: use CB-A's helpers when present, otherwise compute inline so
+  // this slice works standalone (and never throws on boot).
+  function bpResourceCost(def) {
+    if (Buildings && typeof Buildings.resourceCost === "function") return Buildings.resourceCost(def);
+    const out = {};
+    if (def && def.cost) for (const g in def.cost) { if (g === "gold") continue; if (def.cost[g] > 0) out[g] = def.cost[g]; }
+    return out;
+  }
+  function bpConstructionNeed(b) {
+    if (Buildings && typeof Buildings.constructionNeed === "function") return Buildings.constructionNeed(b);
+    if (!b || b.built !== false) return {};
+    const rc = bpResourceCost(CONFIG.buildings[b.typeId]); const d = b.delivered || {}; const out = {};
+    for (const g in rc) { const rem = rc[g] - (d[g] || 0); if (rem > 0) out[g] = rem; }
+    return out;
+  }
+  const bpIsBuilt = b => !b || b.built !== false;   // legacy (no flag) → built
+
+  // Find the building sitting on hex (q,r) plus its town, or null.
+  function buildingAtHex(q, r) {
+    const towns = (state && Array.isArray(state.towns)) ? state.towns : [];
+    for (const t of towns) {
+      const list = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of list) if (b && b.q === q && b.r === r) return { town: t, b };
+    }
+    return null;
+  }
+
+  function openBuildingPanel(town, b) {
+    bpTown = town; bpBuilding = b;
+    closeTownPanel();                    // one detail panel at a time
+    bpEl.classList.remove("hidden");
+    bpEl.setAttribute("aria-hidden", "false");
+    renderBuildingPanel();
+  }
+  function closeBuildingPanel() {
+    bpBuilding = null; bpTown = null;
+    bpEl.classList.add("hidden");
+    bpEl.setAttribute("aria-hidden", "true");
+  }
+
+  function renderBuildingPanel() {
+    const b = bpBuilding, town = bpTown;
+    if (!b) return;
+    // panel outlived its building/town (erased)? close.
+    if (!town || !state.towns.includes(town) ||
+        !Array.isArray(town.buildings) || town.buildings.indexOf(b) < 0) {
+      closeBuildingPanel(); return;
+    }
+    const def = CONFIG.buildings[b.typeId] || {};
+    const tier = def.workerTier || def.houseTier || "";
+    bpNameEl.textContent = def.name || b.typeId;
+    bpTierEl.textContent = (def.kind || "") + (tier ? " · " + tier : "");
+
+    let html = `<div class="tp-row"><span class="k">Hex</span><span class="v">${b.q}, ${b.r}</span></div>`;
+
+    // --- construction status ---
+    if (bpIsBuilt(b)) {
+      html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
+    } else {
+      const rc = bpResourceCost(def);
+      const delivered = b.delivered || {};
+      html += `<div class="tp-sec">Under construction</div>`;
+      let chips = "";
+      for (const gid in rc) {
+        const c = goodColor(gid);
+        chips += `<span class="bp-chip" style="border-color:${c}"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))} ${fmt(delivered[gid] || 0)}/${fmt(rc[gid])}</span>`;
+      }
+      html += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
+      const need = bpConstructionNeed(b);
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + GOOD_LABEL(g)).join(" · ");
+      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
+    }
+
+    // --- output / inputs / housing ---
+    if (def.output) {
+      const c = goodColor(def.output.goodId);
+      html += `<div class="tp-sec">Output</div>
+        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${def.output.ratePerWorker}/wkr</span></div>`;
+    }
+    if (def.inputs && Object.keys(def.inputs).length) {
+      html += `<div class="tp-sec">Inputs / unit</div>`;
+      for (const gid in def.inputs) {
+        const c = goodColor(gid);
+        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
+      }
+    }
+    if (def.kind === "house") {
+      html += `<div class="tp-sec">Housing</div>
+        <div class="tp-row"><span class="k">Capacity</span><span class="v">+${def.houseCapacity || 0} ${esc(tier)}</span></div>`;
+    }
+
+    // --- workers + slot pips (producers only; houses have no workerTier) ---
+    if (def.workerTier) {
+      const total = def.workerSlots || 0;
+      const closed = Math.max(0, Math.min(total, b.closedSlots || 0));
+      const effective = total - closed;
+      const workers = Math.round(b.workers || 0);
+      html += `<div class="tp-sec">Workers — ${workers} / ${effective}${closed ? " · " + closed + " closed" : ""}</div>`;
+      let pips = "";
+      for (let i = 0; i < total; i++) {
+        const isClosed = i >= effective;          // the last `closed` slots are locked
+        if (isClosed) pips += `<div class="bp-slot closed" data-slot title="Closed — click to open">🔒</div>`;
+        else if (i < workers) pips += `<div class="bp-slot filled" data-slot title="Staffed — click to close this slot">👷</div>`;
+        else pips += `<div class="bp-slot open" data-slot title="Open — click to close this slot"></div>`;
+      }
+      html += `<div class="bp-slots">${pips}</div>`;
+      html += `<div class="tp-hint2">Click a slot to open/close it — closed slots take no workers.</div>`;
+    }
+
+    // --- priority star ---
+    const pri = !!b.priority;
+    html += `<div class="tp-sec">Priority</div>
+      <button class="bp-star ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button>`;
+
+    bpBodyEl.innerHTML = html;
+  }
+
+  // Slot toggles + priority (event delegation; b.closedSlots is a count in [0,total]).
+  bpBodyEl.addEventListener("click", (e) => {
+    const b = bpBuilding; if (!b) return;
+    const slot = e.target.closest("[data-slot]");
+    if (slot) {
+      const def = CONFIG.buildings[b.typeId] || {};
+      const total = def.workerSlots || 0;
+      let closed = Math.max(0, Math.min(total, b.closedSlots || 0));
+      closed = slot.classList.contains("closed") ? closed - 1 : closed + 1;
+      b.closedSlots = Math.max(0, Math.min(total, closed));
+      renderBuildingPanel();
+      return;
+    }
+    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); }
+  });
+  document.getElementById("bpClose").addEventListener("click", closeBuildingPanel);
+
+  // Live refresh while a building panel is open (workers/delivery update as ticks run).
+  setInterval(() => { if (bpBuilding) renderBuildingPanel(); }, 500);
+
+  window.BuildingUI = { openBuildingPanel, closeBuildingPanel, buildingAtHex,
+                        get openBuilding() { return bpBuilding; },
+                        get openBuildingTown() { return bpTown; } };
+  // === /CB-C ===
 
   // Expose for headless smoke test / console debugging.
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
