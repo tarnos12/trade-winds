@@ -29,20 +29,20 @@ pop-in — pooled/capped/zoom-culled/reduced-motion-aware); procedural WebAudio 
 + §13 open questions): campaign scenarios, start screen, tutorial, title
 confirmation, win-condition framing, combat scope, and the `tariff_slider` UI.
 
-## Milestone: Placement v2 (contiguous cities) — IN PROGRESS
+## Milestone: Placement v2 (contiguous cities) ✅ DONE
 
-Author request: buildings attach to a city by **adjacency/contiguity** (not a
-fixed radius); build menu moves to the **bottom**; enforce **gaps** so different
-cities (and the castle) never touch. Merge order PV2-A → PV2-B.
+Merged PV2-A → PV2-B. Buildings attach to a city by footprint **adjacency** (not
+radius); build menu is a persistent **bottom bar** (auto-joins the adjacent city,
+charges that city); **gaps** enforced so different cities and the castle never
+touch (`canPlaceTown`). Town panel Buildings tab is read-only. Tests: `buildings`
+59. Also: terrain tile icons + starting fog reveal +2.
 
-Assumptions (stated for correction): building auto-joins the single city its hex
-borders; not-adjacent-to-any-city ⇒ invalid; radius replaced by contiguity +
-slot cap; castle center = a footprint that enforces the gap (not a buildable city).
-
-| Task | Slot | Scope | Status |
-|---|---|---|---|
-| PV2-A — adjacency placement model (pure `Buildings`) | #2 | replace radius `canPlace` with `canPlaceBuilding(state,typeId,q,r)→{ok,town,reason}` (owning city by footprint adjacency; reject if adjacent to a 2nd city or the castle; terrain/occupancy/slotCap/afford) + `canPlaceTown(state,q,r)` (gap from all footprints + castle) + footprint/owner helpers + castle-center const; update `buildings.test.js` | ✅ merged (buildings 59) |
-| PV2-B — bottom build bar + wiring | #4 | move build menu to a persistent bottom bar (Extractors/Processors/Houses, cost, slots); placement uses `canPlaceBuilding` (highlight valid hexes near any city, auto-join the returned town); route town-center placement through `canPlaceTown`; keep building render | 🔲 |
+## Milestone: Trade rework (internal + external traders) — NEXT
+Author model: each city has **internal traders** (move goods between its own
+buildings) and **one external trader** that BUYS shortfalls from other cities
+(selling is passive — a city only sells when bought from). External trader
+available early (not gated on level 2) so trade is visible; tariff → treasury.
+See CLAUDE.md status for the diagnosis of "no trading" (L1 gate + steps).
 
 ## Done
 
