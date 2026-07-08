@@ -81,7 +81,8 @@ ok("basic buildings are wood-only (lumberjack/farm/hut)", [
 const kinds = Object.values(CONFIG.buildings).map(b => b.kind);
 ok("catalog has extractors/processors/houses", kinds.includes("extractor") && kinds.includes("processor") && kinds.includes("house"));
 ok("extractors are peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant"));
-ok("processors are worker-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "processor").every(b => b.workerTier === "worker"));
+// Processors are worker-staffed, except the starter sawmill which is peasant-run (basic wood→planks).
+ok("processors are worker- or peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "processor").every(b => b.workerTier === "worker" || b.workerTier === "peasant"));
 ok("houses declare houseTier + houseCapacity, no output/workers",
   Object.values(CONFIG.buildings).filter(b => b.kind === "house").every(b => b.houseTier && b.houseCapacity > 0 && !b.output && !b.workerSlots));
 ok("expected extractor ids present", ["lumberjack", "farm", "miner", "quarry", "fishery", "shepherd"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "extractor"));

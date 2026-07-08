@@ -994,7 +994,7 @@ Object.assign(CONFIG, {
     // --- processors (worker labour, any buildable town hex) ---
     sawmill: {
       id: "sawmill", name: "Sawmill", kind: "processor",
-      terrain: null, workerTier: "worker",
+      terrain: null, workerTier: "peasant",
       inputs: { wood: 2 }, output: { goodId: "planks", ratePerWorker: 1 },
       // BAL: starter — the one basic processor, wood only so a fresh city can raise
       // it from its founding wood and start refining planks immediately.
@@ -4053,15 +4053,21 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     buildBarCatsEl.innerHTML = html;
     refreshCatButtons();
   }
-  // Reflect locked/open state on the category buttons (research can unlock live).
+  // A tier tab is shown only once it has at least one UNLOCKED building; Build is
+  // always shown. So Worker/Burgher tabs stay hidden until their research lands.
+  function bbCatVisible(cat) {
+    if (!cat) return true;
+    if (cat.kind === "special") return true;
+    return bbTierBuildings(cat.tier).some(bbBuildingAvailable);
+  }
+  // Reflect visibility/open state on the category buttons (research can unlock live).
   function refreshCatButtons() {
     buildBarCatsEl.querySelectorAll(".bb-cat").forEach(btn => {
       const cat = BUILD_CATEGORIES.find(c => c.id === btn.dataset.cat);
-      const locked = cat ? bbCatLocked(cat) : false;
-      btn.classList.toggle("locked", locked);
+      const visible = bbCatVisible(cat);
+      btn.style.display = visible ? "" : "none";
       btn.classList.toggle("open", bbOpenCat === btn.dataset.cat);
-      btn.setAttribute("aria-disabled", locked ? "true" : "false");
-      btn.title = locked ? ("Research " + bbGateName(cat) + " to unlock") : (cat ? cat.label : "");
+      btn.title = cat ? cat.label : "";
     });
   }
   // Render the flyout body for a category into buildBarFlyoutEl.
@@ -4089,20 +4095,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         <div class="bb-fly-lock">🔒 Locked — research <b>${esc(bbGateName(cat))}</b> to unlock ${esc(cat.label.toLowerCase())} construction.</div>`;
       return;
     }
-    const defs = bbTierBuildings(cat.tier);
+    const defs = bbTierBuildings(cat.tier).filter(bbBuildingAvailable);
     let html = `<div class="bb-fly-title">${cat.icon} ${esc(cat.label)}</div>`;
     for (const def of defs) {
-      // BAL: per-building lock — greyed + disabled with a research tooltip; the
-      // click handler ignores .disabled so it can't be selected/placed.
-      if (!bbBuildingAvailable(def)) {
-        const nodeName = bbUnlockNodeName(def);
-        const tip = esc("🔒 Research " + nodeName + " to unlock " + def.name);
-        html += `<button type="button" class="bb-btn disabled locked" data-typeid="${esc(def.id)}"
-          aria-disabled="true" title="${tip}">
-          <span class="bb-name">🔒 ${esc(def.name)}</span>
-          <span class="bb-cost">Research ${esc(nodeName)}</span></button>`;
-        continue;
-      }
+      // Hide locked buildings entirely — only unlocked (researched/starter) ones show.
       const tip = esc(def.name + " — " + bbTerrainReq(def) + " · " + bbCostStr(def.cost));
       const active = placing && placing.typeId === def.id;
       html += `<button type="button" class="bb-btn${active ? " active" : ""}" data-typeid="${esc(def.id)}" title="${tip}">
