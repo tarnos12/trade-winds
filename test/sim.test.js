@@ -346,5 +346,124 @@ withCap2House(() => {
      (t.demand.wood > 0) && (t.demand.potato > 0) && (t.demand.fish > 0) && (t.demand.wool > 0));
 }
 
+// ========================================================================
+// CB-A) Construction & building logistics: built/delivery/priority/closedSlots.
+// ========================================================================
+
+// Mimic the UI placement push (built decided by Buildings.isInstant).
+function place(typeId, q, r, over) {
+  const def = CONFIG.buildings[typeId];
+  return Object.assign({
+    typeId, q, r, workers: 0,
+    built: Buildings.isInstant(def), delivered: {}, closedSlots: 0, priority: false,
+  }, over || {});
+}
+
+// CB-A.1) An UNBUILT building gets 0 workers and produces nothing — even with
+// ample labour AND its production input on the shelf. (mill: cost {wood,stone},
+// input {grain}. Stock has grain but NO wood/stone, so it never gets built.)
+{
+  const t = town({ pop: { peasants: 0, workers: 20, burghers: 0 },
+                   stock: { grain: 1000 },
+                   buildings: [place("mill", 0, 1)] });
+  ok("CB-A: mill placed under construction (built:false)", t.buildings[0].built === false);
+  for (let i = 0; i < 10; i++) Sim.tick({ towns: [t] });
+  ok("CB-A: unbuilt building is assigned 0 workers", t.buildings[0].workers === 0);
+  ok("CB-A: unbuilt building produces nothing (no flour)", !(t.stock.flour > 0));
+  ok("CB-A: unbuilt building never builds without materials", t.buildings[0].built === false);
+}
+
+// CB-A.2) Construction delivery: materials move from town.stock into the
+// building until its resource cost is met, then it flips built:true. delivered
+// equals the resource cost; town.stock drops by exactly the delivered amount.
+{
+  const rc = Buildings.resourceCost(CONFIG.buildings.sawmill); // { wood: 30 }
+  const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },   // pop 0 → no wood consumption
+                   stock: { wood: 50 },   // below storageCap (80) so the clamp doesn't confound accounting
+                   buildings: [place("sawmill", 0, 1)] });
+  const wood0 = t.stock.wood;
+  for (let i = 0; i < 12; i++) Sim.tick({ towns: [t] });
+  ok("CB-A: delivery flips the building to built:true", t.buildings[0].built === true);
+  ok("CB-A: delivered equals the resource cost",
+     JSON.stringify(t.buildings[0].delivered) === JSON.stringify(rc));
+  ok("CB-A: town.stock dropped by EXACTLY the delivered amount",
+     t.stock.wood === wood0 - rc.wood);
+}
+
+// CB-A.3) Delivery respects the shared per-tick budget (deliveryRate=5). A
+// single unbuilt building receives at most deliveryRate units in one tick.
+{
+  const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
+                   stock: { wood: 50 },
+                   buildings: [place("sawmill", 0, 1)] });
+  Sim.tick({ towns: [t] });
+  const moved = t.buildings[0].delivered.wood || 0;
+  ok("CB-A: one tick delivers at most deliveryRate units", moved === CONFIG.town.deliveryRate);
+  ok("CONFIG.town.deliveryRate === 5", CONFIG.town.deliveryRate === 5);
+}
+
+// CB-A.4) An unbuilt building's remaining need is published to town.demand so
+// the external trader buys the construction materials (mill: wood 25, stone 15;
+// pop 0 and no materials in stock ⇒ demand is purely construction demand).
+{
+  const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
+                   stock: {},
+                   buildings: [place("mill", 0, 1)] });
+  Sim.tick({ towns: [t] });
+  const cost = CONFIG.buildings.mill.cost;
+  ok("CB-A: unbuilt building's remaining need appears in town.demand",
+     t.demand.wood === cost.wood && t.demand.stone === cost.stone);
+}
+
+// CB-A.5) A gold-only founding-kit starter comes out built:true and functions
+// EXACTLY as a legacy building (no built field) — same production.
+{
+  ok("CB-A: gold-only starter is instant (built:true on placement)",
+     place("potato_farm", 0, 1).built === true && place("hut", 0, 2).built === true);
+  const houses = () => [place("hut", 0, 2), place("hut", 0, 3), place("hut", 0, 4)];
+  const modern = town({ id: 1, pop: { peasants: 3, workers: 0, burghers: 0 },
+                        stock: { wood: 100000 },
+                        buildings: [place("potato_farm", 0, 1), ...houses()] });
+  const legacy = town({ id: 2, pop: { peasants: 3, workers: 0, burghers: 0 },
+                        stock: { wood: 100000 },
+                        buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
+  for (let i = 0; i < 50; i++) { Sim.tick({ towns: [modern] }); Sim.tick({ towns: [legacy] }); }
+  ok("CB-A: instant starter produces potato", modern.stock.potato > 0);
+  ok("CB-A: instant starter behaves identically to a legacy building",
+     Math.abs((modern.stock.potato || 0) - (legacy.stock.potato || 0)) < 1e-9 &&
+     modern.pop.peasants === legacy.pop.peasants);
+}
+
+// CB-A.6) closedSlots reduces assigned workers by that many (effective slots).
+{
+  const t = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
+                   stock: { wood: 100000 },
+                   buildings: [place("lumberjack", 0, 1, { closedSlots: 1 })] });
+  Sim.tick({ towns: [t] });
+  const full = CONFIG.buildings.lumberjack.workerSlots; // 3
+  ok("CB-A: closedSlots:1 → assigned workers = slots − 1", t.buildings[0].workers === full - 1);
+
+  const t2 = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
+                    stock: { wood: 100000 },
+                    buildings: [place("lumberjack", 0, 1, { closedSlots: full + 5 })] });
+  Sim.tick({ towns: [t2] });
+  ok("CB-A: closedSlots ≥ slots → 0 workers (never negative)", t2.buildings[0].workers === 0);
+}
+
+// CB-A.7) Priority buildings are staffed FIRST — even when a non-priority one
+// comes earlier in the array. Pool of 3 peasants, two 3-slot lumberjacks: the
+// priority one gets all 3, the other gets 0.
+{
+  const t = town({ pop: { peasants: 3, workers: 0, burghers: 0 },
+                   stock: { wood: 100000 },
+                   buildings: [
+                     place("lumberjack", 0, 1, { priority: false }),  // earlier in array
+                     place("lumberjack", 0, 2, { priority: true }),   // but priority
+                   ] });
+  Sim.tick({ towns: [t] });
+  ok("CB-A: priority building staffed first (gets the whole pool)", t.buildings[1].workers === 3);
+  ok("CB-A: non-priority building left unstaffed when pool is exhausted", t.buildings[0].workers === 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

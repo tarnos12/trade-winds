@@ -202,7 +202,7 @@ units/tick from stock → `delivered`, priority buildings first).
 ### Board
 | Task | Slot | Depends on | Status |
 |---|---|---|---|
-| CB-A — construction + delivery + worker-assignment logic (pure) | #2 | contract | 🔲 |
+| CB-A — construction + delivery + worker-assignment logic (pure) | #2 | contract | ✅ merged |
 | CB-B — visuals: build-state look + missing-resources on map + trader cargo icons + priority routing | #3 | CB-A fields | 🔲 |
 | CB-C — per-building click panel (info + slot lock/unlock + ⭐) | #4 | CB-A fields | 🔲 |
 | CB-D — city-panel worker roster (icons + hover available/assigned) | #2 | CB-A fields | 🔲 |

@@ -1090,6 +1090,10 @@ Object.assign(CONFIG, {
     roadCost: 5,                // treasury gold per road hex
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
+    // CB-A: construction logistics — a town moves at most this many units of
+    // construction materials (from its own stock into buildings under
+    // construction) per economy tick, shared across all its unbuilt buildings.
+    deliveryRate: 5,
   },
 });
 
@@ -1231,22 +1235,33 @@ Sim.tick = function (State) {
       worker:  pop.workers  || 0,
       burgher: pop.burghers || 0,
     };
-    for (const b of buildings) {
+    // === CB-A: unbuilt buildings get no workers; effective slots subtract
+    // closedSlots; PRIORITY-true buildings are staffed first (two passes, in
+    // array order within each pass → deterministic). Legacy buildings lacking
+    // `built` are treated as built (b.built !== false).
+    const assignWorkers = (b) => {
+      if (!b) return;
+      if (b.built === false) { b.workers = 0; return; }   // under construction
       const type = CONFIG.buildings[b.typeId];
       if (!type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
-        b.workers = 0; continue;
+        b.workers = 0; return;
       }
+      const eff = Math.max(0, type.workerSlots - (b.closedSlots || 0));
       const tier = type.workerTier;
       const avail = pool[tier] || 0;
-      const take = Math.min(type.workerSlots, avail);
+      const take = Math.min(eff, avail);
       b.workers = take > 0 ? take : 0;
       pool[tier] = avail - b.workers;
-    }
+    };
+    for (const b of buildings) if (b && b.priority) assignWorkers(b);
+    for (const b of buildings) if (!b || !b.priority) assignWorkers(b);
+    // === /CB-A ===
 
     // --- 1. Production -------------------------------------------------
     // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
     // consuming its inputs (processors); throughput is throttled by missing inputs.
     for (const b of buildings) {
+      if (b && b.built === false) continue;   // CB-A: unbuilt buildings don't produce
       const type = CONFIG.buildings[b.typeId];
       if (!type || !type.output) continue;
       const w = b.workers || 0;
@@ -1285,6 +1300,40 @@ Sim.tick = function (State) {
       }
       stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult;
     }
+
+    // === CB-A: construction delivery ==================================
+    // Move construction materials from the town's own stock into each building
+    // that is still under construction (built:false), up to a shared per-tick
+    // budget (CONFIG.town.deliveryRate). Priority-true buildings are filled
+    // first (two-pass, array order → deterministic). A building whose remaining
+    // need reaches empty flips to built:true. EVERY unbuilt building's remaining
+    // need (whether or not the budget reached it this tick) is added to the town
+    // demand, so the external trader buys the materials the city cannot yet make.
+    {
+      let budget = (CONFIG.town && CONFIG.town.deliveryRate) || 5;
+      const order = [];
+      for (const b of buildings) if (b && b.built === false && b.priority) order.push(b);
+      for (const b of buildings) if (b && b.built === false && !b.priority) order.push(b);
+      for (const b of order) {
+        if (!b.delivered) b.delivered = {};
+        const need = Buildings.constructionNeed(b);   // resourceCost − delivered
+        for (const gid in need) {
+          if (budget <= 0) break;
+          const have = stock[gid] || 0;
+          const move = Math.min(need[gid], have, budget);
+          if (move > 0) {
+            stock[gid] = have - move;
+            b.delivered[gid] = (b.delivered[gid] || 0) + move;
+            budget -= move;
+          }
+        }
+        const remain = Buildings.constructionNeed(b);  // recompute after delivery
+        let done = true;
+        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
+        if (done) b.built = true;
+      }
+    }
+    // === /CB-A ========================================================
 
     // --- 2. Consumption + basic/extra need satisfaction ----------------
     // EV3: every resident consumes BASIC (wood+potato) + EXTRA (fish+wool, +beer
@@ -1483,6 +1532,45 @@ Buildings.housingCapacity = function (town, state) {
   return cap;
 };
 
+// === CB-A: construction data helpers ========================================
+// Buildings under construction: a placed building is `built:false` until its
+// RESOURCE cost (non-gold) has been delivered from the town's own stock. A
+// building with no resource cost (gold-only or free) is "instant" — built the
+// moment it is placed. These helpers are pure (read CONFIG + the passed args).
+
+// The non-gold portion of a building def's cost (its construction materials).
+Buildings.resourceCost = function (def) {
+  const out = {};
+  if (!def || !def.cost) return out;
+  for (const gid in def.cost) {
+    if (gid === "gold") continue;
+    if (def.cost[gid] > 0) out[gid] = def.cost[gid];
+  }
+  return out;
+};
+
+// True when a def has NO resource cost → it is built instantly on placement.
+Buildings.isInstant = function (def) {
+  for (const _ in Buildings.resourceCost(def)) return false;
+  return true;
+};
+
+// Remaining construction materials a placed building still needs =
+// resourceCost(def) − delivered, positive remainders only. A built building (or
+// a legacy one lacking the `built` flag → treated as built) needs nothing.
+Buildings.constructionNeed = function (b) {
+  if (!b || b.built !== false) return {};
+  const rc = Buildings.resourceCost(CONFIG.buildings[b.typeId]);
+  const delivered = b.delivered || {};
+  const out = {};
+  for (const gid in rc) {
+    const rem = rc[gid] - (delivered[gid] || 0);
+    if (rem > 0) out[gid] = rem;
+  }
+  return out;
+};
+// === /CB-A ===================================================================
+
 // === PLACEMENT V2 (PV2-A) — contiguous-city model ===========================
 // Cities grow as CONTIGUOUS clusters. A building belongs to the single city
 // whose FOOTPRINT it borders; the map-center castle carries a footprint too, so
@@ -1584,16 +1672,13 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
     return { ok: false, reason: "No free building slots" };
   }
 
-  // (6) affordability (EC-A money model): the GOLD cost is billed to the KINGDOM
-  //     treasury (state.treasury); the RESOURCE costs are billed to the OWNING
-  //     city's own stock. (town.gold is the city's trade budget — not touched.)
+  // (6) affordability (CB-A money model): only the GOLD cost is checked at
+  //     placement, billed to the KINGDOM treasury (state.treasury). RESOURCE
+  //     costs are NO LONGER required up front — a building may be placed "under
+  //     construction" and its traders buy the materials (delivered over time by
+  //     the Sim construction step). (town.gold is the trade budget — untouched.)
   const cost = def.cost || {};
   if ((cost.gold || 0) > (state.treasury || 0)) return { ok: false, reason: "Kingdom treasury lacks gold" };
-  const stock = owner.stock || {};
-  for (const gid in cost) {
-    if (gid === "gold") continue;
-    if ((stock[gid] || 0) < cost[gid]) return { ok: false, reason: "Not enough " + gid };
-  }
 
   return { ok: true, town: owner };
 };
@@ -1656,18 +1741,15 @@ Buildings.foundCost = function () {
   return (CONFIG.town && CONFIG.town.foundCost) || 1000;
 };
 
-// Deduct a building's cost at placement: gold → state.treasury, resources →
-// town.stock. Assumes canPlaceBuilding already passed. Mutates state + town only.
+// Deduct a building's cost at placement: only the GOLD → state.treasury (CB-A).
+// RESOURCE costs are NO LONGER deducted here — construction materials are
+// delivered from town.stock over time by the Sim construction step. Assumes
+// canPlaceBuilding already passed. Mutates state only.
 Buildings.chargeBuilding = function (state, town, typeId) {
   const def = CONFIG.buildings[typeId];
   if (!def || !town) return;
   const cost = def.cost || {};
   state.treasury = (state.treasury || 0) - (cost.gold || 0);
-  if (!town.stock) town.stock = {};
-  for (const gid in cost) {
-    if (gid === "gold") continue;
-    town.stock[gid] = (town.stock[gid] || 0) - cost[gid];
-  }
 };
 
 // Deduct the founding cost from the treasury (call once when a city is placed).
@@ -4216,7 +4298,14 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     // EC-A: split the charge — gold → Kingdom treasury, resources → city stock.
     Buildings.chargeBuilding(state, owner, placing.typeId);
     if (!Array.isArray(owner.buildings)) owner.buildings = [];
-    owner.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
+    // CB-A: a building with resource cost is placed UNDER CONSTRUCTION
+    // (built:false); a gold-only/free building is built instantly. delivered
+    // tracks materials brought in; closedSlots/priority are player logistics
+    // controls (CB-B/C/D UI).
+    owner.buildings.push({
+      typeId: placing.typeId, q: h.q, r: h.r, workers: 0,
+      built: Buildings.isInstant(def), delivered: {}, closedSlots: 0, priority: false,
+    });
     if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();
     SFX.play("place");

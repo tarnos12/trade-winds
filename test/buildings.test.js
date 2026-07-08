@@ -248,8 +248,9 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 }
 
 // ============================================================================
-// 9) affordability (EC-A): GOLD from the Kingdom treasury, RESOURCES from the
-//    owning city's stock.
+// 9) affordability (CB-A): only GOLD (from the Kingdom treasury) is checked at
+//    placement. RESOURCE costs are NO LONGER required up front — a building may
+//    be placed under construction and its traders buy the materials.
 // ============================================================================
 {
   const st = makeState();
@@ -259,14 +260,21 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   const noGold = Buildings.canPlaceBuilding(st, "lumberjack", 6, 0);
   ok("empty treasury → not ok + 'gold'", noGold.ok === false && /gold/i.test(noGold.reason));
 
-  // With a full treasury but a city missing a required RESOURCE (mill needs
-  // stone) → rejected on the resource, not the gold. (BAL: sawmill is now
-  // wood-only, so probe with a processor that still needs stone.)
+  // CB-A: a city missing a required RESOURCE (mill needs stone) is NO LONGER
+  // rejected — gold is sufficient, so placement is allowed (traders will buy it).
   const st2 = makeState();
-  const noStone = makeTown({ stock: { wood: 100 } }); // mill needs stone
+  const noStone = makeTown({ stock: { wood: 100 } }); // mill needs stone — but city lacks it
   st2.towns.push(noStone);
   const short = Buildings.canPlaceBuilding(st2, "mill", 5, -1);
-  ok("city missing resource → not ok + 'stone'", short.ok === false && /stone/i.test(short.reason));
+  ok("CB-A: city missing resource still places (gold sufficient)", short.ok === true && short.town === noStone);
+
+  // …but still rejected when the KINGDOM treasury can't cover the gold.
+  const st3 = makeState();
+  st3.treasury = 0;
+  const brokeMill = makeTown({ stock: {} });
+  st3.towns.push(brokeMill);
+  const noGoldMill = Buildings.canPlaceBuilding(st3, "mill", 5, -1);
+  ok("CB-A: treasury short → still rejected on gold", noGoldMill.ok === false && /gold/i.test(noGoldMill.reason));
 }
 
 // ============================================================================
@@ -335,9 +343,10 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 }
 
 // ============================================================================
-// 13) EC-A money model — placement splits the charge: GOLD → state.treasury,
-//     RESOURCES → the owning city's stock (town.gold untouched); founding a
-//     city costs 1000 treasury gold.
+// 13) CB-A money model — placement charges GOLD ONLY (→ state.treasury). The
+//     RESOURCE cost is NO LONGER deducted at placement (materials are delivered
+//     from town.stock over time by the Sim construction step); town.gold (trade
+//     budget) is untouched. Founding a city still costs 1000 treasury gold.
 // ============================================================================
 {
   const st = makeState();          // treasury 10000
@@ -345,14 +354,13 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   st.towns.push(town);
   const t0 = st.treasury, g0 = town.gold, wood0 = town.stock.wood, stone0 = town.stock.stone;
 
-  // mill costs { wood, stone, gold } — a good split-charge probe (BAL: sawmill is
-  // now wood-only as a starter, so use a building that still spends stone).
+  // mill costs { wood, stone, gold } — only the gold is charged now.
   const def = CONFIG.buildings.mill;
   Buildings.chargeBuilding(st, town, "mill");
   ok("chargeBuilding deducts gold from treasury", st.treasury === t0 - (def.cost.gold || 0));
   ok("chargeBuilding leaves town.gold (trade budget) untouched", town.gold === g0);
-  ok("chargeBuilding deducts wood from city stock", town.stock.wood === wood0 - (def.cost.wood || 0));
-  ok("chargeBuilding deducts stone from city stock", town.stock.stone === stone0 - (def.cost.stone || 0));
+  ok("CB-A: chargeBuilding does NOT deduct wood from city stock", town.stock.wood === wood0);
+  ok("CB-A: chargeBuilding does NOT deduct stone from city stock", town.stock.stone === stone0);
 
   // Founding a city costs 1000 treasury gold.
   const st2 = makeState();         // treasury 10000
@@ -367,6 +375,42 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   ok("treasury < 1000 → canPlaceTown blocked + 'gold'", poor.ok === false && /gold/i.test(poor.reason));
   st3.treasury = 1000;
   ok("treasury ≥ 1000 → canPlaceTown ok", Buildings.canPlaceTown(st3, 7, 0).ok === true);
+}
+
+// ============================================================================
+// 14) CB-A — construction data helpers (resourceCost / isInstant /
+//     constructionNeed) and the built/instant placement rule.
+// ============================================================================
+{
+  // resourceCost drops gold, keeps positive material costs.
+  const millRC = Buildings.resourceCost(CONFIG.buildings.mill);   // { wood, stone }
+  ok("resourceCost drops gold, keeps materials",
+    millRC.wood === CONFIG.buildings.mill.cost.wood &&
+    millRC.stone === CONFIG.buildings.mill.cost.stone && !("gold" in millRC));
+  ok("resourceCost of a gold-only building is empty",
+    Object.keys(Buildings.resourceCost(CONFIG.buildings.hut)).length === 0);
+  ok("resourceCost handles a def with no cost", (() => {
+    const r = Buildings.resourceCost({});
+    return r && typeof r === "object" && Object.keys(r).length === 0;
+  })());
+
+  // isInstant: gold-only / free → instant; any material cost → not instant.
+  ok("isInstant true for gold-only starters (hut/lumberjack/farm)",
+    ["hut", "lumberjack", "farm"].every(id => Buildings.isInstant(CONFIG.buildings[id]) === true));
+  ok("isInstant false for buildings with a resource cost (mill/sawmill/cottage)",
+    ["mill", "sawmill", "cottage"].every(id => Buildings.isInstant(CONFIG.buildings[id]) === false));
+
+  // constructionNeed: remaining = resourceCost − delivered (built → {}).
+  const unbuilt = { typeId: "mill", q: 0, r: 0, workers: 0, built: false, delivered: { wood: 10 } };
+  const need = Buildings.constructionNeed(unbuilt);
+  ok("constructionNeed = resourceCost − delivered (positive remainders)",
+    need.wood === CONFIG.buildings.mill.cost.wood - 10 && need.stone === CONFIG.buildings.mill.cost.stone);
+  ok("constructionNeed of a built building is empty",
+    Object.keys(Buildings.constructionNeed({ typeId: "mill", q: 0, r: 0, built: true })).length === 0);
+  ok("constructionNeed of a LEGACY building (no built flag) is empty (treated as built)",
+    Object.keys(Buildings.constructionNeed({ typeId: "mill", q: 0, r: 0 })).length === 0);
+  ok("constructionNeed omits fully-delivered goods",
+    !("wood" in Buildings.constructionNeed({ typeId: "sawmill", q: 0, r: 0, built: false, delivered: { wood: 999 } })));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
