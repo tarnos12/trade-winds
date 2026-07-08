@@ -37,7 +37,17 @@ charges that city); **gaps** enforced so different cities and the castle never
 touch (`canPlaceTown`). Town panel Buildings tab is read-only. Tests: `buildings`
 59. Also: terrain tile icons + starting fog reveal +2.
 
-## Milestone: Trade rework (internal + external traders) — IN PROGRESS
+## Milestone: Trade rework (internal + external traders) ✅ DONE (base model)
+
+Merged TR-A → TR-B. Each city runs one external trader that BUYS its biggest
+shortfall from a road-connected surplus city (no level gate — L1 trades; the "no
+trading" fix); selling is passive; tariff → treasury. Internal-trader porters
+shuttle goods within each city. Verified in-browser (3-city: treasury grows from
+tariff credits, traders active). Tests: `trade` 33. Stale L2/Buildings-tab labels
+retired. **Still to layer on:** the "Trade correctness + trade UI" milestone below
+(reservation/agreed-price/cap-10 + buy/sell arrows + trader progress/hover).
+
+## Milestone: Trade rework (internal + external traders) — done
 Author model: each city has **internal traders** (move goods between its own
 buildings) and **one external trader** that BUYS shortfalls from other cities
 (selling is passive — a city only sells when bought from). External trader
