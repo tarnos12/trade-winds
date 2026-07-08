@@ -179,6 +179,47 @@
   .cw-btn.sell { border-color: #e0844a; color: #f0b892; }
   .cw-btn:disabled { opacity: 0.3; cursor: default; }
   /* === CASTLE-UI CSS END === */
+
+  /* === RESEARCH-UI CSS START === (P4-A / slot #2 — research tree panel) */
+  #researchPanel {
+    position: fixed; top: 56px; left: 12px; width: 560px; max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 84px);
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+    font-size: 13px; z-index: 22; overflow: hidden;
+  }
+  #researchPanel.hidden { display: none; }
+  #btnResearch.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  .rs-active { padding: 8px 12px; border-bottom: 1px solid var(--panel-edge);
+    background: linear-gradient(180deg, rgba(201,138,60,0.12), rgba(0,0,0,0)); }
+  .rs-active .lbl { display: flex; justify-content: space-between; font-size: 11.5px; opacity: 0.85; margin-bottom: 4px; }
+  .rs-active .lbl b { color: var(--accent); opacity: 1; }
+  .rs-active.idle { opacity: 0.7; font-style: italic; }
+  .rs-cols { display: flex; gap: 10px; padding: 10px 12px 14px; overflow-y: auto; }
+  .rs-col { flex: 1; min-width: 0; }
+  .rs-col h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent); opacity: 0.9; text-align: center; }
+  .rs-node { position: relative; padding: 7px 9px; margin: 0 0 8px;
+    border: 1px solid var(--panel-edge); border-radius: 7px; background: #1c160f; }
+  .rs-node .rn-name { font-weight: bold; font-size: 12.5px; }
+  .rs-node .rn-desc { font-size: 10.5px; opacity: 0.7; line-height: 1.35; margin: 2px 0 5px; }
+  .rs-node .rn-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .rs-node .rn-cost { font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+  .rs-node .rn-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--panel-edge); opacity: 0.85; }
+  .rs-node.locked { opacity: 0.5; }
+  .rs-node.locked .rn-badge { color: #c98a3c; }
+  .rs-node.available { border-color: #6fa8d6; }
+  .rs-node.available:hover { border-color: #a6cdea; background: #22201a; }
+  .rs-node.available .rn-start { padding: 1px 9px; font-size: 11px; border-color: #6fbf73; color: #a6e0a8; }
+  .rs-node.available .rn-start:disabled { opacity: 0.35; border-color: var(--panel-edge); color: var(--paper); cursor: default; }
+  .rs-node.researching { border-color: var(--accent); background: #241a0f; }
+  .rs-node.done { border-color: #4f9d5a; background: rgba(79,157,90,0.12); }
+  .rs-node.done .rn-badge { color: #a6e0a8; border-color: #4f9d5a; }
+  .rs-bar { height: 7px; border-radius: 4px; background: #120f0a; border: 1px solid var(--panel-edge);
+    overflow: hidden; margin-top: 5px; }
+  .rs-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
+  /* === RESEARCH-UI CSS END === */
 </style>
 </head>
 <body>
@@ -202,6 +243,10 @@
   </div>
 
   <div class="spacer"></div>
+
+  <div class="group">
+    <button id="btnResearch" title="Open the research tree">🔬 Research</button>
+  </div>
 
   <div class="group">
     <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Fog</button>
@@ -253,6 +298,17 @@
   <div class="tp-body" id="cwBody"></div>
 </div>
 <!-- === CASTLE-UI HTML END === -->
+
+<!-- === RESEARCH-UI HTML START === (P4-A / slot #2 — research tree panel) -->
+<div id="researchPanel" class="hidden" aria-hidden="true">
+  <div class="tp-head">
+    <div class="tp-title">🔬 Research</div>
+    <button id="rsClose" class="tp-close" title="Close">✕</button>
+  </div>
+  <div id="rsActive" class="rs-active idle"></div>
+  <div class="rs-cols" id="rsCols"></div>
+</div>
+<!-- === RESEARCH-UI HTML END === -->
 
 
 <script>
@@ -1184,6 +1240,156 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 })();
 // === TRADE END ===
 
+// === RESEARCH-CORE START ===  (P4-A / slot #2 — research tree data + pure engine)
+// Pure data + pure functions only (GDD §7.1). No DOM, no canvas, no Math.random,
+// no I/O — deterministic so it runs headless and inside the fixed timestep.
+// Contract: state.research = { unlocked:[ids], active:<id|null>, progress:<ticks>,
+// spent:<gold paid so far on the active node> }.
+//
+// 3 branches × 5 nodes. Each node:
+//   { id, branch, name, desc, cost(gold), timeTicks, prereqs:[ids], effect }
+// `effect` is a plain data bag of queryable flags/multipliers. This slice does
+// NOT wire the effects into Sim/Trade/Buildings (those live in other fenced
+// regions) — instead it keeps them as data any system can read later via
+// Research.has(state, id) / Research.effect(state, key).
+Object.assign(CONFIG, {
+  research: [
+    // ---- Production: bigger yields from the same land/workers ----
+    { id: "crop_rotation",   branch: "production",     name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
+    { id: "deep_veins",      branch: "production",     name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
+    { id: "guild_halls",     branch: "production",     name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
+    { id: "master_crafts",   branch: "production",     name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
+    { id: "industrialize",   branch: "production",     name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
+    // ---- Logistics: move more goods, further, cheaper ----
+    { id: "paved_roads",     branch: "logistics",      name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
+    { id: "larger_carts",    branch: "logistics",      name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 400,  timeTicks: 30, prereqs: ["paved_roads"],    effect: { cartCapacity: 1.5 } },
+    { id: "extra_caravan",   branch: "logistics",      name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
+    { id: "warehousing",     branch: "logistics",      name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
+    { id: "trade_network",   branch: "logistics",      name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+    // ---- Administration: squeeze more coin & growth from the realm ----
+    { id: "tax_ledgers",     branch: "administration", name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
+    { id: "tariff_office",   branch: "administration", name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
+    { id: "royal_census",    branch: "administration", name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
+    { id: "town_charters",   branch: "administration", name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
+    { id: "bureaucracy",     branch: "administration", name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+  ],
+});
+
+// Pure research engine. All queries take `state` and never mutate CONFIG.
+const Research = {
+  // The blank shape newGame/loadGame should install (also used to repair saves).
+  fresh() { return { unlocked: [], active: null, progress: 0, spent: 0 }; },
+  // Defensive normalizer for loaded/foreign data.
+  normalize(r) {
+    const f = Research.fresh();
+    if (!r || typeof r !== "object") return f;
+    f.unlocked = Array.isArray(r.unlocked) ? r.unlocked.filter(id => !!Research.get(id)) : [];
+    f.active = (typeof r.active === "string" && Research.get(r.active)) ? r.active : null;
+    f.progress = (typeof r.progress === "number" && r.progress >= 0) ? r.progress : 0;
+    f.spent = (typeof r.spent === "number" && r.spent >= 0) ? r.spent : 0;
+    if (!f.active) { f.progress = 0; f.spent = 0; }
+    return f;
+  },
+  get(id) {
+    const list = CONFIG.research || [];
+    for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  },
+  all() { return CONFIG.research || []; },
+  branches() { return ["production", "logistics", "administration"]; },
+  nodesIn(branch) { return Research.all().filter(n => n.branch === branch); },
+
+  has(state, id) {
+    return !!(state && state.research && state.research.unlocked.indexOf(id) >= 0);
+  },
+  isActive(state, id) {
+    return !!(state && state.research && state.research.active === id);
+  },
+  prereqsMet(state, node) {
+    return (node.prereqs || []).every(p => Research.has(state, p));
+  },
+  // Available = prereqs met and not already unlocked/active (ignores funds).
+  isAvailable(state, id) {
+    const node = Research.get(id);
+    if (!node) return false;
+    if (Research.has(state, id) || Research.isActive(state, id)) return false;
+    return Research.prereqsMet(state, node);
+  },
+  // canStart also requires no other active project + affordability (full cost as
+  // an affordability *gate*; the gold itself is spent over time in tick()).
+  canStart(state, id) {
+    const node = Research.get(id);
+    if (!node || !state || !state.research) return false;
+    if (state.research.active) return false;         // one project at a time
+    if (Research.has(state, id)) return false;       // already researched
+    if (!Research.prereqsMet(state, node)) return false;
+    if ((state.treasury || 0) < node.cost) return false;
+    return true;
+  },
+  // Deduct NOTHING at start — we reserve nothing and instead charge the treasury
+  // in equal-value installments across timeTicks in tick(). (Documented choice.)
+  start(state, id) {
+    if (!Research.canStart(state, id)) return false;
+    state.research.active = id;
+    state.research.progress = 0;
+    state.research.spent = 0;
+    return true;
+  },
+  // Advance the active project one tick, paying the proportional installment of
+  // its cost from state.treasury. If the treasury can't cover this tick's
+  // installment the project STALLS (progress does not advance) until coin is
+  // available — deterministic, no partial-price completions. On the final tick it
+  // unlocks and clears `active`.
+  tick(state) {
+    if (!state || !state.research) return;
+    const R = state.research;
+    if (!R.active) return;
+    const node = Research.get(R.active);
+    if (!node) { R.active = null; R.progress = 0; R.spent = 0; return; }
+    const total = Math.max(1, node.timeTicks | 0);
+    const nextProgress = (R.progress || 0) + 1;
+    const targetSpent = node.cost * (nextProgress / total);
+    const due = targetSpent - (R.spent || 0);
+    if (due > (state.treasury || 0) + 1e-9) return;   // can't afford → stall
+    if (due > 0) {
+      state.treasury = (state.treasury || 0) - due;
+      R.spent = (R.spent || 0) + due;
+    }
+    R.progress = nextProgress;
+    if (R.progress >= total) {
+      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      R.active = null; R.progress = 0; R.spent = 0;
+    }
+  },
+
+  // Fraction 0..1 of the active project completed (0 if none).
+  activeFraction(state) {
+    if (!state || !state.research || !state.research.active) return 0;
+    const node = Research.get(state.research.active);
+    if (!node) return 0;
+    return Math.max(0, Math.min(1, (state.research.progress || 0) / Math.max(1, node.timeTicks)));
+  },
+  // Aggregate an effect value across all UNLOCKED nodes so other systems can read
+  // research without this file reaching into theirs. Multiplier keys (…Output,
+  // …Capacity, …_mul) multiply; boolean flags OR; everything else sums. Returns
+  // `fallback` when no unlocked node touches the key.
+  effect(state, key, fallback) {
+    let acc = null;
+    const unlocked = (state && state.research && state.research.unlocked) || [];
+    for (let i = 0; i < unlocked.length; i++) {
+      const node = Research.get(unlocked[i]);
+      if (!node || !node.effect || !(key in node.effect)) continue;
+      const v = node.effect[key];
+      if (typeof v === "boolean") acc = (acc || false) || v;
+      else if (/Output$|Capacity$|_mul$/.test(key)) acc = (acc == null ? 1 : acc) * v;
+      else acc = (acc == null ? 0 : acc) + v;   // additive default
+    }
+    return acc == null ? fallback : acc;
+  },
+};
+
+// === RESEARCH-CORE END ===
+
 /* PURE_CORE_END */
 
 /* =====================================================================
@@ -1202,6 +1408,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     towns: [],                 // [{ q, r }]  (empty markers in Phase 1)
     carts: [],                 // live trade carts (Trade.tick owns; T9 draws)
     treasury: 0,               // player tariff income (gold) — distinct from town.gold
+    research: { unlocked: [], active: null, progress: 0, spent: 0 }, // RESEARCH (P4-A)
     tradeSeed: 0,              // seeded RNG stream for deterministic cart routing
     revealed: new Set(),       // hex keys the player can see
     revealAll: false,          // debug fog toggle
@@ -1651,6 +1858,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     state.carts = [];
     state.treasury = 0;
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
+    state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
@@ -1681,6 +1889,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         carts: state.carts,
         treasury: state.treasury,
         tradeSeed: state.tradeSeed,
+        research: state.research,          // RESEARCH (P4-A): tech tree progress
         revealed: Array.from(state.revealed),
         warehouse: state.warehouse,        // CASTLE-UI (T9): player warehouse
       };
@@ -1704,6 +1913,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
+    state.research = Research.normalize(data.research);   // RESEARCH (P4-A)
     state.warehouse = data.warehouse || {};   // CASTLE-UI (T9)
     state.revealAll = !!data.revealAll;
     for (const k of (data.revealed || [])) {
@@ -1763,7 +1973,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       econAcc += dt * state.gameSpeed;
       const step = CONFIG.econ.baseTickMs;
       let guard = 0;
-      while (econAcc >= step && guard++ < 8) { Sim.tick(state); Trade.tick(state); econAcc -= step; }
+      while (econAcc >= step && guard++ < 8) { Sim.tick(state); Trade.tick(state); Research.tick(state); econAcc -= step; }
     }
 
     applyKeyPan(dt);
@@ -2409,6 +2619,112 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
                       updateTreasuryHud, drawCarts, cartPixel,
                       get isOpen() { return castleOpen; } };
   // === CARTS + CASTLE-UI END ===
+
+  // === RESEARCH-UI START ===  (P4-A / slot #2 — research panel, DOM over canvas)
+  // Reads/writes game state ONLY through the pure Research module + state.treasury,
+  // so the balance/rules live in PURE_CORE and this layer stays presentational.
+  const researchEl = document.getElementById("researchPanel");
+  const rsColsEl = document.getElementById("rsCols");
+  const rsActiveEl = document.getElementById("rsActive");
+  const btnResearch = document.getElementById("btnResearch");
+  const BRANCH_LABEL = { production: "🏭 Production", logistics: "🛣 Logistics", administration: "📜 Administration" };
+  let researchOpen = false;
+
+  function nodeStateClass(id) {
+    if (Research.has(state, id)) return "done";
+    if (Research.isActive(state, id)) return "researching";
+    if (Research.isAvailable(state, id)) return "available";
+    return "locked";
+  }
+
+  function renderResearchPanel() {
+    if (!researchOpen) return;
+    const treas = state.treasury || 0;
+
+    // Active-project header.
+    const activeId = state.research && state.research.active;
+    if (activeId) {
+      const node = Research.get(activeId);
+      const frac = Research.activeFraction(state);
+      rsActiveEl.className = "rs-active";
+      rsActiveEl.innerHTML =
+        `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span>` +
+        `<span>${Math.round(frac * 100)}% · ${fmt(state.research.spent || 0)}/${fmt(node.cost)}g</span></div>` +
+        `<div class="rs-bar"><span style="width:${Math.round(frac * 100)}%"></span></div>`;
+    } else {
+      rsActiveEl.className = "rs-active idle";
+      rsActiveEl.textContent = "No active research — pick an available node below.";
+    }
+
+    // Three branch columns.
+    let cols = "";
+    for (const br of Research.branches()) {
+      let nodes = "";
+      for (const node of Research.nodesIn(br)) {
+        const cls = nodeStateClass(node.id);
+        let foot;
+        if (cls === "done") {
+          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">✓ Done</span>`;
+        } else if (cls === "researching") {
+          const frac = Research.activeFraction(state);
+          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">${Math.round(frac * 100)}%</span>`;
+        } else if (cls === "available") {
+          const canPay = Research.canStart(state, node.id);
+          foot = `<span class="rn-cost">${fmt(node.cost)}g · ${node.timeTicks}t</span>` +
+                 `<button class="rn-start" data-start="${node.id}" ${canPay ? "" : "disabled"}>${canPay ? "Research" : "Need gold"}</button>`;
+        } else {
+          const need = (node.prereqs || []).map(p => { const n = Research.get(p); return n ? n.name : p; }).join(", ");
+          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">🔒 ${esc(need || "locked")}</span>`;
+        }
+        let bar = "";
+        if (cls === "researching") {
+          const frac = Research.activeFraction(state);
+          bar = `<div class="rs-bar"><span style="width:${Math.round(frac * 100)}%"></span></div>`;
+        }
+        nodes += `<div class="rs-node ${cls}">
+          <div class="rn-name">${esc(node.name)}</div>
+          <div class="rn-desc">${esc(node.desc)}</div>
+          <div class="rn-foot">${foot}</div>${bar}</div>`;
+      }
+      cols += `<div class="rs-col"><h4>${BRANCH_LABEL[br] || br}</h4>${nodes}</div>`;
+    }
+    rsColsEl.innerHTML = cols;
+  }
+
+  function openResearchPanel() {
+    // mutually exclusive with the other right/left panels
+    if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
+    if (typeof closeCastlePanel === "function") closeCastlePanel();
+    researchOpen = true;
+    researchEl.classList.remove("hidden");
+    researchEl.setAttribute("aria-hidden", "false");
+    btnResearch.classList.add("active");
+    renderResearchPanel();
+  }
+  function closeResearchPanel() {
+    researchOpen = false;
+    researchEl.classList.add("hidden");
+    researchEl.setAttribute("aria-hidden", "true");
+    btnResearch.classList.remove("active");
+  }
+  function toggleResearchPanel() { researchOpen ? closeResearchPanel() : openResearchPanel(); }
+
+  btnResearch.addEventListener("click", toggleResearchPanel);
+  document.getElementById("rsClose").addEventListener("click", closeResearchPanel);
+  // Start a node via delegation (nodes re-render each tick).
+  rsColsEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-start]");
+    if (!b) return;
+    if (Research.start(state, b.dataset.start)) { renderResearchPanel(); scheduleSave(); }
+  });
+
+  // Live refresh: keep the open panel's progress current as the economy ticks.
+  setInterval(() => { if (researchOpen) renderResearchPanel(); }, 500);
+
+  // Expose for the headless smoke test / console debugging.
+  window.ResearchUI = { openResearchPanel, closeResearchPanel, toggleResearchPanel,
+                        renderResearchPanel, get isOpen() { return researchOpen; } };
+  // === RESEARCH-UI END ===
 
   // ---------------------------------------------------------------
   // Boot
