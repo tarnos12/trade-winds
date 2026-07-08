@@ -150,6 +150,26 @@ Group by existing `workerTier`/`houseTier`; locked categories show a "research t
 unlock" hint. UI-only gate (canPlace logic unchanged; tests bypass the UI).
 Deferred content (future chain): potato farm, woodcutter, clothing/chairs/wine goods.
 
+## Milestone: Construction & building logistics — QUEUED (after build menu)
+A cohesive feature set (author requests). Sequence after the categorized build menu.
+- **Construction state:** a placed building starts **under construction** — its GOLD
+  cost is paid to treasury at placement (as now), but its **resource** cost must be
+  **delivered by internal traders** from the city's stock before it's operational.
+  Sim skips unbuilt buildings (no staffing/production until done).
+- **Internal traders carry real cargo:** deliver construction materials to
+  under-construction buildings, and deliver **processor inputs** (e.g. wood → sawmill).
+- **Trader cargo display:** every trader (internal + external) shows an **icon +
+  number** of what it carries. A **greyed icon + number** = an item *requested*
+  (external trader en route to buy it; or a material a build is waiting on).
+- **Constructed vs unconstructed visual:** buildings look distinct while building;
+  **display the missing resources** for an under-construction building on the map.
+- **Per-building click panel:** clicking a building on the map opens a panel with
+  THAT building's info (type/tier, workers, output, inputs, construction status +
+  missing materials) — building info moves OUT of the city panel.
+Likely slices: CB-A construction+delivery logic (Sim/placement/internal traders),
+CB-B visuals (build-state look, missing-resource + trader cargo icons), CB-C
+per-building click panel.
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
