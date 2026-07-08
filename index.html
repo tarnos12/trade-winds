@@ -248,14 +248,19 @@
   #buildBarCancel.hidden { display: none; }
   /* === BUILD-BAR CSS END === */
 
-  /* === CASTLE-UI CSS START === (T9 / slot #4 — treasury HUD + castle warehouse) */
-  /* Treasury line in the shared HUD (keeps existing fps/stat intact). */
-  #hud .treasury { color: var(--accent); font-weight: bold; }
-  #hud .treasury .rate { color: var(--paper); opacity: 0.55; font-weight: normal; font-size: 11px; }
-  /* TARIFF-SLIDER (P5D-D): player-adjustable tariff, shown once researched */
-  #hud .tariffCtl { margin-top: 3px; font-size: 11px; color: var(--paper); opacity: 0.85; }
-  #hud .tariffCtl input[type=range] { vertical-align: middle; width: 92px; margin-left: 4px; }
-  #hud .tariffCtl b { color: var(--accent); }
+  /* === CASTLE-UI CSS START === (T9 / slot #4 — castle warehouse) */
+  /* CP: treasury/tariff/prestige/castle-level moved OUT of #hud into the click
+     panel (#castlePanel). #hud now holds only fps/board stats. */
+  /* Tariff control lives inside the castle panel (moved from #hud by CP). */
+  .cw-tariff {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-bottom: 1px solid var(--panel-edge);
+    font-size: 12px; color: var(--paper);
+  }
+  .cw-tariff b { color: var(--accent); }
+  .cw-tariff .lbl { opacity: 0.8; }
+  .cw-tariff input[type=range] { flex: 1; vertical-align: middle; margin-left: 4px; min-width: 90px; }
+  .cw-tariff .hint { opacity: 0.55; font-size: 11px; font-style: italic; }
   /* Castle warehouse panel — reuses the generic .tp-* look, own position/id. */
   #castlePanel {
     position: fixed; top: 56px; right: 12px; width: 340px;
@@ -582,13 +587,9 @@
 </div>
 
 <div id="hud">
-  <!-- CASTLE-UI: player tariff treasury (T9) -->
-  <div class="treasury">👑 <span id="treasuryVal">0</span> g <span class="rate" id="tariffVal"></span></div>
-  <!-- TARIFF-SLIDER (P5D-D): 10–40% tariff dial, gated on the Tariff Office research -->
-  <div class="tariffCtl" id="tariffCtl" style="display:none">Tariff <b id="tariffPct">25%</b>
-    <input type="range" id="tariffSlider" min="10" max="40" step="1" value="25" title="Higher tariff earns more per trade but makes fewer routes profitable (GDD §6.3)"></div>
-  <!-- PROGRESS-UI (P4-B): prestige + castle level -->
-  <div class="prestige">✨ <span id="prestigeVal">0</span> prestige · 🏰 Lv <span id="castleLvlVal">1</span></div>
+  <!-- CP: treasury/tariff/prestige/castle-level moved into the castle click panel
+       (#castlePanel). Treasury stays on the top-left kingdom chip. #hud is now
+       just performance/board stats. -->
   <div><span class="fps" id="fps">—</span> fps</div>
   <div id="stat">—</div>
 </div>
@@ -630,10 +631,12 @@
 </div>
 <!-- === TOWN-UI HTML END === -->
 
-<!-- === CASTLE-UI HTML START === (T9 / slot #4 — castle warehouse panel) -->
+<!-- === CASTLE-UI HTML START === (T9 / slot #4 — castle info + warehouse panel).
+     CP: consolidates the castle/kingdom info (prestige, castle level + upgrade,
+     tariff rate + slider) formerly in the bottom-right #hud, plus the warehouse. -->
 <div id="castlePanel" class="hidden" aria-hidden="true">
   <div class="tp-head">
-    <div class="tp-title">👑 Castle Warehouse</div>
+    <div class="tp-title">👑 Castle</div>
     <button id="cwClose" class="tp-close" title="Close">✕</button>
   </div>
   <div class="cw-summary">
@@ -642,6 +645,14 @@
     <div class="box"><div class="k">Storage</div><div class="v" id="cwCapText">0 / 0</div></div>
   </div>
   <div class="cw-cap"><span id="cwCapBar" style="width:0%"></span></div>
+  <!-- CP: tariff rate + slider (moved from #hud). The slider (TARIFF-SLIDER P5D-D)
+       stays hidden until the Tariff Office research unlocks it. -->
+  <div class="cw-tariff" id="tariffCtl">
+    <span class="lbl">Tariff</span> <b id="tariffPct">25%</b>
+    <input type="range" id="tariffSlider" min="10" max="40" step="1" value="25"
+      style="display:none" title="Higher tariff earns more per trade but makes fewer routes profitable (GDD §6.3)">
+    <span class="hint" id="tariffHint">Research the Tariff Office to adjust</span>
+  </div>
   <div class="tp-body" id="cwBody"></div>
 </div>
 <!-- === CASTLE-UI HTML END === -->
@@ -4104,9 +4115,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     for (const id in cartRender) if (!live.has(isNaN(+id) ? id : +id) && !live.has(id)) delete cartRender[id];
   }
 
-  // ---- treasury HUD ------------------------------------------------------
-  const treasuryValEl = document.getElementById("treasuryVal");
-  const tariffValEl = document.getElementById("tariffVal");
+  // ---- treasury / kingdom-gold ------------------------------------------
+  // CP: the treasury/tariff readouts moved OUT of #hud. Treasury now shows on the
+  // top-left kingdom chip (kept in sync here + by CityCards) and inside the castle
+  // click panel; the tariff rate lives in the castle panel's tariff control.
+  const kingdomGoldHudEl = document.getElementById("kingdomGold");
   function tariffRate() {
     // TARIFF-SLIDER (P5D-D): the player-set base is the source of truth; fall back to
     // the CONFIG baseline for pre-slider states/saves.
@@ -4115,15 +4128,18 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     return typeof tr === "number" ? tr : 0.25;   // GDD §6.3 baseline
   }
   function updateTreasuryHud() {
-    treasuryValEl.textContent = Math.round(state.treasury || 0).toLocaleString();
-    tariffValEl.textContent = "· " + Math.round(tariffRate() * 100) + "% tariff";
+    if (kingdomGoldHudEl) kingdomGoldHudEl.textContent = Math.round(state.treasury || 0).toLocaleString();
     updateTariffCtl();
   }
 
   // ---- TARIFF-SLIDER (P5D-D): gated 10–40% tariff dial ------------------
+  // CP: the tariff control now lives inside #castlePanel. The block is always shown
+  // there; the slider + hint toggle on the Tariff Office research (before that the
+  // rate is fixed and just displayed).
   const tariffCtlEl = document.getElementById("tariffCtl");
   const tariffSliderEl = document.getElementById("tariffSlider");
   const tariffPctEl = document.getElementById("tariffPct");
+  const tariffHintEl = document.getElementById("tariffHint");
   // Unlocked once the "Tariff Office" node (effect { tariff_slider: true }) is researched.
   // Accept an id-named node too, in case the tree is renamed later.
   function tariffSliderUnlocked() {
@@ -4135,18 +4151,17 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function updateTariffCtl() {
     if (!tariffCtlEl) return;
     const unlocked = tariffSliderUnlocked();
-    tariffCtlEl.style.display = unlocked ? "" : "none";
-    if (!unlocked) return;
+    if (tariffSliderEl) tariffSliderEl.style.display = unlocked ? "" : "none";
+    if (tariffHintEl) tariffHintEl.style.display = unlocked ? "none" : "";
     const pct = Math.round(tariffRate() * 100);
-    if (document.activeElement !== tariffSliderEl) tariffSliderEl.value = String(pct);
-    tariffPctEl.textContent = pct + "%";
+    if (tariffSliderEl && document.activeElement !== tariffSliderEl) tariffSliderEl.value = String(pct);
+    if (tariffPctEl) tariffPctEl.textContent = pct + "%";
   }
   if (tariffSliderEl) {
     tariffSliderEl.addEventListener("input", () => {
       const pct = parseInt(tariffSliderEl.value, 10) || 25;
       state.tariffRate = Math.max(0.10, Math.min(0.40, pct / 100));  // GDD §6.3 range
-      tariffPctEl.textContent = pct + "%";
-      tariffValEl.textContent = "· " + pct + "% tariff";
+      if (tariffPctEl) tariffPctEl.textContent = pct + "%";
       scheduleSave();
     });
   }
@@ -4262,9 +4277,20 @@ var Events = (typeof Events !== "undefined" && Events) || {};
           <button class="cw-btn sell" data-sell="${id}" ${canSell ? "" : "disabled"}>Sell ${unit}</button>
         </td></tr>`;
     }
+    // CP: extension hook so later slices (e.g. CRE — castle research economy) can
+    // inject their own section (research-materials list, etc.) without editing this
+    // function. Each hook returns an HTML string appended to the panel body.
+    let extraHtml = "";
+    if (Array.isArray(castlePanelSections)) {
+      for (const fn of castlePanelSections) {
+        try { extraHtml += (fn(state) || ""); } catch (err) { /* a bad hook must not break the panel */ }
+      }
+    }
     cwBodyEl.innerHTML = castleHtml + `<table class="cw-tbl">
-      <tr><th>Good</th><th>Price</th><th>Held</th><th></th></tr>${rows}</table>`;
+      <tr><th>Good</th><th>Price</th><th>Held</th><th></th></tr>${rows}</table>` + extraHtml;
   }
+  // Registry of extra panel sections (CP hook; see renderCastlePanel).
+  const castlePanelSections = [];
 
   function openCastlePanel() {
     // mutually exclusive with the town panel
@@ -4481,6 +4507,12 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // Expose for the headless smoke test / console debugging.
   window.CastleUI = { openCastlePanel, closeCastlePanel, castleBuy, castleSell,
                       updateTreasuryHud, drawCarts, cartPixel,
+                      // CP: re-render the open panel (used by updateProgressHud so the
+                      // relocated prestige/castle-level stay live).
+                      refresh: renderCastlePanel,
+                      // CP hook for the CRE slice: push fn(state)->htmlString to add a
+                      // section (e.g. research materials) to the castle panel body.
+                      addPanelSection(fn) { if (typeof fn === "function") { castlePanelSections.push(fn); if (castleOpen) renderCastlePanel(); } },
                       get isOpen() { return castleOpen; } };
   // === CARTS + CASTLE-UI END ===
 
@@ -4592,6 +4624,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // === PROGRESS-UI START === (P4-B / slot #3 — prestige HUD, quest banner, victory)
   // Reflects the pure PROGRESS-CORE (Quests.tick / Castle / Town) into the DOM.
   // Owns only its own elements; reads state written by the accumulator each tick.
+  // CP: prestige + castle level moved out of #hud into the castle click panel
+  // (rendered by renderCastlePanel's up-box). These getElementByIds are null now;
+  // updateProgressHud null-guards them and refreshes the panel when it's open.
   const prestigeValEl = document.getElementById("prestigeVal");
   const castleLvlValEl = document.getElementById("castleLvlVal");
   const questBannerEl = document.getElementById("questBanner");
@@ -4602,8 +4637,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   const winNoticeEl = document.getElementById("winNotice");
 
   function updateProgressHud() {
-    prestigeValEl.textContent = Math.floor(state.prestige || 0).toLocaleString();
-    castleLvlValEl.textContent = state.castleLevel || 1;
+    if (prestigeValEl) prestigeValEl.textContent = Math.floor(state.prestige || 0).toLocaleString();
+    if (castleLvlValEl) castleLvlValEl.textContent = state.castleLevel || 1;
+    // CP: prestige + castle level are shown in the castle panel — refresh it if open.
+    if (window.CastleUI && window.CastleUI.isOpen) window.CastleUI.refresh();
   }
 
   function renderQuestBanner() {
