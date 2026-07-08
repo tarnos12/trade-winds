@@ -133,6 +133,22 @@
   .tp-empty { opacity: 0.6; font-style: italic; padding: 6px 0; }
   /* PV2-B: the build action moved to #buildBar; the Buildings tab is read-only. */
   .tp-hint2 { font-size: 11.5px; opacity: 0.7; font-style: italic; margin: 2px 0 8px; line-height: 1.45; }
+  /* === TRADE-UI CSS START === (EC-E) buy/sell markers + trader utilization bars */
+  .tw-mark { font-weight: bold; }
+  .tw-buy  { color: #5aa9e6; }               /* wants to buy (importing) */
+  .tw-sell { color: #6fbf73; }               /* has surplus to sell (exporting) */
+  .tw-neu  { opacity: 0.35; }                /* balanced — no trade pressure */
+  .tw-qty  { font-variant-numeric: tabular-nums; }
+  .tp-tbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 9px; cursor: default; }
+  .tp-tbar .lbl { flex: 0 0 88px; opacity: 0.8; }
+  .tp-tbar .bar { flex: 1 1 auto; height: 9px; border-radius: 4px; background: #1c160f;
+    border: 1px solid var(--panel-edge); overflow: hidden; }
+  .tp-tbar .bar > span { display: block; height: 100%;
+    background: linear-gradient(90deg, #b06b2c, var(--accent)); transition: width .3s ease; }
+  .tp-tbar .bar.idle > span { background: #3a3228; }
+  .tp-tbar .st { flex: 0 0 auto; min-width: 46px; text-align: right; font-size: 11px;
+    opacity: 0.85; font-variant-numeric: tabular-nums; }
+  /* === TRADE-UI CSS END === */
   /* === TOWN-UI CSS END === */
 
   /* === BUILD-BAR CSS START === (PV2-B) persistent bottom-center build bar.
@@ -3343,6 +3359,96 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
+  // === TRADE-UI START === (EC-E) READ-ONLY city-panel trade views. No economy or
+  // Sim/Trade changes here: everything below is derived from the shared model —
+  // town.demand / town.stock / town.reserved (the same fields Trade.tick reads),
+  // CONFIG.econ.bufferTarget, and state.carts (the city's one external trader).
+
+  // A good's trade pressure for a city, using the SAME "comfortable stock" the
+  // Trade module uses (demand × bufferTarget, raw demand, no minDemand floor —
+  // matches Trade.tick's needOf). Positive `want` ⇒ shortfall (city buys);
+  // positive `surplus` ⇒ spendable stock a buyer could take (city sells).
+  function goodTrade(t, gid) {
+    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const stock = (t.stock && t.stock[gid]) || 0;
+    const demand = (t.demand && t.demand[gid]) || 0;
+    const reserved = (t.reserved && t.reserved[gid]) || 0;
+    const need = demand * buffer;                 // comfortable stock
+    const want = need - stock;                    // >0 → wants to buy this many
+    const surplus = stock - reserved - need;      // >0 → this many free to sell
+    return { want, surplus };
+  }
+
+  // The buy/sell/neutral marker + optional quantity for the Stock tab.
+  function tradeMark(t, gid) {
+    const EPS = 0.05;
+    const { want, surplus } = goodTrade(t, gid);
+    if (want > EPS)
+      return { cls: "tw-buy",  mark: "↑", title: "Wants to buy", qty: Math.ceil(want) };
+    if (surplus > EPS)
+      return { cls: "tw-sell", mark: "↓", title: "Surplus to sell", qty: Math.floor(surplus) };
+    return { cls: "tw-neu", mark: "—", title: "Balanced", qty: null };
+  }
+
+  // The city's current external trader (one per city). null ⇒ Idle.
+  function externalCart(t) {
+    if (!Array.isArray(state.carts)) return null;
+    return state.carts.find(c => c && c.fromId === t.id && !c.done) || null;
+  }
+
+  // Human-readable activity line for the external trader (drives the hover tip).
+  function externalActivity(t) {
+    const c = externalCart(t);
+    if (!c) return "Idle — no external trader out right now.";
+    const good = GOOD_LABEL(c.goodId || "goods");
+    const qty = fmt(c.qty || 0);
+    if (c.phase === "return")
+      return `Returning with ${qty} ${good} from City #${c.toId}.`;
+    return `Buying ${qty} ${good} from City #${c.toId} (en route).`;
+  }
+
+  // Internal-trader utilization = staffed producers / total producers. Mirrors
+  // the porter rule (a producer emits a porter only when workers>0), so this is a
+  // faithful 0..1 proxy for how busy the city's internal hauling is.
+  function internalUtil(t) {
+    let producers = 0, staffed = 0;
+    for (const b of (t.buildings || [])) {
+      const def = CONFIG.buildings[b.typeId];
+      if (!def || (def.kind !== "extractor" && def.kind !== "processor")) continue;
+      if (!(def.output && def.output.goodId)) continue;
+      producers++;
+      if (b.workers > 0) staffed++;
+    }
+    return { producers, staffed, frac: producers ? staffed / producers : 0 };
+  }
+
+  // The two Overview trader bars (external activity + internal utilization).
+  function renderTraderBars(t) {
+    const c = externalCart(t);
+    const extFrac = c ? Math.max(0, Math.min(1, c.progress || 0)) : 0;
+    const extBusy = !!c;
+    const extTip = esc(externalActivity(t));
+    const extLabel = extBusy
+      ? (c.phase === "return" ? "Hauling" : "Buying")
+      : "Idle";
+    const iu = internalUtil(t);
+    const intTip = iu.producers
+      ? `${iu.staffed} of ${iu.producers} producer${iu.producers === 1 ? "" : "s"} staffed`
+      : "No producers yet";
+    return `<div class="tp-sec">Traders</div>
+      <div class="tp-tbar" title="${extTip}" aria-label="${extTip}">
+        <span class="lbl">External</span>
+        <span class="bar ${extBusy ? "" : "idle"}"><span style="width:${Math.round(extFrac * 100)}%"></span></span>
+        <span class="st">${extBusy ? Math.round(extFrac * 100) + "%" : "Idle"}</span>
+      </div>
+      <div class="tp-tbar" title="${esc(intTip)}" aria-label="${esc(intTip)}">
+        <span class="lbl">Internal</span>
+        <span class="bar ${iu.frac > 0 ? "" : "idle"}"><span style="width:${Math.round(iu.frac * 100)}%"></span></span>
+        <span class="st">${iu.producers ? iu.staffed + "/" + iu.producers : "—"}</span>
+      </div>`;
+  }
+  // === TRADE-UI END ===
+
   function renderOverview(t) {
     const popTotal = t.pop.peasants + t.pop.workers + t.pop.burghers;
     const happy = Math.round(t.happiness);
@@ -3354,6 +3460,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       <div class="tp-row"><span class="k">Buildings</span><span class="v">${t.buildings.length} / ${TOWN_BUILDING_CAP[t.level] || 3}</span></div>
       <div class="tp-row"><span class="k">Goods in stock</span><span class="v">${goodsHeld} / ${Object.keys(CONFIG.goods).length}</span></div>
       ${renderUpgrade(t)}
+      ${renderTraderBars(t)}
       <div class="tp-sec">Happiness — ${happy}%</div>
       <div class="tp-bar"><span style="width:${Math.max(0, Math.min(100, happy))}%"></span></div>
       <div class="tp-row"><span class="k">Location</span><span class="v">q ${t.q}, r ${t.r}</span></div>`;
@@ -3382,13 +3489,22 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       const qty = t.stock[id] || 0;
       const price = priceOf(t, id);
       const arrow = trendArrow(t, id, price);
-      rows += `<tr class="${qty > 0 ? "" : "dim"}">
+      // === TRADE-UI === buy/sell marker + wanted/surplus qty for this good.
+      const tm = tradeMark(t, id);
+      const tradeCell = `<span class="tw-mark ${tm.cls}" title="${esc(tm.title)}">${tm.mark}</span>`;
+      const qtyCell = tm.qty != null
+        ? `<span class="tw-qty ${tm.cls}">${fmt(tm.qty)}</span>`
+        : `<span class="tw-neu">—</span>`;
+      const rowDim = (qty > 0 || tm.qty != null) ? "" : "dim";
+      rows += `<tr class="${rowDim}">
         <td>${esc(GOOD_LABEL(id))}<span style="opacity:.5"> · T${CONFIG.goods[id].tier}</span></td>
         <td>${fmt(qty)}</td>
-        <td>${fmt(price)}g ${arrow}</td></tr>`;
+        <td>${fmt(price)}g ${arrow}</td>
+        <td>${tradeCell}</td>
+        <td>${qtyCell}</td></tr>`;
     }
     return `<table class="tp-tbl">
-      <tr><th>Good</th><th>Stock</th><th>Price</th></tr>${rows}</table>`;
+      <tr><th>Good</th><th>Stock</th><th>Price</th><th title="Buy ↑ / Sell ↓">Trade</th><th>Qty</th></tr>${rows}</table>`;
   }
 
   // PV2-B: Buildings tab is now READ-ONLY — slots used/free + the placed list.
