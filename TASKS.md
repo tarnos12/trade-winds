@@ -49,6 +49,26 @@ Two independent slices; merge order TR-A → TR-B.
 | TR-A — external-buyer trade logic (pure `Trade.tick`) | #2 | one external trader per road-connected city (from level 1) buys its biggest shortfall from a reachable surplus city; seller passively sells; tariff (`state.tariffRate`) → treasury; deterministic; update `trade.test.js` | 🔲 |
 | TR-B — internal trader visuals | #4 | per-city internal traders (small carts shuttling produced goods between buildings and the city center — read-only over state, module-local like Juice); visually distinguish external-trader carts | 🔲 |
 
+## Milestone: Economy rebalance + City cards — QUEUED (after Trade rework)
+
+Author directives (implement as one balance pass + a city-cards UI slice):
+1. **Player starts with 10,000 gold** (`state.treasury` = player gold).
+2. **Founding a city costs 1000 player gold.**
+3. **Each city starts:** 1000 gold · **0 population** · enough **wood** to build a
+   lumberjack + a house · **8 build slots** (1 = the city center, so **7 buildable**).
+4. **A basic house gives 2 population** at max happiness (basic house cap = 2).
+5. **Building cost = gold + resources** (paid from the *city's* gold + stock, which
+   its internal traders supply). **Basic buildings = wood only**, then + stone/
+   planks, later + bricks (new good, deferred). Rebalance `CONFIG.buildings` costs.
+6. **City cards, top of screen:** one card per city — a colored avatar + name
+   "City #1/#2/…". Colors from a **fixed predefined unique palette** (same color
+   for City #N every game). Each card has a **Donate 1000 g** button (player→city
+   gold) with a **2-minute per-city cooldown**.
+
+Interpretations (correct if off): player gold = `state.treasury`; slot count =
+7 buildings + the center; donate cooldown is per-city; "bricks" tier deferred
+until a bricks good is added.
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
