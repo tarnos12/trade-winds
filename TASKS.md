@@ -27,7 +27,14 @@ buildings until researched (already true).
   🔲 queued
 - **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
 
-## Milestone: Kingdom resource overview (LTT-style sidebar) — QUEUED (after research tree)
+**Author decisions (2026-07-08 Q&A):** (1) Tree ships with EXISTING content —
+citizen-band content chains are the immediate next milestone after. (2) Castle
+traders buy materials **autonomously for the ACTIVE research** — no panel-open
+requirement (supersedes the earlier castle-selected rule; the game is a
+simulation, player makes minimal decisions). (3) The full-screen tree fully
+REPLACES the old column research panel (🔬 opens the tree).
+
+## Milestone: Kingdom resource overview (LTT-style sidebar) — 🟡 IN PROGRESS (KR workflow, worktree)
 Author design (screenshot 2026-07-08, main game screen): a **top-left resource
 grid** — one chip per UNLOCKED resource (i.e. producible with currently-researched
 buildings), each showing the **total across all cities** + **average price**, with
