@@ -427,26 +427,26 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   // -- research gating of nextUpgrade --
   const hutB = { typeId: "hut", q: 0, r: 0, upgradeLevel: 1, pendingUpgrade: null };
   ok("nextUpgrade null while research locked", Buildings.nextUpgrade(stWith([]), hutB) === null);
-  ok("nextUpgrade returns L2 once unlocked", (Buildings.nextUpgrade(stWith(["hut_upgrades"]), hutB) || {}).level === 2);
+  ok("nextUpgrade returns L2 once unlocked", (Buildings.nextUpgrade(stWith(["upg_hut_l2"]), hutB) || {}).level === 2);
 
   // -- canStartUpgrade gating --
   ok("canStartUpgrade blocked when gold too low", (() => {
-    const r = Buildings.canStartUpgrade(stWith(["hut_upgrades"], { treasury: 100 }), {}, hutB);
+    const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100 }), {}, hutB);
     return !r.ok && r.reason === "Not enough gold";
   })());
-  ok("canStartUpgrade ok with gold + unlock", Buildings.canStartUpgrade(stWith(["hut_upgrades"], { treasury: 100000 }), {}, hutB).ok === true);
+  ok("canStartUpgrade ok with gold + unlock", Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, hutB).ok === true);
   ok("canStartUpgrade blocked while pending", (() => {
-    const r = Buildings.canStartUpgrade(stWith(["hut_upgrades"], { treasury: 100000 }), {}, { typeId: "hut", upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } });
+    const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, { typeId: "hut", upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } });
     return !r.ok && r.reason === "Upgrade in progress";
   })());
   ok("canStartUpgrade blocked while under construction", (() => {
-    const r = Buildings.canStartUpgrade(stWith(["hut_upgrades"], { treasury: 100000 }), {}, { typeId: "hut", upgradeLevel: 1, pendingUpgrade: null, built: false });
+    const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, { typeId: "hut", upgradeLevel: 1, pendingUpgrade: null, built: false });
     return !r.ok && r.reason === "Under construction";
   })());
 
   // -- startUpgrade charges gold only, sets pending --
   {
-    const st = stWith(["hut_upgrades"], { treasury: 100000 });
+    const st = stWith(["upg_hut_l2"], { treasury: 100000 });
     const town = { stock: { wood: 50 } };
     const b = { typeId: "hut", upgradeLevel: 1, pendingUpgrade: null };
     const okStart = Buildings.startUpgrade(st, town, b);

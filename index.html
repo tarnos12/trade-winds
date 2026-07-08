@@ -1021,7 +1021,7 @@ Object.assign(CONFIG, {
       id: "miner", name: "Miner", kind: "extractor",
       terrain: "hills", workerTier: "peasant",
       output: { goodId: "ore", ratePerWorker: 1 },
-      unlockedBy: "deep_veins",   // BAL: mining group
+      unlockedBy: "unlock_miner",   // RT-A: per-building unlock node
       workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
@@ -1030,21 +1030,21 @@ Object.assign(CONFIG, {
       output: { goodId: "stone", ratePerWorker: 1 },
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
-      unlockedBy: "deep_veins",   // BAL: mining group
+      unlockedBy: "unlock_quarry",   // RT-A: per-building unlock node
       workerSlots: 3, cost: { wood: 35, gold: 80 },
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
       terrain: null, adjacent: "water", workerTier: "peasant",
       output: { goodId: "fish", ratePerWorker: 1 },
-      unlockedBy: "crop_rotation",   // BAL: food/agriculture extractors
+      unlockedBy: "unlock_fishery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
       id: "shepherd", name: "Shepherd", kind: "extractor",
       terrain: "meadow", workerTier: "peasant",
       output: { goodId: "wool", ratePerWorker: 1 },
-      unlockedBy: "crop_rotation",   // BAL: food/agriculture extractors
+      unlockedBy: "unlock_shepherd",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 20, stone: 5, gold: 60 },
     },
     // --- processors (worker labour, any buildable town hex) ---
@@ -1061,35 +1061,35 @@ Object.assign(CONFIG, {
       id: "mill", name: "Mill", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { grain: 2 }, output: { goodId: "flour", ratePerWorker: 1 },
-      unlockedBy: "guild_halls",   // BAL: workshops group
+      unlockedBy: "unlock_mill",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     bakery: {
       id: "bakery", name: "Bakery", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { flour: 2 }, output: { goodId: "bread", ratePerWorker: 1 },
-      unlockedBy: "master_crafts",   // BAL: tier-3 crafts
+      unlockedBy: "unlock_bakery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 5, gold: 150 },
     },
     brewery: {
       id: "brewery", name: "Brewery", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { grain: 2 }, output: { goodId: "beer", ratePerWorker: 1 },
-      unlockedBy: "guild_halls",   // BAL: workshops group
+      unlockedBy: "unlock_brewery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 100 },
     },
     smelter: {
       id: "smelter", name: "Smelter", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { ore: 1, wood: 1 }, output: { goodId: "tools", ratePerWorker: 1 },
-      unlockedBy: "guild_halls",   // BAL: workshops group (guild_halls needs deep_veins → miner)
+      unlockedBy: "unlock_smelter",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 30, stone: 25, gold: 130 },
     },
     weaver: {
       id: "weaver", name: "Weaver", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { wool: 2 }, output: { goodId: "cloth", ratePerWorker: 1 },
-      unlockedBy: "guild_halls",   // BAL: workshops group
+      unlockedBy: "unlock_weaver",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
     // --- houses (no workers; add population capacity by tier) ---
@@ -1104,13 +1104,13 @@ Object.assign(CONFIG, {
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
       terrain: null, houseTier: "worker", houseCapacity: 3,
-      unlockedBy: "royal_census",   // BAL: worker housing
+      unlockedBy: "unlock_cottage",   // RT-A: per-building unlock node
       cost: { wood: 30, stone: 15, gold: 90 },
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
       terrain: null, houseTier: "burgher", houseCapacity: 4,
-      unlockedBy: "town_charters",   // BAL: burgher/luxury housing (late)
+      unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
       cost: { wood: 40, stone: 30, planks: 10, gold: 220 },
     },
   },
@@ -1654,23 +1654,25 @@ Buildings.constructionNeed = function (b) {
 // Ladders are defined for the 4 starter buildings only.
 Object.assign(CONFIG, {
   upgrades: {
+    // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
     hut: [
-      { level: 2, name: "Sturdy Hut",   unlockedBy: "hut_upgrades", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",     unlockedBy: "hut_upgrades", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",    unlockedBy: "hut_upgrades", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",   unlockedBy: "upg_hut_l2", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",     unlockedBy: "upg_hut_l3", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",    unlockedBy: "upg_hut_l4", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
     ],
     lumberjack: [
-      { level: 2, name: "Sharpened Axes", unlockedBy: "lumberjack_upgrades", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
-      { level: 3, name: "Logging Camp",   unlockedBy: "lumberjack_upgrades", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+      { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Logging Camp",   unlockedBy: "upg_lumberjack_l3", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
     ],
     farm: [
-      { level: 2, name: "Better Plows",  unlockedBy: "farm_upgrades", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
-      { level: 3, name: "Great Estate",  unlockedBy: "farm_upgrades", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+      { level: 2, name: "Better Plows",  unlockedBy: "upg_farm_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Great Estate",  unlockedBy: "upg_farm_l3", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
     ],
     sawmill: [
-      { level: 2, name: "Water Wheel",   unlockedBy: "sawmill_upgrades", cost: { gold: 220, wood: 25 },           effect: { outputMult: 1.25 } },
-      { level: 3, name: "Great Sawmill", unlockedBy: "sawmill_upgrades", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
+      { level: 2, name: "Water Wheel",   unlockedBy: "upg_sawmill_l2", cost: { gold: 220, wood: 25 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
     ],
+    // === /RT-A ===
   },
 });
 
@@ -2351,32 +2353,55 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 // Research.has(state, id) / Research.effect(state, key).
 Object.assign(CONFIG, {
   research: [
-    // ---- Production: bigger yields from the same land/workers ----
-    { id: "crop_rotation",   branch: "production",     name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
-    { id: "deep_veins",      branch: "production",     name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
-    { id: "guild_halls",     branch: "production",     name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
-    { id: "master_crafts",   branch: "production",     name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
-    { id: "industrialize",   branch: "production",     name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
-    // ---- Logistics: move more goods, further, cheaper ----
-    { id: "paved_roads",     branch: "logistics",      name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
-    { id: "larger_carts",    branch: "logistics",      name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 400,  timeTicks: 30, prereqs: ["paved_roads"],    effect: { cartCapacity: 1.5 } },
-    { id: "extra_caravan",   branch: "logistics",      name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
-    { id: "warehousing",     branch: "logistics",      name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
-    { id: "trade_network",   branch: "logistics",      name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
-    // ---- Administration: squeeze more coin & growth from the realm ----
-    { id: "tax_ledgers",     branch: "administration", name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
-    { id: "tariff_office",   branch: "administration", name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
-    { id: "royal_census",    branch: "administration", name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
-    { id: "town_charters",   branch: "administration", name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
-    { id: "bureaucracy",     branch: "administration", name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
-    // === RU-A: development branch — unlocks per-building upgrade ladders ====
-    // Chained into a single root so "exactly one prereq-less root per branch"
-    // holds. effect:{} (unlock-only); materials attached via RESEARCH_MATERIALS.
-    { id: "hut_upgrades",        branch: "development", name: "Master Builders",     desc: "Unlocks upgrades for Huts.",        cost: 250, timeTicks: 20, prereqs: [],                     effect: {} },
-    { id: "lumberjack_upgrades", branch: "development", name: "Forestry",            desc: "Unlocks upgrades for Lumberjacks.", cost: 400, timeTicks: 25, prereqs: ["hut_upgrades"],        effect: {} },
-    { id: "farm_upgrades",       branch: "development", name: "Husbandry",           desc: "Unlocks upgrades for Farms.",       cost: 400, timeTicks: 25, prereqs: ["lumberjack_upgrades"], effect: {} },
-    { id: "sawmill_upgrades",    branch: "development", name: "Sawmill Engineering", desc: "Unlocks upgrades for Sawmills.",     cost: 550, timeTicks: 30, prereqs: ["farm_upgrades"],       effect: {} },
-    // === /RU-A =============================================================
+    // === RT-A: tiered tree nodes. Kingdom nodes keep their ids + gameplay
+    // effects and become the band:"kingdom" side column (3 chains × 5). Building
+    // gating moved OUT to per-building unlock_* / per-level upg_* nodes below;
+    // band/kind/pos are additive layout+semantic fields RT-B renders. ===
+    // ---- Production (kingdom): bigger yields from the same land/workers ----
+    { id: "crop_rotation",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 0 }, name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
+    { id: "deep_veins",      branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 1 }, name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
+    { id: "guild_halls",     branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 2 }, name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
+    { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
+    { id: "industrialize",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 4 }, name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
+    // ---- Logistics (kingdom): move more goods, further, cheaper ----
+    { id: "paved_roads",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 0 }, name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
+    { id: "larger_carts",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 1 }, name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 400,  timeTicks: 30, prereqs: ["paved_roads"],    effect: { cartCapacity: 1.5 } },
+    { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
+    { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
+    { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+    // ---- Administration (kingdom): squeeze more coin & growth from the realm ----
+    { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
+    { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
+    { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
+    { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
+    { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+
+    // ---- Unlock nodes: one per non-startUnlocked building (effect:{} — gate
+    // only). band = building's tier; branch mirrors band for legacy grouping. ----
+    { id: "unlock_quarry",   branch: "peasant", band: "peasant", kind: "unlock", buildingId: "quarry",   pos: { col: 5, row: 0 }, name: "Quarry",   desc: "Unlocks the Quarry.",   cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
+    { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 6, row: 0 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
+    { id: "unlock_miner",    branch: "peasant", band: "peasant", kind: "unlock", buildingId: "miner",    pos: { col: 5, row: 1 }, name: "Miner",    desc: "Unlocks the Miner.",    cost: 200,  timeTicks: 15, prereqs: ["unlock_quarry"],   effect: {} },
+    { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Shepherd", desc: "Unlocks the Shepherd.", cost: 180,  timeTicks: 14, prereqs: ["unlock_fishery"],  effect: {} },
+    { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
+    { id: "unlock_smelter",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "smelter",  pos: { col: 1, row: 0 }, name: "Smelter",  desc: "Unlocks the Smelter.",  cost: 400,  timeTicks: 24, prereqs: ["unlock_miner"],    effect: {} },
+    { id: "unlock_weaver",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "weaver",   pos: { col: 2, row: 0 }, name: "Weaver",   desc: "Unlocks the Weaver.",   cost: 350,  timeTicks: 22, prereqs: ["unlock_shepherd"], effect: {} },
+    { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 3, row: 0 }, name: "Cottage",  desc: "Unlocks the Cottage.",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
+    { id: "unlock_brewery",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "brewery",  pos: { col: 0, row: 1 }, name: "Brewery",  desc: "Unlocks the Brewery.",  cost: 350,  timeTicks: 22, prereqs: ["unlock_mill"],     effect: {} },
+    { id: "unlock_bakery",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "bakery",   pos: { col: 1, row: 1 }, name: "Bakery",   desc: "Unlocks the Bakery.",   cost: 500,  timeTicks: 28, prereqs: ["unlock_mill"],     effect: {} },
+    { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
+
+    // ---- Upgrade nodes: one per ladder level (replaces the 4 dev nodes). l2
+    // prereq = [] for these startUnlocked buildings; l3/l4 chain from l2/l3. ----
+    { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
+    { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
+    { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
+    { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
+    { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
+    { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 2, row: 0 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
+    { id: "upg_farm_l3",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 3, pos: { col: 2, row: 0 }, name: "Great Estate",   desc: "Unlocks the Farm level 3 upgrade.",       cost: 400, timeTicks: 22, prereqs: ["upg_farm_l2"],           effect: {} },
+    { id: "upg_sawmill_l2",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 2, pos: { col: 4, row: 0 }, name: "Water Wheel",    desc: "Unlocks the Sawmill level 2 upgrade.",    cost: 250, timeTicks: 16, prereqs: [],                        effect: {} },
+    { id: "upg_sawmill_l3",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 3, pos: { col: 4, row: 0 }, name: "Great Sawmill",  desc: "Unlocks the Sawmill level 3 upgrade.",    cost: 500, timeTicks: 26, prereqs: ["upg_sawmill_l2"],        effect: {} },
+    // === /RT-A =============================================================
   ],
 });
 
@@ -2388,7 +2413,23 @@ const Research = {
   normalize(r) {
     const f = Research.fresh();
     if (!r || typeof r !== "object") return f;
-    f.unlocked = Array.isArray(r.unlocked) ? r.unlocked.filter(id => !!Research.get(id)) : [];
+    // === RT-A: migrate retired development-branch ids → their per-level upgrade
+    // nodes so old saves keep their unlocked value. Expand, then drop unknowns,
+    // then dedupe. Legacy kingdom ids survive the filter unchanged. ===
+    const MIGRATE_MAP = {
+      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"],
+      lumberjack_upgrades: ["upg_lumberjack_l2", "upg_lumberjack_l3"],
+      farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
+      sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],
+    };
+    const rawUnlocked = Array.isArray(r.unlocked) ? r.unlocked : [];
+    const expanded = [];
+    for (const id of rawUnlocked) {
+      if (MIGRATE_MAP[id]) expanded.push(...MIGRATE_MAP[id]);
+      else expanded.push(id);
+    }
+    f.unlocked = [...new Set(expanded.filter(id => !!Research.get(id)))];
+    // === /RT-A ===
     f.active = (typeof r.active === "string" && Research.get(r.active)) ? r.active : null;
     f.progress = (typeof r.progress === "number" && r.progress >= 0) ? r.progress : 0;
     f.spent = (typeof r.spent === "number" && r.spent >= 0) ? r.spent : 0;
@@ -2401,8 +2442,12 @@ const Research = {
     return null;
   },
   all() { return CONFIG.research || []; },
-  branches() { return ["production", "logistics", "administration", "development"]; },   // RU-A: +development
+  branches() { return ["production", "logistics", "administration"]; },   // RT-A: kingdom side-column branches (dropped development)
   nodesIn(branch) { return Research.all().filter(n => n.branch === branch); },
+  // === RT-A: bands API — RT-B renders the tiered tree by band. ===
+  bands() { return ["peasant", "worker", "burgher", "kingdom"]; },
+  nodesInBand(band) { return Research.all().filter(n => n.band === band); },
+  // === /RT-A ===
 
   has(state, id) {
     return !!(state && state.research && state.research.unlocked.indexOf(id) >= 0);
@@ -2561,12 +2606,29 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, cloth: 20 },
   town_charters: { tools: 20, furniture: 15 },
   bureaucracy:   { jewelry: 15, furniture: 25 },
-  // === RU-A: development branch materials (tier-1 amounts) ==
-  hut_upgrades:        { wood: 20, stone: 10 },
-  lumberjack_upgrades: { wood: 25, stone: 10 },
-  farm_upgrades:       { wood: 25, stone: 10 },
-  sawmill_upgrades:    { wood: 30, stone: 15 },
-  // === /RU-A ===============================================
+  // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
+  unlock_quarry:   { wood: 15 },
+  unlock_fishery:  { wood: 15 },
+  unlock_miner:    { wood: 20, stone: 10 },
+  unlock_shepherd: { wood: 20, stone: 5 },
+  unlock_mill:     { planks: 15, stone: 10 },
+  unlock_smelter:  { planks: 20, stone: 15 },
+  unlock_weaver:   { planks: 15, stone: 10 },
+  unlock_cottage:  { planks: 15, stone: 15 },
+  unlock_brewery:  { planks: 15, stone: 10 },
+  unlock_bakery:   { planks: 20, tools: 10 },
+  unlock_manor:    { planks: 30, tools: 15 },
+  // -- per-level upgrade nodes (replace the old development ids) --
+  upg_hut_l2:        { wood: 15 },
+  upg_hut_l3:        { wood: 20, stone: 10 },
+  upg_hut_l4:        { wood: 30, stone: 15 },
+  upg_lumberjack_l2: { wood: 20 },
+  upg_lumberjack_l3: { wood: 25, stone: 15 },
+  upg_farm_l2:       { wood: 20 },
+  upg_farm_l3:       { wood: 25, stone: 15 },
+  upg_sawmill_l2:    { planks: 10, wood: 15 },
+  upg_sawmill_l3:    { planks: 20, stone: 15 },
+  // === /RT-A ===============================================
 };
 for (const _rn of (CONFIG.research || [])) {
   if (!_rn.materials) _rn.materials = RESEARCH_MATERIALS[_rn.id] || {};

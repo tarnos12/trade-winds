@@ -36,25 +36,98 @@ function fillMats(st, id) {
 }
 
 // =========================================================================
-// Catalog shape
+// Catalog shape — RT-A tiered tree: 15 kingdom + one unlock node per
+// non-startUnlocked building + one node per ladder level. Counts derived from
+// CONFIG (no magic numbers), so the test tracks the real data model.
 // =========================================================================
-ok("19 research nodes", CONFIG.research.length === 19);   // RU-A: +4 development nodes
-// RU-A: 3 core branches × 5 nodes + a development branch of 4 nodes.
-ok("core branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
-ok("development branch has 4 nodes", Research.nodesIn("development").length === 4);
-ok("branches() includes development (4 branches)", Research.branches().length === 4 && Research.branches().indexOf("development") >= 0);
-ok("every node has required fields", CONFIG.research.every(n =>
+const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
+const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
+const KINGDOM_COUNT = 15;
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // 15 + 11 + 9 = 35
+ok("expected node count derived from CONFIG (15 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
+ok("EXPECT resolves to 35", EXPECT === 35);
+// The 3 kingdom branches remain 5 nodes each.
+ok("kingdom branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
+ok("branches() is the 3 kingdom branches, development dropped",
+  Research.branches().length === 3 && Research.branches().indexOf("development") < 0);
+// bands() API for RT-B.
+ok("bands() lists all four bands", (() => {
+  const b = Research.bands();
+  return b.length === 4 && ["peasant", "worker", "burgher", "kingdom"].every(x => b.indexOf(x) >= 0);
+})());
+ok("kingdom band has 15 nodes", Research.nodesInBand("kingdom").length === KINGDOM_COUNT);
+ok("peasant+worker+burgher bands hold every unlock + upgrade node",
+  Research.nodesInBand("peasant").length + Research.nodesInBand("worker").length + Research.nodesInBand("burgher").length
+    === NON_STARTERS.length + LADDER_LEVELS);
+ok("every node assigned to a real band", CONFIG.research.every(n => Research.bands().indexOf(n.band) >= 0));
+ok("every node has required fields (incl. band, kind, pos)", CONFIG.research.every(n =>
   n.id && n.branch && n.name && n.desc && typeof n.cost === "number" &&
-  typeof n.timeTicks === "number" && Array.isArray(n.prereqs) && n.effect && typeof n.effect === "object"));
+  typeof n.timeTicks === "number" && Array.isArray(n.prereqs) && n.effect && typeof n.effect === "object" &&
+  typeof n.band === "string" && typeof n.kind === "string" &&
+  n.pos && Number.isInteger(n.pos.col) && Number.isInteger(n.pos.row)));
+ok("node kinds are kingdom|unlock|upgrade", CONFIG.research.every(n => ["kingdom", "unlock", "upgrade"].indexOf(n.kind) >= 0));
 // CRE: every node carries a materials requirement (goodId → positive qty of real goods).
 ok("every node has a materials requirement", CONFIG.research.every(n =>
   n.materials && typeof n.materials === "object" && Object.keys(n.materials).length > 0 &&
   Object.keys(n.materials).every(g => !!CONFIG.goods[g] && n.materials[g] > 0)));
-ok("node ids are unique", new Set(CONFIG.research.map(n => n.id)).size === 19);   // RU-A: 19 total
+ok("node ids are unique", new Set(CONFIG.research.map(n => n.id)).size === EXPECT);
 ok("all prereqs reference real nodes", CONFIG.research.every(n =>
   n.prereqs.every(p => !!Research.get(p))));
-ok("each branch has exactly one root (no prereqs)", Research.branches().every(b =>
+// The 3 kingdom branches each still form a single chain (one prereq-less root).
+ok("each kingdom branch has exactly one root (no prereqs)", Research.branches().every(b =>
   Research.nodesIn(b).filter(n => n.prereqs.length === 0).length === 1));
+
+// -- RT-A: DAG is acyclic and every prereq resolves (whole forest). --
+ok("prereq graph is acyclic", (() => {
+  const WHITE = 0, GREY = 1, BLACK = 2;
+  const color = {};
+  CONFIG.research.forEach(n => color[n.id] = WHITE);
+  let acyclic = true;
+  function visit(id) {
+    color[id] = GREY;
+    const node = Research.get(id);
+    for (const p of (node.prereqs || [])) {
+      if (!Research.get(p)) { acyclic = false; continue; }
+      if (color[p] === GREY) { acyclic = false; }
+      else if (color[p] === WHITE) visit(p);
+    }
+    color[id] = BLACK;
+  }
+  CONFIG.research.forEach(n => { if (color[n.id] === WHITE) visit(n.id); });
+  return acyclic;
+})());
+
+// -- RT-A: every non-starter building has a matching unlock_<id> node whose id
+// equals the building's unlockedBy, kind:"unlock", carrying the building's tier band. --
+ok("every non-starter building maps to its unlock node", NON_STARTERS.every(b => {
+  const node = Research.get("unlock_" + b.id);
+  if (!node || node.kind !== "unlock" || node.buildingId !== b.id) return false;
+  if (b.unlockedBy !== node.id) return false;
+  const tier = b.workerTier || b.houseTier;
+  return node.band === tier;
+}));
+ok("no unlock node points at a nonexistent building", CONFIG.research
+  .filter(n => n.kind === "unlock")
+  .every(n => CONFIG.buildings[n.buildingId] && !CONFIG.buildings[n.buildingId].startUnlocked));
+
+// -- RT-A: every ladder entry has its own per-level upgrade node with chained
+// prereqs (l3 requires l2, l4 requires l3; l2 prereq = unlock node or [] for
+// startUnlocked buildings). --
+ok("every ladder level has a matching upgrade node + chained prereqs", Object.entries(CONFIG.upgrades).every(([typeId, ladder]) => {
+  const b = CONFIG.buildings[typeId];
+  return ladder.every(entry => {
+    const node = Research.get("upg_" + typeId + "_l" + entry.level);
+    if (!node || node.kind !== "upgrade" || node.buildingId !== typeId || node.level !== entry.level) return false;
+    if (entry.unlockedBy !== node.id) return false;              // ladder gate points at THIS node
+    if (entry.level === 2) {
+      // l2 prereq = the building's unlock node, or [] when the building is startUnlocked.
+      if (b.startUnlocked) return node.prereqs.length === 0;
+      return node.prereqs.length === 1 && node.prereqs[0] === "unlock_" + typeId;
+    }
+    // l3/l4 chain from the previous level.
+    return node.prereqs.indexOf("upg_" + typeId + "_l" + (entry.level - 1)) >= 0;
+  });
+}));
 
 // =========================================================================
 // canStart gating — prereqs, funds, single-active, already-done
@@ -293,21 +366,48 @@ function mkCity(over) {
 })();
 
 // =========================================================================
-// === RU-A: development branch — unlock nodes exist, gated, unlock normally ===
+// === RT-A: retired development ids gone; per-level upgrade nodes present ===
 (() => {
   const devIds = ["hut_upgrades", "lumberjack_upgrades", "farm_upgrades", "sawmill_upgrades"];
-  ok("4 development nodes exist", devIds.every(id => !!Research.get(id) && Research.get(id).branch === "development"));
-  const st = mkState({ treasury: 100000 });
-  ok("dev root available, others gated", Research.isAvailable(st, "hut_upgrades")
-    && !Research.isAvailable(st, "lumberjack_upgrades"));
-  ok("dev nodes locked before research", devIds.every(id => !Research.has(st, id)));
-  fillMats(st, "hut_upgrades");
-  Research.start(st, "hut_upgrades");
-  tick(st, Research.get("hut_upgrades").timeTicks);
-  ok("dev root unlocks via normal flow", Research.has(st, "hut_upgrades"));
-  ok("next dev node available after prereq", Research.canStart(st, "lumberjack_upgrades"));
+  ok("the 4 development ids no longer exist", devIds.every(id => Research.get(id) === null));
+  const upgNodes = ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_lumberjack_l2", "upg_lumberjack_l3",
+    "upg_farm_l2", "upg_farm_l3", "upg_sawmill_l2", "upg_sawmill_l3"];
+  ok("all 9 per-level upgrade nodes exist with kind:upgrade + peasant band", upgNodes.every(id => {
+    const n = Research.get(id);
+    return n && n.kind === "upgrade" && n.band === "peasant";
+  }));
+  ok("upg_hut_l4 carries buildingId+level", (() => {
+    const n = Research.get("upg_hut_l4");
+    return n.buildingId === "hut" && n.level === 4;
+  })());
 })();
-// === /RU-A ===================================================================
+
+// -- RT-A: normalize migrates old development ids to their full level sets --
+(() => {
+  const cleaned = Research.normalize({ unlocked: ["hut_upgrades", "crop_rotation", "bogus"] });
+  ok("migrate expands hut_upgrades → all 3 hut level nodes",
+    ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"].every(id => cleaned.unlocked.indexOf(id) >= 0));
+  ok("migrate keeps legacy kingdom id crop_rotation", cleaned.unlocked.indexOf("crop_rotation") >= 0);
+  ok("migrate drops unknown id", cleaned.unlocked.indexOf("bogus") < 0);
+  ok("migrate result has exactly the expected 4 ids", cleaned.unlocked.length === 4);
+  const multi = Research.normalize({ unlocked: ["lumberjack_upgrades", "sawmill_upgrades"] });
+  ok("migrate expands multiple dev ids", multi.unlocked.length === 4 &&
+    ["upg_lumberjack_l2", "upg_lumberjack_l3", "upg_sawmill_l2", "upg_sawmill_l3"].every(id => multi.unlocked.indexOf(id) >= 0));
+})();
+
+// -- RT-A: an unlock node gates its building and unlocks via the normal flow --
+(() => {
+  const st = mkState({ treasury: 100000 });
+  ok("root unlock nodes available immediately", Research.isAvailable(st, "unlock_quarry") && Research.isAvailable(st, "unlock_fishery"));
+  ok("dependent unlock node gated before prereq", !Research.isAvailable(st, "unlock_miner"));
+  ok("miner building gated before its unlock node", !Research.has(st, "unlock_quarry") && CONFIG.buildings.miner.unlockedBy === "unlock_miner");
+  fillMats(st, "unlock_quarry");
+  Research.start(st, "unlock_quarry");
+  tick(st, Research.get("unlock_quarry").timeTicks);
+  ok("unlock_quarry unlocks via normal start→tick flow", Research.has(st, "unlock_quarry"));
+  ok("unlock_miner now available after its prereq", Research.canStart(st, "unlock_miner"));
+})();
+// === /RT-A ===================================================================
 
 console.log(`research: ${pass}/${pass + fail} passed` + (fail ? ` (${fail} FAILED)` : ""));
 process.exit(fail ? 1 : 0);
