@@ -105,6 +105,68 @@
   .cc-cool { font-size: 11px; text-align: center; color: var(--accent); opacity: 0.9; font-variant-numeric: tabular-nums; }
   /* === CITY-CARDS CSS END === */
 
+  /* === KR-B CSS START === kingdom resource overview (grid + detail chart).
+     Left column, BELOW the kingdom-gold chip (chip band ends ~92px). The grid is
+     compact + collapsible; early game only a few goods are producible so it sits
+     above the tutorial (top:156px). Detail is anchored BOTTOM-left, clear of the
+     top-left chip/tutorial and the top-center city cards. */
+  #resGrid {
+    position: fixed; left: 12px; top: 96px; width: 214px; z-index: 14;
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45); font-size: 12px; overflow: hidden;
+  }
+  #resGrid.hidden { display: none; }
+  #resGrid .rg-head {
+    display: flex; align-items: center; gap: 6px; padding: 6px 9px;
+    border-bottom: 1px solid var(--panel-edge);
+    background: linear-gradient(180deg, rgba(201,138,60,0.15), rgba(0,0,0,0));
+  }
+  #resGrid .rg-title { font-weight: bold; color: var(--accent); font-size: 12px; flex: 1; letter-spacing: 0.3px; }
+  #resGrid .rg-toggle { padding: 0 6px; font-size: 12px; line-height: 1.4; background: transparent; border-color: transparent; }
+  #resGrid .rg-toggle:hover { background: #4d3c24; }
+  #resGrid.collapsed .rg-chips { display: none; }
+  #resGrid.collapsed .rg-head { border-bottom: none; }
+  .rg-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 6px; max-height: 44vh; overflow-y: auto; }
+  .rg-chips::-webkit-scrollbar { width: 8px; }
+  .rg-chips::-webkit-scrollbar-thumb { background: var(--panel-edge); border-radius: 4px; }
+  .rg-chip {
+    display: flex; align-items: center; gap: 4px; padding: 3px 5px; border-radius: 6px;
+    background: #1c160f; border: 1px solid transparent; cursor: pointer;
+    font-variant-numeric: tabular-nums; min-width: 0;
+  }
+  .rg-chip:hover { border-color: var(--panel-edge); }
+  .rg-chip.active { border-color: var(--accent); background: #241c11; }
+  .rg-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset; }
+  .rg-tot { flex: 1; color: var(--paper); font-weight: bold; font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .rg-price { color: #d9c169; font-size: 10.5px; flex: 0 0 auto; }
+  .rg-tr { width: 11px; text-align: center; font-size: 10px; flex: 0 0 auto; }
+  .rg-tr.up { color: #6fbf73; } .rg-tr.down { color: #e06b4a; } .rg-tr.flat { color: #8a8172; }
+
+  #resDetail {
+    position: fixed; left: 12px; bottom: 56px; width: 250px; z-index: 16;
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.5); font-size: 12px; overflow: hidden;
+  }
+  #resDetail.hidden { display: none; }
+  .rd-head {
+    display: flex; align-items: center; gap: 7px; padding: 7px 10px;
+    border-bottom: 1px solid var(--panel-edge);
+    background: linear-gradient(180deg, rgba(201,138,60,0.15), rgba(0,0,0,0));
+  }
+  .rd-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset; }
+  .rd-title { font-weight: bold; color: var(--accent); font-size: 14px; flex: 1; }
+  .rd-body { padding: 9px 10px 11px; }
+  .rd-bar-wrap { position: relative; height: 15px; background: #1c160f; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+  .rd-bar { height: 100%; width: 0; background: linear-gradient(90deg, #6b7f4a, #d9c169); transition: width 0.4s; }
+  .rd-bar-lbl { position: absolute; inset: 0; text-align: center; font-size: 10.5px; line-height: 15px; color: var(--paper); text-shadow: 0 1px 2px rgba(0,0,0,0.75); }
+  .rd-stats { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 3px 10px; margin-bottom: 8px; font-size: 11.5px; }
+  .rd-stats .k { opacity: 0.7; } .rd-stats .v { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .rd-stats .v.up { color: #6fbf73; } .rd-stats .v.down { color: #e06b4a; }
+  #rdChart { display: block; width: 100%; height: 96px; background: #150f09; border: 1px solid var(--panel-edge); border-radius: 6px; }
+  .rd-axis { display: flex; justify-content: space-between; font-size: 10px; opacity: 0.62; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .rd-axis-mid { color: #7a9bd4; opacity: 0.95; }
+  /* === KR-B CSS END === */
+
   /* ---- Bottom hint ---- */
   #hint {
     position: fixed; left: 12px; bottom: 12px;
@@ -619,6 +681,29 @@
   <div id="cityCards" aria-label="Cities"></div>
 </div>
 <!-- === CITY-CARDS END === -->
+
+<!-- === KR-B HTML START === kingdom resource overview (grid + detail chart) -->
+<div id="resGrid" class="hidden" aria-label="Kingdom resources">
+  <div class="rg-head">
+    <span class="rg-title">📦 Resources</span>
+    <button id="rgToggle" class="rg-toggle" title="Collapse / expand">▾</button>
+  </div>
+  <div id="rgChips" class="rg-chips"></div>
+</div>
+<div id="resDetail" class="hidden" aria-hidden="true">
+  <div class="rd-head">
+    <span class="rd-dot" id="rdDot"></span>
+    <span class="rd-title" id="rdName">Good</span>
+    <button id="rdClose" class="tp-close" title="Close">✕</button>
+  </div>
+  <div class="rd-body">
+    <div class="rd-bar-wrap"><div class="rd-bar" id="rdBar"></div><span class="rd-bar-lbl" id="rdBarLbl"></span></div>
+    <div class="rd-stats" id="rdStats"></div>
+    <canvas id="rdChart" width="238" height="96" aria-label="Mean price history"></canvas>
+    <div class="rd-axis"><span id="rdAxMin"></span><span class="rd-axis-mid" id="rdAxBase"></span><span id="rdAxMax"></span></div>
+  </div>
+</div>
+<!-- === KR-B HTML END === -->
 
 <div id="hint">
   <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
@@ -3109,6 +3194,149 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 })();
 // === EVENTS-CORE END ===
 
+// === KR-A: kingdom resource market (pure sampling + summaries) ===
+// A small, pure, side-effect-free market observatory. Once per economy tick it
+// samples every good's KINGDOM-WIDE stock total and mean local price into a
+// bounded history ring so the KR-B panel can draw a 5-min price chart and a
+// live resource grid. No DOM / canvas / I/O; the only mutation is state.market.
+//
+// Contract:
+//   state.market = { hist: { [goodId]: [ {t,total,avg}, ... ] }, head, len }
+//     - hist[gid]  chronological, newest LAST, capped to MAX_SAMPLES (a
+//                  shift-capped array — stays bounded across save/load).
+//     - head       total samples ever taken (monotonic counter).
+//     - len        current sample depth (max array length, ≤ MAX_SAMPLES).
+//
+// It READS the price ALREADY PUBLISHED by Sim.tick this tick (town.prices[gid])
+// rather than calling Sim.priceFor — priceFor lerps and mutates, so re-calling
+// it here would double-step prices and perturb the economy. Falling back to the
+// good's basePrice keeps empty/legacy states well-defined. Deterministic:
+// same state in ⇒ same sample out (no Math.random, no wall clock).
+var Market = (typeof Market !== "undefined" && Market) || {};
+
+Market.MAX_SAMPLES = 600;     // 5 min at 500 ms / tick — buffer hard cap per good
+Market.TREND_LOOKBACK = 60;   // compare "now" vs ~30 s ago for the trend arrow
+Market.RATE_WINDOW = 20;      // ~10 s window the net-production rate averages over
+
+// Blank, well-formed market container.
+Market.fresh = function () { return { hist: {}, head: 0, len: 0 }; };
+
+// { [goodId]: true } for every good some AVAILABLE building outputs. A building
+// is available iff startUnlocked OR it has no unlockedBy (defensive: ungated) OR
+// its unlockedBy research node is unlocked. Mirrors the build-menu gate exactly.
+Market.producible = function (state) {
+  const out = {};
+  const defs = (typeof CONFIG !== "undefined" && CONFIG.buildings) || {};
+  const rHas = (id) => (typeof Research !== "undefined" && Research.has) ? Research.has(state, id) : false;
+  for (const bid in defs) {
+    const def = defs[bid];
+    if (!def || !def.output || !def.output.goodId) continue;
+    const avail = def.startUnlocked || !def.unlockedBy || rHas(def.unlockedBy);
+    if (avail) out[def.output.goodId] = true;
+  }
+  return out;
+};
+
+// Defensive normalizer for loaded / foreign / oversized state.market data.
+// Drops unknown goods, sanitizes each record, trims any array back to
+// MAX_SAMPLES (keeping the most recent), and returns a fresh container when the
+// shape is missing/malformed. Never throws.
+Market.normalize = function (state) {
+  const goods = (typeof CONFIG !== "undefined" && CONFIG.goods) || {};
+  let m = state ? state.market : null;
+  if (!m || typeof m !== "object" || !m.hist || typeof m.hist !== "object") m = Market.fresh();
+  const cleanHist = {};
+  let len = 0;
+  for (const gid in goods) {
+    const arr = Array.isArray(m.hist[gid]) ? m.hist[gid] : [];
+    const clean = [];
+    for (let i = 0; i < arr.length; i++) {
+      const r = arr[i];
+      if (r && typeof r === "object" &&
+          typeof r.total === "number" && isFinite(r.total) &&
+          typeof r.avg === "number" && isFinite(r.avg)) {
+        clean.push({ t: (typeof r.t === "number" && isFinite(r.t)) ? r.t : 0, total: r.total, avg: r.avg });
+      }
+    }
+    if (clean.length > Market.MAX_SAMPLES) clean.splice(0, clean.length - Market.MAX_SAMPLES);
+    cleanHist[gid] = clean;
+    if (clean.length > len) len = clean.length;
+  }
+  m.hist = cleanHist;
+  m.len = Math.min(len, Market.MAX_SAMPLES);
+  if (typeof m.head !== "number" || !isFinite(m.head) || m.head < m.len) m.head = m.len;
+  if (state) state.market = m;
+  return m;
+};
+
+// Sample once into the ring. Call AFTER Sim.tick / Trade.tick each econ step.
+Market.tick = function (state) {
+  if (!state) return state;
+  const goods = (typeof CONFIG !== "undefined" && CONFIG.goods) || {};
+  let m = state.market;
+  if (!m || typeof m !== "object" || !m.hist || typeof m.hist !== "object") { m = Market.fresh(); state.market = m; }
+  const towns = Array.isArray(state.towns) ? state.towns : [];
+  const t = (typeof state.tick === "number" && isFinite(state.tick)) ? state.tick : (m.head | 0);
+  for (const gid in goods) {
+    const base = goods[gid].basePrice;
+    let arr = m.hist[gid];
+    if (!Array.isArray(arr)) { arr = []; m.hist[gid] = arr; }
+    let total = 0, pSum = 0, pN = 0;
+    for (let i = 0; i < towns.length; i++) {
+      const town = towns[i];
+      if (!town) continue;
+      total += (town.stock && town.stock[gid]) || 0;
+      // Read the published price (Sim.tick already republished it this tick);
+      // count only towns that "value" the good (hold a finite price for it).
+      const p = town.prices && town.prices[gid];
+      if (typeof p === "number" && isFinite(p)) { pSum += p; pN++; }
+    }
+    const avg = pN > 0 ? pSum / pN : base;
+    arr.push({ t: t, total: total, avg: avg });
+    if (arr.length > Market.MAX_SAMPLES) arr.splice(0, arr.length - Market.MAX_SAMPLES);
+  }
+  m.len = Math.min((m.len | 0) + 1, Market.MAX_SAMPLES);
+  m.head = (m.head | 0) + 1;
+  return state;
+};
+
+// Per-good rollup for the UI. Reads the ring (does not sample):
+//   { total, avg, capacity, trend:-1|0|1, netRate }
+//   total     latest kingdom-wide stock
+//   avg       latest mean local price (basePrice when no history yet)
+//   capacity  #towns × storageCap (the theoretical kingdom ceiling)
+//   trend     avg now vs ~TREND_LOOKBACK samples ago, with a 2% deadband
+//   netRate   mean per-tick change in total over the last ~RATE_WINDOW samples
+Market.summary = function (state) {
+  const goods = (typeof CONFIG !== "undefined" && CONFIG.goods) || {};
+  const towns = (state && Array.isArray(state.towns)) ? state.towns : [];
+  const cap = towns.length * ((typeof CONFIG !== "undefined" && CONFIG.town && CONFIG.town.storageCap) || 0);
+  const hist = (state && state.market && state.market.hist) || {};
+  const out = {};
+  for (const gid in goods) {
+    const base = goods[gid].basePrice;
+    const arr = Array.isArray(hist[gid]) ? hist[gid] : [];
+    const n = arr.length;
+    const last = n ? arr[n - 1] : null;
+    const total = last ? last.total : 0;
+    const avg = last ? last.avg : base;
+    let trend = 0, netRate = 0;
+    if (n >= 2) {
+      const tIdx = Math.max(0, n - 1 - Market.TREND_LOOKBACK);
+      const past = arr[tIdx].avg;
+      const dead = Math.max(0.05, Math.abs(past) * 0.02);
+      if (avg > past + dead) trend = 1;
+      else if (avg < past - dead) trend = -1;
+      const rIdx = Math.max(0, n - 1 - Market.RATE_WINDOW);
+      const steps = (n - 1) - rIdx;
+      if (steps > 0) netRate = (total - arr[rIdx].total) / steps;
+    }
+    out[gid] = { total: total, avg: avg, capacity: cap, trend: trend, netRate: netRate };
+  }
+  return out;
+};
+// === /KR-A ===
+
 /* PURE_CORE_END */
 
 /* =====================================================================
@@ -3129,6 +3357,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     treasury: 10000,           // EC-A: Kingdom gold — starting purse + tariff income; pays ALL placement gold (distinct from town.gold trade budget)
     tariffRate: CONFIG.trade.tariffRate, // TARIFF-SLIDER (P5D-D): player-set base tariff (GDD §6.3, 10–40%)
     research: { unlocked: [], active: null, progress: 0, spent: 0 }, // RESEARCH (P4-A)
+    market: { hist: {}, head: 0, len: 0 }, // KR-A: kingdom market history ring (Market.tick fills it)
     tradeSeed: 0,              // seeded RNG stream for deterministic cart routing
     prestige: 0,               // P4-B: earned from King's quests; gates castle levels
     castleLevel: 1,            // P4-B: 1..5 (5 = victory)
@@ -3937,6 +4166,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 25%
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
+    state.market = (typeof Market !== "undefined" && Market.fresh) ? Market.fresh() : { hist: {}, head: 0, len: 0 };  // KR-A: fresh market history
     state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
     state.castleStock = {};      // CRE: castle research-material stockpile
     state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
@@ -3993,6 +4223,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         eventCooldown: state.eventCooldown,// P4-C: ticks until next event
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
+        market: state.market,              // KR-A: bounded market history ring (≤600/good)
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }
@@ -4016,7 +4247,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.tariffRate = typeof data.tariffRate === "number" ? data.tariffRate : CONFIG.trade.tariffRate; // TARIFF-SLIDER (P5D-D)
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
     state.research = Research.normalize(data.research);   // RESEARCH (P4-A)
-    state.warehouse = data.warehouse || {};   // CASTLE-UI (T9)
+    state.market = data.market;   // KR-A: normalized just below (guards missing/oversized/malformed)
+    if (typeof Market !== "undefined" && Market.normalize) Market.normalize(state);
+    else if (!state.market || typeof state.market !== "object") state.market = { hist: {}, head: 0, len: 0 };
     state.castleStock = (data.castleStock && typeof data.castleStock === "object") ? data.castleStock : {};   // CRE
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
@@ -4103,6 +4336,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         const _treasBefore = state.treasury || 0;
         Trade.tick(state);
         if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
+        // KR-A: sample the kingdom-wide market AFTER production + trade so the
+        // reading reflects this tick's stock/price movement (guarded; pure).
+        if (typeof Market !== "undefined" && Market.tick) Market.tick(state);
         // CRE: run the castle's research-buyer traders BEFORE Research.tick so any
         // material delivered this tick counts toward completion. Dispatch is gated on
         // the castle panel being selected (CastleUI.isOpen).
@@ -5666,10 +5902,245 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   window.CityCards = CityCards;
   // === CITY-CARDS END ===
 
+  // === KR-B START === kingdom resource overview UI (grid of producible goods +
+  // a click-through detail panel with a 5-min mean-price chart). READ-ONLY: it
+  // only reads the pure KR-A Market module (window.Market) + CONFIG + towns and
+  // never mutates the economy. Cheap DOM patching on a ~1 s cadence (chips are
+  // created once and updated in place); the chart redraws only while open.
+  const MarketUI = (() => {
+    const gridEl   = document.getElementById("resGrid");
+    const chipsEl  = document.getElementById("rgChips");
+    const toggleEl = document.getElementById("rgToggle");
+    const detailEl = document.getElementById("resDetail");
+    const rdDot    = document.getElementById("rdDot");
+    const rdName   = document.getElementById("rdName");
+    const rdClose  = document.getElementById("rdClose");
+    const rdBar    = document.getElementById("rdBar");
+    const rdBarLbl = document.getElementById("rdBarLbl");
+    const rdStats  = document.getElementById("rdStats");
+    const rdChart  = document.getElementById("rdChart");
+    const rdAxMin  = document.getElementById("rdAxMin");
+    const rdAxBase = document.getElementById("rdAxBase");
+    const rdAxMax  = document.getElementById("rdAxMax");
+
+    let openGood = null;
+    const chips = new Map();   // gid -> { root, tot, price, tr }
+
+    const M = () => (typeof window !== "undefined" && window.Market) || null;
+    // Show only once a game is actually running (start screen gates boot).
+    function running() {
+      if (!state || !state.map) return false;
+      if (window.StartScreen && typeof window.StartScreen.isOpen === "function" && window.StartScreen.isOpen()) return false;
+      return true;
+    }
+
+    // Cheap producer/consumer census for a good: producers = buildings that
+    // OUTPUT it; consumers = buildings that use it as an INPUT + (if it is a
+    // population need) each populated town that eats it.
+    function roleCounts(gid) {
+      let producers = 0, consumers = 0;
+      const towns = (state && state.towns) || [];
+      for (const t of towns) {
+        const bs = Array.isArray(t.buildings) ? t.buildings : [];
+        for (const b of bs) {
+          const def = CONFIG.buildings[b && b.typeId];
+          if (!def) continue;
+          if (def.output && def.output.goodId === gid) producers++;
+          if (def.inputs && def.inputs[gid]) consumers++;
+        }
+      }
+      const N = CONFIG.needs || {};
+      const isNeed = (Array.isArray(N.basicNeeds) && N.basicNeeds.indexOf(gid) >= 0) ||
+                     (Array.isArray(N.extraNeeds) && N.extraNeeds.indexOf(gid) >= 0);
+      if (isNeed) {
+        for (const t of towns) {
+          const p = t.pop || {};
+          if (((p.peasants || 0) + (p.workers || 0) + (p.burghers || 0)) > 0) consumers++;
+        }
+      }
+      return { producers, consumers };
+    }
+
+    function buildChip(gid) {
+      const root = document.createElement("div");
+      root.className = "rg-chip";
+      root.title = GOOD_LABEL(gid);
+      root.innerHTML = '<span class="rg-dot"></span><span class="rg-tot"></span>' +
+                       '<span class="rg-price"></span><span class="rg-tr"></span>';
+      root.querySelector(".rg-dot").style.background = goodColor(gid);
+      const c = { root: root, tot: root.querySelector(".rg-tot"),
+                  price: root.querySelector(".rg-price"), tr: root.querySelector(".rg-tr") };
+      root.addEventListener("click", () => { if (openGood === gid) close(); else open(gid); });
+      return c;
+    }
+
+    function refresh() {
+      if (!gridEl) return;
+      const M0 = M();
+      if (!M0 || !running()) { gridEl.classList.add("hidden"); if (detailEl) detailEl.classList.add("hidden"); return; }
+      gridEl.classList.remove("hidden");
+      anchorBelowStrip();
+
+      const prod = M0.producible(state);
+      const sum  = M0.summary(state);
+      const gids = Object.keys(CONFIG.goods).filter(g => prod[g]);
+
+      const seen = new Set();
+      let prev = null;
+      for (const gid of gids) {
+        seen.add(gid);
+        let c = chips.get(gid);
+        if (!c) { c = buildChip(gid); chips.set(gid, c); }
+        if (c.root.parentNode !== chipsEl || c.root.previousElementSibling !== prev) {
+          chipsEl.insertBefore(c.root, prev ? prev.nextElementSibling : chipsEl.firstChild);
+        }
+        prev = c.root;
+        const s = sum[gid] || { total: 0, avg: CONFIG.goods[gid].basePrice, trend: 0 };
+        c.tot.textContent = Math.round(s.total);
+        c.price.textContent = (Math.round(s.avg * 10) / 10).toFixed(1);
+        c.tr.className = "rg-tr " + (s.trend > 0 ? "up" : s.trend < 0 ? "down" : "flat");
+        c.tr.textContent = s.trend > 0 ? "▲" : s.trend < 0 ? "▼" : "—";
+        c.root.classList.toggle("active", gid === openGood);
+      }
+      for (const [gid, c] of chips) {
+        if (!seen.has(gid)) { if (c.root.parentNode) c.root.parentNode.removeChild(c.root); chips.delete(gid); }
+      }
+      keepTutorialClear();
+      // an open good that stopped being producible (e.g. new game) closes.
+      if (openGood && !prod[openGood]) { close(); return; }
+      if (openGood) refreshDetail();
+    }
+
+    // The grid is persistent and lives in the same left column as the transient
+    // onboarding coach (#tutorial, CSS top:156px). When both are on screen, push
+    // the coach just below the grid so they never overlap; otherwise restore the
+    // coach to its CSS anchor. Defensive: no-op if the element is absent.
+    // Sit the grid just under the top-left city strip (the kingdom-gold chip +
+    // the city-cards row), whose height depends on whether any cities exist —
+    // so the grid clears BOTH the chip and the cards without hard-coding widths.
+    function anchorBelowStrip() {
+      const strip = document.getElementById("cityStrip");
+      if (!strip || !gridEl) return;
+      const b = strip.getBoundingClientRect().bottom;
+      gridEl.style.top = Math.max(96, Math.round(b) + 8) + "px";
+    }
+
+    function keepTutorialClear() {
+      const tut = document.getElementById("tutorial");
+      if (!tut || !gridEl) return;
+      if (!tut.classList.contains("hidden") && !gridEl.classList.contains("hidden")) {
+        const gb = gridEl.getBoundingClientRect().bottom;
+        tut.style.top = Math.max(156, Math.round(gb) + 10) + "px";
+      } else if (tut.style.top) {
+        tut.style.top = "";
+      }
+    }
+
+    function open(gid) {
+      if (!CONFIG.goods[gid] || !detailEl) return;
+      openGood = gid;
+      detailEl.classList.remove("hidden");
+      detailEl.setAttribute("aria-hidden", "false");
+      if (rdDot) rdDot.style.background = goodColor(gid);
+      if (rdName) rdName.textContent = GOOD_LABEL(gid);
+      for (const [g, c] of chips) c.root.classList.toggle("active", g === gid);
+      refreshDetail();
+    }
+    function close() {
+      openGood = null;
+      if (detailEl) { detailEl.classList.add("hidden"); detailEl.setAttribute("aria-hidden", "true"); }
+      for (const [, c] of chips) c.root.classList.remove("active");
+    }
+
+    function refreshDetail() {
+      const M0 = M();
+      if (!M0 || !openGood || !detailEl) return;
+      const gid = openGood, base = CONFIG.goods[gid].basePrice;
+      const s = M0.summary(state)[gid] || { total: 0, avg: base, capacity: 0, netRate: 0, trend: 0 };
+      const cap = s.capacity || 0;
+      const pct = cap > 0 ? Math.max(0, Math.min(100, (s.total / cap) * 100)) : 0;
+      if (rdBar) rdBar.style.width = pct.toFixed(1) + "%";
+      if (rdBarLbl) rdBarLbl.textContent = Math.round(s.total) + " / " + Math.round(cap);
+      const rc = roleCounts(gid);
+      const rate = s.netRate || 0;
+      const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
+      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/tick";
+      if (rdStats) rdStats.innerHTML =
+        '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
+        '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
+        '<span class="k">Producers</span><span class="v">' + rc.producers + '</span>' +
+        '<span class="k">Consumers</span><span class="v">' + rc.consumers + '</span>';
+      drawChart(gid);
+    }
+
+    // Small dedicated line chart: avg-price series + a subtle basePrice ref line.
+    function drawChart(gid) {
+      const cv = rdChart;
+      if (!cv || typeof cv.getContext !== "function") return;
+      const g = cv.getContext("2d");
+      const cw = cv.clientWidth || 238, ch = 96;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
+      if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, cw, ch);
+      g.fillStyle = "#150f09"; g.fillRect(0, 0, cw, ch);
+
+      const M0 = M();
+      const hist = (M0 && state.market && state.market.hist && state.market.hist[gid]) || [];
+      const base = CONFIG.goods[gid].basePrice;
+      const vals = [];
+      for (let i = 0; i < hist.length; i++) { const v = hist[i] && hist[i].avg; if (typeof v === "number" && isFinite(v)) vals.push(v); }
+
+      let min = base, max = base;
+      for (let i = 0; i < vals.length; i++) { if (vals[i] < min) min = vals[i]; if (vals[i] > max) max = vals[i]; }
+      if (max - min < 1e-6) { min -= 1; max += 1; }
+      const span = max - min, pad = 5;
+      const X = (i, n) => pad + (n <= 1 ? 0 : (i / (n - 1)) * (cw - 2 * pad));
+      const Y = (v) => ch - pad - ((v - min) / span) * (ch - 2 * pad);
+
+      // basePrice reference (subtle dashed line)
+      g.strokeStyle = "rgba(122,155,212,0.5)"; g.lineWidth = 1; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(pad, Y(base)); g.lineTo(cw - pad, Y(base)); g.stroke(); g.setLineDash([]);
+
+      // avg-price series
+      if (vals.length >= 2) {
+        g.strokeStyle = goodColor(gid); g.lineWidth = 1.5; g.lineJoin = "round"; g.beginPath();
+        for (let i = 0; i < vals.length; i++) { const px = X(i, vals.length), py = Y(vals[i]); if (i === 0) g.moveTo(px, py); else g.lineTo(px, py); }
+        g.stroke();
+      } else if (vals.length === 1) {
+        g.fillStyle = goodColor(gid); g.beginPath(); g.arc(X(0, 1), Y(vals[0]), 2.5, 0, Math.PI * 2); g.fill();
+      }
+
+      if (rdAxMin)  rdAxMin.textContent  = (Math.round(min * 10) / 10).toFixed(1);
+      if (rdAxMax)  rdAxMax.textContent  = (Math.round(max * 10) / 10).toFixed(1);
+      if (rdAxBase) rdAxBase.textContent = "base " + (Math.round(base * 10) / 10).toFixed(1);
+    }
+
+    if (toggleEl && gridEl) {
+      toggleEl.addEventListener("click", () => {
+        const col = gridEl.classList.toggle("collapsed");
+        toggleEl.textContent = col ? "▸" : "▾";
+      });
+    }
+    if (rdClose) rdClose.addEventListener("click", close);
+
+    return {
+      refresh: refresh, open: open, close: close,
+      get openGood() { return openGood; },
+    };
+  })();
+  window.MarketUI = MarketUI;
+  // === KR-B END ===
+
   // Live refresh: keep treasury HUD + open castle panel current as prices/trade tick.
   updateTreasuryHud();
   CityCards.refresh();
   setInterval(() => { updateTreasuryHud(); CityCards.refresh(); if (castleOpen) renderCastlePanel(); }, 500);
+  // KR-B: the resource grid patches on a calmer ~1 s cadence (independent of the
+  // 500 ms HUD tick) — cheap, read-only, and refreshes the open detail chart too.
+  MarketUI.refresh();
+  setInterval(() => { MarketUI.refresh(); }, 1000);
 
   // Expose for the headless smoke test / console debugging.
   window.CastleUI = { openCastlePanel, closeCastlePanel, castleBuy, castleSell,
