@@ -338,19 +338,32 @@ function mkCity(over) {
   ok("never dispatches more than maxTraders at once", maxSeen <= CONFIG.researchEconomy.maxTraders);
 })();
 
-// Panel CLOSED → no NEW dispatches (in-flight carts, if any, may still finish).
+// RT-A2: AUTONOMOUS buying — the panel gate is gone. Buyers dispatch and the node
+// completes with the `open` flag FALSE (proving no UI flag is involved).
 (() => {
   const city = mkCity({ stock: { wood: 500, stone: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 3 });
   Research.start(st, "crop_rotation");
-  for (let i = 0; i < 50; i++) { ResearchEconomy.tick(st, false); Research.tick(st); }
-  ok("closed panel dispatches no castle traders", ResearchEconomy.activeCastleCarts(st) === 0);
-  ok("closed panel gathers no materials", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
-  ok("node stays active (stalled) while the panel is closed", st.research.active === "crop_rotation");
-  // Re-open → it now proceeds.
+  let done = false, sawCart = false;
+  for (let i = 0; i < 300 && !done; i++) {
+    ResearchEconomy.tick(st, false);   // flag FALSE — used to suppress dispatch
+    if (ResearchEconomy.activeCastleCarts(st) > 0) sawCart = true;
+    Research.tick(st);
+    if (Research.has(st, "crop_rotation")) done = true;
+  }
+  ok("autonomous buying dispatches a trader with open=false", sawCart);
+  ok("autonomous buying gathers materials and completes with open=false", done);
+  ok("selling city paid under autonomous buying", city.gold > 0);
+})();
+
+// RT-A2: also autonomous when tick() is called with NO second argument at all.
+(() => {
+  const city = mkCity({ stock: { wood: 500, stone: 500 } });
+  const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 5 });
+  Research.start(st, "crop_rotation");
   let done = false;
-  for (let i = 0; i < 300 && !done; i++) { ResearchEconomy.tick(st, true); Research.tick(st); if (Research.has(st, "crop_rotation")) done = true; }
-  ok("re-opening the panel resumes and completes it", done);
+  for (let i = 0; i < 300 && !done; i++) { ResearchEconomy.tick(st); Research.tick(st); if (Research.has(st, "crop_rotation")) done = true; }
+  ok("autonomous buying works with tick(state) and no flag", done);
 })();
 
 // Determinism of the castle-trade scenario (seeded).
@@ -408,6 +421,104 @@ function mkCity(over) {
   ok("unlock_miner now available after its prereq", Research.canStart(st, "unlock_miner"));
 })();
 // === /RT-A ===================================================================
+
+// =========================================================================
+// === RT-A2: research queue (enqueue/dequeue/isQueued + auto-start in tick) ===
+// =========================================================================
+(() => {
+  // fresh() carries an empty queue.
+  ok("fresh() has an empty queue array", Array.isArray(Research.fresh().queue) && Research.fresh().queue.length === 0);
+
+  // enqueue validity rules.
+  const st = mkState({ treasury: 1e6 });
+  ok("enqueue valid node returns true", Research.enqueue(st, "crop_rotation") === true);
+  ok("isQueued true after enqueue", Research.isQueued(st, "crop_rotation"));
+  ok("enqueue unknown id → false", Research.enqueue(st, "does_not_exist") === false);
+  ok("enqueue duplicate → false, queue length unchanged", (() => {
+    const before = st.research.queue.length;
+    const r = Research.enqueue(st, "crop_rotation");
+    return r === false && st.research.queue.length === before;
+  })());
+
+  const st2 = mkState({ treasury: 1e6 });
+  st2.research.unlocked = ["crop_rotation"];
+  ok("enqueue already-unlocked id → false", Research.enqueue(st2, "crop_rotation") === false);
+
+  const st3 = mkState({ treasury: 1e6 });
+  Research.start(st3, "crop_rotation");
+  ok("enqueue active id → false", Research.enqueue(st3, "crop_rotation") === false);
+
+  // dequeue.
+  const st4 = mkState({ treasury: 1e6 });
+  Research.enqueue(st4, "crop_rotation");
+  ok("dequeue removes and returns true", Research.dequeue(st4, "crop_rotation") === true && !Research.isQueued(st4, "crop_rotation"));
+  ok("dequeue of absent id → false", Research.dequeue(st4, "crop_rotation") === false);
+})();
+
+// normalize sanitization of the queue.
+(() => {
+  const cleaned = Research.normalize({
+    unlocked: ["crop_rotation"],
+    active: "paved_roads", progress: 3, spent: 10,
+    queue: ["deep_veins", "deep_veins", "crop_rotation", "paved_roads", "bogus", 42, null, "guild_halls"],
+  });
+  ok("normalize drops duplicate queue ids", cleaned.queue.filter(x => x === "deep_veins").length === 1);
+  ok("normalize drops already-unlocked queue id", cleaned.queue.indexOf("crop_rotation") < 0);
+  ok("normalize drops active-collision queue id", cleaned.queue.indexOf("paved_roads") < 0);
+  ok("normalize drops unknown/non-string queue ids", cleaned.queue.indexOf("bogus") < 0 && cleaned.queue.every(x => typeof x === "string"));
+  ok("normalize keeps valid queue entries in order", cleaned.queue[0] === "deep_veins" && cleaned.queue[1] === "guild_halls");
+  ok("normalize coerces non-array queue → []", Array.isArray(Research.normalize({ queue: "nope" }).queue) && Research.normalize({ queue: "nope" }).queue.length === 0);
+  ok("normalize of legacy save (no queue field) → []", Array.isArray(Research.normalize({ unlocked: [] }).queue) && Research.normalize({ unlocked: [] }).queue.length === 0);
+})();
+
+// tick auto-start: nothing active → start the FIRST eligible entry, remove it,
+// preserve the order of the rest.
+(() => {
+  const st = mkState({ treasury: 1e6 });
+  Research.enqueue(st, "crop_rotation");
+  Research.enqueue(st, "paved_roads");
+  Research.enqueue(st, "tax_ledgers");
+  Research.tick(st);   // nothing active → auto-start first
+  ok("tick auto-starts the first queued entry", st.research.active === "crop_rotation");
+  ok("auto-started entry removed from queue", !Research.isQueued(st, "crop_rotation"));
+  ok("remaining queue order preserved", st.research.queue.length === 2 && st.research.queue[0] === "paved_roads" && st.research.queue[1] === "tax_ledgers");
+})();
+
+// tick auto-start SKIPS IN PLACE an entry whose prereqs are unmet, and starts a
+// later eligible entry. deep_veins (prereq crop_rotation) is skipped; crop_rotation
+// starts; deep_veins remains queued.
+(() => {
+  const st = mkState({ treasury: 1e6 });
+  st.research.queue = ["deep_veins", "crop_rotation"];   // deep_veins needs crop_rotation
+  Research.tick(st);
+  ok("tick skips unmet-prereq entry and starts a later eligible one", st.research.active === "crop_rotation");
+  ok("skipped entry stays queued in place", Research.isQueued(st, "deep_veins") && st.research.queue.length === 1 && st.research.queue[0] === "deep_veins");
+})();
+
+// tick does NOT auto-start when a project is already active.
+(() => {
+  const st = mkState({ treasury: 1e6 });
+  Research.start(st, "crop_rotation");
+  Research.enqueue(st, "paved_roads");
+  Research.tick(st);
+  ok("tick leaves the queue intact while a project is active", st.research.active === "crop_rotation" && Research.isQueued(st, "paved_roads"));
+})();
+
+// End-to-end: a queued node auto-starts and completes once the active one finishes.
+(() => {
+  const st = mkState({ treasury: 1e6 });
+  fillMats(st, "crop_rotation");
+  Research.start(st, "crop_rotation");
+  Research.enqueue(st, "deep_veins");   // prereq = crop_rotation (met after it finishes)
+  const node = Research.get("crop_rotation");
+  tick(st, node.timeTicks);   // finish crop_rotation
+  ok("first node completed", Research.has(st, "crop_rotation"));
+  fillMats(st, "deep_veins");
+  tick(st, 1);   // auto-start the queued deep_veins
+  ok("queued node auto-started after the active one finished", st.research.active === "deep_veins");
+  ok("auto-started node removed from queue", !Research.isQueued(st, "deep_veins"));
+})();
+// === /RT-A2 ==================================================================
 
 console.log(`research: ${pass}/${pass + fail} passed` + (fail ? ` (${fail} FAILED)` : ""));
 process.exit(fail ? 1 : 0);

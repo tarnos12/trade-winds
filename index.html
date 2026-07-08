@@ -292,46 +292,93 @@
   .cw-btn:disabled { opacity: 0.3; cursor: default; }
   /* === CASTLE-UI CSS END === */
 
-  /* === RESEARCH-UI CSS START === (P4-A / slot #2 — research tree panel) */
-  #researchPanel {
-    position: fixed; top: 56px; left: 12px; width: 560px; max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 84px);
-    display: flex; flex-direction: column;
-    background: var(--panel); border: 1px solid var(--panel-edge);
-    border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
-    font-size: 13px; z-index: 22; overflow: hidden;
-  }
-  #researchPanel.hidden { display: none; }
+  /* === RT-B TECH-TREE CSS START === (full-screen tiered tech tree, DOM over canvas) */
   #btnResearch.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
-  .rs-active { padding: 8px 12px; border-bottom: 1px solid var(--panel-edge);
-    background: linear-gradient(180deg, rgba(201,138,60,0.12), rgba(0,0,0,0)); }
-  .rs-active .lbl { display: flex; justify-content: space-between; font-size: 11.5px; opacity: 0.85; margin-bottom: 4px; }
-  .rs-active .lbl b { color: var(--accent); opacity: 1; }
-  .rs-active.idle { opacity: 0.7; font-style: italic; }
-  .rs-cols { display: flex; gap: 10px; padding: 10px 12px 14px; overflow-y: auto; }
-  .rs-col { flex: 1; min-width: 0; }
-  .rs-col h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--accent); opacity: 0.9; text-align: center; }
-  .rs-node { position: relative; padding: 7px 9px; margin: 0 0 8px;
-    border: 1px solid var(--panel-edge); border-radius: 7px; background: #1c160f; }
-  .rs-node .rn-name { font-weight: bold; font-size: 12.5px; }
-  .rs-node .rn-desc { font-size: 10.5px; opacity: 0.7; line-height: 1.35; margin: 2px 0 5px; }
-  .rs-node .rn-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-  .rs-node .rn-cost { font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.85; }
-  .rs-node .rn-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--panel-edge); opacity: 0.85; }
-  .rs-node.locked { opacity: 0.5; }
-  .rs-node.locked .rn-badge { color: #c98a3c; }
-  .rs-node.available { border-color: #6fa8d6; }
-  .rs-node.available:hover { border-color: #a6cdea; background: #22201a; }
-  .rs-node.available .rn-start { padding: 1px 9px; font-size: 11px; border-color: #6fbf73; color: #a6e0a8; }
-  .rs-node.available .rn-start:disabled { opacity: 0.35; border-color: var(--panel-edge); color: var(--paper); cursor: default; }
-  .rs-node.researching { border-color: var(--accent); background: #241a0f; }
-  .rs-node.done { border-color: #4f9d5a; background: rgba(79,157,90,0.12); }
-  .rs-node.done .rn-badge { color: #a6e0a8; border-color: #4f9d5a; }
-  .rs-bar { height: 7px; border-radius: 4px; background: #120f0a; border: 1px solid var(--panel-edge);
-    overflow: hidden; margin-top: 5px; }
-  .rs-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
-  /* === RESEARCH-UI CSS END === */
+  #techTree { position: fixed; inset: 0; z-index: 60; background: rgba(10,8,5,0.94); }
+  #techTree.hidden { display: none; }
+  .tt-viewport { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
+  .tt-viewport.grabbing { cursor: grabbing; }
+  .tt-surface { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .tt-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .tt-edges path { fill: none; stroke: #2a2216; stroke-width: 5; stroke-linecap: round; }
+  .tt-edges path.tt-edge-done { stroke: #4f6b4a; }
+  .tt-edges path.tt-edge-active { stroke: var(--accent); stroke-width: 6; }
+  .tt-nodes { position: absolute; left: 0; top: 0; }
+  /* band tint strips */
+  .tt-band { position: absolute; border-radius: 10px; pointer-events: none; }
+  .tt-band-peasant { background: rgba(45,120,120,0.10); }
+  .tt-band-worker  { background: rgba(190,140,50,0.10); }
+  .tt-band-citizen { background: rgba(40,130,90,0.12); }
+  .tt-band-kingdom { background: rgba(120,120,140,0.08); }
+  .tt-band-label { position: absolute; writing-mode: vertical-rl; transform: rotate(180deg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; letter-spacing: 2px; font-weight: bold;
+    color: var(--paper); opacity: 0.5; pointer-events: none; text-transform: uppercase; }
+  /* node card */
+  .tt-node { position: absolute; box-sizing: border-box; padding: 8px 9px 9px;
+    border: 2px solid var(--panel-edge); border-radius: 9px; background: #1c160f;
+    cursor: pointer; overflow: hidden; }
+  .tt-node .tt-shield { position: absolute; top: 6px; right: 8px; font-size: 17px; opacity: 0.9; }
+  .tt-node .tt-name { font-weight: bold; font-size: 12.5px; line-height: 1.2; padding-right: 20px; }
+  .tt-node .tt-badge { font-size: 10.5px; margin-top: 4px; opacity: 0.85; }
+  .tt-node .tt-prog { height: 6px; border-radius: 4px; background: #120f0a; border: 1px solid var(--panel-edge);
+    overflow: hidden; margin-top: 5px; display: none; }
+  .tt-node .tt-prog > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
+  .tt-node.locked { opacity: 0.5; }
+  .tt-node.locked .tt-badge { color: #c98a3c; }
+  .tt-node.available { border-color: #6fa8d6; }
+  .tt-node.available:hover { border-color: #a6cdea; background: #22201a; }
+  .tt-node.researching { border-color: var(--accent); background: #241a0f; box-shadow: 0 0 0 2px rgba(201,138,60,0.35); }
+  .tt-node.researching .tt-prog { display: block; }
+  .tt-node.queued { border-color: #b9863c; background: #1f1810; }
+  .tt-node.queued .tt-badge { color: #e0b877; }
+  .tt-node.done { border-color: #4f9d5a; background: rgba(79,157,90,0.13); }
+  .tt-node.done .tt-badge { color: #a6e0a8; }
+  .tt-node.tt-anchor { cursor: default; opacity: 0.95; }
+  /* pip row (upgrade levels) */
+  .tt-pip { position: absolute; box-sizing: border-box; width: 26px; height: 24px; border-radius: 6px;
+    border: 2px solid var(--panel-edge); background: #1c160f; font-size: 11px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .tt-pip.locked { opacity: 0.45; }
+  .tt-pip.locked { color: #c98a3c; }
+  .tt-pip.available { border-color: #6fa8d6; color: #a6cdea; }
+  .tt-pip.available:hover { background: #22201a; }
+  .tt-pip.researching { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 2px rgba(201,138,60,0.35); }
+  .tt-pip.queued { border-color: #b9863c; color: #e0b877; }
+  .tt-pip.done { border-color: #4f9d5a; color: #a6e0a8; background: rgba(79,157,90,0.13); }
+  /* queue panel */
+  .tt-queue { position: absolute; left: 0; top: 0; bottom: 0; width: 250px; z-index: 2;
+    background: linear-gradient(180deg, #3a2f1e, #2a2114); border-right: 2px solid var(--panel-edge);
+    overflow-y: auto; padding: 14px 12px; box-shadow: 4px 0 18px rgba(0,0,0,0.5); }
+  .tt-queue h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent); letter-spacing: 0.5px; }
+  .tt-qactive { border: 1px solid var(--accent); border-radius: 8px; padding: 8px 9px; margin-bottom: 12px;
+    background: linear-gradient(180deg, rgba(201,138,60,0.14), rgba(0,0,0,0)); }
+  .tt-qactive .lbl { display: flex; justify-content: space-between; font-size: 11.5px; opacity: 0.9; margin-bottom: 5px; }
+  .tt-qactive .lbl b { color: var(--accent); opacity: 1; }
+  .tt-qbar { height: 7px; border-radius: 4px; background: #120f0a; border: 1px solid var(--panel-edge); overflow: hidden; }
+  .tt-qbar > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
+  .tt-qcard { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px;
+    border: 1px solid var(--panel-edge); border-radius: 7px; background: #241c11; cursor: pointer; font-size: 12px; }
+  .tt-qcard:hover { border-color: var(--accent); }
+  .tt-qcard .tt-qn { font-weight: bold; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .tt-qcard .tt-qname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-qx { border: none; background: none; color: var(--paper); opacity: 0.55; cursor: pointer; font-size: 13px; padding: 0 2px; }
+  .tt-qx:hover { opacity: 1; color: #e0844a; }
+  .tt-qempty { font-size: 11.5px; opacity: 0.6; font-style: italic; line-height: 1.5; }
+  /* chrome */
+  .tt-close { position: absolute; top: 14px; right: 16px; z-index: 3; font-size: 22px; line-height: 1;
+    background: var(--panel); color: var(--paper); border: 1px solid var(--panel-edge); border-radius: 8px;
+    width: 34px; height: 34px; cursor: pointer; }
+  .tt-close:hover { border-color: var(--accent); color: var(--accent); }
+  .tt-hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
+    opacity: 0.6; font-size: 12px; pointer-events: none; }
+  .tt-tip { position: fixed; z-index: 70; max-width: 260px; pointer-events: none;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px;
+    font-size: 12px; line-height: 1.5; box-shadow: 0 6px 22px rgba(0,0,0,0.55); }
+  .tt-tip.hidden { display: none; }
+  .tt-tip .tt-tip-name { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
+  .tt-tip .tt-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  /* === RT-B TECH-TREE CSS END === */
   /* === CB-C CSS START === per-building detail panel (mirrors the .tp-* look) */
   #buildingPanel {
     position: fixed; top: 56px; right: 12px; width: 300px;
@@ -707,16 +754,20 @@
 </div>
 <!-- === CASTLE-UI HTML END === -->
 
-<!-- === RESEARCH-UI HTML START === (P4-A / slot #2 — research tree panel) -->
-<div id="researchPanel" class="hidden" aria-hidden="true">
-  <div class="tp-head">
-    <div class="tp-title">🔬 Research</div>
-    <button id="rsClose" class="tp-close" title="Close">✕</button>
+<!-- === RT-B TECH-TREE HTML START === (full-screen tiered tech tree) -->
+<div id="techTree" class="hidden" aria-hidden="true">
+  <div id="ttViewport" class="tt-viewport">
+    <div id="ttSurface" class="tt-surface">
+      <svg id="ttEdges" class="tt-edges"></svg>
+      <div id="ttNodes" class="tt-nodes"></div>
+    </div>
   </div>
-  <div id="rsActive" class="rs-active idle"></div>
-  <div class="rs-cols" id="rsCols"></div>
+  <div id="ttQueue" class="tt-queue"></div>
+  <div class="tt-hint">Esc to close · R to reset · drag to pan</div>
+  <button id="ttClose" class="tt-close" title="Close">✕</button>
+  <div id="ttTip" class="tt-tip hidden"></div>
 </div>
-<!-- === RESEARCH-UI HTML END === -->
+<!-- === RT-B TECH-TREE HTML END === -->
 <!-- === PROGRESS-UI HTML START === (P4-B / slot #3 — King's quest banner + victory notice) -->
 <div id="questBanner" class="hidden" aria-hidden="true">
   <div class="qb-crown">📜</div>
@@ -2408,7 +2459,7 @@ Object.assign(CONFIG, {
 // Pure research engine. All queries take `state` and never mutate CONFIG.
 const Research = {
   // The blank shape newGame/loadGame should install (also used to repair saves).
-  fresh() { return { unlocked: [], active: null, progress: 0, spent: 0 }; },
+  fresh() { return { unlocked: [], active: null, progress: 0, spent: 0, queue: [] }; },
   // Defensive normalizer for loaded/foreign data.
   normalize(r) {
     const f = Research.fresh();
@@ -2434,6 +2485,17 @@ const Research = {
     f.progress = (typeof r.progress === "number" && r.progress >= 0) ? r.progress : 0;
     f.spent = (typeof r.spent === "number" && r.spent >= 0) ? r.spent : 0;
     if (!f.active) { f.progress = 0; f.spent = 0; }
+    // === RT-A2: sanitize the research queue (ordered node ids). Drop
+    // unknown/duplicate ids, ids already unlocked, and the currently-active id;
+    // coerce a non-array (or missing, legacy save) to []. f.active/f.unlocked are
+    // already computed above, so the collision checks are valid here. ===
+    const rawQ = Array.isArray(r.queue) ? r.queue : [];
+    const seenQ = new Set();
+    f.queue = rawQ.filter(id =>
+      typeof id === "string" && Research.get(id) &&
+      f.unlocked.indexOf(id) < 0 && id !== f.active &&
+      !seenQ.has(id) && (seenQ.add(id), true));
+    // === /RT-A2 ===
     return f;
   },
   get(id) {
@@ -2493,6 +2555,20 @@ const Research = {
   tick(state) {
     if (!state || !state.research) return;
     const R = state.research;
+    // === RT-A2: nothing active → scan the queue IN ORDER and start the FIRST
+    // entry whose prereqs are met (canStart also gates funds + single-active, so
+    // this matches the manual start path). Entries with unmet prereqs — or that
+    // are momentarily unaffordable — stay put, order preserved, retried next tick.
+    if (!R.active && Array.isArray(R.queue) && R.queue.length) {
+      for (let i = 0; i < R.queue.length; i++) {
+        if (Research.canStart(state, R.queue[i])) {
+          Research.start(state, R.queue[i]);
+          R.queue.splice(i, 1);
+          break;
+        }
+      }
+    }
+    // === /RT-A2 ===
     if (!R.active) return;
     const node = Research.get(R.active);
     if (!node) { R.active = null; R.progress = 0; R.spent = 0; return; }
@@ -2550,6 +2626,33 @@ const Research = {
     }
     return acc == null ? fallback : acc;
   },
+
+  // === RT-A2: research queue — ordered node ids the player lines up while a
+  // project is active. tick() auto-starts the first eligible entry (see below).
+  // enqueue allows queuing a node whose prereqs are NOT yet met (they may be
+  // satisfied by an earlier queue entry); validity = real node, not already
+  // unlocked, not active, not already queued. ===
+  isQueued(state, id) {
+    return !!(state && state.research && Array.isArray(state.research.queue)
+      && state.research.queue.indexOf(id) >= 0);
+  },
+  enqueue(state, id) {
+    if (!state || !state.research) return false;
+    if (!Array.isArray(state.research.queue)) state.research.queue = [];
+    if (!Research.get(id)) return false;
+    if (Research.has(state, id) || Research.isActive(state, id)) return false;
+    if (Research.isQueued(state, id)) return false;
+    state.research.queue.push(id);
+    return true;
+  },
+  dequeue(state, id) {
+    if (!state || !state.research || !Array.isArray(state.research.queue)) return false;
+    const i = state.research.queue.indexOf(id);
+    if (i < 0) return false;
+    state.research.queue.splice(i, 1);
+    return true;
+  },
+  // === /RT-A2 ===
 };
 
 // === RESEARCH-CORE END ===
@@ -2568,10 +2671,12 @@ const Research = {
 // town), and NO tariff is levied — the castle IS the kingdom buying for itself,
 // so the selling city receives the full agreed price (documented choice).
 //
-// GATING: new traders are dispatched ONLY while the castle panel is SELECTED
-// (the `open` arg, from CastleUI.isOpen) AND a node is active. Close the panel ⇒
-// no new dispatches; in-flight traders still finish their run. Concurrent castle
-// traders are capped at CONFIG.researchEconomy.maxTraders (10).
+// GATING (RT-A2): traders buy autonomously whenever a research node is ACTIVE —
+// the old "only while the castle panel is selected" rule was removed (author
+// decision). Only the active node's materials are bought (never queued ones).
+// The `open` arg is retained for signature/test compatibility but no longer
+// gates dispatch. Concurrent castle traders are capped at
+// CONFIG.researchEconomy.maxTraders (10).
 Object.assign(CONFIG, {
   researchEconomy: {
     maxTraders: 10,     // hard cap on concurrent castle-owned traders
@@ -2685,9 +2790,10 @@ var ResearchEconomy = (function () {
   }
   const townKey = (t) => HexMath.key(t.q, t.r);
 
-  // Advance the castle-trade layer one tick. `open` = is the castle panel
-  // selected? Mutates State only (state.carts, state.treasury, town stock/gold,
-  // state.castleStock). Deterministic via a dedicated seed (state.researchSeed).
+  // Advance the castle-trade layer one tick. `open` is retained for signature
+  // compatibility (RT-A2 removed the panel gate; dispatch now depends only on an
+  // active node). Mutates State only (state.carts, state.treasury, town
+  // stock/gold, state.castleStock). Deterministic via state.researchSeed.
   function tick(state, open) {
     if (!state) return state;
     if (!Array.isArray(state.carts)) state.carts = [];
@@ -2709,10 +2815,10 @@ var ResearchEconomy = (function () {
     const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
     const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
 
-    // --- 1. Dispatch (ONLY while the castle panel is open + a node is active) ---
+    // --- 1. Dispatch (whenever a node is ACTIVE — RT-A2 removed the panel gate) ---
     const R = state.research;
     const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
-    if (open && node && Object.keys(need(node)).length) {
+    if (node && Object.keys(need(node)).length) {
       const fromKey = castleHex();
       let guard = 0;
       // Fill up to the trader cap; each pass buys one material batch from one city.
@@ -3927,6 +4033,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
   function applyKeyPan(dt) {
+    // RT-B: don't drift the map while the full-screen tech tree is open
+    // (WASD keydowns still land in `keys` since the overlay doesn't eat them).
+    const tt = document.getElementById("techTree");
+    if (tt && !tt.classList.contains("hidden")) return;
     const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
     if (keys.has("w")) state.cam.y -= v;
     if (keys.has("s")) state.cam.y += v;
@@ -4166,10 +4276,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         Trade.tick(state);
         if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
         // CRE: run the castle's research-buyer traders BEFORE Research.tick so any
-        // material delivered this tick counts toward completion. Dispatch is gated on
-        // the castle panel being selected (CastleUI.isOpen).
+        // material delivered this tick counts toward completion. RT-A2: buyers run
+        // autonomously whenever a node is active (no longer gated on the castle panel).
         if (typeof ResearchEconomy !== "undefined") {
-          ResearchEconomy.tick(state, !!(window.CastleUI && window.CastleUI.isOpen));
+          ResearchEconomy.tick(state);
         }
         Research.tick(state); Quests.tick(state);
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
@@ -4515,7 +4625,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const tiers = [
       { key: "peasants", label: "Peasants", needs: "wood + potato + fish + wool" },
       { key: "workers",  label: "Workers",  needs: "+ beer" },
-      { key: "burghers", label: "Burghers", needs: "+ clothes" },
+      { key: "burghers", label: "Citizens", needs: "+ clothes" },
     ];
     let rows = "";
     for (const tier of tiers) {
@@ -4536,7 +4646,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   const CBD_TIERS = [
     { key: "peasants", tier: "peasant", label: "Peasants", glyph: "🧑‍🌾", color: "#8bc34a" },
     { key: "workers",  tier: "worker",  label: "Workers",  glyph: "🔨", color: "#ff9800" },
-    { key: "burghers", tier: "burgher", label: "Burghers", glyph: "🎩", color: "#9c88ff" },
+    { key: "burghers", tier: "burgher", label: "Citizens", glyph: "🎩", color: "#9c88ff" },
   ];
   function renderWorkerRoster(t) {
     if (!t || !t.pop) return "";
@@ -4641,7 +4751,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     { id: "build",   icon: "🏗", label: "Build",   kind: "special" },
     { id: "peasant", icon: "🌾", label: "Peasant", kind: "tier", tier: "peasant" },
     { id: "worker",  icon: "🔨", label: "Worker",  kind: "tier", tier: "worker"  },
-    { id: "burgher", icon: "👑", label: "Burgher", kind: "tier", tier: "burgher" },
+    { id: "burgher", icon: "👑", label: "Citizen", kind: "tier", tier: "burgher" },
   ];
   // BAL: per-building availability. A building is available iff it is a starter
   // (startUnlocked) or its unlockedBy research node has been unlocked.
@@ -5775,8 +5885,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       }
       out += '</table>';
     }
-    out += '<div class="cre-carts">🐎 ' + outCarts + ' / ' + maxCarts + ' royal buyers on the road' +
-           (castleOpen ? '' : ' (paused — panel closed)') + '</div>';
+    out += '<div class="cre-carts">🐎 ' + outCarts + ' / ' + maxCarts + ' royal buyers on the road</div>';
     return out + '</div>';
   });
 
@@ -5785,113 +5894,398 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   window.__cre = { get state() { return state; } };
   // === CARTS + CASTLE-UI END ===
 
-  // === RESEARCH-UI START ===  (P4-A / slot #2 — research panel, DOM over canvas)
-  // Reads/writes game state ONLY through the pure Research module + state.treasury,
-  // so the balance/rules live in PURE_CORE and this layer stays presentational.
-  const researchEl = document.getElementById("researchPanel");
-  const rsColsEl = document.getElementById("rsCols");
-  const rsActiveEl = document.getElementById("rsActive");
-  const btnResearch = document.getElementById("btnResearch");
-  // === RU-B: 4th research-panel column label ===
-  const BRANCH_LABEL = { production: "🏭 Production", logistics: "🛣 Logistics", administration: "📜 Administration", development: "🏗 Development" };
-  // === /RU-B ===
-  let researchOpen = false;
+  // === RT-B TECH-TREE START === (full-screen tiered tech tree, DOM over canvas)
+  // Replaces the old #researchPanel column list. Reads/writes state ONLY through
+  // the pure Research module (+ scheduleSave); all balance/rules live in PURE_CORE.
+  // Bands stack bottom-up (peasant → worker → citizen); kingdom is a side column.
+  // Upgrade nodes render as PIP rows on their building's card, not as tree nodes.
+  const btnResearch  = document.getElementById("btnResearch");
+  const techTreeEl   = document.getElementById("techTree");
+  const ttViewport   = document.getElementById("ttViewport");
+  const ttSurface    = document.getElementById("ttSurface");
+  const ttNodesEl    = document.getElementById("ttNodes");
+  const ttEdgesEl    = document.getElementById("ttEdges");
+  const ttQueueEl    = document.getElementById("ttQueue");
+  const ttTipEl      = document.getElementById("ttTip");
+  let techOpen = false;
 
-  function nodeStateClass(id) {
+  // Layout constants (px). Cards are CARD_W×CARD_H inside CELL_W×CELL_H grid slots.
+  const TT = { CELL_W: 150, CELL_H: 132, CARD_W: 132, CARD_H: 74, PIP_W: 26, PIP_H: 30,
+               QUEUE_W: 250, GAP: 30, BAND_LABEL_W: 44, BAND_PAD_Y: 34 };
+  const TT_KINGDOM_LABEL_X = TT.QUEUE_W + TT.GAP;                       // 280
+  const TT_KINGDOM_X0      = TT_KINGDOM_LABEL_X + TT.BAND_LABEL_W;      // 324
+  const TT_KINGDOM_COLS    = 3;
+  const TT_KINGDOM_END     = TT_KINGDOM_X0 + TT_KINGDOM_COLS * TT.CELL_W;
+  const TT_POP_LABEL_X     = TT_KINGDOM_END + TT.GAP;
+  const TT_POP_X0          = TT_POP_LABEL_X + TT.BAND_LABEL_W;
+  const TT_POP_BANDS       = ["peasant", "worker", "burgher"];         // bottom → top
+  const TT_BAND_TINT       = { peasant: "tt-band-peasant", worker: "tt-band-worker", burgher: "tt-band-citizen", kingdom: "tt-band-kingdom" };
+  const TT_BAND_LABEL      = { peasant: "Peasants", worker: "Workers", burgher: "Citizens", kingdom: "Kingdom" };
+  // The 5 startUnlocked buildings have no unlock node — synthesize anchor cards so
+  // their upgrade pips have a home and the full starter row shows (like the ref).
+  const TT_STARTERS = [
+    { id: "anchor_hut",         buildingId: "hut",         band: "peasant", pos: { col: 0, row: 0 }, name: "Hut" },
+    { id: "anchor_lumberjack",  buildingId: "lumberjack",  band: "peasant", pos: { col: 1, row: 0 }, name: "Lumberjack" },
+    { id: "anchor_farm",        buildingId: "farm",        band: "peasant", pos: { col: 2, row: 0 }, name: "Farm" },
+    { id: "anchor_potato_farm", buildingId: "potato_farm", band: "peasant", pos: { col: 3, row: 0 }, name: "Potato Farm" },
+    { id: "anchor_sawmill",     buildingId: "sawmill",     band: "peasant", pos: { col: 4, row: 0 }, name: "Sawmill" },
+  ];
+  const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
+    quarry: "⛏️", fishery: "🎣", miner: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥", weaver: "🧵",
+    cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️" };
+  const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
+  const TT_ROMAN = { 2: "II", 3: "III", 4: "IV" };
+
+  const ttPos = new Map();   // node id → { x, y } (cards only; edges + pips read it)
+  let ttSurfaceW = 0, ttSurfaceH = 0;
+  let ttPanX = 0, ttPanY = 0, ttDragging = false, ttDragMoved = false, ttDragStart = null;
+  let ttLastTip = null, ttEdgeSig = "";
+
+  function ttGlyphFor(node) {
+    if (!node) return "🔬";
+    if (node.kind === "kingdom") return TT_KINGDOM_GLYPH[node.branch] || "📜";
+    return TT_BUILDING_GLYPH[node.buildingId] || "🏭";
+  }
+  function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
     if (Research.isActive(state, id)) return "researching";
+    if (Research.isQueued(state, id)) return "queued";
     if (Research.isAvailable(state, id)) return "available";
     return "locked";
   }
+  function ttBadge(id, s) {
+    if (s === "done") return "✓";
+    if (s === "researching") return Math.round(Research.activeFraction(state) * 100) + "%";
+    if (s === "queued") { const i = (state.research.queue || []).indexOf(id); return "#" + (i + 1); }
+    if (s === "available") { const n = Research.get(id); return n ? fmt(n.cost) + " 🪙" : ""; }
+    return "🔒";
+  }
 
-  function renderResearchPanel() {
-    if (!researchOpen) return;
-    const treas = state.treasury || 0;
+  // -- layout: rows per band (incl. starter anchors), so band slabs size to fit. --
+  function ttRowsOf(band) {
+    let max = 0;
+    for (const n of Research.nodesInBand(band)) if (n.kind !== "upgrade") max = Math.max(max, n.pos.row);
+    for (const s of TT_STARTERS) if (s.band === band) max = Math.max(max, s.pos.row);
+    return max + 1;
+  }
 
-    // Active-project header.
-    const activeId = state.research && state.research.active;
-    if (activeId) {
-      const node = Research.get(activeId);
-      const frac = Research.activeFraction(state);
-      rsActiveEl.className = "rs-active";
-      rsActiveEl.innerHTML =
-        `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span>` +
-        `<span>${Math.round(frac * 100)}% · ${fmt(state.research.spent || 0)}/${fmt(node.cost)}g</span></div>` +
-        `<div class="rs-bar"><span style="width:${Math.round(frac * 100)}%"></span></div>`;
-    } else {
-      rsActiveEl.className = "rs-active idle";
-      rsActiveEl.textContent = "No active research — pick an available node below.";
+  function ttSig() {
+    const R = state.research || {};
+    return (R.active || "") + "|" + ((R.unlocked || []).length) + "|" + ((R.queue || []).length);
+  }
+
+  // Card HTML. `anchor` = synthesized starter (always-done, non-interactive).
+  function ttCardEl(id, name, glyph, s, anchor) {
+    const p = ttPos.get(id);
+    if (!p) return "";
+    const badge = anchor ? "✓" : ttBadge(id, s);
+    const pct = (!anchor && s === "researching") ? Math.round(Research.activeFraction(state) * 100) : 0;
+    const dataAttr = anchor ? `data-anchor="${id}"` : `data-node="${id}"`;
+    const cls = anchor ? "tt-node done tt-anchor" : "tt-node " + s;
+    return `<div class="${cls}" ${dataAttr} style="left:${p.x}px;top:${p.y}px;width:${TT.CARD_W}px;min-height:${TT.CARD_H}px">` +
+      `<div class="tt-shield">${glyph}</div>` +
+      `<div class="tt-name">${esc(name)}</div>` +
+      `<div class="tt-badge">${badge}</div>` +
+      `<div class="tt-prog"><span style="width:${pct}%"></span></div>` +
+      `</div>`;
+  }
+
+  // Pip row above a building card — one pip per CONFIG.upgrades ladder level.
+  function ttPipsHTML(buildingId, cardPos) {
+    const ladder = (CONFIG.upgrades && CONFIG.upgrades[buildingId]) || [];
+    if (!ladder.length || !cardPos) return "";
+    let out = "";
+    ladder.forEach((entry, i) => {
+      const nid = "upg_" + buildingId + "_l" + entry.level;
+      const s = ttNodeState(nid);
+      const px = cardPos.x + i * (TT.PIP_W + 5);
+      const py = cardPos.y - TT.PIP_H - 2;
+      out += `<div class="tt-pip ${s}" data-node="${nid}" style="left:${px}px;top:${py}px">${TT_ROMAN[entry.level] || entry.level}</div>`;
+    });
+    return out;
+  }
+
+  // Full rebuild (on open): positions, band strips/labels, cards, pips, edges.
+  function ttBuildLayout() {
+    const rows = {}, bandH = {};
+    for (const b of TT_POP_BANDS) { rows[b] = ttRowsOf(b); bandH[b] = rows[b] * TT.CELL_H + TT.BAND_PAD_Y * 2; }
+    const H = TT_POP_BANDS.reduce((s, b) => s + bandH[b], 0);
+    const bandTops = {}; let y = H;
+    for (const b of TT_POP_BANDS) { bandTops[b] = y - bandH[b]; y -= bandH[b]; }   // first (peasant) → bottom
+
+    let maxCol = 0;
+    for (const b of TT_POP_BANDS) for (const n of Research.nodesInBand(b)) if (n.kind !== "upgrade") maxCol = Math.max(maxCol, n.pos.col);
+    for (const s of TT_STARTERS) maxCol = Math.max(maxCol, s.pos.col);
+    ttSurfaceW = TT_POP_X0 + (maxCol + 1) * TT.CELL_W + TT.GAP;
+    ttSurfaceH = H;
+    ttSurface.style.width = ttSurfaceW + "px";
+    ttSurface.style.height = ttSurfaceH + "px";
+
+    // positions (cards only)
+    ttPos.clear();
+    for (const n of Research.nodesInBand("kingdom"))
+      ttPos.set(n.id, { x: TT_KINGDOM_X0 + n.pos.col * TT.CELL_W, y: TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
+    for (const b of TT_POP_BANDS) for (const n of Research.nodesInBand(b)) {
+      if (n.kind === "upgrade") continue;
+      ttPos.set(n.id, { x: TT_POP_X0 + n.pos.col * TT.CELL_W, y: bandTops[b] + TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
     }
+    for (const s of TT_STARTERS)
+      ttPos.set(s.id, { x: TT_POP_X0 + s.pos.col * TT.CELL_W, y: bandTops[s.band] + TT.BAND_PAD_Y + s.pos.row * TT.CELL_H });
 
-    // Three branch columns.
-    let cols = "";
-    for (const br of Research.branches()) {
-      let nodes = "";
-      for (const node of Research.nodesIn(br)) {
-        const cls = nodeStateClass(node.id);
-        let foot;
-        if (cls === "done") {
-          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">✓ Done</span>`;
-        } else if (cls === "researching") {
-          const frac = Research.activeFraction(state);
-          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">${Math.round(frac * 100)}%</span>`;
-        } else if (cls === "available") {
-          const canPay = Research.canStart(state, node.id);
-          foot = `<span class="rn-cost">${fmt(node.cost)}g · ${node.timeTicks}t</span>` +
-                 `<button class="rn-start" data-start="${node.id}" ${canPay ? "" : "disabled"}>${canPay ? "Research" : "Need gold"}</button>`;
-        } else {
-          const need = (node.prereqs || []).map(p => { const n = Research.get(p); return n ? n.name : p; }).join(", ");
-          foot = `<span class="rn-cost">${fmt(node.cost)}g</span><span class="rn-badge">🔒 ${esc(need || "locked")}</span>`;
-        }
-        let bar = "";
-        if (cls === "researching") {
-          const frac = Research.activeFraction(state);
-          bar = `<div class="rs-bar"><span style="width:${Math.round(frac * 100)}%"></span></div>`;
-        }
-        nodes += `<div class="rs-node ${cls}">
-          <div class="rn-name">${esc(node.name)}</div>
-          <div class="rn-desc">${esc(node.desc)}</div>
-          <div class="rn-foot">${foot}</div>${bar}</div>`;
+    // markup
+    let html = "";
+    html += `<div class="tt-band ${TT_BAND_TINT.kingdom}" style="left:${TT_KINGDOM_LABEL_X}px;top:0;width:${TT_KINGDOM_END - TT_KINGDOM_LABEL_X}px;height:${H}px"></div>`;
+    html += `<div class="tt-band-label" style="left:${TT_KINGDOM_LABEL_X}px;top:0;width:${TT.BAND_LABEL_W}px;height:${H}px">${TT_BAND_LABEL.kingdom}</div>`;
+    for (const b of TT_POP_BANDS) {
+      html += `<div class="tt-band ${TT_BAND_TINT[b]}" style="left:${TT_POP_LABEL_X}px;top:${bandTops[b]}px;width:${ttSurfaceW - TT_POP_LABEL_X - TT.GAP}px;height:${bandH[b]}px"></div>`;
+      html += `<div class="tt-band-label" style="left:${TT_POP_LABEL_X}px;top:${bandTops[b]}px;width:${TT.BAND_LABEL_W}px;height:${bandH[b]}px">${TT_BAND_LABEL[b]}</div>`;
+    }
+    for (const n of Research.nodesInBand("kingdom"))
+      html += ttCardEl(n.id, n.name, ttGlyphFor(n), ttNodeState(n.id), false);
+    for (const b of TT_POP_BANDS) for (const n of Research.nodesInBand(b)) {
+      if (n.kind === "upgrade") continue;
+      html += ttCardEl(n.id, n.name, ttGlyphFor(n), ttNodeState(n.id), false);
+      html += ttPipsHTML(n.buildingId, ttPos.get(n.id));
+    }
+    for (const s of TT_STARTERS) {
+      html += ttCardEl(s.id, s.name, TT_BUILDING_GLYPH[s.buildingId] || "🏠", "done", true);
+      html += ttPipsHTML(s.buildingId, ttPos.get(s.id));
+    }
+    ttNodesEl.innerHTML = html;
+    ttBuildEdges();
+  }
+
+  // Prerequisite edges (one SVG, card-level only). Rebuilt on open + state change.
+  function ttBuildEdges() {
+    const active = state.research && state.research.active;
+    const cards = Research.nodesInBand("kingdom").concat(
+      TT_POP_BANDS.reduce((acc, b) => acc.concat(Research.nodesInBand(b).filter(n => n.kind !== "upgrade")), []));
+    let parts = "";
+    for (const n of cards) {
+      const to = ttPos.get(n.id); if (!to) continue;
+      for (const pid of (n.prereqs || [])) {
+        const from = ttPos.get(pid); if (!from) continue;
+        const x1 = from.x + TT.CARD_W / 2, y1 = from.y + TT.CARD_H / 2;
+        const x2 = to.x + TT.CARD_W / 2, y2 = to.y + TT.CARD_H / 2;
+        let cls = "";
+        if (n.id === active || pid === active) cls = "tt-edge-active";
+        else if (Research.has(state, n.id) && Research.has(state, pid)) cls = "tt-edge-done";
+        parts += `<path d="M${x1},${y1} L${x2},${y2}" class="${cls}"></path>`;
       }
-      cols += `<div class="rs-col"><h4>${BRANCH_LABEL[br] || br}</h4>${nodes}</div>`;
     }
-    rsColsEl.innerHTML = cols;
+    ttEdgesEl.setAttribute("width", ttSurfaceW);
+    ttEdgesEl.setAttribute("height", ttSurfaceH);
+    ttEdgesEl.innerHTML = parts;
+    ttEdgeSig = ttSig();
   }
 
-  function openResearchPanel() {
-    // mutually exclusive with the other right/left panels
-    if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
-    if (typeof closeCastlePanel === "function") closeCastlePanel();
-    researchOpen = true;
-    researchEl.classList.remove("hidden");
-    researchEl.setAttribute("aria-hidden", "false");
-    btnResearch.classList.add("active");
-    renderResearchPanel();
+  // Cheap per-interval patch: state classes + badges + progress (no full rebuild).
+  function ttRebuildStates() {
+    const els = ttNodesEl.querySelectorAll("[data-node]");
+    els.forEach(el => {
+      const id = el.dataset.node;
+      const s = ttNodeState(id);
+      if (el.classList.contains("tt-pip")) { el.className = "tt-pip " + s; return; }
+      el.className = "tt-node " + s;
+      const badge = el.querySelector(".tt-badge");
+      if (badge) badge.textContent = ttBadge(id, s);
+      const prog = el.querySelector(".tt-prog > span");
+      if (prog) prog.style.width = (s === "researching" ? Math.round(Research.activeFraction(state) * 100) : 0) + "%";
+    });
   }
-  function closeResearchPanel() {
-    researchOpen = false;
-    researchEl.classList.add("hidden");
-    researchEl.setAttribute("aria-hidden", "true");
-    btnResearch.classList.remove("active");
-  }
-  function toggleResearchPanel() { researchOpen ? closeResearchPanel() : openResearchPanel(); }
 
-  btnResearch.addEventListener("click", toggleResearchPanel);
-  document.getElementById("rsClose").addEventListener("click", closeResearchPanel);
-  // Start a node via delegation (nodes re-render each tick).
-  rsColsEl.addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-start]");
-    if (!b) return;
-    if (Research.start(state, b.dataset.start)) { renderResearchPanel(); scheduleSave(); }
+  function ttRenderQueue() {
+    // While the cursor is inside the queue panel, skip the innerHTML rebuild —
+    // replacing the hovered card would destroy the tooltip mid-hover. Clicks
+    // re-render explicitly, so the panel never goes stale for long.
+    if (ttQueueEl.matches(":hover")) return;
+    const R = state.research || {};
+    let html = `<h3>Research Queue</h3>`;
+    if (R.active) {
+      const node = Research.get(R.active);
+      const frac = Research.activeFraction(state);
+      html += `<div class="tt-qactive" data-node="${R.active}">` +
+        `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${Math.round(frac * 100)}%</span></div>` +
+        `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
+        `<div style="font-size:11px;opacity:.75;margin-top:5px">${fmt(R.spent || 0)}/${fmt(node.cost)} 🪙</div></div>`;
+    }
+    const q = Array.isArray(R.queue) ? R.queue : [];
+    if (q.length) {
+      q.forEach((id, i) => {
+        const node = Research.get(id); if (!node) return;
+        html += `<div class="tt-qcard" data-node="${id}">` +
+          `<span class="tt-qn">#${i + 1}</span><span>${ttGlyphFor(node)}</span>` +
+          `<span class="tt-qname">${esc(node.name)}</span>` +
+          `<button class="tt-qx" data-dq="${id}" title="Remove from queue">✕</button></div>`;
+      });
+    } else if (!R.active) {
+      html += `<div class="tt-qempty">Click an available node to research it; click more to queue them up.</div>`;
+    } else {
+      html += `<div class="tt-qempty">Queue is empty — click more available nodes to line up the next projects.</div>`;
+    }
+    ttQueueEl.innerHTML = html;
+  }
+
+  // Shared tooltip (nodes, pips, queue entries all key by node id).
+  function ttTooltipHTML(id) {
+    const node = Research.get(id); if (!node) return "";
+    const s = ttNodeState(id);
+    let eff;
+    if (node.kind === "unlock") { const b = CONFIG.buildings[node.buildingId]; eff = "Unlocks the " + (b ? b.name : node.buildingId); }
+    else if (node.kind === "upgrade") {
+      const entry = (typeof Buildings.upgradeAt === "function") ? Buildings.upgradeAt(node.buildingId, node.level) : null;
+      const b = CONFIG.buildings[node.buildingId];
+      const sum = (entry && typeof bpEffectSummary === "function") ? bpEffectSummary(entry.effect) : "";
+      eff = (b ? b.name : node.buildingId) + " Lv" + node.level + (sum ? ": " + sum : "");
+    } else eff = node.desc || "";
+    const curTxt = { done: "Finished", researching: "In Progress",
+      queued: "Queued (#" + (((state.research.queue || []).indexOf(id)) + 1) + ")",
+      available: "Available", locked: "Locked" }[s] || s;
+    let html = `<div class="tt-tip-name">${esc(node.name)}</div><div>${esc(eff)}</div>`;
+    if (Research.isActive(state, id)) html += `<div>Progress: ${Math.round(Research.activeFraction(state) * 100)}%</div>`;
+    html += `<div>Currently: ${curTxt}</div>`;
+    html += `<div>Estimated cost: ${fmt(node.cost)} 🪙</div>`;
+    const mats = node.materials || {};
+    for (const gid in mats) {
+      const qty = mats[gid];
+      const val = qty * ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
+      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${esc(GOOD_LABEL(gid))} ${qty} = ${fmt(val)} 🪙</div>`;
+    }
+    return html;
+  }
+  function ttPositionTip(ev) {
+    const pad = 14; let x = ev.clientX + pad, y = ev.clientY + pad;
+    const r = ttTipEl.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 6) x = ev.clientX - r.width - pad;
+    if (y + r.height > window.innerHeight - 6) y = ev.clientY - r.height - pad;
+    ttTipEl.style.left = Math.max(6, x) + "px";
+    ttTipEl.style.top = Math.max(6, y) + "px";
+  }
+  function ttShowTip(id, ev) {
+    if (!Research.get(id)) { ttHideTip(); return; }
+    if (id !== ttLastTip) { ttTipEl.innerHTML = ttTooltipHTML(id); ttLastTip = id; }
+    ttTipEl.classList.remove("hidden");
+    ttPositionTip(ev);
+  }
+  function ttHideTip() { ttTipEl.classList.add("hidden"); ttLastTip = null; }
+
+  // Click an AVAILABLE node/pip → start (nothing active) or enqueue; QUEUED → dequeue.
+  function ttActivateNode(id) {
+    const s = ttNodeState(id);
+    let changed = false;
+    if (s === "available") {
+      changed = (state.research && state.research.active) ? Research.enqueue(state, id) : Research.start(state, id);
+      // Start can fail (e.g. treasury can't cover the cost yet) — fall back to
+      // enqueueing so the click never silently does nothing.
+      if (!changed && !(state.research && state.research.active)) changed = Research.enqueue(state, id);
+    } else if (s === "queued") {
+      changed = Research.dequeue(state, id);
+    }
+    if (changed) { ttRebuildStates(); ttRenderQueue(); ttBuildEdges(); scheduleSave(); }
+  }
+
+  ttNodesEl.addEventListener("click", (e) => {
+    if (ttDragMoved) return;                       // swallow the click that ends a pan
+    const el = e.target.closest("[data-node]");
+    if (el) ttActivateNode(el.dataset.node);
+  });
+  ttNodesEl.addEventListener("mousemove", (e) => {
+    const el = e.target.closest("[data-node]");
+    if (el && !ttDragging) ttShowTip(el.dataset.node, e); else ttHideTip();
+  });
+  ttNodesEl.addEventListener("mouseleave", ttHideTip);
+
+  ttQueueEl.addEventListener("click", (e) => {
+    const x = e.target.closest("[data-dq]");
+    if (x) { if (Research.dequeue(state, x.dataset.dq)) { ttRebuildStates(); ttRenderQueue(); ttBuildEdges(); scheduleSave(); } return; }
+    const card = e.target.closest(".tt-qcard[data-node]");
+    if (card) { if (Research.dequeue(state, card.dataset.node)) { ttRebuildStates(); ttRenderQueue(); ttBuildEdges(); scheduleSave(); } }
+  });
+  ttQueueEl.addEventListener("mousemove", (e) => {
+    const el = e.target.closest("[data-node]");
+    if (el) ttShowTip(el.dataset.node, e); else ttHideTip();
+  });
+  ttQueueEl.addEventListener("mouseleave", ttHideTip);
+
+  // Drag-to-pan the surface (mirrors the canvas pattern; 3px threshold so a
+  // click on a node still fires when the pointer didn't actually pan).
+  function ttApplyPan() { ttSurface.style.transform = `translate(${ttPanX}px,${ttPanY}px)`; }
+  function ttResetPan() {
+    ttPanX = 0;
+    const vh = ttViewport.clientHeight || window.innerHeight;
+    ttPanY = ttSurfaceH > vh ? (vh - ttSurfaceH) : 0;   // show the bottom (peasant band)
+    ttApplyPan();
+  }
+  // Panning is done purely via CSS transform, so the viewport's native scroll must
+  // stay pinned at 0 — otherwise a click on a partially-offscreen node triggers the
+  // browser's scroll-into-view, which shifts the whole surface out from under us.
+  ttViewport.addEventListener("scroll", () => {
+    if (ttViewport.scrollLeft || ttViewport.scrollTop) { ttViewport.scrollLeft = 0; ttViewport.scrollTop = 0; }
+  });
+  ttViewport.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    ttDragging = true; ttDragMoved = false;
+    ttDragStart = { x: e.clientX, y: e.clientY, px: ttPanX, py: ttPanY };
+    ttViewport.classList.add("grabbing");
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!ttDragging) return;
+    const dx = e.clientX - ttDragStart.x, dy = e.clientY - ttDragStart.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) ttDragMoved = true;
+    ttPanX = ttDragStart.px + dx; ttPanY = ttDragStart.py + dy;
+    ttApplyPan();
+  });
+  window.addEventListener("mouseup", () => {
+    if (!ttDragging) return;
+    ttDragging = false; ttViewport.classList.remove("grabbing");
+    setTimeout(() => { ttDragMoved = false; }, 0);   // reset AFTER the click handler runs
   });
 
-  // Live refresh: keep the open panel's progress current as the economy ticks.
-  setInterval(() => { if (researchOpen) renderResearchPanel(); }, 500);
+  function openTechTree() {
+    if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
+    if (typeof closeCastlePanel === "function") closeCastlePanel();
+    if (window.BuildingUI && typeof window.BuildingUI.closeBuildingPanel === "function") window.BuildingUI.closeBuildingPanel();
+    if (window.KingdomUI && typeof window.KingdomUI.closeKingdom === "function") window.KingdomUI.closeKingdom();
+    techOpen = true;
+    techTreeEl.classList.remove("hidden");
+    techTreeEl.setAttribute("aria-hidden", "false");
+    btnResearch.classList.add("active");
+    ttBuildLayout();
+    ttRenderQueue();
+    ttResetPan();
+  }
+  function closeTechTree() {
+    techOpen = false;
+    techTreeEl.classList.add("hidden");
+    techTreeEl.setAttribute("aria-hidden", "true");
+    btnResearch.classList.remove("active");
+    ttHideTip();
+  }
+  function toggleTechTree() { techOpen ? closeTechTree() : openTechTree(); }
 
-  // Expose for the headless smoke test / console debugging.
-  window.ResearchUI = { openResearchPanel, closeResearchPanel, toggleResearchPanel,
-                        renderResearchPanel, get isOpen() { return researchOpen; } };
-  // === RESEARCH-UI END ===
+  btnResearch.addEventListener("click", toggleTechTree);
+  document.getElementById("ttClose").addEventListener("click", closeTechTree);
+  // Esc closes; R resets pan (ignored while typing in a field).
+  window.addEventListener("keydown", (e) => {
+    if (!techOpen) return;
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.key === "Escape") { e.stopPropagation(); closeTechTree(); }
+    else if (e.key === "r" || e.key === "R") { ttResetPan(); }
+  });
+
+  // Live refresh: cheap state/badge patch + queue each ~500ms; edges only on change.
+  setInterval(() => {
+    if (!techOpen) return;
+    ttRebuildStates();
+    ttRenderQueue();
+    if (ttSig() !== ttEdgeSig) ttBuildEdges();
+  }, 500);
+
+  // Expose for the headless smoke / console (old names aliased so nothing breaks).
+  window.ResearchUI = { openTechTree, closeTechTree, toggleTechTree,
+    openResearchPanel: openTechTree, closeResearchPanel: closeTechTree, toggleResearchPanel: toggleTechTree,
+    get isOpen() { return techOpen; } };
+  // === RT-B TECH-TREE END ===
   // === PROGRESS-UI START === (P4-B / slot #3 — prestige HUD, quest banner, victory)
   // Reflects the pure PROGRESS-CORE (Quests.tick / Castle / Town) into the DOM.
   // Owns only its own elements; reads state written by the accumulator each tick.
@@ -6060,7 +6454,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   const KW_COLS = [
     ["name", "Town"], ["level", "Lv"], ["peasants", "Peas."], ["workers", "Work."],
-    ["burghers", "Burgh."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
+    ["burghers", "Citiz."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
     ["surplus", "Top surplus"], ["shortage", "Top shortage"],
   ];
 
