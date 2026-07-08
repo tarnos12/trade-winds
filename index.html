@@ -59,6 +59,52 @@
   button.speed { min-width: 34px; text-align: center; padding: 5px 8px; }
   .spacer { flex: 1; }
 
+  /* === CITY-CARDS CSS === kingdom chip + city cards strip (EC-C) */
+  #cityStrip {
+    position: fixed; top: 52px; left: 12px; right: 12px;
+    display: flex; align-items: flex-start; gap: 8px;
+    pointer-events: none; z-index: 15;
+  }
+  #cityStrip > * { pointer-events: auto; }
+  #kingdomChip {
+    flex: 0 0 auto; white-space: nowrap;
+    background: linear-gradient(180deg, #3a2e1d, #241c11);
+    border: 1px solid var(--accent); border-radius: 9px;
+    padding: 9px 13px; font-size: 14px; font-weight: bold; color: var(--paper);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums;
+  }
+  #kingdomChip b { color: var(--accent); }
+  #cityCards {
+    flex: 1 1 auto; min-width: 0; display: flex; gap: 8px;
+    overflow-x: auto; overflow-y: hidden; padding: 2px 2px 6px;
+  }
+  #cityCards::-webkit-scrollbar { height: 8px; }
+  #cityCards::-webkit-scrollbar-thumb { background: var(--panel-edge); border-radius: 4px; }
+  .city-card {
+    flex: 0 0 auto; width: 176px;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 9px; padding: 7px 9px; font-size: 12px;
+    box-shadow: 0 2px 9px rgba(0,0,0,0.4); cursor: pointer;
+    transition: border-color 0.12s, transform 0.08s;
+  }
+  .city-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .cc-top { display: flex; align-items: center; gap: 7px; }
+  .cc-avatar {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.4); box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset;
+  }
+  .cc-name { font-weight: bold; color: var(--paper); flex: 1; }
+  .cc-gold { color: var(--accent); font-weight: bold; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cc-happy { margin: 5px 0 6px; display: flex; align-items: center; gap: 6px; }
+  .cc-happy-track { flex: 1; height: 6px; background: #1c160f; border-radius: 3px; overflow: hidden; }
+  .cc-happy-fill { height: 100%; background: linear-gradient(90deg, #e06b4a, #d9c169, #6fbf73); transition: width 0.3s; }
+  .cc-happy-pct { font-size: 11px; opacity: 0.85; font-variant-numeric: tabular-nums; width: 30px; text-align: right; }
+  .cc-btns { display: flex; gap: 6px; }
+  .cc-btns button { flex: 1; padding: 4px 6px; font-size: 11.5px; }
+  .cc-btns button:disabled { opacity: 0.45; cursor: default; }
+  .cc-cool { font-size: 11px; text-align: center; color: var(--accent); opacity: 0.9; font-variant-numeric: tabular-nums; }
+  /* === CITY-CARDS CSS END === */
+
   /* ---- Bottom hint ---- */
   #hint {
     position: fixed; left: 12px; bottom: 12px;
@@ -470,6 +516,13 @@
   </div>
   <span id="eventChip" title="Active kingdom event"></span>
 </div>
+
+<!-- === CITY-CARDS === kingdom-gold chip + live city cards row (EC-C) -->
+<div id="cityStrip">
+  <div id="kingdomChip" title="Your royal treasury — the King's gold">👑 Kingdom: <b id="kingdomGold">0</b> g</div>
+  <div id="cityCards" aria-label="Cities"></div>
+</div>
+<!-- === CITY-CARDS END === -->
 
 <div id="hint">
   <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
@@ -3967,9 +4020,169 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     else if (castleOpen) closeCastlePanel();
   });
 
+  // === CITY-CARDS === kingdom-gold chip + live per-city cards with Give/Take (EC-C)
+  // UI-only: never touches Sim/Trade/economy or the town panel internals. Give/Take
+  // move gold between state.treasury (Kingdom) and town.gold (a city's trade budget),
+  // nudge happiness via the Sim's town.happyMods channel, then start a per-city
+  // tick-based cooldown. Colors are a FIXED palette so City #N is stable every game.
+  const CityCards = (() => {
+    // 12 predefined, visually distinct hues (warm-leaning) in a FIXED order.
+    const PALETTE = [
+      "#e0563f", // vermillion
+      "#e39a2c", // amber
+      "#d8c23a", // gold
+      "#6fb64a", // leaf green
+      "#3fb59b", // teal
+      "#3f8fd6", // sky blue
+      "#7d6bd8", // indigo
+      "#c05bd0", // magenta
+      "#e0578f", // rose
+      "#b5794a", // clay
+      "#9aa62e", // olive
+      "#5aa0a0", // slate cyan
+    ];
+    function cityColor(id) {
+      const n = +id;
+      const i = Number.isFinite(n)
+        ? ((n - 1) % PALETTE.length + PALETTE.length) % PALETTE.length
+        : 0;
+      return PALETTE[i];
+    }
+
+    const GIVE_AMT = 1000, TAKE_AMT = 1000;
+    const COOLDOWN_TICKS = 240;   // ~2 min at 1× (500 ms/tick)
+    const HAPPY_TICKS = 120;      // ~1 min the happiness nudge lasts
+
+    const cardsEl = document.getElementById("cityCards");
+    const kingdomGoldEl = document.getElementById("kingdomGold");
+    const SIZEc = (CONFIG.map && CONFIG.map.hexSize) || 24;
+    const cards = new Map();   // townId -> { root, avatar, name, gold, hFill, hPct, give, take, cool }
+
+    const now = () => (state.tick || 0);
+    const onCooldown = (t) => (t.cooldownUntil || 0) > now();
+
+    function give(town) {
+      if (onCooldown(town)) return false;
+      if ((state.treasury || 0) < GIVE_AMT) return false;
+      state.treasury -= GIVE_AMT;
+      town.gold = (town.gold || 0) + GIVE_AMT;
+      if (!Array.isArray(town.happyMods)) town.happyMods = [];
+      town.happyMods.push({ delta: +10, untilTick: now() + HAPPY_TICKS });
+      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (typeof scheduleSave === "function") scheduleSave();
+      refresh();
+      return true;
+    }
+    function take(town) {
+      if (onCooldown(town)) return false;
+      if ((town.gold || 0) < TAKE_AMT) return false;
+      town.gold -= TAKE_AMT;
+      state.treasury = (state.treasury || 0) + TAKE_AMT;
+      if (!Array.isArray(town.happyMods)) town.happyMods = [];
+      town.happyMods.push({ delta: -30, untilTick: now() + HAPPY_TICKS });
+      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (typeof scheduleSave === "function") scheduleSave();
+      refresh();
+      return true;
+    }
+
+    // Click a card body (not a button): center the camera and open its panel.
+    function focus(town) {
+      const p = HexMath.hexToPixel(town.q, town.r, SIZEc);
+      state.cam.x = p.x; state.cam.y = p.y;
+      if (typeof openTownPanel === "function") openTownPanel(town);
+    }
+
+    function buildCard(town) {
+      const root = document.createElement("div");
+      root.className = "city-card";
+      root.innerHTML =
+        '<div class="cc-top">' +
+          '<span class="cc-avatar"></span>' +
+          '<span class="cc-name"></span>' +
+          '<span class="cc-gold"></span>' +
+        '</div>' +
+        '<div class="cc-happy">' +
+          '<span class="cc-happy-track"><span class="cc-happy-fill"></span></span>' +
+          '<span class="cc-happy-pct"></span>' +
+        '</div>' +
+        '<div class="cc-btns">' +
+          '<button class="cc-give" title="Give 1000 g from the Kingdom to this city (+happiness)">Give 1000</button>' +
+          '<button class="cc-take" title="Take 1000 g from this city into the Kingdom (−happiness)">Take 1000</button>' +
+        '</div>' +
+        '<div class="cc-cool" style="display:none"></div>';
+      const parts = {
+        root,
+        avatar: root.querySelector(".cc-avatar"),
+        name: root.querySelector(".cc-name"),
+        gold: root.querySelector(".cc-gold"),
+        hFill: root.querySelector(".cc-happy-fill"),
+        hPct: root.querySelector(".cc-happy-pct"),
+        give: root.querySelector(".cc-give"),
+        take: root.querySelector(".cc-take"),
+        cool: root.querySelector(".cc-cool"),
+      };
+      parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
+      parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
+      root.addEventListener("click", () => focus(town));
+      return parts;
+    }
+
+    function refresh() {
+      if (!cardsEl) return;
+      if (kingdomGoldEl) kingdomGoldEl.textContent = Math.round(state.treasury || 0).toLocaleString();
+
+      const towns = (state.towns || []).slice().sort((a, b) => (+a.id || 0) - (+b.id || 0));
+      const seen = new Set();
+      let prev = null;
+      for (const town of towns) {
+        if (town.id == null) continue;
+        seen.add(town.id);
+        let c = cards.get(town.id);
+        if (!c) { c = buildCard(town); cards.set(town.id, c); }
+        // keep DOM order matching id order
+        if (c.root.parentNode !== cardsEl || c.root.previousElementSibling !== prev) {
+          cardsEl.insertBefore(c.root, prev ? prev.nextElementSibling : cardsEl.firstChild);
+        }
+        prev = c.root;
+
+        c.avatar.style.background = cityColor(town.id);
+        c.name.textContent = "City #" + town.id;
+        c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
+        const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
+        c.hFill.style.width = h + "%";
+        c.hPct.textContent = h + "%";
+
+        const cooling = onCooldown(town);
+        const canGive = !cooling && (state.treasury || 0) >= GIVE_AMT;
+        const canTake = !cooling && (town.gold || 0) >= TAKE_AMT;
+        c.give.disabled = !canGive;
+        c.take.disabled = !canTake;
+        if (cooling) {
+          const left = Math.max(0, (town.cooldownUntil || 0) - now());
+          const secs = Math.ceil(left * 0.5);   // 500 ms per tick
+          const mm = Math.floor(secs / 60), ss = secs % 60;
+          c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
+          c.cool.style.display = "";
+        } else {
+          c.cool.style.display = "none";
+        }
+      }
+      // drop cards for towns that no longer exist
+      for (const [id, c] of cards) {
+        if (!seen.has(id)) { if (c.root.parentNode) c.root.parentNode.removeChild(c.root); cards.delete(id); }
+      }
+    }
+
+    return { refresh, cityColor, give, take, PALETTE };
+  })();
+  window.CityCards = CityCards;
+  // === CITY-CARDS END ===
+
   // Live refresh: keep treasury HUD + open castle panel current as prices/trade tick.
   updateTreasuryHud();
-  setInterval(() => { updateTreasuryHud(); if (castleOpen) renderCastlePanel(); }, 500);
+  CityCards.refresh();
+  setInterval(() => { updateTreasuryHud(); CityCards.refresh(); if (castleOpen) renderCastlePanel(); }, 500);
 
   // Expose for the headless smoke test / console debugging.
   window.CastleUI = { openCastlePanel, closeCastlePanel, castleBuy, castleSell,
