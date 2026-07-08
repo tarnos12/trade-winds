@@ -1548,6 +1548,16 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
   const townKey = (t) => HexMath.key(t.q, t.r);
 
+  // EC-D: goods a seller has EARMARKED for in-flight buyers. Every availability
+  // check (the seller-surplus scan below) treats a seller's spendable stock as
+  // `stock[gid] - reserved[gid]`, so two traders can't claim the same goods and a
+  // committed trade's goods aren't sold out from under it. A reservation is placed
+  // at DISPATCH (when the trader leaves carrying the agreed gold) and released on
+  // arrival at the seller — or refunded/released if the trade is invalidated.
+  function reservedOf(t, gid) { return (t && t.reserved && t.reserved[gid]) || 0; }
+  function reserve(t, gid, n) { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; }
+  function release(t, gid, n) { if (t && t.reserved) t.reserved[gid] = Math.max(0, (t.reserved[gid] || 0) - n); }
+
   // Count a city's live (not-done) external traders (carts it owns as buyer).
   // All state.carts are external traders in this model; a cart missing `kind`
   // (e.g. an old save) is treated as external. Used to enforce one-trader/city.
@@ -1626,7 +1636,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const offers = [];
       for (const seller of towns) {
         if (seller === home || !seller || !seller.stock) continue;
-        const surplus = (seller.stock[want.gid] || 0) - needOf(seller, want.gid);
+        // Available surplus = stock − what's already reserved for other traders − need.
+        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - needOf(seller, want.gid);
         if (surplus <= 0) continue;
         const route = Pathing.route(state, fromKey, townKey(seller));
         if (!route) continue;
@@ -1641,18 +1652,27 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const slate = offers.slice(0, cfg.topRandom);
       const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))]; // one draw
 
-      // (c) Dispatch: qty capped by cart capacity, seller surplus, buyer shortfall,
-      //     and what the buyer can currently afford (payment happens on arrival).
-      const price = pick.price;
-      const affordable = price > 0 ? (home.gold || 0) / price : cartCapacity;
+      // (c) Dispatch (EC-D): qty capped by cart capacity, seller's un-reserved
+      //     surplus, buyer shortfall, and what the buyer can afford NOW — because
+      //     the trader leaves CARRYING the agreed gold (paid up front, not on
+      //     arrival). The price is AGREED at departure and the purchase settles at
+      //     that amount regardless of later market moves.
+      const agreedUnit = pick.price;
+      const affordable = agreedUnit > 0 ? (home.gold || 0) / agreedUnit : cartCapacity;
       const qty = Math.min(cartCapacity, pick.surplus, want.shortfall, affordable);
       if (!(qty > 0)) continue;
+      const agreedGold = agreedUnit * qty;
+
+      // Commit: reserve the goods at the seller and deduct the carried gold from the
+      // buyer NOW. Both are undone (release + refund) if the trade can't complete.
+      reserve(pick.seller, want.gid, qty);
+      home.gold = (home.gold || 0) - agreedGold;
 
       state.carts.push({
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
         kind: "external",                     // TR-B renders external vs internal traders
         fromId: home.id, toId: pick.seller.id, // fromId = buyer (owns the trader); toId = seller
-        goodId: want.gid, qty: qty, unitBuy: price,
+        goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
         path: pick.route.path.slice(),        // buyer → seller hex keys (contract shape)
         progress: 0, phase: "outbound", done: false,
       });
@@ -1666,32 +1686,45 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       cart.progress = 1;
 
       if (cart.phase === "outbound") {
-        // Arrived at the SELLER — execute the purchase (the seller sells passively).
+        // Arrived at the SELLER — settle the purchase at the AGREED amount (EC-D).
+        // The trader carries `cart.agreedGold` (already deducted from the buyer at
+        // dispatch) and the seller has `cart.qty` reserved for it, so the deal is
+        // race-free and price-stable: later market moves don't change what's paid.
         const seller = byId.get(cart.toId);
         const buyer = byId.get(cart.fromId);
-        if (!seller || !buyer) { cart.done = true; continue; } // a town vanished → scrap
+        const carried = cart.agreedGold || (cart.unitBuy || 0) * cart.qty;
+        // Always release this trader's reservation on arrival (deal or not).
+        if (seller) release(seller, cart.goodId, cart.qty);
+        if (!seller) {                                         // seller vanished → refund buyer, scrap
+          if (buyer) buyer.gold = (buyer.gold || 0) + carried; // release the carried gold
+          cart.done = true; continue;
+        }
         if (!seller.stock) seller.stock = {};
-        // Re-clamp to what the seller still holds and the buyer can still pay for
-        // (other traders may have drained either since dispatch).
-        const price = priceOf(seller, cart.goodId);
-        let qty = Math.min(cart.qty, seller.stock[cart.goodId] || 0);
-        if (price > 0) qty = Math.min(qty, (buyer.gold || 0) / price);
-        if (!(qty > 0)) { cart.done = true; continue; }        // nothing left to buy → scrap
-        cart.qty = qty;
-        const value = price * qty;                             // transaction value
+        // Reservation should guarantee the goods, but Sim consumption can still eat
+        // stock between ticks — take what's actually there and refund any shortfall
+        // proportionally (settling the delivered part at the agreed unit price).
+        const take = Math.min(cart.qty, Math.max(0, seller.stock[cart.goodId] || 0));
+        if (!(take > 0)) {                                     // nothing to deliver → full refund, scrap
+          if (buyer) buyer.gold = (buyer.gold || 0) + carried;
+          cart.done = true; continue;
+        }
+        const value = (cart.unitBuy || 0) * take;              // AGREED unit price × delivered qty
         // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
         const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
           ? Events.tariffMultiplier(state) : 1;
         const tariff = tariffRate * value * tariffMult;        // GDD §6.3: 25% cut (+ research bonus)
-        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - qty; // passive sale: goods leave
+        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - take; // passive sale: goods leave
         seller.gold = (seller.gold || 0) + (value - tariff);   // seller nets value − tariff
-        buyer.gold = (buyer.gold || 0) - value;                // buyer pays the full value
         state.treasury += tariff;                              // → player's treasury
+        // Buyer already paid `carried` at dispatch; refund any undelivered portion.
+        if (buyer && carried > value) buyer.gold = (buyer.gold || 0) + (carried - value);
+        cart.qty = take;                                       // carry only what was actually bought
         cart.phase = "return";                                 // carry the goods home
         cart.progress = 0;
         cart.path = cart.path.slice().reverse();               // seller → buyer
       } else {
-        // Arrived HOME — deliver the purchased goods into the buyer's stock.
+        // Arrived HOME — deliver the purchased goods into the buyer's stock. The
+        // buyer's gold was already spent at dispatch, so do NOT charge again.
         const buyer = byId.get(cart.fromId);
         if (buyer) {
           if (!buyer.stock) buyer.stock = {};
