@@ -90,17 +90,17 @@ function stockAfterTick(typeId, good, unlocked) {
 // =========================================================================
 (() => {
   const town = { buildings: [
-    { typeId: "hut", q: 0, r: 1 },       // peasant 10
-    { typeId: "cottage", q: 1, r: 0 },   // worker 8
-    { typeId: "manor", q: 0, r: 2 },     // burgher 5
+    { typeId: "hut", q: 0, r: 1 },       // EC-A: peasant 2
+    { typeId: "cottage", q: 1, r: 0 },   // EC-A: worker 3
+    { typeId: "manor", q: 0, r: 2 },     // EC-A: burgher 4
   ] };
   const base = Buildings.housingCapacity(town);
-  ok("housingCapacity base (no state) unchanged", base.peasants === 10 && base.workers === 8 && base.burghers === 5);
+  ok("housingCapacity base (no state) unchanged", base.peasants === 2 && base.workers === 3 && base.burghers === 4);
   const noState = Buildings.housingCapacity(town, { research: withResearch([]) });
-  ok("housingCapacity with empty research == base", noState.peasants === 10 && noState.workers === 8 && noState.burghers === 5);
+  ok("housingCapacity with empty research == base", noState.peasants === 2 && noState.workers === 3 && noState.burghers === 4);
   const boosted = Buildings.housingCapacity(town, { research: withResearch(["royal_census"]) });
   ok("housingBonus scales all tiers (×1.15)",
-    Math.abs(boosted.peasants - 11.5) < 1e-9 && Math.abs(boosted.workers - 9.2) < 1e-9 && Math.abs(boosted.burghers - 5.75) < 1e-9);
+    Math.abs(boosted.peasants - 2.3) < 1e-9 && Math.abs(boosted.workers - 3.45) < 1e-9 && Math.abs(boosted.burghers - 4.6) < 1e-9);
 })();
 
 // =========================================================================
@@ -109,9 +109,9 @@ function stockAfterTick(typeId, good, unlocked) {
 // =========================================================================
 (() => {
   ok("slotCap base by level unchanged (no state)",
-    Buildings.slotCap(1) === 3 && Buildings.slotCap(2) === 5 && Buildings.slotCap(3) === 7 && Buildings.slotCap(4) === 9);
-  ok("slotCap with empty research == base", Buildings.slotCap(2, { research: withResearch([]) }) === 5);
-  ok("slotBonus adds +1 slot", Buildings.slotCap(2, { research: withResearch(["town_charters"]) }) === 6);
+    Buildings.slotCap(1) === 7 && Buildings.slotCap(2) === 9 && Buildings.slotCap(3) === 11 && Buildings.slotCap(4) === 13);
+  ok("slotCap with empty research == base", Buildings.slotCap(2, { research: withResearch([]) }) === 9);
+  ok("slotBonus adds +1 slot", Buildings.slotCap(2, { research: withResearch(["town_charters"]) }) === 10);
 })();
 
 // =========================================================================
@@ -179,7 +179,7 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
   function bigBuyerState(unlocked) {
     const roads = new Set();
     for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
-    const huts = []; for (let i = 0; i < 24; i++) huts.push({ typeId: "hut", q: i, r: 2 }); // pop capacity ~240
+    const huts = []; for (let i = 0; i < 120; i++) huts.push({ typeId: "hut", q: i, r: 2 }); // EC-A hut cap 2 → 120 huts house ~240
     const towns = [
       mkTradeTown({ id: 1, q: 0, r: 0, buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }], stock: { grain: 5000 } }),
       mkTradeTown({ id: 2, q: 6, r: 0, pop: { peasants: 200, workers: 0, burghers: 0 }, buildings: huts, stock: { grain: 0 } }),
