@@ -824,25 +824,29 @@ Object.assign(CONFIG, {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
       output: { goodId: "wood", ratePerWorker: 1 },
-      workerSlots: 3, cost: { stone: 10, gold: 40 },
+      // EC-A: basic building — wood only (+ small treasury gold).
+      workerSlots: 3, cost: { wood: 20, gold: 40 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "grain", ratePerWorker: 2 },
-      workerSlots: 3, cost: { wood: 15, stone: 5, gold: 40 },
+      // EC-A: basic building — wood only.
+      workerSlots: 3, cost: { wood: 25, gold: 40 },
     },
     miner: {
       id: "miner", name: "Miner", kind: "extractor",
       terrain: "hills", workerTier: "peasant",
       output: { goodId: "ore", ratePerWorker: 1 },
-      workerSlots: 3, cost: { wood: 15, stone: 25, gold: 80 },
+      workerSlots: 3, cost: { wood: 20, stone: 15, gold: 80 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
       terrain: "mountains", workerTier: "peasant",
       output: { goodId: "stone", ratePerWorker: 1 },
-      workerSlots: 3, cost: { wood: 20, gold: 70 },
+      // EC-A: the bootstrap stone source — wood only, so a wood-only city can
+      // build it and start producing stone for everything else.
+      workerSlots: 3, cost: { wood: 30, gold: 70 },
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
@@ -896,17 +900,19 @@ Object.assign(CONFIG, {
     // --- houses (no workers; add population capacity by tier) ---
     hut: {
       id: "hut", name: "Hut", kind: "house",
-      terrain: null, houseTier: "peasant", houseCapacity: 10,
-      cost: { wood: 10, gold: 20 },
+      // EC-A: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
+      terrain: null, houseTier: "peasant", houseCapacity: 2,
+      // EC-A: basic building — wood only.
+      cost: { wood: 15, gold: 20 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
-      terrain: null, houseTier: "worker", houseCapacity: 8,
+      terrain: null, houseTier: "worker", houseCapacity: 3,
       cost: { wood: 20, stone: 10, gold: 60 },
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
-      terrain: null, houseTier: "burgher", houseCapacity: 5,
+      terrain: null, houseTier: "burgher", houseCapacity: 4,
       cost: { wood: 25, stone: 25, planks: 5, gold: 150 },
     },
   },
@@ -914,15 +920,22 @@ Object.assign(CONFIG, {
   // Town-interior layout constants (GDD §4.1). slotCap is indexed by town level
   // (index 0 unused); every placed building — house or producer — takes a slot.
   town: {
-    slotCap: [0, 3, 5, 7, 9],   // buildings allowed by town-center level 1..4
+    slotCap: [0, 7, 9, 11, 13], // EC-A: buildable slots by town-center level 1..4
+                                // (the center is separate → level 1 = 7 buildings + center).
     castle: { q: 0, r: 0 },     // PV2-A: the King's hub (map center). Not a city —
                                 // it carries a footprint so cities keep a 1-hex gap.
     radius: 2,                  // (legacy) unused by Placement v2 — cities grow by
                                 // contiguity now; kept so old saves/tuning don't break.
-    baseWorkers: { peasants: 8 }, // starting pop before any houses are built
-    // Founding kit: a small food buffer + enough wood/stone to build the first
-    // few structures (a farm/lumberjack + a house or two) before any trade.
-    startStock: { grain: 30, fish: 10, bread: 8, wood: 80, stone: 50 },
+    baseWorkers: { peasants: 8 }, // (legacy) EC-B owns pop; makeTown starts pop at 0.
+    // EC-A: a new city starts with just enough WOOD to build a lumberjack (20) +
+    // a hut (15) with buffer; gold/stone come from treasury/quarry, not the kit.
+    startStock: { wood: 80 },
+    // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
+    // to lay roads/bridges (city resources pay building RESOURCE costs).
+    foundCost: 1000,            // treasury gold to found a new city center
+    roadCost: 5,                // treasury gold per road hex
+    bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
+                                // placeable (water is not roadable), kept for wiring.
   },
 });
 
@@ -1357,9 +1370,11 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
     return { ok: false, reason: "No free building slots" };
   }
 
-  // (6) affordability from the OWNING town: gold + each resource in the cost.
+  // (6) affordability (EC-A money model): the GOLD cost is billed to the KINGDOM
+  //     treasury (state.treasury); the RESOURCE costs are billed to the OWNING
+  //     city's own stock. (town.gold is the city's trade budget — not touched.)
   const cost = def.cost || {};
-  if ((cost.gold || 0) > (owner.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  if ((cost.gold || 0) > (state.treasury || 0)) return { ok: false, reason: "Kingdom treasury lacks gold" };
   const stock = owner.stock || {};
   for (const gid in cost) {
     if (gid === "gold") continue;
@@ -1378,6 +1393,10 @@ Buildings.canPlaceTown = function (state, q, r) {
   if (!hex) return { ok: false, reason: "No hex here" };
   const terrDef = CONFIG.terrain[hex.terrain];
   if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+
+  // EC-A: founding a city is paid from the Kingdom treasury.
+  const foundCost = Buildings.foundCost();
+  if ((state.treasury || 0) < foundCost) return { ok: false, reason: "Treasury too low — need " + foundCost + " gold to found" };
 
   const key = HexMath.key(q, r);
   if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
@@ -1412,6 +1431,40 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
   if (!res.ok) return res;
   if (res.town !== town) return { ok: false, reason: "Not adjacent to this city" };
   return { ok: true };
+};
+
+// === EC-A money model ========================================================
+// The Kingdom treasury (state.treasury) pays all placement GOLD; a city's own
+// stock pays building RESOURCE costs; town.gold (the trade budget) is untouched.
+
+// Treasury gold required to found a new city center.
+Buildings.foundCost = function () {
+  return (CONFIG.town && CONFIG.town.foundCost) || 1000;
+};
+
+// Deduct a building's cost at placement: gold → state.treasury, resources →
+// town.stock. Assumes canPlaceBuilding already passed. Mutates state + town only.
+Buildings.chargeBuilding = function (state, town, typeId) {
+  const def = CONFIG.buildings[typeId];
+  if (!def || !town) return;
+  const cost = def.cost || {};
+  state.treasury = (state.treasury || 0) - (cost.gold || 0);
+  if (!town.stock) town.stock = {};
+  for (const gid in cost) {
+    if (gid === "gold") continue;
+    town.stock[gid] = (town.stock[gid] || 0) - cost[gid];
+  }
+};
+
+// Deduct the founding cost from the treasury (call once when a city is placed).
+Buildings.chargeFounding = function (state) {
+  state.treasury = (state.treasury || 0) - Buildings.foundCost();
+};
+
+// Treasury gold to lay one road hex (bridges over water cost more — not yet
+// placeable since water is not roadable).
+Buildings.roadCost = function () {
+  return (CONFIG.town && typeof CONFIG.town.roadCost === "number") ? CONFIG.town.roadCost : 5;
 };
 // === PLACEMENT V2 (PV2-A) END ================================================
 // === BUILDINGS-CORE END ===
@@ -2215,7 +2268,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     roads: new Set(),          // hex keys carrying road
     towns: [],                 // [{ q, r }]  (empty markers in Phase 1)
     carts: [],                 // live trade carts (Trade.tick owns; T9 draws)
-    treasury: 0,               // player tariff income (gold) — distinct from town.gold
+    treasury: 10000,           // EC-A: Kingdom gold — starting purse + tariff income; pays ALL placement gold (distinct from town.gold trade budget)
     tariffRate: CONFIG.trade.tariffRate, // TARIFF-SLIDER (P5D-D): player-set base tariff (GDD §6.3, 10–40%)
     research: { unlocked: [], active: null, progress: 0, spent: 0 }, // RESEARCH (P4-A)
     tradeSeed: 0,              // seeded RNG stream for deterministic cart routing
@@ -2684,6 +2737,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (state.mode === "road") {
       if (!CONFIG.terrain[hex.terrain].road) return false;
       if (state.roads.has(k)) return false;
+      // EC-A: roads are paid from the Kingdom treasury.
+      if ((state.treasury || 0) < Buildings.roadCost()) return false;
       return true;
     }
     if (state.mode === "town") {
@@ -2700,13 +2755,20 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function place(q, r) {
     const k = HexMath.key(q, r);
     if (state.mode === "road") {
-      if (canPlace(q, r)) { state.roads.add(k); Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90); }
+      if (canPlace(q, r)) {
+        state.roads.add(k);
+        state.treasury = (state.treasury || 0) - Buildings.roadCost();   // EC-A: treasury pays for roads
+        Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+      }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
+        Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
         state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
         reveal(q, r, CONFIG.fog.townReveal);
         scheduleSave();
         SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
       }
     } else if (state.mode === "erase") {
       let changed = false;
@@ -2867,7 +2929,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.roads = new Set();
     state.towns = [];
     state.carts = [];
-    state.treasury = 0;
+    state.treasury = 10000;   // EC-A: Kingdom starting gold (pays all placement)
     state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 25%
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
@@ -3128,15 +3190,19 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       // Town.canUpgrade) to reach level 2 before Trade dispatches carts from them.
       // This replaces the old Phase-3 "start at L2" trade bridge.
       level: 1,
-      gold: 200,
-      // TI-C: no auto-seeded buildings — the town starts with its center only.
-      // Base peasants (CONFIG.town.baseWorkers) man the first buildings the
-      // player places; workers/burghers appear once housing is built (Sim.tick).
-      pop: { peasants: 0, workers: 0, burghers: 0, ...CONFIG.town.baseWorkers },
+      // EC-A: town.gold is the city's TRADE budget (the external trader spends it
+      // to buy goods) — NOT construction money. Construction gold is the Kingdom
+      // treasury (state.treasury); construction resources are town.stock.
+      gold: 1000,
+      // EC-A/EC-B: a city starts with ZERO population — houses + happiness grow it
+      // (Sim.tick, owned by EC-B). No auto-seeded buildings: center only.
+      pop: { peasants: 0, workers: 0, burghers: 0 },
       stock: { ...CONFIG.town.startStock },
       prices: {},
       buildings: [],
-      happiness: 78,
+      // EC-A: happiness baseline is 50 (EC-B's Sim moves it toward 100 as needs
+      // are met, down when unmet); pop per house = round(cap × happiness/100).
+      happiness: 50,
     };
     // Prime prices once so the panel opens with meaningful numbers (priceFor
     // mutates town.prices; first read snaps to target).
@@ -3149,15 +3215,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function ensureTown(t) {
     if (t.id == null) t.id = nextTownId();
     if (t.level == null) t.level = 1;
-    if (t.gold == null) t.gold = 200;
-    if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0, ...CONFIG.town.baseWorkers };
+    if (t.gold == null) t.gold = 1000;   // EC-A: trade budget
+    if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0 };
     if (!t.stock) t.stock = { ...CONFIG.town.startStock };
     if (!t.prices) t.prices = {};
     // TI-C: no more auto-seed. A bare {q,r} marker (old Phase-1 save) starts with
     // no buildings; towns saved with a buildings array keep it (old auto-seeded
     // saves still load — Sim.tick reassigns their workers).
     if (!Array.isArray(t.buildings)) t.buildings = [];
-    if (t.happiness == null) t.happiness = 78;
+    if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
     return t;
   }
 
@@ -3399,15 +3465,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     }
     const owner = res.town;
     const def = CONFIG.buildings[placing.typeId];
-    const cost = def.cost || {};
-    owner.gold = (owner.gold || 0) - (cost.gold || 0);
-    if (!owner.stock) owner.stock = {};
-    for (const gid in cost) {
-      if (gid === "gold") continue;
-      owner.stock[gid] = (owner.stock[gid] || 0) - cost[gid];
-    }
+    // EC-A: split the charge — gold → Kingdom treasury, resources → city stock.
+    Buildings.chargeBuilding(state, owner, placing.typeId);
     if (!Array.isArray(owner.buildings)) owner.buildings = [];
     owner.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();
     SFX.play("place");
     buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;

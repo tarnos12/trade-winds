@@ -44,7 +44,8 @@ function makeState() {
   hexes.set(...hx(6, -1, "hills"));    // miner      (adj to A center)
   hexes.set(...hx(3, 0, "water"));     // water body (dist 2 from A)
   hexes.set(...hx(4, 0, "meadow"));    // land adj to A AND bordering water → fishery
-  return { map: { hexes }, roads: new Set(), towns: [] };
+  // EC-A: state.treasury is the Kingdom purse that pays all placement GOLD.
+  return { map: { hexes }, roads: new Set(), towns: [], treasury: 10000 };
 }
 function makeTown(over) {
   return Object.assign({
@@ -56,21 +57,26 @@ function makeTown(over) {
 }
 
 // ============================================================================
-// 1) slotCap by town level = 3 / 5 / 7 / 9 (index 0 unused; fallback 3).
+// 1) slotCap by town level = 7 / 9 / 11 / 13 (EC-A; index 0 unused; fallback 3).
 // ============================================================================
-ok("slotCap(1) === 3", Buildings.slotCap(1) === 3);
-ok("slotCap(2) === 5", Buildings.slotCap(2) === 5);
-ok("slotCap(3) === 7", Buildings.slotCap(3) === 7);
-ok("slotCap(4) === 9", Buildings.slotCap(4) === 9);
+ok("slotCap(1) === 7", Buildings.slotCap(1) === 7);
+ok("slotCap(2) === 9", Buildings.slotCap(2) === 9);
+ok("slotCap(3) === 11", Buildings.slotCap(3) === 11);
+ok("slotCap(4) === 13", Buildings.slotCap(4) === 13);
 ok("slotCap(unknown) falls back to 3", Buildings.slotCap(99) === 3);
 
 // ============================================================================
 // 2) CONFIG.town + catalog sanity (shared data contract).
 // ============================================================================
-ok("CONFIG.town.slotCap = [0,3,5,7,9]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 3, 5, 7, 9]));
+ok("CONFIG.town.slotCap = [0,7,9,11,13]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 7, 9, 11, 13]));
 ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q === 0 && CONFIG.town.castle.r === 0);
 ok("CONFIG.town.baseWorkers.peasants set", CONFIG.town.baseWorkers.peasants > 0);
-ok("CONFIG.town.startStock has food buffer", CONFIG.town.startStock.grain > 0 && CONFIG.town.startStock.fish > 0 && CONFIG.town.startStock.bread > 0);
+ok("CONFIG.town.startStock has wood to build a lumberjack + hut", CONFIG.town.startStock.wood >= (CONFIG.buildings.lumberjack.cost.wood + CONFIG.buildings.hut.cost.wood));
+ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);
+ok("basic house (hut) shelters 2", CONFIG.buildings.hut.houseCapacity === 2);
+ok("basic buildings are wood-only (lumberjack/farm/hut)", [
+  "lumberjack", "farm", "hut",
+].every(id => { const c = CONFIG.buildings[id].cost; return c.wood > 0 && !c.stone && !c.planks; }));
 const kinds = Object.values(CONFIG.buildings).map(b => b.kind);
 ok("catalog has extractors/processors/houses", kinds.includes("extractor") && kinds.includes("processor") && kinds.includes("house"));
 ok("extractors are peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant"));
@@ -202,33 +208,37 @@ ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.
 // ============================================================================
 {
   const st = makeState();
-  const town = makeTown({ level: 1, buildings: [
-    { typeId: "hut", q: 6, r: 0, workers: 0 },
-    { typeId: "hut", q: 5, r: 1, workers: 0 },
-    { typeId: "hut", q: 5, r: -1, workers: 0 },
-  ] });
+  // EC-A: level-1 cap is now 7 — fill 7 slots so the 8th is rejected. (Only the
+  // usedSlots count matters here, so the filler hexes need not be valid placements.)
+  const fill = [];
+  for (let i = 0; i < 7; i++) fill.push({ typeId: "hut", q: 10 + i, r: 3, workers: 0 });
+  const town = makeTown({ level: 1, buildings: fill });
   st.towns.push(town);
-  ok("usedSlots counts all placed buildings", Buildings.usedSlots(town) === 3);
+  ok("usedSlots counts all placed buildings", Buildings.usedSlots(town) === 7);
   // (4,1) borders the center → contiguous, but the level-1 cap (3) is full.
   const capped = Buildings.canPlaceBuilding(st, "cottage", 4, 1);
   ok("over slot cap → not ok + 'slot'", capped.ok === false && /slot/i.test(capped.reason));
 }
 
 // ============================================================================
-// 9) affordability is charged to the OWNER town.
+// 9) affordability (EC-A): GOLD from the Kingdom treasury, RESOURCES from the
+//    owning city's stock.
 // ============================================================================
 {
   const st = makeState();
-  const brokeGold = makeTown({ gold: 0 });
-  st.towns.push(brokeGold);
+  st.treasury = 0;                 // Kingdom is broke → gold cost unaffordable
+  const town = makeTown();
+  st.towns.push(town);
   const noGold = Buildings.canPlaceBuilding(st, "lumberjack", 6, 0);
-  ok("owner has no gold → not ok + 'gold'", noGold.ok === false && /gold/i.test(noGold.reason));
+  ok("empty treasury → not ok + 'gold'", noGold.ok === false && /gold/i.test(noGold.reason));
 
+  // With a full treasury but a city missing a required RESOURCE (sawmill needs
+  // stone) → rejected on the resource, not the gold.
   const st2 = makeState();
-  const noStone = makeTown({ gold: 1000, stock: { wood: 100 } }); // lumberjack needs stone
+  const noStone = makeTown({ stock: { wood: 100 } }); // sawmill needs stone
   st2.towns.push(noStone);
-  const short = Buildings.canPlaceBuilding(st2, "lumberjack", 6, 0);
-  ok("owner missing resource → not ok + 'stone'", short.ok === false && /stone/i.test(short.reason));
+  const short = Buildings.canPlaceBuilding(st2, "sawmill", 5, -1);
+  ok("city missing resource → not ok + 'stone'", short.ok === false && /stone/i.test(short.reason));
 }
 
 // ============================================================================
@@ -294,6 +304,40 @@ ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.
 
   const empty = Buildings.housingCapacity(makeTown());
   ok("no houses → all zero", empty.peasants === 0 && empty.workers === 0 && empty.burghers === 0);
+}
+
+// ============================================================================
+// 13) EC-A money model — placement splits the charge: GOLD → state.treasury,
+//     RESOURCES → the owning city's stock (town.gold untouched); founding a
+//     city costs 1000 treasury gold.
+// ============================================================================
+{
+  const st = makeState();          // treasury 10000
+  const town = makeTown();         // gold 1000, stock wood/stone/planks 100
+  st.towns.push(town);
+  const t0 = st.treasury, g0 = town.gold, wood0 = town.stock.wood, stone0 = town.stock.stone;
+
+  // sawmill costs { wood, stone, gold } — a good split-charge probe.
+  const def = CONFIG.buildings.sawmill;
+  Buildings.chargeBuilding(st, town, "sawmill");
+  ok("chargeBuilding deducts gold from treasury", st.treasury === t0 - (def.cost.gold || 0));
+  ok("chargeBuilding leaves town.gold (trade budget) untouched", town.gold === g0);
+  ok("chargeBuilding deducts wood from city stock", town.stock.wood === wood0 - (def.cost.wood || 0));
+  ok("chargeBuilding deducts stone from city stock", town.stock.stone === stone0 - (def.cost.stone || 0));
+
+  // Founding a city costs 1000 treasury gold.
+  const st2 = makeState();         // treasury 10000
+  const f0 = st2.treasury;
+  Buildings.chargeFounding(st2);
+  ok("chargeFounding deducts 1000 from treasury", st2.treasury === f0 - 1000);
+
+  // canPlaceTown blocks when the treasury can't cover founding.
+  const st3 = makeState();
+  st3.treasury = 500;              // < 1000 founding cost
+  const poor = Buildings.canPlaceTown(st3, 7, 0);   // otherwise-valid isolated hex
+  ok("treasury < 1000 → canPlaceTown blocked + 'gold'", poor.ok === false && /gold/i.test(poor.reason));
+  st3.treasury = 1000;
+  ok("treasury ≥ 1000 → canPlaceTown ok", Buildings.canPlaceTown(st3, 7, 0).ok === true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

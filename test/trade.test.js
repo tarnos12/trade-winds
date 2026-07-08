@@ -47,20 +47,25 @@ function mkTown(over) {
 //                BUY grain (food+brew input) and ORE (smelt input).
 // So grain flows FARM→{MINE,MILL}, ore flows MINE→MILL, beer flows MILL→others.
 // Huts+cottages give each city housing so workers persist (Sim caps pop at housing).
+// EC-A dropped basic house cap to 2 (cottage 3), so supply enough houses to shelter
+// each city's seeded pop (≤12 peasants / ≤8 workers → 8 huts + 3 cottages).
+function homes() {
+  const a = [];
+  for (let i = 0; i < 8; i++) a.push({ typeId: "hut" });      // 8×2 = 16 peasant cap
+  for (let i = 0; i < 3; i++) a.push({ typeId: "cottage" });  // 3×3 =  9 worker cap
+  return a;
+}
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 },
-              { typeId: "hut" }, { typeId: "cottage" }],
+  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
   stock: { grain: 80, beer: 20 } }); }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
   pop: { peasants: 12, workers: 5, burghers: 0 },
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 },
-              { typeId: "hut" }, { typeId: "cottage" }],
+  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()],
   stock: { ore: 80, grain: 15, beer: 20 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
   pop: { peasants: 8, workers: 8, burghers: 0 },
-  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 },
-              { typeId: "hut" }, { typeId: "cottage" }],
+  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, ...homes()],
   stock: { grain: 15, ore: 12, wood: 5000, beer: 12 } }); }
 
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];  // FARM(0,0)↔MINE(6,0); MILL(3,1)→(3,0)
