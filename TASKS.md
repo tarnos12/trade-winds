@@ -102,9 +102,16 @@ enum (`water, meadow, forest, hills, mountains, fertile, wasteland`).
 - **Barren Land**, **Desert**, **Fertile Soil** (grassland).
 - **Fertile Soil is REQUIRED for farm buildings:** Potato Farm (T1), Wheat Farm,
   Shepherd/wool (T1) — Shepherd moves meadow→fertile.
-- **Wheat Farm:** unlock node lives in the WORKER band of the research tree
-  (needs research) but the building is STAFFED BY PEASANTS (workerTier stays
-  'peasant'). [Author: "more details after this" — hold for follow-up.]
+- **Wheat Farm:** ⚠ AMENDED (author, latest word wins): unlock node lives in the
+  **PEASANT (T1) band** (earlier "worker band" reversed). Still research-gated
+  (no longer a starter), still peasant-staffed. APPLY AT TV2 INTEGRATION.
+- **Sheep Farm:** ⚠ AMENDED: shepherd DISPLAYS as "Sheep Farm" (fertile, wool).
+  APPLY AT TV2 INTEGRATION.
+- **Definitive peasant building list (author):** Lumberjack (forest→wood),
+  Potato Farm (fertile→potato), Sawmill (any generic tile — not water/snow/
+  deposits/forests), Fishery (on fish tile), Sheep Farm (fertile→wool), Quarry
+  (stone deposit), Wheat Farm (fertile) — all unlocked via the T1/peasant
+  research band except the starters (hut, lumberjack, potato farm, sawmill).
 **Resource tiles** (only their extractor):
 - **Water** — nothing buildable (future: harbor).
 - **Fish tile** — water-with-fish; the **Fishery is placed ON it** (author-
