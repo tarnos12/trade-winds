@@ -62,12 +62,21 @@ Author directives (implement as one balance pass + a city-cards UI slice):
    planks, later + bricks (new good, deferred). Rebalance `CONFIG.buildings` costs.
 6. **City cards, top of screen:** one card per city — a colored avatar + name
    "City #1/#2/…". Colors from a **fixed predefined unique palette** (same color
-   for City #N every game). Each card has a **Donate 1000 g** button (player→city
-   gold) with a **2-minute per-city cooldown**.
+   for City #N every game). Each card has **Give 1000 g** and **Take 1000 g**
+   buttons with a **2-minute per-city cooldown** (give needs player gold; take
+   needs the city to have ≥1000 g).
+7. **City global happiness** (~50% by default) scales the happiness of everything
+   in the city. **Baseline 50% (even with no food)** yields ~half of housing
+   capacity → a basic house (cap 2) makes **1 worker** at 50%, **2 at 100%**.
+   Met needs push happiness up toward 100%; unmet needs push it down.
+8. **Give 1000 g → +10% city happiness for 60 s.** **Take 1000 g → −30% city
+   happiness** (temporary). Both move 1000 g between player and city.
+9. **Top-left: show the kingdom's gold** (player treasury) prominently.
 
 Interpretations (correct if off): player gold = `state.treasury`; slot count =
-7 buildings + the center; donate cooldown is per-city; "bricks" tier deferred
-until a bricks good is added.
+7 buildings + the center; give/take cooldown is per-city; take's −30% is a
+temporary modifier (decays over ~60 s) symmetric with give; "bricks" tier
+deferred until a bricks good is added; population per house ≈ `cap × happiness%`.
 
 ## Done
 
