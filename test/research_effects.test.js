@@ -164,26 +164,41 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
   ok("tariffBonus raises treasury vs baseline", taxed.treasury > base.treasury);
 })();
 
-// --- 4b) extraCarts lifts the per-city external-trader cap. The buy model runs
-//        ONE external trader per city (base cap 1); extraCarts (+3) lets a chronic
-//        BUYER run more concurrent traders. We probe the grain-less MINE (id 2),
-//        which is perpetually short grain and re-dispatches until it hits the cap. --
+// --- 4b) PP-A: fleets scale with city level AND extraCarts research lifts the cap
+//        further. A city runs at most its fleet of live external traders, but only
+//        as many as its (in-flight-adjusted) shortfall warrants -- so to make the
+//        CAP the binding constraint we use a chronically potato-starved LEVEL-1
+//        buyer (pop 200, no potato => demand for >5 carts). Base fleet L1 = 2; the
+//        buyer saturates it at 2. extra_caravan+trade_network (+3) lifts the cap to
+//        5, and the hungry buyer then runs more concurrent traders. --
 (() => {
+  function bigL1BuyerState(unlocked) {
+    const roads = new Set();
+    for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
+    const huts = []; for (let i = 0; i < 120; i++) huts.push({ typeId: "hut", q: i, r: 2 });
+    const towns = [
+      mkTradeTown({ id: 1, q: 0, r: 0, buildings: [{ typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }], stock: { potato: 50000, wood: 5000 } }),
+      mkTradeTown({ id: 2, level: 1, q: 6, r: 0, pop: { peasants: 200, workers: 0, burghers: 0 }, buildings: huts, stock: { potato: 0, wood: 5000 } }),
+    ];
+    const st = { roads, towns, carts: [], treasury: 0, tradeSeed: 7 };
+    if (unlocked) st.research = withResearch(unlocked);
+    return st;
+  }
   function maxBuyerCarts(unlocked) {
     Pathing.invalidate();
-    const st = buildTradeState(55, unlocked);       // mine (id 2) buys grain from the farm
+    const st = bigL1BuyerState(unlocked);
     let mx = 0;
     for (let i = 0; i < 120; i++) {
       Sim.tick(st); Trade.tick(st);
-      const n = st.carts.filter(c => !c.done && c.fromId === 2).length; // the mine's live traders
+      const n = st.carts.filter(c => !c.done && c.fromId === 2).length; // the buyer's live traders
       if (n > mx) mx = n;
     }
     return mx;
   }
   const base = maxBuyerCarts(null);
-  const more = maxBuyerCarts(["extra_caravan", "trade_network"]); // +1 +2 = +3 traders
-  ok("baseline city runs a single external trader (cap 1)", base === 1);
-  ok("extraCarts lets a city run more than one external trader", more > base);
+  const more = maxBuyerCarts(["extra_caravan", "trade_network"]); // +1 +2 = +3 to the cap
+  ok("baseline city saturates its level fleet (L1 => 2)", base === Trade.externalFleet({ level: 1 }));
+  ok("extraCarts lets a city run more external traders", more > base);
 })();
 
 // --- 4c) cartCapacity — larger traders haul a bigger load. The buy load is capped

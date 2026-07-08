@@ -20,8 +20,8 @@ if (!m) { console.error("FAIL: could not find PURE_CORE markers in index.html");
 
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Sim=Sim; this.Buildings=Buildings;", sandbox);
-const { CONFIG, Sim, Buildings } = sandbox;
+vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Sim=Sim; this.Buildings=Buildings; this.Ledger=Ledger;", sandbox);
+const { CONFIG, Sim, Buildings, Ledger } = sandbox;
 
 const BASE_PEASANTS = CONFIG.town.baseWorkers.peasants; // housing-independent peasant cap (0 now)
 const HUT_CAP = CONFIG.buildings.hut.houseCapacity;     // peasant housing per hut (2)
@@ -390,16 +390,19 @@ function place(typeId, q, r, over) {
      t.stock.wood === wood0 - rc.wood);
 }
 
-// CB-A.3) Delivery respects the shared per-tick budget (deliveryRate=5). A
-// single unbuilt building receives at most deliveryRate units in one tick.
+// CB-A.3) Delivery respects the shared per-tick budget. PP-A: the budget now
+// scales with the town's internal transporters (deliveryRate x transporterCount).
+// A single unbuilt building receives at most that budget in one tick.
 {
   const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
                    stock: { wood: 50 },
-                   buildings: [place("sawmill", 0, 1)] });
+                   buildings: [place("sawmill", 0, 1)] });   // L1 town => 4 transporters => budget 20
   Sim.tick({ towns: [t] });
   const moved = t.buildings[0].delivered.wood || 0;
-  ok("CB-A: one tick delivers at most deliveryRate units", moved === CONFIG.town.deliveryRate);
+  const budget = CONFIG.town.deliveryRate * Buildings.transporterCount(t);
+  ok("CB-A/PP-A: one tick delivers at most deliveryRate x transporterCount", moved === budget);
   ok("CONFIG.town.deliveryRate === 5", CONFIG.town.deliveryRate === 5);
+  ok("PP-A: L1 town runs transportersByLevel[1] transporters", Buildings.transporterCount(t) === CONFIG.town.transportersByLevel[1]);
 }
 
 // CB-A.4) An unbuilt building's remaining need is published to town.demand so
@@ -536,12 +539,14 @@ function place(typeId, q, r, over) {
   // -- pending upgrade: its material need shows in demand, drains stock over
   //    ticks, and flips upgradeLevel when delivered. --
   {
+    // PP-A: L1 budget is deliveryRate x 4 = 20. The sawmill L2 upgrade needs wood:25
+    // (> budget), so it stays pending after one tick and completes over several.
     const t = town({
       pop: { peasants: 0, workers: 0, burghers: 0 },
       stock: { wood: 100 },
-      buildings: [place("lumberjack", 0, 1, { upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } })],
+      buildings: [place("sawmill", 0, 1, { upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } })],
     });
-    Sim.tick({ towns: [t] });   // L2 upgrade needs wood:20; deliveryRate < 20 so still pending
+    Sim.tick({ towns: [t] });   // sawmill L2 needs wood:25; budget 20 < 25 => still pending
     const bld = t.buildings[0];
     ok("RU-A: pending upgrade adds its need to town demand", (t.demand.wood || 0) > 0);
     ok("RU-A: pending upgrade still pending after one tick", bld.pendingUpgrade && bld.upgradeLevel === 1);
@@ -552,6 +557,98 @@ function place(typeId, q, r, over) {
   }
 }
 // === /RU-A =================================================================
+
+// === PP-A: per-tier happiness + income, houseIncome, transporter delivery =====
+{
+  const near = (a, b, eps) => Math.abs(a - b) < (eps || 1e-9);
+  const homesFor = (peas, work, burg) => {
+    const a = [];
+    for (let i = 0; i < peas; i++) a.push(place("hut", i, 3));       // 2 peasant cap each
+    for (let i = 0; i < work; i++) a.push(place("cottage", i, 4));   // 3 worker cap each
+    for (let i = 0; i < burg; i++) a.push(place("manor", i, 5));     // 4 burgher cap each
+    return a;
+  };
+
+  // -- transporter-scaled construction delivery: L4 delivers more/tick than L1. --
+  {
+    const mk = (lvl) => town({ level: lvl, pop: { peasants: 0, workers: 0, burghers: 0 },
+                               stock: { wood: 200 }, buildings: [place("sawmill", 0, 1)] });
+    const t1 = mk(1), t4 = mk(4);
+    Sim.tick({ towns: [t1] }); Sim.tick({ towns: [t4] });
+    const d1 = t1.buildings[0].delivered.wood || 0, d4 = t4.buildings[0].delivered.wood || 0;
+    ok("PP-A: transporterCount L1=4, L4=7", Buildings.transporterCount(t1) === 4 && Buildings.transporterCount(t4) === 7);
+    ok("PP-A: L4 delivers more construction material per tick than L1", d4 > d1);
+    ok("PP-A: L1 delivers deliveryRate x 4", d1 === CONFIG.town.deliveryRate * 4);
+    ok("PP-A: transporterCount floors at 1 for an unlevelled town", Buildings.transporterCount({}) >= 1);
+  }
+
+  // -- single-tier equivalence: a peasant-only town's happiness matches the OLD
+  //    aggregate model bit-exactly, and income uses that same happiness. ONE tick. --
+  {
+    const t = town({ level: 1, gold: 0,
+      pop: { peasants: 8, workers: 0, burghers: 0 },
+      stock: { wood: 100, potato: 100, fish: 100, wool: 100 },
+      buildings: homesFor(5, 0, 0) });
+    Sim.tick({ towns: [t] });
+    ok("PP-A: single-tier tierHappiness.peasants == town.happiness", near(t.tierHappiness.peasants, t.happiness));
+    ok("PP-A: single-tier empty tiers are null", t.tierHappiness.workers === null && t.tierHappiness.burghers === null);
+    const pt = CONFIG.needs.peopleTax;
+    const oldMult = 1 + Math.max(0, t.happiness - pt.happyBase) * pt.bonusPerPoint;
+    const oldTotal = t.pop.peasants * pt.goldPerPop * oldMult;
+    const tierTotal = t.tierIncome.peasants + t.tierIncome.workers + t.tierIncome.burghers;
+    ok("PP-A: single-tier income == old aggregate formula", near(tierTotal, oldTotal));
+    ok("PP-A: Sum tierIncome == the gold credited this tick", near(tierTotal, t.gold));
+    ok("PP-A: tierIncome all in the peasant bucket", t.tierIncome.workers === 0 && t.tierIncome.burghers === 0);
+  }
+
+  // -- weighted average: workers (beer met) end HAPPIER than burghers (clothes
+  //    missing); town.happiness is their pop-weighted average. ONE tick (pre-growth pop). --
+  {
+    const t = town({ level: 3, gold: 0,
+      pop: { peasants: 0, workers: 6, burghers: 3 },
+      stock: { wood: 500, potato: 500, fish: 500, wool: 500, beer: 500, clothes: 0 },
+      buildings: homesFor(0, 3, 2) });
+    Sim.tick({ towns: [t] });
+    ok("PP-A: workers (beer met) happier than burghers (clothes missing)",
+       t.tierHappiness.workers > t.tierHappiness.burghers);
+    ok("PP-A: town.happiness sits between the two present tiers",
+       t.happiness <= t.tierHappiness.workers + 1e-9 && t.happiness >= t.tierHappiness.burghers - 1e-9);
+    const wavg = (6 * t.tierHappiness.workers + 3 * t.tierHappiness.burghers) / 9;
+    ok("PP-A: town.happiness == pop-weighted avg of present tiers", near(t.happiness, wavg, 1e-9));
+    ok("PP-A: Sum tierIncome == people-tax credited (mixed tiers)",
+       near(t.tierIncome.workers + t.tierIncome.burghers + t.tierIncome.peasants, t.gold, 1e-9) && t.gold > 0);
+    ok("PP-A: peasant tier absent -> tierIncome.peasants 0", t.tierIncome.peasants === 0);
+  }
+
+  // -- houseIncome attributes a tier's income across its houses by capacity share. --
+  {
+    const bigHut = place("hut", 0, 3, { upgradeLevel: 2 });   // +1 capacity from L2 (cap 3)
+    const smallHut = place("hut", 1, 3);                       // base cap 2
+    const t = town({ level: 1, gold: 0,
+      pop: { peasants: 5, workers: 0, burghers: 0 },
+      stock: { wood: 200, potato: 200, fish: 200, wool: 200 },
+      buildings: [bigHut, smallHut] });
+    Sim.tick({ towns: [t] });
+    const iBig = Sim.houseIncome(t, bigHut), iSmall = Sim.houseIncome(t, smallHut);
+    ok("PP-A: houseIncome present as a function", typeof Sim.houseIncome === "function");
+    ok("PP-A: bigger house earns a larger income share", iBig > iSmall && iSmall > 0);
+    ok("PP-A: Sum houseIncome over a tier == tierIncome[tier]", near(iBig + iSmall, t.tierIncome.peasants, 1e-9));
+    ok("PP-A: split follows capacity share (3:2)", near(iBig / iSmall, 3 / 2, 1e-6));
+    ok("PP-A: houseIncome returns 0 for a non-house", Sim.houseIncome(t, place("sawmill", 2, 3)) === 0);
+  }
+
+  // -- ledger tax hook: after a Sim tick the town's ledger tally.tax == people-tax. --
+  {
+    const t = town({ level: 1, gold: 0,
+      pop: { peasants: 6, workers: 0, burghers: 0 },
+      stock: { wood: 100, potato: 100, fish: 100, wool: 100 },
+      buildings: homesFor(4, 0, 0) });
+    Sim.tick({ towns: [t] });
+    ok("PP-A: Sim records people-tax into the ledger", near(t.ledger.tally.tax, t.tierIncome.peasants, 1e-9) && t.ledger.tally.tax > 0);
+    ok("PP-A: ledger sampled gold history once this tick", Array.isArray(t.ledger.hist) && t.ledger.hist.length === 1);
+  }
+}
+// === /PP-A ====================================================================
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

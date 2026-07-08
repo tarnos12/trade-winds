@@ -17,10 +17,11 @@ const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(
   m[1] + "\nthis.CONFIG=CONFIG; this.HexMath=HexMath; this.Sim=Sim;" +
-         "this.Pathing=Pathing; this.Trade=Trade;",
+         "this.Pathing=Pathing; this.Trade=Trade;" +
+         "this.Buildings=Buildings; this.ResearchEconomy=ResearchEconomy; this.CastleMarket=CastleMarket;",
   sandbox
 );
-const { CONFIG, HexMath, Sim, Pathing, Trade } = sandbox;
+const { CONFIG, HexMath, Sim, Pathing, Trade, Buildings, ResearchEconomy, CastleMarket } = sandbox;
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -271,8 +272,10 @@ Pathing.invalidate();
       if (n > maxPerCity) maxPerCity = n;
     }
   }
-  ok("never more than one external trader per city", maxPerCity <= 1);
-  ok("the single-trader cap is actually exercised (>0 traders seen)", maxPerCity > 0);
+  // PP-A: fleets scale with city level. buildState towns are all L1 => fleet 2; no
+  // city ever exceeds its per-level fleet cap, and the fleet is exercised (>0 seen).
+  ok("never more than a city's level fleet of external traders", maxPerCity <= Trade.externalFleet({ level: 1 }));
+  ok("the fleet cap is actually exercised (>0 traders seen)", maxPerCity > 0);
 }
 
 // =========================================================================
@@ -410,6 +413,100 @@ Pathing.invalidate();
   ok("EC-D: carried gold refunded when the seller vanishes", townById(st, 1).gold === 1000);
   ok("EC-D: no goods delivered on a failed trade", (townById(st, 1).stock.grain || 0) === 0);
   ok("EC-D: failed trade retires its cart", st.carts.length === 0);
+}
+
+// =========================================================================
+// PP-A) multi-good cargo, castle-as-seller (no tariff), and determinism.
+// =========================================================================
+
+// (m) A buyer short on TWO goods both held by ONE seller dispatches a SINGLE cart
+//     carrying both (total <= capacity), with the primary mirrored on the cart.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000,
+    stock: { grain: 0, ore: 0 }, demand: { grain: 3, ore: 3 } });
+  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0,
+    stock: { grain: 100, ore: 100 }, prices: { grain: 5, ore: 4 }, demand: {} });
+  const st = { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 1 };
+  Trade.tick(st);
+  const c = st.carts[0];
+  ok("PP-A multi-good: a cart with a cargo array is dispatched", !!c && Array.isArray(c.cargo));
+  ok("PP-A multi-good: cart carries >= 2 goods from the same seller", c && c.cargo.length >= 2);
+  const total = c.cargo.reduce((s, it) => s + it.qty, 0);
+  ok("PP-A multi-good: Sum cargo.qty <= cart capacity", total <= CONFIG.trade.cartCapacity + 1e-9);
+  ok("PP-A multi-good: totalQty mirrors summed cargo", Math.abs(c.totalQty - total) < 1e-9);
+  ok("PP-A multi-good: mirror goodId/qty == primary cargo[0]", c.goodId === c.cargo[0].goodId && c.qty === c.cargo[0].qty);
+  ok("PP-A multi-good: agreedGold == Sum unitBuy*qty", Math.abs(c.agreedGold - c.cargo.reduce((s, it) => s + it.unitBuy * it.qty, 0)) < 1e-9);
+  ok("PP-A multi-good: both goods reserved at the seller", (seller.reserved.grain || 0) > 0 && (seller.reserved.ore || 0) > 0);
+  ok("PP-A multi-good: buyer charged the whole cargo up front", Math.abs((100000 - townById(st, 1).gold) - c.agreedGold) < 1e-9);
+}
+
+// (m2) Per-good partial-delivery refund.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000,
+    stock: { grain: 0, ore: 0 }, demand: { grain: 3, ore: 3 } });
+  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0,
+    stock: { grain: 100, ore: 100 }, prices: { grain: 5, ore: 5 }, demand: {} });
+  const st = { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 1 };
+  Trade.tick(st);
+  const c = st.carts[0];
+  const oreItem = c.cargo.find(it => it.goodId === "ore");
+  const grainItem = c.cargo.find(it => it.goodId === "grain");
+  const oreQty = oreItem.qty, grainQty = grainItem.qty;
+  const goldAfterDispatch = townById(st, 1).gold;
+  seller.stock.ore = 1;      // only 1 ore left when the trader arrives
+  buyer.demand = {};         // freeze re-dispatch; the in-flight cart still completes
+  for (let i = 0; i < 30; i++) Trade.tick(st);
+  ok("PP-A multi-good settle: undelivered ore refunded ((oreQty-1)*unit)",
+     Math.abs(townById(st, 1).gold - (goldAfterDispatch + (oreQty - 1) * 5)) < 1e-9);
+  ok("PP-A multi-good settle: buyer got exactly the 1 ore the seller had", (townById(st, 1).stock.ore || 0) === 1);
+  ok("PP-A multi-good settle: the other good (grain) delivered in full", Math.abs((townById(st, 1).stock.grain || 0) - grainQty) < 1e-9);
+}
+
+// (cs) Castle-as-seller: NO tariff, proceeds -> treasury, goods -> buyer.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000, stock: { grain: 0 }, demand: { grain: 8 } });
+  const st = { roads: new Set([K(1, 0)]), towns: [buyer], carts: [], treasury: 0, tradeSeed: 1,
+    castleStock: { grain: 50 }, castleReserved: {}, castleTrade: { grain: { enabled: true, limit: 100 } } };
+  const price = CONFIG.goods.grain.basePrice * (CONFIG.trade.castleSellMargin || 1);
+  Trade.tick(st);
+  const c = st.carts[0];
+  const qtyDispatched = c.qty;
+  ok("PP-A castle-sell: buyer dispatches a trader to the CASTLE",
+     !!c && c.sellerCastle === true && c.toId === ResearchEconomy.CASTLE_ID && (c.kind || "external") === "external");
+  ok("PP-A castle-sell: castle stock reserved at dispatch", (st.castleReserved.grain || 0) === qtyDispatched);
+  ok("PP-A castle-sell: buyer paid basePrice x margin up front", Math.abs((100000 - townById(st, 1).gold) - qtyDispatched * price) < 1e-9);
+  const cs0 = st.castleStock.grain;
+  buyer.demand = {};
+  for (let i = 0; i < 30; i++) Trade.tick(st);
+  ok("PP-A castle-sell: treasury += full value (NO tariff)", Math.abs(st.treasury - qtyDispatched * price) < 1e-9);
+  ok("PP-A castle-sell: castleStock dropped by the delivered qty", Math.abs((cs0 - st.castleStock.grain) - qtyDispatched) < 1e-9);
+  ok("PP-A castle-sell: buyer received the grain", Math.abs((townById(st, 1).stock.grain || 0) - qtyDispatched) < 1e-9);
+  ok("PP-A castle-sell: castle reservation released after the sale", (st.castleReserved.grain || 0) === 0);
+}
+
+// (det) Determinism with fleets + a castle seller.
+Pathing.invalidate();
+function detState() {
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1e9, stock: { grain: 0, ore: 0 }, demand: { grain: 40, ore: 40 } });
+  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0, stock: { ore: 5000 }, prices: { ore: 4 }, demand: {} });
+  return { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 42,
+    castleStock: { grain: 5000 }, castleReserved: {}, castleTrade: { grain: { enabled: true, limit: 100000 } } };
+}
+{
+  const a = detState(); for (let i = 0; i < 60; i++) Trade.tick(a);
+  Pathing.invalidate();
+  const b = detState(); for (let i = 0; i < 60; i++) Trade.tick(b);
+  ok("PP-A determinism: identical treasury", a.treasury === b.treasury);
+  ok("PP-A determinism: identical live cart count", a.carts.length === b.carts.length);
+  ok("PP-A determinism: identical buyer stock",
+     (townById(a, 1).stock.grain || 0) === (townById(b, 1).stock.grain || 0) &&
+     (townById(a, 1).stock.ore || 0) === (townById(b, 1).stock.ore || 0));
+  ok("PP-A determinism: identical castle stock", (a.castleStock.grain || 0) === (b.castleStock.grain || 0));
+  ok("PP-A determinism: fleet of >=1 exercised (L1 buyer, big shortfall)",
+     a.carts.filter(c => c.fromId === 1).length >= 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
