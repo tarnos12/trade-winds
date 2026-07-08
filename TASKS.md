@@ -58,7 +58,7 @@ are rejected with a reason.
 | Task | Slot | Depends on | Status |
 |---|---|---|---|
 | TI-A — building catalog + placement rules + housing model (`Buildings` pure) | #2 | contract only | 🔲 assigned |
-| TI-B — `Sim.tick`: pop-from-housing + worker assignment + production from placed buildings | #3 | TI-A catalog + `Buildings` | 🔲 assigned |
+| TI-B — `Sim.tick`: pop-from-housing + worker assignment + production from placed buildings | #3 | TI-A catalog + `Buildings` | ✅ merged |
 | TI-C — build-mode UI + build menu + remove auto-seed + render buildings | #4 | TI-A `canPlace` + catalog | 🔲 assigned |
 
 Legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
