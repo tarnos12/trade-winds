@@ -53,7 +53,10 @@
     transition: background 0.12s, border-color 0.12s;
   }
   button:hover { background: #4d3c24; }
-  button.tool.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  button.tool.active,
+  button.speed.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  /* === SPEED-UI === keep the speed buttons compact/uniform */
+  button.speed { min-width: 34px; text-align: center; padding: 5px 8px; }
   .spacer { flex: 1; }
 
   /* ---- Bottom hint ---- */
@@ -321,6 +324,14 @@
     <button class="tool" data-mode="road" title="Paint roads (drag to draw)">🛣 Road</button>
     <button class="tool" data-mode="town" title="Place an empty town marker">🏰 Town</button>
     <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
+  </div>
+
+  <!-- === SPEED-UI === speed & pause controls (P5D-A) -->
+  <div class="group" id="speedGroup">
+    <button class="speed" data-speed="0" title="Pause (Space)">⏸</button>
+    <button class="speed" data-speed="1" title="Normal speed (1)">1×</button>
+    <button class="speed" data-speed="2" title="Double speed (2)">2×</button>
+    <button class="speed" data-speed="4" title="Quadruple speed (4)">4×</button>
   </div>
 
   <div class="spacer"></div>
@@ -2320,10 +2331,18 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const k = e.key.toLowerCase();
     if (["w", "a", "s", "d"].includes(k)) keys.add(k);
     if (e.target && e.target.id === "seed") return;
-    if (k === "1") setMode("pan");
-    if (k === "2") setMode("road");
-    if (k === "3") setMode("town");
-    if (k === "4") setMode("erase");
+    // === SPEED-UI === Space toggles pause <-> last non-zero speed; 1/2/4 set
+    // speed (P5D-A). These number keys previously selected build tools
+    // (1=pan 2=road 3=town 4=erase); tools remain available via the toolbar
+    // buttons. NOTE for merge reconciliation: this reassigned the 1-4 hotkeys.
+    if (k === " " || e.code === "Space") {
+      e.preventDefault();   // stop the page from scrolling on Space
+      setSpeed(state.gameSpeed > 0 ? 0 : lastSpeed);
+      return;
+    }
+    if (k === "1") setSpeed(1);
+    else if (k === "2") setSpeed(2);
+    else if (k === "4") setSpeed(4);
   });
   window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
@@ -2345,6 +2364,22 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     canvas.classList.toggle("building", mode !== "pan");
   }
   toolButtons.forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+  // === SPEED-UI === speed & pause controls (P5D-A).
+  // Buttons set state.gameSpeed to 0/1/2/4; the economy accumulator already
+  // halts at 0, so gameSpeed 0 = paused. `lastSpeed` remembers the last
+  // non-zero speed so Space can toggle back to it after a pause.
+  const speedButtons = Array.from(document.querySelectorAll("button.speed"));
+  let lastSpeed = 1;
+  function setSpeed(sp) {
+    sp = Number(sp) || 0;
+    if (![0, 1, 2, 4].includes(sp)) sp = 1;
+    state.gameSpeed = sp;
+    if (sp > 0) lastSpeed = sp;
+    speedButtons.forEach(b => b.classList.toggle("active", Number(b.dataset.speed) === sp));
+    scheduleSave();
+  }
+  speedButtons.forEach(b => b.addEventListener("click", () => setSpeed(b.dataset.speed)));
 
   document.getElementById("btnGen").addEventListener("click", () => {
     newGame(document.getElementById("seed").value.trim() || randomSeed());
@@ -2431,6 +2466,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         eventSeed: state.eventSeed,        // P4-C: event RNG stream
         eventCooldown: state.eventCooldown,// P4-C: ticks until next event
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
+        gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }
@@ -2465,6 +2501,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
     state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
+    // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
+    // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
+    state.gameSpeed = (typeof data.gameSpeed === "number" && data.gameSpeed > 0) ? data.gameSpeed : 1;
     // P5-C: restore audio mute preference (localStorage flag is the live source,
     // but honor a saved value too so an imported save carries its setting).
     if (typeof data.muted === "boolean" && typeof SFX !== "undefined") {
@@ -3996,6 +4035,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   resize();
   if (!loadGame()) newGame(randomSeed());
   setMode(state.mode);
+  setSpeed(state.gameSpeed);   // === SPEED-UI === (P5D-A) reflect speed in the toolbar at boot
   requestAnimationFrame(frame);
 
   // expose a little for debugging in the console
