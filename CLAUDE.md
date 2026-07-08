@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–4 DONE + Town Interiors DONE. Phase 5 — Content & Polish: next.**
+**Phases 1–4 + Town Interiors + Phase 5 groundwork DONE. Phase 5 *content* (scenarios/tutorial/title) needs author design input.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.

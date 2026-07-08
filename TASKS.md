@@ -5,19 +5,17 @@ Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
 non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
 integrates in the merge order below.
 
-## Milestone: Phase 5 groundwork (design-free polish) — IN PROGRESS
+## Milestone: Phase 5 groundwork (design-free polish) ✅ DONE
 
-Non-content polish that needs no design decisions (scenarios/tutorial/title/win
-framing wait for the author). Three independent slices; merge P5-A → P5-B → P5-C.
+Merged P5-A → P5-B → P5-C. Research effects now change gameplay (output
+multipliers, extra carts/capacity, paved-road speed, tariff/housing/slot bonus,
+warehouse cap); visual juice (transaction particles, chimney smoke, cart trails,
+pop-in — pooled/capped/zoom-culled/reduced-motion-aware); procedural WebAudio SFX
++ mute. Tests: `research_effects` 22 (296 total). Full-stack headless smoke clean.
 
-| Task | Slot | Scope | Status |
-|---|---|---|---|
-| P5-A — wire research effects into gameplay | #2 | apply `Research.effect`/`has` in Sim/Trade/Buildings/Pathing (output multipliers, paved-road cart speed, extra carts/capacity, warehouse cap, housing/slot bonus, tariff bonus). + tests | 🔲 |
-| P5-B — visual juice | #3 | transaction particles at trades, chimney smoke on active producers, cart trails, subtle town/build pop-in; respect perf (1 offscreen terrain draw) | 🔲 |
-| P5-C — audio (WebAudio) | #4 | subtle procedural SFX (place, trade chime, level-up, quest complete, event) + a mute toggle; no assets, all synthesized | 🔲 |
-
-Deferred (needs author design input): campaign scenarios, start screen, tutorial,
-title confirmation, win-condition framing, combat scope (GDD §13).
+**Deferred — needs author design input before building** (GDD §10 Phase 5 content
++ §13 open questions): campaign scenarios, start screen, tutorial, title
+confirmation, win-condition framing, combat scope, and the `tariff_slider` UI.
 
 ## Done
 
