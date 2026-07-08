@@ -255,5 +255,109 @@ Pathing.invalidate();
   ok("the single-trader cap is actually exercised (>0 traders seen)", maxPerCity > 0);
 }
 
+// =========================================================================
+// 6) EC-D — reservation + carried gold + agreed price. Driven WITHOUT Sim so the
+//    dispatch/settlement is exactly controllable (Sim would re-price/consume).
+// =========================================================================
+// Minimal controlled scenario: one BUYER short on grain, one SELLER holding a
+// grain surplus at a fixed price, joined by a road. Trade.tick alone (no Sim).
+const BUFFER = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+function ctrlTown(over) {
+  return Object.assign({ id: 1, q: 0, r: 0, level: 1, gold: 0,
+    pop: { peasants: 0, workers: 0, burghers: 0 },
+    stock: {}, prices: {}, demand: {}, buildings: [], happiness: 100 }, over);
+}
+// buyer(2,0) — seller(0,0), a single road hex at (1,0) joins them.
+function ctrlState(seed, sellerStock, sellerPrice, buyers) {
+  const roads = new Set([K(1, 0), K(-1, 0)]);
+  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0,
+    stock: { grain: sellerStock }, prices: { grain: sellerPrice }, demand: {} });
+  const towns = [seller].concat(buyers);
+  return { roads, towns, carts: [], treasury: 0, tradeSeed: seed >>> 0 };
+}
+
+// (a) Cart capacity is 10.
+ok("EC-D: cartCapacity === 10", CONFIG.trade.cartCapacity === 10);
+
+// (b) At dispatch: buyer gold drops by agreedGold, seller shows a reservation
+//     (available = stock − reserved), and the cart carries the agreed amount.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000,
+    stock: { grain: 0 }, demand: { grain: 20 } });
+  const st = ctrlState(1, /*sellerStock*/100, /*price*/5, [buyer]);
+  Trade.tick(st);                                   // one dispatch, no arrival yet
+  const c = st.carts[0];
+  ok("EC-D: a trader is dispatched in the controlled scenario", !!c && c.phase === "outbound");
+  ok("EC-D: qty capped at capacity 10", c && c.qty === 10);
+  ok("EC-D: agreedUnit stored as unitBuy (price at dispatch)", c && c.unitBuy === 5);
+  ok("EC-D: cart carries agreedGold = unit × qty", c && c.agreedGold === 50);
+  ok("EC-D: buyer gold drops by agreedGold at DISPATCH", townById(st, 1).gold === 950);
+  ok("EC-D: seller stock is reserved (10 earmarked)", townById(st, 100).reserved.grain === 10);
+  ok("EC-D: available = stock − reserved (100 − 10 = 90)",
+    (townById(st, 100).stock.grain - townById(st, 100).reserved.grain) === 90);
+  ok("EC-D: goods NOT yet removed from seller stock at dispatch", townById(st, 100).stock.grain === 100);
+}
+
+// (c) A mid-transit price spike does NOT change what the buyer pays — the deal
+//     settles at the AGREED gold carried at departure.
+Pathing.invalidate();
+{
+  // Demand sized so ONE 10-unit cart fully satisfies the buyer (need = 10) → no
+  // second trader is dispatched after delivery, keeping the gold assertion exact.
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000,
+    stock: { grain: 0 }, demand: { grain: 10 / BUFFER } });
+  const st = ctrlState(1, 100, 5, [buyer]);
+  Trade.tick(st);                                   // dispatch @ price 5 → agreedGold 50
+  ok("EC-D: buyer paid the agreed 50 up front", townById(st, 1).gold === 950);
+  townById(st, 100).prices.grain = 100;             // price 20× spike while in transit
+  const sellerGold0 = townById(st, 100).gold;
+  for (let i = 0; i < 10; i++) Trade.tick(st);       // let the trader arrive + return
+  ok("EC-D: buyer pays only the agreed amount despite the spike (gold stays 950)",
+    townById(st, 1).gold === 950);
+  ok("EC-D: buyer receives the 10 grain on return", townById(st, 1).stock.grain === 10);
+  // Seller settled at the agreed unit (5), not the spiked price (100): value 50,
+  // tariff = 0.25 × 50 = 12.5, seller nets 37.5.
+  ok("EC-D: seller settles at agreed unit price (nets value − tariff = 37.5)",
+    Math.abs((townById(st, 100).gold - sellerGold0) - 37.5) < 1e-9);
+  ok("EC-D: reservation released after the sale", (townById(st, 100).reserved.grain || 0) === 0);
+  ok("EC-D: treasury got the tariff on the agreed value (12.5)", Math.abs(st.treasury - 12.5) < 1e-9);
+}
+
+// (d) Two buyers cannot over-claim the same seller stock — reservations cap the
+//     combined take at what the seller actually holds.
+Pathing.invalidate();
+{
+  const b1 = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000, stock: { grain: 0 }, demand: { grain: 20 } });
+  const b2 = ctrlTown({ id: 2, q: -2, r: 0, gold: 1000, stock: { grain: 0 }, demand: { grain: 20 } });
+  const st = ctrlState(7, /*only 15 in stock*/15, 5, [b1, b2]);
+  Trade.tick(st);                                   // both buyers dispatch this tick
+  const claimed = st.carts.reduce((s, c) => s + c.qty, 0);
+  ok("EC-D: both buyers dispatch a trader", st.carts.length === 2);
+  ok("EC-D: combined claim never exceeds seller stock (no over-claim)", claimed <= 15);
+  ok("EC-D: combined claim uses the full 15 available (10 + 5)", claimed === 15);
+  ok("EC-D: reservation total equals combined claim", townById(st, 100).reserved.grain === claimed);
+  ok("EC-D: reservation never exceeds physical stock", townById(st, 100).reserved.grain <= townById(st, 100).stock.grain);
+  // Each buyer paid exactly for what its own trader carries (carried gold = unit × qty).
+  const paid1 = 1000 - townById(st, 1).gold, paid2 = 1000 - townById(st, 2).gold;
+  ok("EC-D: each buyer paid unit × its own qty at dispatch",
+    Math.abs(paid1 + paid2 - claimed * 5) < 1e-9 && paid1 > 0 && paid2 > 0);
+}
+
+// (e) Failure path — seller removed mid-transit: reservation released + gold refunded.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000, stock: { grain: 0 }, demand: { grain: 20 } });
+  const st = ctrlState(3, 100, 5, [buyer]);
+  Trade.tick(st);
+  ok("EC-D: buyer charged 50 at dispatch", townById(st, 1).gold === 950);
+  // Remove the seller before the trader arrives (its stock/reserved go with it).
+  st.towns = st.towns.filter(t => t.id !== 100);
+  for (let i = 0; i < 8; i++) Trade.tick(st);
+  ok("EC-D: carried gold refunded when the seller vanishes", townById(st, 1).gold === 1000);
+  ok("EC-D: no goods delivered on a failed trade", (townById(st, 1).stock.grain || 0) === 0);
+  ok("EC-D: failed trade retires its cart", st.carts.length === 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
