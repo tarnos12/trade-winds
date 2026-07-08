@@ -333,6 +333,7 @@
     <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Fog</button>
     <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
     <button id="btnKingdom" title="Kingdom overview — all towns (K)">📋 Kingdom</button>
+    <button id="btnMute" title="Toggle sound effects (M)">🔊 Sound</button>
   </div>
   <span id="eventChip" title="Active kingdom event"></span>
 </div>
@@ -2192,12 +2193,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function place(q, r) {
     const k = HexMath.key(q, r);
     if (state.mode === "road") {
-      if (canPlace(q, r)) { state.roads.add(k); Pathing.invalidate(); scheduleSave(); }
+      if (canPlace(q, r)) { state.roads.add(k); Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90); }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
         state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
         reveal(q, r, CONFIG.fog.townReveal);
         scheduleSave();
+        SFX.play("place");
       }
     } else if (state.mode === "erase") {
       let changed = false;
@@ -2384,6 +2386,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         event: state.event,                // P4-C: active event
         eventSeed: state.eventSeed,        // P4-C: event RNG stream
         eventCooldown: state.eventCooldown,// P4-C: ticks until next event
+        muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }
@@ -2418,6 +2421,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
     state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
+    // P5-C: restore audio mute preference (localStorage flag is the live source,
+    // but honor a saved value too so an imported save carries its setting).
+    if (typeof data.muted === "boolean" && typeof SFX !== "undefined") {
+      SFX.setMuted(data.muted); syncMuteBtn();
+    }
     for (const k of (data.revealed || [])) {
       state.revealed.add(k);
       const hex = state.map.hexes.get(k);
@@ -2461,6 +2469,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // ---------------------------------------------------------------
   let lastTime = performance.now();
   let econAcc = 0;
+  let _prevQuestReward = null;   // AUDIO (P5-C): tracks quest-complete edge for the fanfare cue
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
 
   const fpsEl = document.getElementById("fps");
@@ -2476,7 +2485,18 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       const step = CONFIG.econ.baseTickMs;
       let guard = 0;
       while (econAcc >= step && guard++ < 8) {
-        Sim.tick(state); Trade.tick(state); Research.tick(state); Quests.tick(state);
+        Sim.tick(state);
+        // AUDIO (P5-C): isolate the tariff credit so only autonomous sales chime
+        // (a throttle in SFX keeps a busy economy from machine-gunning).
+        const _treasBefore = state.treasury || 0;
+        Trade.tick(state);
+        if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
+        Research.tick(state); Quests.tick(state);
+        // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
+        if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
+          _prevQuestReward = state.lastQuestReward;
+          SFX.play("quest");
+        }
         if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
           Events.tick(state);
           if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
@@ -2826,6 +2846,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     }
     town.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
     scheduleSave();
+    SFX.play("place");
     if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level)) cancelPlacing();
     renderTownPanel();
   }
@@ -2837,7 +2858,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const upBtn = e.target.closest("[data-town-upgrade]");
     if (upBtn && activeTown) {
       const res = Town.upgrade(activeTown);
-      if (res.ok) { scheduleSave(); renderTownPanel(); }
+      if (res.ok) { scheduleSave(); renderTownPanel(); SFX.play("levelup"); }
       return;
     }
     const buildRow = e.target.closest("[data-build]");
@@ -3065,6 +3086,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (state.warehouse[goodId] <= 0) delete state.warehouse[goodId];
     state.treasury = (state.treasury || 0) + price * unit;   // player earns gold
     afterCastleTrade();
+    SFX.playThrottled("trade", 120);
   }
   function afterCastleTrade() {
     renderCastlePanel();
@@ -3143,6 +3165,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         updateProgressHud();
         if (res.victory) showVictory();
         scheduleSave();
+        SFX.play(res.victory ? "quest" : "levelup");
       }
       return;
     }
@@ -3544,6 +3567,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       let extra = "";
       if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
       showToast(label + extra + " has begun!");
+      SFX.play("event");
     } else {
       showToast(label + " has ended.");
     }
@@ -3561,6 +3585,144 @@ var Events = (typeof Events !== "undefined" && Events) || {};
                        get isOpen() { return kingdomOpen; } };
   window.Events = Events;
   // === KINGDOM/EVENTS-UI END ===
+
+  // === AUDIO START === (P5-C / slot #4 — procedural WebAudio SFX + mute)
+  // Self-contained: all cues are synthesized (oscillators + envelopes), zero
+  // external assets (CSP blocks them anyway). Lives entirely in the browser IIFE
+  // and is guarded so a headless/no-WebAudio environment never throws — the pure
+  // Sim/Trade/etc. cores have no audio dependency. Sound is silent until the
+  // player's first gesture (WebAudio autoplay policy) and honors the mute flag.
+  const SFX = (function () {
+    const MUTE_KEY = "tw_muted";
+    const AC = (typeof window !== "undefined") &&
+               (window.AudioContext || window.webkitAudioContext);
+    let ctx = null, master = null, unlocked = false, warned = false;
+    let muted = false;
+    try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) {}
+
+    function ensureCtx() {
+      if (ctx || !AC) return ctx;
+      try {
+        ctx = new AC();
+        master = ctx.createGain();
+        master.gain.value = 0.22;          // gentle master volume
+        master.connect(ctx.destination);
+      } catch (e) { ctx = null; }
+      return ctx;
+    }
+
+    // Resume the context on the first real user gesture, then arm playback.
+    function unlock() {
+      if (unlocked) return;
+      if (!ensureCtx()) return;
+      try { if (ctx.state === "suspended") ctx.resume(); } catch (e) {}
+      unlocked = true;
+    }
+
+    // One enveloped voice: osc(type) sliding from f0→f1, soft attack + decay.
+    function voice(f0, f1, t0, dur, type, peak) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type || "sine";
+      o.frequency.setValueAtTime(f0, t0);
+      if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+      const a = Math.min(0.012, dur * 0.25);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + a);        // quick soft attack
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);    // exp decay to ~silence
+      o.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+
+    // Cue definitions — each builds a short, soft gesture from the current time.
+    function render(name) {
+      const t = ctx.currentTime;
+      switch (name) {
+        case "place":                              // soft wooden "tok"
+          voice(200, 120, t, 0.10, "triangle", 0.5);
+          break;
+        case "trade":                              // gentle two-note coin chime
+          voice(1046, 1046, t, 0.10, "sine", 0.28);
+          voice(1568, 1568, t + 0.06, 0.14, "sine", 0.22);
+          break;
+        case "levelup":                            // rising C–E–G arpeggio
+          voice(523, 523, t, 0.12, "triangle", 0.32);
+          voice(659, 659, t + 0.09, 0.12, "triangle", 0.32);
+          voice(784, 784, t + 0.18, 0.20, "triangle", 0.34);
+          break;
+        case "quest": {                            // brief bright fanfare C–E–G–C
+          const n = [523, 659, 784, 1046];
+          for (let i = 0; i < n.length; i++)
+            voice(n[i], n[i], t + i * 0.08, 0.18, "triangle", 0.3);
+          break;
+        }
+        case "event":                              // mellow ding-dong notification
+          voice(660, 660, t, 0.16, "sine", 0.26);
+          voice(880, 880, t + 0.13, 0.22, "sine", 0.24);
+          break;
+        default:
+          voice(440, 440, t, 0.08, "sine", 0.2);
+      }
+    }
+
+    function play(name) {
+      if (muted || !unlocked || !ctx) return;     // silent pre-gesture / muted
+      if (ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} }
+      try { render(name); }
+      catch (e) { if (!warned) { warned = true; /* audio disabled for session */ } }
+    }
+
+    // --- light rate limits so a busy economy / road-drag can't machine-gun ---
+    const nextAt = Object.create(null);
+    function playThrottled(name, minGapMs) {
+      const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+      if (nextAt[name] && now < nextAt[name]) return;
+      nextAt[name] = now + (minGapMs || 120);
+      play(name);
+    }
+
+    function setMuted(m) {
+      muted = !!m;
+      try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {}
+      if (typeof state === "object" && state) state.muted = muted;
+    }
+    function toggle() { setMuted(!muted); return muted; }
+
+    return {
+      play, playThrottled, unlock, toggle,
+      setMuted,
+      isMuted: () => muted,
+      get ready() { return unlocked; },
+      get available() { return !!AC; },
+    };
+  })();
+  window.SFX = SFX;   // exposed for the headless smoke test / console debugging
+
+  // Arm audio on the first genuine user gesture (WebAudio autoplay policy).
+  ["pointerdown", "keydown", "touchstart"].forEach(ev =>
+    window.addEventListener(ev, () => SFX.unlock(), { once: false, passive: true }));
+
+  // Mute toggle button in the top bar.
+  const muteBtn = document.getElementById("btnMute");
+  function syncMuteBtn() {
+    if (!muteBtn) return;
+    const m = SFX.isMuted();
+    muteBtn.textContent = m ? "🔇 Muted" : "🔊 Sound";
+    muteBtn.classList.toggle("active", m);
+    muteBtn.setAttribute("aria-pressed", m ? "true" : "false");
+  }
+  if (muteBtn) {
+    muteBtn.addEventListener("click", () => { SFX.unlock(); SFX.toggle(); syncMuteBtn(); });
+    syncMuteBtn();
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "m" || e.key === "M") {
+      const el = document.activeElement;
+      if (el && el.tagName === "INPUT") return;   // don't hijack the seed field
+      SFX.toggle(); syncMuteBtn();
+    }
+  });
+  // === AUDIO END ===
 
   // ---------------------------------------------------------------
   // Boot
