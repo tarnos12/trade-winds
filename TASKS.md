@@ -1,5 +1,29 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
+## Milestone: Research tree overhaul (LTT-style) — IN PROGRESS (RT-A running)
+Author design (5 reference screenshots, 2026-07-08): **full-screen tech tree**,
+bands stacked bottom-up by worker tier — **Peasant → Worker → Citizen** (the
+`burgher` internal key DISPLAYS as "Citizen" everywhere from now on). Each
+building = a node with an unlock shield + one **pip per upgrade level**
+(II/III/IV…); prerequisite lines within + across bands; kingdom-wide upgrades in
+a side column per band; drag-to-pan, R = reset, Esc = close; hover tooltips show
+name, effects/unlocks, progress %, state, and estimated cost (gold + per-material
+breakdown). Researching is ALSO how houses unlock. Build bar keeps hiding
+buildings until researched (already true).
+- **RT-A (data/logic, workflow: plan→implement→2 adversarial reviews):**
+  per-building unlock nodes, per-LEVEL upgrade nodes wired to CONFIG.upgrades,
+  band/kind/pos metadata, materials for every node, save migration
+  (old dev-branch ids → per-level sets), engine API unchanged. 🟡 running
+- **RT-B (UI, workflow):** the full-screen tree overlay itself. 🔲 queued
+- **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
+
+## Milestone: Aristocrats tier — FUTURE (author-deferred)
+4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
+(luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
+Author: "we can leave aristocrats for the future." Requires: citizen-tier content
+chains first (goods for aristocrats to consume), then a 4th houseTier + needs +
+research band. Do not start without author steer.
+
 Manager's board for the **in-session agent team** ([PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)).
 Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
 non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
