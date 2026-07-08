@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) + Two-part research & per-building upgrades (v0.13.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next candidates: content chains (cloth→clothing, chairs, wine), upgrade ladders for more buildings, or GDD §13 open questions. Standing directive: orchestrate work via dynamic Workflows (plan → implement → adversarial review), delegating to Sonnet/Opus subagents by complexity.**
+**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) + Two-part research & per-building upgrades (v0.13.0) + Research-tree overhaul & kingdom resource overview (v0.14.0: full-screen LTT-style tech tree with bands/pips/queue, per-building unlock nodes, autonomous castle buying, Burgher→Citizen display rename, top-left resource sidebar with price charts) DONE. IN FLIGHT: LTT panel parity (PP-A mechanics workflow running; PP-B..E UI slices queued — see TASKS.md for the full author spec + Q&A decisions). Standing directive: orchestrate work via dynamic Workflows (plan → implement → adversarial review), delegating to Sonnet/Opus subagents by complexity.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.

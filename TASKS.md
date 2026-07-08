@@ -1,6 +1,6 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
-## Milestone: Research tree overhaul (LTT-style) — IN PROGRESS (RT-A running)
+## Milestone: Research tree overhaul (LTT-style) ✅ DONE (v0.14.0, RT-A/RT-A2/RT-B)
 Author design (5 reference screenshots, 2026-07-08): **full-screen tech tree**,
 bands stacked bottom-up by worker tier — **Peasant → Worker → Citizen** (the
 `burgher` internal key DISPLAYS as "Citizen" everywhere from now on). Each
@@ -10,22 +10,10 @@ a side column per band; drag-to-pan, R = reset, Esc = close; hover tooltips show
 name, effects/unlocks, progress %, state, and estimated cost (gold + per-material
 breakdown). Researching is ALSO how houses unlock. Build bar keeps hiding
 buildings until researched (already true).
-- **RT-A (data/logic, workflow: plan→implement→2 adversarial reviews):**
-  per-building unlock nodes, per-LEVEL upgrade nodes wired to CONFIG.upgrades,
-  band/kind/pos metadata, materials for every node, save migration
-  (old dev-branch ids → per-level sets), engine API unchanged. 🟡 running
-- **RT-A2 (engine follow-up, after RT-A merges):** **Research Queue** (author,
-  from LTT's left-hand parchment panel) — `state.research.queue` (ordered ids);
-  when the active node completes, auto-start the next queued node whose prereqs
-  are met (skip-with-keep or drop unaffordable-yet entries — decide simplest);
-  `Research.enqueue/dequeue/queued`; normalize + persist. 🔲 queued
-- **RT-B (UI, workflow):** the full-screen tree overlay itself + the **queue
-  panel** on its left (ordered list, click-to-enqueue from the tree, ✕ remove,
-  active node shows progress at the top). Queue entries render as icons and
-  share the SAME hover tooltip as tree nodes (name, effect text, progress %,
-  status In Progress/queued, estimated cost with per-material gold breakdown).
-  🔲 queued
-- **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
+- **RT-A:** data restructure (35 nodes: 15 kingdom + 11 unlocks + 9 per-level). ✅ merged
+- **RT-A2:** research queue engine + autonomous castle buying. ✅ merged (v0.14.0)
+- **RT-B:** full-screen tree overlay + queue panel + tooltips. ✅ merged (v0.14.0)
+- **Citizen display rename:** ✅ merged with RT-B (internal keys unchanged).
 
 **Author decisions (2026-07-08 Q&A):** (1) Tree ships with EXISTING content —
 citizen-band content chains are the immediate next milestone after. (2) Castle
@@ -34,7 +22,7 @@ requirement (supersedes the earlier castle-selected rule; the game is a
 simulation, player makes minimal decisions). (3) The full-screen tree fully
 REPLACES the old column research panel (🔬 opens the tree).
 
-## Milestone: Kingdom resource overview (LTT-style sidebar) — 🟡 IN PROGRESS (KR workflow, worktree)
+## Milestone: Kingdom resource overview ✅ DONE (v0.14.0, KR — Market module + sidebar + charts, market.test.js 41)
 Author design (screenshot 2026-07-08, main game screen): a **top-left resource
 grid** — one chip per UNLOCKED resource (i.e. producible with currently-researched
 buildings), each showing the **total across all cities** + **average price**, with
