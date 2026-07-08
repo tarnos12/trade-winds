@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next: two-part research + per-building upgrade ladders (now unblocked — depends on the per-building panel + delivery that just landed).**
+**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) DONE. Remaining Phase 5: campaign scenarios + combat need author design input. Next: two-part research + per-building upgrade ladders (now unblocked — depends on the per-building panel + delivery that landed). Going forward: orchestrate work via dynamic Workflows, delegating implementation to Sonnet/Opus subagents by complexity (author directive).**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -87,6 +87,19 @@ Done:
   workers/burghers from housing as needs are met, build-menu UI + placement
   overlay, buildings rendered. Towns start center-only with a founding kit.
   Tests: `buildings` 37, `sim` 40.
+
+- **Gradual trade transfer (v0.12.0)**: trades are no longer instant. Each trader
+  travels, then **parks to LOAD at the seller and UNLOAD at the buyer** over
+  `ceil(qty / (CONFIG.trade.transferRate × tickSec))` ticks (`transferRate` = 5
+  items/sec of game time; same for castle traders via `CONFIG.researchEconomy`).
+  The **purchase settles atomically on arrival** (unchanged economics — so market
+  moves / Sim consumption can't nibble a half-loaded cart and balance is preserved);
+  the dwell is load *time* and the haul **meters into the buyer's stock** as it
+  unloads. This intentionally cuts throughput (~3× fewer trips), so tight economies
+  lean more on local production. Render: `cartPixel` mirror removed (returning carts
+  animated backwards — fixed), `drawCarts(dt)` eases position with a frame-rate-
+  independent `1−e^(−dt/τ)` lerp; hover shows Loading/Hauling/Unloading + live count.
+  Tests: `trade` 64 (452 total green).
 
 - **Construction & building logistics (v0.11.0)** landed via the agent team
   (CB-A → CB-B → CB-C → CB-D): buildings are placed **under construction** —

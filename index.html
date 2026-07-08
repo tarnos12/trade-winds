@@ -1919,6 +1919,7 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
+    transferRate: 5,           // items/sec (game time) a parked trader loads/unloads — trades are NOT instant
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
     buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader
@@ -2070,62 +2071,78 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       });
     }
 
-    // --- 2. Advance traders; buy at the seller (its passive sale), deliver home --
+    // --- 2. Advance traders; travel, then PARK to load / unload (not instant) -----
+    // A trader travels (progress += cartSpeed), then dwells to LOAD at the seller and
+    // to UNLOAD at the buyer for ceil(qty / perTick) ticks — so a trade takes visible
+    // time (CONFIG.trade.transferRate items/sec of game time). Phases:
+    //   outbound → loading (dwell @ seller) → return → unloading (dwell @ buyer) → done.
+    // The PURCHASE settles atomically on arrival at the seller (as before) so market
+    // moves / Sim consumption can't nibble a half-loaded cart; the dwell is the load
+    // TIME, and the haul is metered into the buyer's stock as it unloads.
+    const perTick = (cfg.transferRate || 5) * (((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / 1000);
+    const dwellFor = (n) => Math.max(1, Math.ceil((Math.max(0, n) || 0) / (perTick || 1)));
     for (const cart of state.carts) {
       if (cart.done) continue;
       if (cart.kind === "castle") continue;   // CRE: castle-owned traders are driven by ResearchEconomy.tick
+
+      // -- Loading dwell: cargo already secured on arrival; ramp the chip for feel. --
+      if (cart.phase === "loading") {
+        cart.loaded = Math.min(cart.qty, (cart.loaded || 0) + perTick);
+        if ((cart.dwell = (cart.dwell || 0) - 1) <= 0) {
+          cart.phase = "return"; cart.progress = 0;
+          cart.path = cart.path.slice().reverse();            // seller → buyer
+        }
+        continue;
+      }
+
+      // -- Unloading dwell: meter the haul into the buyer's stock over several ticks. --
+      if (cart.phase === "unloading") {
+        const buyer = byId.get(cart.fromId);
+        if (buyer) {
+          if (!buyer.stock) buyer.stock = {};
+          const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;   // EV3 storage cap
+          const move = Math.min(perTick, cart.qty - (cart.unloaded || 0),
+                                Math.max(0, capG - (buyer.stock[cart.goodId] || 0)));
+          if (move > 0) {
+            buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + move;
+            cart.unloaded = (cart.unloaded || 0) + move;
+          }
+        }
+        if ((cart.dwell = (cart.dwell || 0) - 1) <= 0 || (cart.unloaded || 0) >= cart.qty) cart.done = true;
+        continue;
+      }
+
+      // -- Travel (outbound / return) --
       cart.progress += cartSpeed;
       if (cart.progress < 1) continue;
       cart.progress = 1;
 
       if (cart.phase === "outbound") {
-        // Arrived at the SELLER — settle the purchase at the AGREED amount (EC-D).
-        // The trader carries `cart.agreedGold` (already deducted from the buyer at
-        // dispatch) and the seller has `cart.qty` reserved for it, so the deal is
-        // race-free and price-stable: later market moves don't change what's paid.
+        // Arrived at the SELLER — settle the purchase ATOMICALLY at the AGREED amount
+        // (EC-D). The trader carries `agreedGold` (deducted at dispatch) and the seller
+        // has `qty` reserved, so the deal is race-free and price-stable. Then it dwells
+        // to "load" before heading home.
         const seller = byId.get(cart.toId);
         const buyer = byId.get(cart.fromId);
         const carried = cart.agreedGold || (cart.unitBuy || 0) * cart.qty;
-        // Always release this trader's reservation on arrival (deal or not).
-        if (seller) release(seller, cart.goodId, cart.qty);
-        if (!seller) {                                         // seller vanished → refund buyer, scrap
-          if (buyer) buyer.gold = (buyer.gold || 0) + carried; // release the carried gold
-          cart.done = true; continue;
-        }
+        if (seller) release(seller, cart.goodId, cart.qty);   // release reservation on arrival
+        if (!seller) { if (buyer) buyer.gold = (buyer.gold || 0) + carried; cart.done = true; continue; }
         if (!seller.stock) seller.stock = {};
-        // Reservation should guarantee the goods, but Sim consumption can still eat
-        // stock between ticks — take what's actually there and refund any shortfall
-        // proportionally (settling the delivered part at the agreed unit price).
         const take = Math.min(cart.qty, Math.max(0, seller.stock[cart.goodId] || 0));
-        if (!(take > 0)) {                                     // nothing to deliver → full refund, scrap
-          if (buyer) buyer.gold = (buyer.gold || 0) + carried;
-          cart.done = true; continue;
-        }
-        const value = (cart.unitBuy || 0) * take;              // AGREED unit price × delivered qty
+        if (!(take > 0)) { if (buyer) buyer.gold = (buyer.gold || 0) + carried; cart.done = true; continue; }
+        const value = (cart.unitBuy || 0) * take;             // AGREED unit price × delivered qty
         // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
         const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
           ? Events.tariffMultiplier(state) : 1;
-        const tariff = tariffRate * value * tariffMult;        // GDD §6.3: 25% cut (+ research bonus)
-        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - take; // passive sale: goods leave
-        seller.gold = (seller.gold || 0) + (value - tariff);   // seller nets value − tariff
-        state.treasury += tariff;                              // → player's treasury
-        // Buyer already paid `carried` at dispatch; refund any undelivered portion.
-        if (buyer && carried > value) buyer.gold = (buyer.gold || 0) + (carried - value);
-        cart.qty = take;                                       // carry only what was actually bought
-        cart.phase = "return";                                 // carry the goods home
-        cart.progress = 0;
-        cart.path = cart.path.slice().reverse();               // seller → buyer
+        const tariff = tariffRate * value * tariffMult;       // GDD §6.3: 25% cut (+ research bonus)
+        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - take;  // passive sale
+        seller.gold = (seller.gold || 0) + (value - tariff);  // seller nets value − tariff
+        state.treasury += tariff;                             // → player's treasury
+        if (buyer && carried > value) buyer.gold = (buyer.gold || 0) + (carried - value);  // refund undelivered
+        cart.qty = take;                                      // carry only what was actually bought
+        cart.phase = "loading"; cart.loaded = 0; cart.dwell = dwellFor(take);
       } else {
-        // Arrived HOME — deliver the purchased goods into the buyer's stock. The
-        // buyer's gold was already spent at dispatch, so do NOT charge again.
-        const buyer = byId.get(cart.fromId);
-        if (buyer) {
-          if (!buyer.stock) buyer.stock = {};
-          // EV3: clamp delivered stock to the per-city storage cap (80/good).
-          const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
-          buyer.stock[cart.goodId] = Math.min(capG, (buyer.stock[cart.goodId] || 0) + cart.qty);
-        }
-        cart.done = true;
+        cart.phase = "unloading"; cart.unloaded = 0; cart.dwell = dwellFor(cart.qty);
       }
     }
 
@@ -2324,6 +2341,7 @@ Object.assign(CONFIG, {
     maxTraders: 10,     // hard cap on concurrent castle-owned traders
     cartCapacity: 10,   // units one royal buyer hauls per trip
     cartSpeed: 0.5,     // progress (0..1) added per tick (paved-roads boosts it)
+    transferRate: 5,    // items/sec (game time) a parked royal buyer loads/unloads — not instant
     buyThreshold: 0,    // min still-needed qty before a buyer is sent (0 = any)
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
   },
@@ -2488,9 +2506,37 @@ var ResearchEconomy = (function () {
       }
     }
 
-    // --- 2. Advance castle traders: buy at the seller, deliver to castleStock ---
+    // --- 2. Advance castle traders: travel, then PARK to load / unload (not instant).
+    //     The PURCHASE settles atomically on arrival (no tariff — the castle buys for
+    //     the kingdom); the dwell is load TIME and the haul meters into castleStock.
+    //     Phases mirror Trade.tick: outbound → loading → return → unloading → done.
+    const perTick = (C.transferRate || 5) * (((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / 1000);
+    const dwellFor = (n) => Math.max(1, Math.ceil((Math.max(0, n) || 0) / (perTick || 1)));
     for (const cart of state.carts) {
       if (cart.done || cart.kind !== "castle") continue;
+
+      // -- Loading dwell (cargo secured on arrival) --
+      if (cart.phase === "loading") {
+        cart.loaded = Math.min(cart.qty, (cart.loaded || 0) + perTick);
+        if ((cart.dwell = (cart.dwell || 0) - 1) <= 0) {
+          cart.phase = "return"; cart.progress = 0;
+          cart.path = cart.path.slice().reverse();            // seller → castle
+        }
+        continue;
+      }
+
+      // -- Unloading dwell: meter into castleStock over several ticks --
+      if (cart.phase === "unloading") {
+        const move = Math.min(perTick, cart.qty - (cart.unloaded || 0));
+        if (move > 0) {
+          stock(state)[cart.goodId] = (stock(state)[cart.goodId] || 0) + move;   // into the castle
+          cart.unloaded = (cart.unloaded || 0) + move;
+        }
+        if ((cart.dwell = (cart.dwell || 0) - 1) <= 0 || (cart.unloaded || 0) >= cart.qty) cart.done = true;
+        continue;
+      }
+
+      // -- Travel (outbound / return) --
       cart.progress += cartSpeed;
       if (cart.progress < 1) continue;
       cart.progress = 1;
@@ -2503,18 +2549,14 @@ var ResearchEconomy = (function () {
         if (!seller.stock) seller.stock = {};
         const take = Math.min(cart.qty, Math.max(0, seller.stock[cart.goodId] || 0));
         if (!(take > 0)) { state.treasury = (state.treasury || 0) + carried; cart.done = true; continue; }
-        const value = (cart.unitBuy || 0) * take;             // AGREED unit × delivered qty
-        // NO tariff (documented): the castle is the kingdom purchasing for itself,
-        // so the city nets the full agreed price.
+        const value = (cart.unitBuy || 0) * take;             // AGREED unit × delivered qty; NO tariff
         seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - take;
         seller.gold = (seller.gold || 0) + value;
         if (carried > value) state.treasury = (state.treasury || 0) + (carried - value);  // refund undelivered
         cart.qty = take;
-        cart.phase = "return"; cart.progress = 0;
-        cart.path = cart.path.slice().reverse();              // seller → castle
+        cart.phase = "loading"; cart.loaded = 0; cart.dwell = dwellFor(take);
       } else {
-        stock(state)[cart.goodId] = (stock(state)[cart.goodId] || 0) + cart.qty;   // into the castle
-        cart.done = true;
+        cart.phase = "unloading"; cart.unloaded = 0; cart.dwell = dwellFor(cart.qty);
       }
     }
 
@@ -3876,7 +3918,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
     drawAlerts();     // P4-C: subtle status icons over towns in a bad state
-    drawCarts();      // CARTS (T9): live trade carts, drawn right after towns
+    drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
@@ -4026,6 +4068,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (!c) return "Idle — no external trader out right now.";
     const good = GOOD_LABEL(c.goodId || "goods");
     const qty = fmt(c.qty || 0);
+    if (c.phase === "loading")
+      return `Loading ${fmt(c.loaded || 0)}/${qty} ${good} at City #${c.toId}.`;
+    if (c.phase === "unloading")
+      return `Unloading ${fmt(c.unloaded || 0)}/${qty} ${good} at home.`;
     if (c.phase === "return")
       return `Returning with ${qty} ${good} from City #${c.toId}.`;
     return `Buying ${qty} ${good} from City #${c.toId} (en route).`;
@@ -4053,7 +4099,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const extBusy = !!c;
     const extTip = esc(externalActivity(t));
     const extLabel = extBusy
-      ? (c.phase === "return" ? "Hauling" : "Buying")
+      ? (c.phase === "loading" ? "Loading" : c.phase === "unloading" ? "Unloading"
+         : c.phase === "return" ? "Hauling" : "Buying")
       : "Idle";
     const iu = internalUtil(t);
     const intTip = iu.producers
@@ -4815,8 +4862,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       pts.push(HexMath.hexToPixel(q, r, SIZE));
     }
     if (pts.length === 1) return pts[0];
-    let f = Math.max(0, Math.min(1, Number(cart.progress) || 0));
-    if (cart.phase === "return") f = 1 - f;
+    // `f` walks the path forward. The LOGIC reverses cart.path when a trader turns
+    // for home, so progress always runs 0→1 along the current path regardless of
+    // phase (no mirroring). Parked phases hold progress at 1 → the path's end
+    // (loading = seller on the outbound path; unloading = buyer on the reversed path).
+    const f = Math.max(0, Math.min(1, Number(cart.progress) || 0));
     // walk cumulative segment lengths to the fraction f of total length
     let total = 0; const seg = [];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -4851,21 +4901,24 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     ctx.beginPath(); ctx.arc(x, y - h * 0.08, h * 0.36, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
 
-  function drawCarts() {
+  function drawCarts(dt) {
     const carts = state.carts || [];
     if (!carts.length) return;
     const zoomedOut = state.zoom < 0.6;   // dots-only when far out (GDD §8)
+    // Frame-rate-independent smoothing toward the logical position. The economy
+    // only moves carts every 500ms step, so we ease the visual continuously each
+    // frame: k = 1 − e^(−dt/τ). τ≈120ms trails just enough to read as gliding
+    // motion between steps (and settles when a cart parks to load/unload).
+    const k = 1 - Math.exp(-(Math.max(0, Number(dt) || 16)) / 120);
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
       const target = cartPixel(cart);
       if (!target) continue;
       live.add(cart.id);
-      // smooth motion between the 500ms progress steps (position still derives
-      // from progress; this only interpolates the visual toward it each frame)
       let rp = cartRender[cart.id];
       if (!rp) rp = cartRender[cart.id] = { x: target.x, y: target.y };
-      else { rp.x += (target.x - rp.x) * 0.25; rp.y += (target.y - rp.y) * 0.25; }
+      else { rp.x += (target.x - rp.x) * k; rp.y += (target.y - rp.y) * k; }
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
         ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
@@ -4874,11 +4927,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         drawCartToken(rp.x, rp.y, gc);
         // === CB-B: cargo chip above the wagon. outbound = requested (greyed/
         // translucent); return = carried (solid). Castle carts share the look. ===
+        // requested (not yet bought) only while heading OUT; once parked to load the
+        // cargo is secured, so loading/return/unloading show it solid (carried).
+        const requested = cart.phase === "outbound";
         const cargoNum = Math.round(Number(cart.qty) || 0);
         if (cargoNum > 0) {
-          const outbound = cart.phase === "outbound";
           drawGoodChip(rp.x, rp.y - SIZE * 0.5, cart.goodId, cargoNum,
-            { alpha: outbound ? 0.5 : 1, muted: outbound });
+            { alpha: requested ? 0.5 : 1, muted: requested });
         }
         // === /CB-B ===
       }
@@ -6426,8 +6481,13 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.11.0";
+  const GAME_VERSION = "0.12.0";
   const PATCH_NOTES = [
+    { v: "0.12.0", notes: [
+      "Trades are no longer instant — traders park to load and unload at 5 items/sec",
+      "Traders glide smoothly along roads between economy ticks (frame-rate independent)",
+      "Hover a trader to see Loading / Hauling / Unloading with a live count",
+    ] },
     { v: "0.11.0", notes: [
       "Buildings are now built over time — placement costs gold; resources are delivered from city stock",
       "Under-construction buildings show a scaffold + the resources they still need on the map",

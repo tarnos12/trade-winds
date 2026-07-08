@@ -159,8 +159,16 @@ Pathing.invalidate();
 const connected = buildState(777, true);
 // Record which goods flowed and which town they were bought FROM (the seller).
 const flows = new Set();
+// Trades are GRADUAL (a trader parks to load/unload at CONFIG.trade.transferRate
+// items/sec — not instant), so we tally potato actually delivered INTO the mine
+// (towns[1]) across the run by summing positive stock deltas around each Trade.tick.
+let minePotatoDelivered = 0;
 for (let i = 0; i < N; i++) {
-  Sim.tick(connected); Trade.tick(connected);
+  Sim.tick(connected);
+  const before = connected.towns[1].stock.potato || 0;
+  Trade.tick(connected);
+  const after = connected.towns[1].stock.potato || 0;
+  if (after > before) minePotatoDelivered += after - before;
   for (const c of connected.carts) flows.add(c.goodId + "<-" + c.toId);
 }
 Pathing.invalidate();
@@ -175,12 +183,17 @@ ok("no carts are ever created without roads", isolated.carts.length === 0);
 ok("potato is bought FROM the farm (surplus → shortfall cities)", flows.has("potato<-1"));
 ok("ore is bought FROM the mine (surplus → shortfall city)", flows.has("ore<-2"));
 
-// Potato (food) flow keeps the potato-less MINE better fed: the connected mine
-// holds a real population AND is happier than the road-less one. (A food-starved
-// city floors at its low happiness-scaled capacity — the "fed vs starved" contrast
-// reads on HAPPINESS + population.)
-ok("potato flow keeps the mine fed (happier + populated vs road-less)",
-  popTotal(connected.towns[1]) > 5 && connected.towns[1].happiness > isolated.towns[1].happiness);
+// Potato (food) flow actually reaches the potato-less MINE: with roads, the mine's
+// external trader BUYS potato from the farm and DELIVERS it into the mine's stock
+// (gradually, as it unloads); with no roads it can receive nothing. (Gradual 5/sec
+// transfer throttles throughput, so a tight one-trader economy leans more on local
+// production than under the old instant model — the guarantee is that trade feeds
+// the mine at all, and never leaves it worse off than the isolated baseline.)
+ok("potato is delivered INTO the mine via trade (road-connected only)",
+  minePotatoDelivered > 0);
+ok("the road-connected mine is no worse off than the road-less one",
+  connected.towns[1].happiness >= isolated.towns[1].happiness &&
+  popTotal(connected.towns[1]) >= popTotal(isolated.towns[1]));
 // Ore flow lets the MILL's smelter keep making tools; the road-less mill stalls.
 ok("ore flow lets the mill out-produce tools vs the road-less baseline",
   stockOf(connected, 3, "tools") > stockOf(isolated, 3, "tools"));
@@ -319,16 +332,49 @@ Pathing.invalidate();
   ok("EC-D: buyer paid the agreed 50 up front", townById(st, 1).gold === 950);
   townById(st, 100).prices.grain = 100;             // price 20× spike while in transit
   const sellerGold0 = townById(st, 100).gold;
-  for (let i = 0; i < 10; i++) Trade.tick(st);       // let the trader arrive + return
+  // Gradual trade: travel (2) + load dwell (ceil(10/2.5)=4) + travel (2) + unload
+  // dwell (4) ≈ 12 ticks. Run enough ticks for the round trip to fully complete.
+  for (let i = 0; i < 20; i++) Trade.tick(st);       // let the trader arrive, load, return, unload
   ok("EC-D: buyer pays only the agreed amount despite the spike (gold stays 950)",
     townById(st, 1).gold === 950);
-  ok("EC-D: buyer receives the 10 grain on return", townById(st, 1).stock.grain === 10);
+  ok("EC-D: buyer receives the 10 grain after the round trip", townById(st, 1).stock.grain === 10);
   // Seller settled at the agreed unit (5), not the spiked price (100): value 50,
   // tariff = 0.25 × 50 = 12.5, seller nets 37.5.
   ok("EC-D: seller settles at agreed unit price (nets value − tariff = 37.5)",
     Math.abs((townById(st, 100).gold - sellerGold0) - 37.5) < 1e-9);
   ok("EC-D: reservation released after the sale", (townById(st, 100).reserved.grain || 0) === 0);
   ok("EC-D: treasury got the tariff on the agreed value (12.5)", Math.abs(st.treasury - 12.5) < 1e-9);
+}
+
+// (c2) Gradual transfer — a trade is NOT instant: the trader parks to LOAD at the
+//      seller and to UNLOAD at the buyer at CONFIG.trade.transferRate items/sec of
+//      game time, so the buyer's stock fills over several ticks, not all at once.
+Pathing.invalidate();
+{
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000,
+    stock: { grain: 0 }, demand: { grain: 10 / BUFFER } });
+  const st = ctrlState(1, 100, 5, [buyer]);
+  Trade.tick(st);                                   // dispatch (qty 10)
+  const perTick = CONFIG.trade.transferRate * (CONFIG.econ.baseTickMs / 1000); // 5 × 0.5 = 2.5
+  ok("gradual: transferRate is configured (items/sec)", CONFIG.trade.transferRate === 5);
+  // Advance until the buyer first receives ANY grain, counting ticks + phases seen.
+  const phases = new Set();
+  let ticksToFirstDelivery = 0, first = 0;
+  for (let i = 0; i < 40 && first === 0; i++) {
+    Trade.tick(st);
+    const c = st.carts.find(x => x && !x.done);
+    if (c) phases.add(c.phase);
+    ticksToFirstDelivery++;
+    first = townById(st, 1).stock.grain || 0;
+  }
+  ok("gradual: the trader parks to load (a 'loading' phase exists)", phases.has("loading"));
+  ok("gradual: delivery is not instant (takes several ticks to arrive)", ticksToFirstDelivery > 3);
+  ok("gradual: the first delivery is a partial load, not the whole 10 at once",
+    first > 0 && first <= perTick + 1e-9);
+  // Finish the run; the full 10 still arrives.
+  for (let i = 0; i < 20; i++) Trade.tick(st);
+  ok("gradual: the full quantity is delivered once unloading completes",
+    (townById(st, 1).stock.grain || 0) === 10);
 }
 
 // (d) Two buyers cannot over-claim the same seller stock — reservations cap the
