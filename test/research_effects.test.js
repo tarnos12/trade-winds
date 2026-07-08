@@ -125,13 +125,22 @@ function mkTradeTown(over) {
   }, over);
 }
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];
+// Housing so each city keeps a real population (Sim caps pop at housing now:
+// base peasants are 0). Without houses pop → 0 ⇒ no demand ⇒ no trade. 6 huts
+// (cap 12 peasants) + 2 cottages (cap 6 workers) shelter mkTradeTown's default pop.
+function homes() {
+  const a = [];
+  for (let i = 0; i < 6; i++) a.push({ typeId: "hut" });
+  for (let i = 0; i < 2; i++) a.push({ typeId: "cottage" });
+  return a;
+}
 function buildTradeState(seed, unlocked, farmLevel) {
   const roads = new Set();
   for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
   const towns = [
-    mkTradeTown({ id: 1, q: 0, r: 0, level: farmLevel || 4, buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }], stock: { grain: 5000 } }),
-    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }], stock: { ore: 5000 } }),
-    mkTradeTown({ id: 3, q: 3, r: 1, buildings: [{ typeId: "mill", workers: 2 }], stock: { grain: 500 } }),
+    mkTradeTown({ id: 1, q: 0, r: 0, level: farmLevel || 4, buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()], stock: { grain: 5000 } }),
+    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()], stock: { ore: 5000 } }),
+    mkTradeTown({ id: 3, q: 3, r: 1, buildings: [{ typeId: "mill", workers: 2 }, ...homes()], stock: { grain: 500 } }),
   ];
   const st = { roads, towns, carts: [], treasury: 0, tradeSeed: seed >>> 0 };
   if (unlocked) st.research = withResearch(unlocked);

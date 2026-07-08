@@ -37,14 +37,23 @@ function mkTown(over) {
     stock: {}, prices: {}, demand: {}, buildings: [], happiness: 100,
   }, over);
 }
+// Housing so each city keeps a real population across the run (Sim caps pop at
+// housing now: base peasants are 0). No houses ⇒ pop → 0 ⇒ no demand ⇒ no trade ⇒
+// treasury stays 0. 6 huts (cap 12) + 2 cottages (cap 6) shelter mkTown's pop.
+function homes() {
+  const a = [];
+  for (let i = 0; i < 6; i++) a.push({ typeId: "hut" });
+  for (let i = 0; i < 2; i++) a.push({ typeId: "cottage" });
+  return a;
+}
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }],
+  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
   stock: { grain: 40, ore: 0 } }); }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }],
+  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()],
   stock: { ore: 40, grain: 15 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
-  buildings: [{ typeId: "mill", workers: 2 }],
+  buildings: [{ typeId: "mill", workers: 2 }, ...homes()],
   stock: { grain: 30, ore: 0 } }); }
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];
 

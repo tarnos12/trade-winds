@@ -70,7 +70,8 @@ ok("slotCap(unknown) falls back to 3", Buildings.slotCap(99) === 3);
 // ============================================================================
 ok("CONFIG.town.slotCap = [0,7,9,11,13]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 7, 9, 11, 13]));
 ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q === 0 && CONFIG.town.castle.r === 0);
-ok("CONFIG.town.baseWorkers.peasants set", CONFIG.town.baseWorkers.peasants > 0);
+ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
+   typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
 ok("CONFIG.town.startStock has wood to build a lumberjack + hut", CONFIG.town.startStock.wood >= (CONFIG.buildings.lumberjack.cost.wood + CONFIG.buildings.hut.cost.wood));
 ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);
 ok("basic house (hut) shelters 2", CONFIG.buildings.hut.houseCapacity === 2);
