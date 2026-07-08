@@ -3509,7 +3509,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     return `
       <div class="tp-sec">Summary</div>
       <div class="tp-row"><span class="k">Treasury</span><span class="v">${fmt(t.gold)} g</span></div>
-      <div class="tp-row"><span class="k">Population</span><span class="v">${popTotal}</span></div>
+      <div class="tp-row"><span class="k">Population</span><span class="v">${Math.round(popTotal)}</span></div>
       <div class="tp-row"><span class="k">Buildings</span><span class="v">${t.buildings.length} / ${TOWN_BUILDING_CAP[t.level] || 3}</span></div>
       <div class="tp-row"><span class="k">Goods in stock</span><span class="v">${goodsHeld} / ${Object.keys(CONFIG.goods).length}</span></div>
       ${renderUpgrade(t)}
@@ -3601,10 +3601,10 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     ];
     let rows = "";
     for (const tier of tiers) {
-      rows += `<div class="tp-row"><span class="k">${tier.label}<span style="opacity:.5"> · needs ${tier.needs}</span></span><span class="v">${t.pop[tier.key] || 0}</span></div>`;
+      rows += `<div class="tp-row"><span class="k">${tier.label}<span style="opacity:.5"> · needs ${tier.needs}</span></span><span class="v">${Math.round(t.pop[tier.key] || 0)}</span></div>`;
     }
     const total = t.pop.peasants + t.pop.workers + t.pop.burghers;
-    return `<div class="tp-sec">By tier — ${total} total</div>${rows}
+    return `<div class="tp-sec">By tier — ${Math.round(total)} total</div>${rows}
       <div class="tp-sec">Happiness — ${Math.round(t.happiness)}%</div>
       <div class="tp-bar"><span style="width:${Math.max(0, Math.min(100, t.happiness))}%"></span></div>`;
   }
@@ -4595,7 +4595,7 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       `<th data-sort="${c[0]}">${c[1]}${kwSort.key === c[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
     const trs = rows.map(r => `<tr>
       <td>${esc(r.name)}</td><td>${r.level}</td>
-      <td>${r.peasants}</td><td>${r.workers}</td><td>${r.burghers}</td><td>${r.total}</td>
+      <td>${Math.round(r.peasants)}</td><td>${Math.round(r.workers)}</td><td>${Math.round(r.burghers)}</td><td>${Math.round(r.total)}</td>
       <td>${r.happiness}%</td><td>${fmt(r.gold)}g</td>
       <td class="kw-good up">${esc(goodLabel(r.surplus))}</td>
       <td class="kw-good down">${esc(goodLabel(r.shortage))}</td></tr>`).join("");
