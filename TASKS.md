@@ -209,6 +209,21 @@ Author directives (supersede parts of the BAL balance pass — apply these speci
 Sizeable — likely its own multi-slice pass (goods/needs model + potato content;
 storage caps + costs; people-tax income). Sequence after the castle/balance round.
 
+## Milestone: Two-part research + per-building upgrades — QUEUED (needs per-building panel + internal delivery)
+- **Part 1 — global research (castle):** unlocks the *possibility* of an upgrade
+  (e.g. "Hut Lv2" becomes available). Research only unlocks; it doesn't apply.
+- **Part 2 — per-building upgrade:** click a specific building → pick an unlocked
+  upgrade → it costs **kingdom gold (treasury)** + **city resources** (delivered by
+  internal traders to that building). Applies to THAT building.
+- **Upgrade ladders per building**, e.g. Hut Lv2/3/4 — each costs more + eventually
+  higher-tier resources; effect: **+1 population per level**, and the **final level
+  cuts wood/potato consumption 30%**. (Define ladders per building type.)
+- **City resource demand is derived from its own buildings/houses/upgrades' needs**
+  (inputs + consumption + pending upgrade materials) — this is what its external
+  trader buys. (Formalize demand = sum of building/house/upgrade requirements.)
+- Depends on: **CB-C** per-building click panel (where upgrades are shown/bought) +
+  **CB-A** internal-trader material delivery (delivers upgrade + input materials).
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
