@@ -5,6 +5,20 @@ Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
 non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
 integrates in the merge order below.
 
+## Milestone: Phase 5 groundwork (design-free polish) — IN PROGRESS
+
+Non-content polish that needs no design decisions (scenarios/tutorial/title/win
+framing wait for the author). Three independent slices; merge P5-A → P5-B → P5-C.
+
+| Task | Slot | Scope | Status |
+|---|---|---|---|
+| P5-A — wire research effects into gameplay | #2 | apply `Research.effect`/`has` in Sim/Trade/Buildings/Pathing (output multipliers, paved-road cart speed, extra carts/capacity, warehouse cap, housing/slot bonus, tariff bonus). + tests | 🔲 |
+| P5-B — visual juice | #3 | transaction particles at trades, chimney smoke on active producers, cart trails, subtle town/build pop-in; respect perf (1 offscreen terrain draw) | 🔲 |
+| P5-C — audio (WebAudio) | #4 | subtle procedural SFX (place, trade chime, level-up, quest complete, event) + a mute toggle; no assets, all synthesized | 🔲 |
+
+Deferred (needs author design input): campaign scenarios, start screen, tutorial,
+title confirmation, win-condition framing, combat scope (GDD §13).
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
