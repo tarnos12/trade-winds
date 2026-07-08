@@ -265,6 +265,42 @@
   .wn-text { line-height: 1.5; opacity: 0.9; margin-bottom: 16px; }
   #wnClose { padding: 8px 18px; font-weight: bold; background: var(--accent); color: #201607; border-color: #e0a860; }
   /* === PROGRESS-UI CSS END === */
+  /* === KINGDOM/EVENTS CSS START === (P4-C / slot #4 — kingdom screen, alerts, events) */
+  #kingdomPanel {
+    position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+    width: min(760px, calc(100vw - 40px)); max-height: calc(100vh - 92px);
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+    font-size: 13px; z-index: 25; overflow: hidden;
+  }
+  #kingdomPanel.hidden { display: none; }
+  .kw-body { overflow: auto; padding: 4px 12px 12px; }
+  table.kw-tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.kw-tbl th, table.kw-tbl td { padding: 4px 7px; text-align: right; white-space: nowrap; }
+  table.kw-tbl th:first-child, table.kw-tbl td:first-child { text-align: left; }
+  table.kw-tbl th { position: sticky; top: 0; background: var(--panel); font-size: 10.5px; opacity: 0.85;
+    border-bottom: 1px solid var(--panel-edge); font-weight: normal; cursor: pointer; user-select: none; }
+  table.kw-tbl th:hover { color: var(--accent); }
+  table.kw-tbl tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+  .kw-good.up { color: #a6e0a8; } .kw-good.down { color: #f0a48c; }
+  .kw-empty { opacity: 0.65; padding: 22px; text-align: center; }
+  .kw-banner { margin: 8px 12px 2px; padding: 7px 10px; border-radius: 8px;
+    background: #2a2413; border: 1px solid var(--accent); color: var(--paper); font-size: 12.5px; }
+  .kw-banner.hidden { display: none; }
+
+  #eventChip { display: none; align-items: center; gap: 6px; padding: 5px 10px;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
+    color: var(--accent); font-size: 12.5px; font-weight: bold; }
+  #eventChip.show { display: inline-flex; }
+
+  #toasts { position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 6px; z-index: 40; pointer-events: none; align-items: center; }
+  .toast { background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    opacity: 0; transform: translateY(-8px); transition: opacity 0.25s, transform 0.25s; max-width: 80vw; text-align: center; }
+  .toast.in { opacity: 1; transform: translateY(0); }
+  /* === KINGDOM/EVENTS CSS END === */
 </style>
 </head>
 <body>
@@ -296,7 +332,9 @@
   <div class="group">
     <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Fog</button>
     <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
+    <button id="btnKingdom" title="Kingdom overview — all towns (K)">📋 Kingdom</button>
   </div>
+  <span id="eventChip" title="Active kingdom event"></span>
 </div>
 
 <div id="hint">
@@ -378,6 +416,17 @@
   </div>
 </div>
 <!-- === PROGRESS-UI HTML END === -->
+<!-- === KINGDOM/EVENTS HTML START === (P4-C / slot #4 — kingdom screen + toasts) -->
+<div id="kingdomPanel" class="hidden" aria-hidden="true">
+  <div class="tp-head">
+    <div class="tp-title">📋 Kingdom Overview</div>
+    <button id="kwClose" class="tp-close" title="Close">✕</button>
+  </div>
+  <div id="kwBanner" class="kw-banner hidden"></div>
+  <div class="kw-body" id="kwBody"></div>
+</div>
+<div id="toasts"></div>
+<!-- === KINGDOM/EVENTS HTML END === -->
 
 
 <script>
@@ -873,7 +922,10 @@ Sim.tick = function (State) {
       if (effW <= 0) continue;          // inputs missing → building idles this tick
       if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf;
+      // P4-C hook: a "bumper harvest" event boosts farm output (light, guarded).
+      const evMult = (type.id === "farm" && typeof Events !== "undefined" && Events.farmMultiplier)
+        ? Events.farmMultiplier(State) : 1;
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult;
     }
 
     // --- 2. Consumption + per-need satisfaction ------------------------
@@ -948,6 +1000,11 @@ Sim.tick = function (State) {
     }
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
+    // P4-C hook: a "demand craze" event triples one good's demand (price rises).
+    if (typeof Events !== "undefined" && Events.crazeGood) {
+      const cg = Events.crazeGood(State);
+      if (cg) demand[cg] = Events.adjustDemand(State, cg, demand[cg] || 0);
+    }
     town.demand = demand;
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
@@ -1286,7 +1343,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (!dest.stock) dest.stock = {};
         const priceDest = priceOf(dest, cart.goodId);
         const value = priceDest * cart.qty;                  // transaction value
-        const tariff = cfg.tariffRate * value;               // GDD §6.3: 25% cut
+        // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
+        const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
+          ? Events.tariffMultiplier(state) : 1;
+        const tariff = cfg.tariffRate * value * tariffMult;  // GDD §6.3: 25% cut
         dest.stock[cart.goodId] = (dest.stock[cart.goodId] || 0) + cart.qty; // dest gains stock
         dest.gold = (dest.gold || 0) - value;                // dest pays gold
         state.treasury += tariff;                            // → player's treasury
@@ -1637,6 +1697,166 @@ Quests.tick = function (state) {
   return state;
 };
 // === PROGRESS-CORE END ===
+// === EVENTS-CORE START ===  (P4-C / slot #4 — random events: cozy market
+// opportunities, GDD §7.3). Pure + deterministic: no DOM / canvas / Math.random —
+// timing draws from a seeded stream on State (state.eventSeed), mirroring Trade.
+// Effects are exposed as DATA HOOKS (farmMultiplier / crazeGood / adjustDemand /
+// tariffMultiplier) that Sim.tick & Trade.tick read through `typeof Events` guards,
+// so the pure cores stay independently testable. Wired into the 500ms accumulator
+// right AFTER Trade.tick(state). Events are opportunities, never progress-eaters:
+// they boost output, spike a price, waive the tariff, or reroute one road (which
+// auto-repairs) — nothing is destroyed.
+Object.assign(CONFIG, {
+  events: {
+    minGapTicks: 40,      // quiet stretch after an event ends before another may start
+    checkEveryTicks: 12,  // ticks between "roll for a new event" checks
+    startChance: 0.5,     // chance an eligible check actually starts one
+    defs: {
+      bumper: { id: "bumper", name: "Bumper Harvest", icon: "🌾",
+        desc: "Farms are overflowing — grain output +50%.",
+        weight: 3, durationTicks: 60, farmMultiplier: 1.5 },
+      craze:  { id: "craze", name: "Demand Craze", icon: "🔥",
+        desc: "One good is all the rage — its demand triples.",
+        weight: 3, durationTicks: 50, demandMultiplier: 3, demandFloor: 6 },
+      fair:   { id: "fair", name: "Kingdom Fair", icon: "🎪",
+        desc: "Tariff-free trading — carts pay no tariff.",
+        weight: 2, durationTicks: 40, tariffFree: true },
+      bridge: { id: "bridge", name: "Collapsed Bridge", icon: "🌉",
+        desc: "A road washed out — trade reroutes until it is repaired.",
+        weight: 1, durationTicks: 40, collapseRoad: true },
+    },
+  },
+});
+
+var Events = (typeof Events !== "undefined" && Events) || {};
+(function () {
+  // ---- effect hooks (read by Sim.tick / Trade.tick through typeof guards) ----
+  Events.farmMultiplier = function (state) {           // bumper harvest
+    const e = state && state.event;
+    if (e && e.id === "bumper") { const d = CONFIG.events.defs.bumper; return (d && d.farmMultiplier) || 1; }
+    return 1;
+  };
+  Events.crazeGood = function (state) {                // id of the craze good, or null
+    const e = state && state.event;
+    return (e && e.id === "craze" && e.goodId) ? e.goodId : null;
+  };
+  Events.adjustDemand = function (state, goodId, base) { // craze: triples + floors demand
+    if (Events.crazeGood(state) === goodId) {
+      const d = CONFIG.events.defs.craze;
+      return (base || 0) * (d.demandMultiplier || 3) + (d.demandFloor || 0);
+    }
+    return base || 0;
+  };
+  Events.tariffMultiplier = function (state) {         // fair: waives the tariff
+    const e = state && state.event;
+    return (e && e.id === "fair") ? 0 : 1;
+  };
+  Events.isActive = function (state) { return !!(state && state.event); };
+
+  // ---- road helpers (state.roads is a Set at runtime, an array from a save) ---
+  function roadList(state) {
+    const r = state && state.roads;
+    if (!r) return [];
+    if (typeof r.has === "function" && typeof r.forEach === "function") return Array.from(r); // Set
+    if (Array.isArray(r)) return r.slice();
+    return [];
+  }
+  function delRoad(state, key) {
+    const r = state.roads;
+    if (r && typeof r.delete === "function") r.delete(key);
+    else if (Array.isArray(r)) { const i = r.indexOf(key); if (i >= 0) r.splice(i, 1); }
+  }
+  function addRoad(state, key) {
+    const r = state.roads;
+    if (r && typeof r.add === "function") r.add(key);
+    else if (Array.isArray(r)) { if (r.indexOf(key) < 0) r.push(key); }
+  }
+  function invalidatePathing() {
+    if (typeof Pathing !== "undefined" && Pathing.invalidate) Pathing.invalidate();
+  }
+
+  function weightedPick(rng) {
+    const defs = CONFIG.events.defs, ids = Object.keys(defs);
+    let total = 0; for (const id of ids) total += defs[id].weight || 1;
+    let r = rng() * total;
+    for (const id of ids) { r -= defs[id].weight || 1; if (r <= 0) return id; }
+    return ids[ids.length - 1];
+  }
+
+  // Start `id`. Returns true on success, false if it can't fire (e.g. a bridge
+  // collapse with no roads to collapse). Mutates state (state.event, maybe roads).
+  function beginEvent(state, id, rng) {
+    const def = CONFIG.events.defs[id];
+    if (!def) return false;
+    const ev = { id: id, ticksLeft: def.durationTicks };
+    if (id === "craze") {
+      const goods = Object.keys(CONFIG.goods);
+      ev.goodId = goods[Math.floor(rng() * goods.length)] || goods[0];
+    }
+    if (def.collapseRoad) {
+      const roads = roadList(state);
+      if (!roads.length) return false;              // nothing to collapse — skip cleanly
+      ev.roadKey = roads[Math.floor(rng() * roads.length)];
+      delRoad(state, ev.roadKey);
+      invalidatePathing();
+    }
+    state.event = ev;
+    return true;
+  }
+
+  // End the current event, undoing any reversible world change (bridge repair).
+  function endEvent(state) {
+    const e = state.event;
+    if (!e) return;
+    if (e.id === "bridge" && e.roadKey != null) { addRoad(state, e.roadKey); invalidatePathing(); }
+    state.event = null;
+  }
+
+  // Advance the event layer by one tick. Deterministic (seeded). Sets a transient
+  // state._eventNotice ({type:'start'|'end', id}) the browser layer drains for toasts.
+  Events.tick = function (state) {
+    if (!state) return state;
+    if (typeof state.eventSeed !== "number") state.eventSeed = 0;
+    if (typeof state.eventCooldown !== "number") state.eventCooldown = CONFIG.events.minGapTicks;
+    const cfg = CONFIG.events;
+    const rng = mulberry32(state.eventSeed | 0);
+    state.eventSeed = (Math.imul(state.eventSeed | 0, 1664525) + 1013904223) | 0;
+    state._eventNotice = null;
+
+    if (state.event) {                              // an event is running — count it down
+      state.event.ticksLeft = (state.event.ticksLeft | 0) - 1;
+      if (state.event.ticksLeft <= 0) {
+        const endedId = state.event.id;
+        endEvent(state);
+        state.eventCooldown = cfg.minGapTicks;
+        state._eventNotice = { type: "end", id: endedId };
+      }
+      return state;
+    }
+
+    if (state.eventCooldown > 0) { state.eventCooldown--; return state; }
+
+    // cooldown elapsed → roll. Reset the gap either way so rolls are paced.
+    state.eventCooldown = cfg.checkEveryTicks;
+    if (rng() < cfg.startChance) {
+      const id = weightedPick(rng);
+      if (beginEvent(state, id, rng)) state._eventNotice = { type: "start", id: id };
+    }
+    return state;
+  };
+
+  // Force-start a specific event now (used by the headless smoke test / debug).
+  Events.force = function (state, id) {
+    if (!state) return false;
+    if (typeof state.eventSeed !== "number") state.eventSeed = 0;
+    const rng = mulberry32(((state.eventSeed | 0) ^ 0x9e3779b9) | 0);
+    if (state.event) endEvent(state);
+    const ok = beginEvent(state, id, rng);
+    state._eventNotice = ok ? { type: "start", id: id } : null;
+    return ok;
+  };
+})();
+// === EVENTS-CORE END ===
 
 /* PURE_CORE_END */
 
@@ -1668,6 +1888,10 @@ Quests.tick = function (state) {
     cam: { x: 0, y: 0 },       // world-space camera target
     zoom: 1,
     gameSpeed: 1,
+    // P4-C — random events (Events.tick owns these; KINGDOM/EVENTS-UI draws them).
+    event: null,               // current active event { id, ticksLeft, goodId?, roadKey? } or null
+    eventSeed: 0,              // seeded RNG stream for deterministic event timing
+    eventCooldown: 0,          // ticks until another event may start
   };
 
   // Offscreen terrain layer (GDD §9.3: pre-rendered, redrawn only on fog change).
@@ -2117,6 +2341,9 @@ Quests.tick = function (state) {
     state.quest = null;
     state.victory = false;
     state._questSeq = 0;
+    state.event = null;          // P4-C: no event on a fresh map
+    state.eventSeed = (hashSeed(seedInput) ^ 0x1a2b3c4d) | 0;  // deterministic per-game event RNG
+    state.eventCooldown = CONFIG.events.minGapTicks;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -2154,6 +2381,9 @@ Quests.tick = function (state) {
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
+        event: state.event,                // P4-C: active event
+        eventSeed: state.eventSeed,        // P4-C: event RNG stream
+        eventCooldown: state.eventCooldown,// P4-C: ticks until next event
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }
@@ -2182,6 +2412,11 @@ Quests.tick = function (state) {
     state.quest = data.quest || null;
     state.victory = !!data.victory;
     if (typeof data._questSeq === "number") state._questSeq = data._questSeq;
+    // P4-C: restore events (a bridge event's road is stored removed from roads;
+    // Events.tick re-adds it on expiry, so the road returns after repair).
+    state.event = data.event || null;
+    state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
+    state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
     for (const k of (data.revealed || [])) {
       state.revealed.add(k);
@@ -2240,7 +2475,14 @@ Quests.tick = function (state) {
       econAcc += dt * state.gameSpeed;
       const step = CONFIG.econ.baseTickMs;
       let guard = 0;
-      while (econAcc >= step && guard++ < 8) { Sim.tick(state); Trade.tick(state); Research.tick(state); Quests.tick(state); econAcc -= step; }
+      while (econAcc >= step && guard++ < 8) {
+        Sim.tick(state); Trade.tick(state); Research.tick(state); Quests.tick(state);
+        if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
+          Events.tick(state);
+          if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
+        }
+        econAcc -= step;
+      }
     }
 
     applyKeyPan(dt);
@@ -2277,6 +2519,7 @@ Quests.tick = function (state) {
     drawRoads();
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
+    drawAlerts();     // P4-C: subtle status icons over towns in a bad state
     drawCarts();      // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
@@ -3100,6 +3343,224 @@ Quests.tick = function (state) {
   window.ProgressUI = { updateProgressHud, renderQuestBanner, showVictory,
                         Town, Castle, Quests };
   // === PROGRESS-UI END ===
+  // === KINGDOM/EVENTS-UI START === (P4-C / slot #4 — kingdom screen, town alerts,
+  // random-event notifications). All DOM + canvas; reads the pure state produced by
+  // Events.tick. drawAlerts()/handleEventNotice() are function declarations so the
+  // render loop + accumulator (defined earlier) can call them via hoisting.
+  const kingdomEl = document.getElementById("kingdomPanel");
+  const kwBodyEl = document.getElementById("kwBody");
+  const kwBannerEl = document.getElementById("kwBanner");
+  const eventChipEl = document.getElementById("eventChip");
+  const toastsEl = document.getElementById("toasts");
+  let kingdomOpen = false;
+  let kwSort = { key: "id", dir: 1 };
+
+  const goodLabel = (id) => id ? id.charAt(0).toUpperCase() + id.slice(1) : "—";
+
+  // ---- town alerts (canvas icons over a town in a bad state) --------------
+  // Cheap: a couple of sums per town, derived from state each frame. Icons scale
+  // with the world transform (so they shrink when zoomed out) and fade far out.
+  function townAlertIcons(t, N) {
+    const out = [];
+    if (!t || !t.pop) return out;
+    const pop = t.pop;
+    const total = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    const stock = t.stock || {};
+    // 1. food shortage — less than ~4 ticks of food buffer for the population
+    if (total > 0 && N && N.foodOrder) {
+      let foodUnits = 0;
+      for (const gid of N.foodOrder) foodUnits += (stock[gid] || 0) * (N.foodValue[gid] || 1);
+      const perTick = N.perCapita.peasants.food * total;
+      if (perTick > 0 && foodUnits < perTick * 4) out.push("🍽");
+    }
+    // 2. idle producer — a building with worker slots but no assigned labour
+    if (Array.isArray(t.buildings)) {
+      for (const b of t.buildings) {
+        const def = CONFIG.buildings[b.typeId];
+        if (def && def.output && def.workerSlots > 0 && !(b.workers > 0)) { out.push("🚧"); break; }
+      }
+    }
+    // 3. near-starve / very unhappy town
+    if (total > 0 && typeof t.happiness === "number" && t.happiness < 25) out.push("💀");
+    return out;
+  }
+
+  function drawAlerts() {
+    const towns = state.towns || [];
+    if (!towns.length) return;
+    const alpha = Math.max(0, Math.min(1, (state.zoom - 0.4) / 0.35));
+    if (alpha <= 0.02) return;                      // too far out — skip entirely
+    const N = CONFIG.needs;
+    const fs = Math.round(SIZE * 0.5);
+    ctx.save();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = fs + "px 'Segoe UI Emoji', system-ui, sans-serif";
+    for (const t of towns) {
+      const icons = townAlertIcons(t, N);
+      if (!icons.length) continue;
+      const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const y = p.y - SIZE * 0.95;
+      const gap = SIZE * 0.62;
+      const x0 = p.x - gap * (icons.length - 1) / 2;
+      for (let i = 0; i < icons.length; i++) {
+        const x = x0 + i * gap;
+        ctx.globalAlpha = alpha * 0.8;              // legibility badge behind the glyph
+        ctx.fillStyle = "rgba(18,14,8,0.78)";
+        ctx.beginPath(); ctx.arc(x, y, SIZE * 0.33, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = alpha;
+        ctx.fillText(icons[i], x, y + fs * 0.06);
+      }
+    }
+    ctx.restore();
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
+  // ---- kingdom screen (all-towns table) ----------------------------------
+  // Biggest surplus / shortage good, by stock-vs-demand ratio (same model as the
+  // price engine): high ratio = surplus, low ratio (with real demand) = shortage.
+  function biggestExtremes(t) {
+    const stock = t.stock || {}, demand = t.demand || {};
+    const buffer = CONFIG.econ.bufferTarget, floor = CONFIG.econ.minDemand;
+    let surplus = null, surRatio = -Infinity, shortage = null, shoRatio = Infinity;
+    for (const gid in CONFIG.goods) {
+      const s = stock[gid] || 0;
+      const d = Math.max(floor, demand[gid] || 0);
+      const ratio = s / (d * buffer);
+      if (s > 0 && ratio > surRatio) { surRatio = ratio; surplus = gid; }
+      if ((demand[gid] || 0) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
+    }
+    return { surplus, shortage };
+  }
+
+  function townMetrics(t) {
+    const pop = t.pop || {};
+    const peasants = Math.round(pop.peasants || 0);
+    const workers = Math.round(pop.workers || 0);
+    const burghers = Math.round(pop.burghers || 0);
+    const ex = biggestExtremes(t);
+    return { name: "Town #" + t.id, id: t.id, level: t.level || 1,
+      peasants, workers, burghers, total: peasants + workers + burghers,
+      happiness: Math.round(t.happiness || 0), gold: Math.round(t.gold || 0),
+      surplus: ex.surplus, shortage: ex.shortage };
+  }
+
+  const KW_COLS = [
+    ["name", "Town"], ["level", "Lv"], ["peasants", "Peas."], ["workers", "Work."],
+    ["burghers", "Burgh."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
+    ["surplus", "Top surplus"], ["shortage", "Top shortage"],
+  ];
+
+  function renderKingdom() {
+    if (!kingdomOpen) return;
+    renderEventBanner();
+    const rows = (state.towns || []).map(townMetrics);
+    const k = kwSort.key, dir = kwSort.dir;
+    rows.sort((a, b) => {
+      const av = a[k], bv = b[k];
+      if (typeof av === "string" || typeof bv === "string")
+        return dir * String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv));
+      return dir * ((av || 0) - (bv || 0));
+    });
+    if (!rows.length) { kwBodyEl.innerHTML = '<div class="kw-empty">No towns yet — place a town to see it here.</div>'; return; }
+    const head = KW_COLS.map(c =>
+      `<th data-sort="${c[0]}">${c[1]}${kwSort.key === c[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
+    const trs = rows.map(r => `<tr>
+      <td>${esc(r.name)}</td><td>${r.level}</td>
+      <td>${r.peasants}</td><td>${r.workers}</td><td>${r.burghers}</td><td>${r.total}</td>
+      <td>${r.happiness}%</td><td>${fmt(r.gold)}g</td>
+      <td class="kw-good up">${esc(goodLabel(r.surplus))}</td>
+      <td class="kw-good down">${esc(goodLabel(r.shortage))}</td></tr>`).join("");
+    kwBodyEl.innerHTML = `<table class="kw-tbl"><thead><tr>${head}</tr></thead><tbody>${trs}</tbody></table>`;
+  }
+
+  kwBodyEl.addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-sort]");
+    if (!th) return;
+    const key = th.dataset.sort;
+    if (kwSort.key === key) kwSort.dir *= -1; else { kwSort.key = key; kwSort.dir = key === "name" ? 1 : -1; }
+    renderKingdom();
+  });
+
+  function openKingdom() {
+    kingdomOpen = true;
+    kingdomEl.classList.remove("hidden");
+    kingdomEl.setAttribute("aria-hidden", "false");
+    renderKingdom();
+  }
+  function closeKingdom() {
+    kingdomOpen = false;
+    kingdomEl.classList.add("hidden");
+    kingdomEl.setAttribute("aria-hidden", "true");
+  }
+  function toggleKingdom() { kingdomOpen ? closeKingdom() : openKingdom(); }
+
+  document.getElementById("btnKingdom").addEventListener("click", toggleKingdom);
+  document.getElementById("kwClose").addEventListener("click", closeKingdom);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "k" || e.key === "K") {
+      const el = document.activeElement;
+      if (el && el.tagName === "INPUT") return;     // don't hijack the seed field
+      toggleKingdom();
+    }
+  });
+
+  // ---- event banner / chip / toasts --------------------------------------
+  function currentEventDef() {
+    const e = state.event;
+    if (!e) return null;
+    const def = CONFIG.events && CONFIG.events.defs[e.id];
+    return def ? { def, e } : null;
+  }
+  function eventText(def, e) {
+    let d = def.desc;
+    if (e.id === "craze" && e.goodId) d = "Everyone wants " + goodLabel(e.goodId) + " — its demand triples.";
+    return def.name + " — " + d + " · " + Math.max(0, e.ticksLeft | 0) + " ticks left";
+  }
+  function renderEventBanner() {
+    const cur = currentEventDef();
+    if (cur) { kwBannerEl.classList.remove("hidden"); kwBannerEl.innerHTML = (cur.def.icon || "✨") + " " + esc(eventText(cur.def, cur.e)); }
+    else { kwBannerEl.classList.add("hidden"); kwBannerEl.textContent = ""; }
+  }
+  function updateEventChip() {
+    const cur = currentEventDef();
+    if (cur) { eventChipEl.classList.add("show"); eventChipEl.textContent = (cur.def.icon || "✨") + " " + cur.def.name; }
+    else { eventChipEl.classList.remove("show"); eventChipEl.textContent = ""; }
+  }
+
+  function showToast(msg) {
+    const el = document.createElement("div");
+    el.className = "toast"; el.textContent = msg;
+    toastsEl.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("in"));
+    setTimeout(() => { el.classList.remove("in"); setTimeout(() => el.remove(), 320); }, 4200);
+  }
+
+  // Called from the economy accumulator when Events.tick flags a start/end.
+  function handleEventNotice(notice) {
+    if (!notice) return;
+    const def = CONFIG.events.defs[notice.id];
+    const label = def ? (def.icon + " " + def.name) : notice.id;
+    if (notice.type === "start") {
+      let extra = "";
+      if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
+      showToast(label + extra + " has begun!");
+    } else {
+      showToast(label + " has ended.");
+    }
+    updateEventChip();
+    if (kingdomOpen) renderKingdom();
+  }
+
+  // Keep the chip + open kingdom panel current as the economy ticks.
+  updateEventChip();
+  setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+
+  // Expose for the headless smoke test / console debugging.
+  window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,
+                       showToast, drawAlerts, townAlertIcons,
+                       get isOpen() { return kingdomOpen; } };
+  window.Events = Events;
+  // === KINGDOM/EVENTS-UI END ===
 
   // ---------------------------------------------------------------
   // Boot
