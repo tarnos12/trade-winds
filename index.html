@@ -3950,9 +3950,54 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     }
     const total = t.pop.peasants + t.pop.workers + t.pop.burghers;
     return `<div class="tp-sec">By tier — ${Math.round(total)} total</div>${rows}
+      ${renderWorkerRoster(t)}
       <div class="tp-sec">Happiness — ${Math.round(t.happiness)}%</div>
       <div class="tp-bar"><span style="width:${Math.max(0, Math.min(100, t.happiness))}%"></span></div>`;
   }
+
+  // === CB-D: worker roster ===
+  // Read-only summary of how each worker tier is deployed: total / assigned /
+  // idle, with a per-building breakdown on hover (title attr). Assigned counts
+  // come from Sim-written `b.workers` on built producer buildings, grouped by
+  // CONFIG.buildings[typeId].workerTier. Pure additive DOM — no state mutation.
+  const CBD_TIERS = [
+    { key: "peasants", tier: "peasant", label: "Peasants", glyph: "🧑‍🌾", color: "#8bc34a" },
+    { key: "workers",  tier: "worker",  label: "Workers",  glyph: "🔨", color: "#ff9800" },
+    { key: "burghers", tier: "burgher", label: "Burghers", glyph: "🎩", color: "#9c88ff" },
+  ];
+  function renderWorkerRoster(t) {
+    if (!t || !t.pop) return "";
+    const buildings = Array.isArray(t.buildings) ? t.buildings : [];
+    let rows = "";
+    for (const info of CBD_TIERS) {
+      const pop = Math.round(t.pop[info.key] || 0);
+      if (pop <= 0) continue;   // hide empty tiers, keep it tidy
+      // Tally assigned workers by building name for this tier.
+      let assigned = 0;
+      const byName = {};
+      for (const b of buildings) {
+        if (!b) continue;
+        if (b.built === false) continue;   // treat missing `built` as built
+        const def = CONFIG.buildings[b.typeId];
+        if (!def || def.kind === "house" || def.workerTier !== info.tier) continue;
+        const w = Math.round(b.workers || 0);
+        if (w <= 0) continue;
+        assigned += w;
+        const nm = def.name || b.typeId;
+        byName[nm] = (byName[nm] || 0) + w;
+      }
+      const idle = Math.max(0, pop - assigned);
+      const parts = Object.keys(byName).map(nm => byName[nm] + " in " + nm);
+      const tip = (parts.length ? parts.join(", ") : "none assigned") + " · " + idle + " idle";
+      rows += `<div class="tp-row" title="${esc(tip)}">
+        <span class="k"><span style="color:${info.color}">${info.glyph} ${info.label}</span>
+          <span style="opacity:.5"> · ${pop} total</span></span>
+        <span class="v">${assigned} assigned · ${idle} idle</span></div>`;
+    }
+    if (!rows) return "";
+    return `<div class="tp-sec">Workforce</div>${rows}`;
+  }
+  // === /CB-D ===
 
   function renderTownPanel() {
     if (!activeTown) return;
