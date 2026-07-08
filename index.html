@@ -909,6 +909,7 @@ Object.assign(CONFIG, {
     stone:  { id: "stone",  tier: 1, basePrice: 6 },
     ore:    { id: "ore",    tier: 1, basePrice: 8 },
     grain:  { id: "grain",  tier: 1, basePrice: 4 },
+    potato: { id: "potato", tier: 1, basePrice: 4 },   // EV3: tier-1 basic food (the peasant staple)
     fish:   { id: "fish",   tier: 1, basePrice: 5 },
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
     // --- tier 2 (processed) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
@@ -949,17 +950,25 @@ Object.assign(CONFIG, {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
       output: { goodId: "wood", ratePerWorker: 1 },
-      // BAL: starter — basic building, wood only (+ small treasury gold).
+      // EV3: starter — GOLD ONLY at level 1 (no resource cost).
       startUnlocked: true,
-      workerSlots: 3, cost: { wood: 20, gold: 40 },
+      workerSlots: 3, cost: { gold: 100 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "grain", ratePerWorker: 2 },
-      // BAL: starter — basic building, wood only.
+      // EV3: starter — GOLD ONLY at level 1.
       startUnlocked: true,
-      workerSlots: 3, cost: { wood: 25, gold: 40 },
+      workerSlots: 3, cost: { gold: 250 },
+    },
+    potato_farm: {
+      id: "potato_farm", name: "Potato Farm", kind: "extractor",
+      terrain: "fertile", workerTier: "peasant",
+      output: { goodId: "potato", ratePerWorker: 2 },
+      // EV3: starter food building — the basic peasant staple. GOLD ONLY.
+      startUnlocked: true,
+      workerSlots: 3, cost: { gold: 120 },
     },
     miner: {
       id: "miner", name: "Miner", kind: "extractor",
@@ -1041,9 +1050,9 @@ Object.assign(CONFIG, {
       id: "hut", name: "Hut", kind: "house",
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // BAL: starter — basic building, wood only.
+      // EV3: starter — GOLD ONLY at level 1.
       startUnlocked: true,
-      cost: { wood: 15, gold: 20 },
+      cost: { gold: 200 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
@@ -1069,10 +1078,12 @@ Object.assign(CONFIG, {
     radius: 2,                  // (legacy) unused by Placement v2 — cities grow by
                                 // contiguity now; kept so old saves/tuning don't break.
     baseWorkers: { peasants: 0 }, // 0 pop until a house is built (population comes only from housing).
-    // BAL: a new city starts with enough WOOD to raise the whole starter set —
-    // lumberjack (20) + farm (25) + hut (15) + sawmill (30) = 90 — plus buffer;
-    // gold comes from the treasury, stone/planks from research-gated buildings.
-    startStock: { wood: 120 },
+    // EV3: per-city storage cap — a city holds at most this many of EACH good.
+    // Enforced wherever stock increases (Sim production, trade delivery).
+    storageCap: 80,
+    // EV3: a new city starts with a little WOOD (a basic peasant need — firewood).
+    // Starter buildings are now GOLD-only, so no wood is needed to build them.
+    startStock: { wood: 20 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
@@ -1138,31 +1149,37 @@ Sim.priceFor = function (town, goodId) {
 // composes with the Phase-1 CONFIG and the T5 goods/prices merge.
 Object.assign(CONFIG, {
   needs: {
-    // Food is a CATEGORY (GDD §5.1 "food = fish / bread"): a town eats whatever
-    // food it has; each unit satisfies `foodValue` of hunger (bread counts 2x).
-    // Eaten in this fixed priority (best value first) so the tick is deterministic.
-    foodOrder: ["bread", "fish", "grain"],
-    foodValue: { bread: 2, fish: 1, grain: 1 },
-    // Per-resident consumption per tick, by tier (GDD §4.2 needs table):
-    //   peasants → food; workers → food + beer; burghers → food + beer + clothes.
+    // EV3 needs / happiness model. Every resident burns two classes of goods:
+    //   BASIC needs  = Wood + Potato (tier-1 food) — meeting them ALONE floors
+    //                  happiness at ~basicHappy (70%). Missing basics drops below 70.
+    //   EXTRA needs  = Fish + Wool (all tiers) + Beer (workers+) + Clothes (burghers) —
+    //                  meeting them adds the remaining extraHappy (+30% ⇒ ~100%).
+    basicNeeds: ["wood", "potato"],
+    extraNeeds: ["fish", "wool", "beer", "clothes"],
+    // Per-resident consumption per tick, by tier. Higher tiers add their own
+    // extra needs (beer for workers, +clothes for burghers) on top of the shared
+    // basic (wood+potato) + peasant-extra (fish+wool) baseline.
     perCapita: {
-      peasants: { food: 0.10 },
-      workers:  { food: 0.10, beer: 0.05 },
-      burghers: { food: 0.10, beer: 0.05, clothes: 0.03 },
+      peasants: { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03 },
+      workers:  { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03, beer: 0.05 },
+      burghers: { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03, beer: 0.05, clothes: 0.03 },
     },
-    growthThreshold: 0.9999, // per-tier need satisfaction at/above this => grow toward housing
-    declineThreshold: 0.5,   // sustained per-tier satisfaction below this => decline
-    declineAfterTicks: 3,    // consecutive low-satisfaction ticks before a tier declines
-    growthRate: 0.03,        // fraction of free housing capacity a tier gains per tick
+    // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
+    //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.
+    basicHappy: 70,
+    extraHappy: 30,
+    growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
+    declineThreshold: 0.5,   // sustained satisfaction below this => decline
+    declineAfterTicks: 3,    // consecutive low ticks before a tier declines
+    growthRate: 0.03,        // fraction of the gap to target a tier gains per tick
     declineRate: 0.05,       // fraction of a tier's population lost per decline tick
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
-    // EC-B — single-city happiness model (0..100, ~50 baseline). Happiness eases
-    // toward: happyBaseline + happyRange*needSatisfaction − penalties + tempMods.
-    happyBaseline: 50,       // happiness with zero needs met (empty / foodless city)
-    happyRange: 50,          // met needs raise happiness by up to this (⇒ ~100 all met)
     happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
-    needPenalty: 30,         // happiness lost per fully-unmet SECONDARY need (beer/clothes)
+    // EV3 people-tax: each tick the population pays gold into town.gold (its TRADE
+    // budget), scaled by happiness. At happyBase the multiplier is 1; every point
+    // above happyBase adds bonusPerPoint (so happier cities fund trade faster).
+    peopleTax: { goldPerPop: 0.10, happyBase: 70, bonusPerPoint: 0.02 },
   },
 });
 
@@ -1269,66 +1286,60 @@ Sim.tick = function (State) {
       stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult;
     }
 
-    // --- 2. Consumption + per-need satisfaction ------------------------
-    // foodSat is the shared category need; beerSat/clothesSat are computed even
-    // when the consuming tier is empty (req<=0 → 1 if any is in stock, else 0) so
-    // an empty tier can still test whether its need-good is AVAILABLE before growing.
+    // --- 2. Consumption + basic/extra need satisfaction ----------------
+    // EV3: every resident consumes BASIC (wood+potato) + EXTRA (fish+wool, +beer
+    // for workers, +clothes for burghers) goods per its tier's perCapita rates.
+    // We tally required + consumed per good (recording demand for the price model
+    // AND for Trade shortfalls), then roll them into basicSat/extraSat.
     const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
 
-    let foodSat = 1;
-    if (totalPop > 0) {
-      const foodReq = N.perCapita.peasants.food * totalPop; // same food rate all tiers
-      let remaining = foodReq;
-      for (const gid of N.foodOrder) {
-        const val = N.foodValue[gid] || 1;
-        const wantUnits = remaining > 0 ? remaining / val : 0;
-        addDemand(gid, wantUnits);
-        if (remaining <= 0) continue;
-        const have = stock[gid] || 0;
-        const consume = Math.min(have, wantUnits);
-        stock[gid] = have - consume;
-        remaining -= consume * val;
+    const required = {};                 // goodId -> units the population wants this tick
+    for (const tierKey in N.perCapita) {
+      const n = pop[tierKey] || 0;
+      if (n <= 0) continue;
+      const rates = N.perCapita[tierKey];
+      for (const gid in rates) required[gid] = (required[gid] || 0) + rates[gid] * n;
+    }
+    const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
+    for (const gid in required) {
+      const req = required[gid];
+      addDemand(gid, req);
+      const have = stock[gid] || 0;
+      const consume = Math.min(have, req);
+      stock[gid] = have - consume;
+      gsat[gid] = req > 0 ? consume / req : 1;
+    }
+    // Demand-weighted class satisfaction; null when the class isn't demanded at all.
+    const classSat = (list) => {
+      let req = 0, con = 0;
+      for (const gid of list) {
+        const r = required[gid] || 0;
+        if (r <= 0) continue;
+        req += r; con += r * (gsat[gid] || 0);
       }
-      foodSat = foodReq > 0 ? (foodReq - clamp0(remaining)) / foodReq : 1;
-    }
-
-    const beerPop = (pop.workers || 0) + (pop.burghers || 0);
-    const beerSat = needSat(stock, "beer", N.perCapita.workers.beer * beerPop, addDemand);
-    const clothesSat = needSat(stock, "clothes", N.perCapita.burghers.clothes * (pop.burghers || 0), addDemand);
-
-    // --- 3. Happiness (single 0..100 city value, ~50 baseline) ---------
-    // Eases toward: happyBaseline + happyRange*needSatisfaction − penalties +
-    // tempMods, clamped 0..100. needSatisfaction is the average of the ACTIVE
-    // tiers' met-need fractions (food for peasants; +beer for workers;
-    // +beer+clothes for burghers) — 0 met ⇒ ~50, all met ⇒ ~100. An EMPTY
-    // city reads food AVAILABILITY instead, so a stocked pantry (⇒1) draws the
-    // first residents while an empty one (⇒0) idles at the 50 baseline. Food
-    // scarcity only FAILS TO RAISE happiness (holds ~50); unmet SECONDARY needs
-    // (beer/clothes) of tiers that already exist apply a penalty that pulls it
-    // below 50. town.happyMods = [{delta, untilTick}] is a temporary channel
-    // (EC-C give/take) summed here and pruned once entries expire.
-    const tierSat = {
-      peasants: foodSat,
-      workers:  Math.min(foodSat, beerSat),
-      burghers: Math.min(foodSat, beerSat, clothesSat),
+      return req > 0 ? con / req : null;
     };
-    let needSatisfaction;
-    if (totalPop > 0) {
-      const parts = [];
-      if ((pop.peasants || 0) > 0) parts.push(tierSat.peasants);
-      if ((pop.workers  || 0) > 0) parts.push(tierSat.workers);
-      if ((pop.burghers || 0) > 0) parts.push(tierSat.burghers);
-      needSatisfaction = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : foodSat;
-    } else {
-      // Empty city: is there food on the shelf to attract the first residents?
-      needSatisfaction = N.foodOrder.some((g) => (stock[g] || 0) > 0) ? 1 : 0;
-    }
-    // Penalty from unmet SECONDARY needs of tiers that already exist (food is
-    // never penalised — a foodless city stays at the ~50 baseline by design).
-    let penalty = 0;
-    if ((pop.workers  || 0) > 0) penalty += N.needPenalty * (1 - beerSat);
-    if ((pop.burghers || 0) > 0) penalty += N.needPenalty * (1 - clothesSat);
-    // Temporary modifier channel: sum un-expired deltas; prune the expired.
+    // Availability fallback (fraction of a class's goods on the shelf) — used by an
+    // EMPTY city so a stocked pantry attracts the first residents.
+    const availFrac = (list) => {
+      let present = 0; for (const g of list) if ((stock[g] || 0) > 0) present++;
+      return list.length ? present / list.length : 0;
+    };
+    let basicSat = classSat(N.basicNeeds);
+    let extraSat = classSat(N.extraNeeds);
+    if (basicSat === null) basicSat = totalPop > 0 ? 1 : availFrac(N.basicNeeds);
+    if (extraSat === null) extraSat = totalPop > 0 ? 1 : availFrac(N.extraNeeds);
+
+    // Extra-need availability per secondary good — gates worker/burgher GROWTH even
+    // when that tier is still empty (req=0 → read pure availability).
+    const beerSat    = ("beer"    in gsat) ? gsat.beer    : ((stock.beer    || 0) > 0 ? 1 : 0);
+    const clothesSat = ("clothes" in gsat) ? gsat.clothes : ((stock.clothes || 0) > 0 ? 1 : 0);
+
+    // --- 3. Happiness = basicHappy·basicSat + extraHappy·extraSat -------
+    // EV3: basics (wood+potato) fully met floor happiness at ~70; extras (fish+wool
+    // +beer/+clothes) met lift it the remaining +30 to ~100. Missing basics drops it
+    // below 70. town.happyMods = [{delta, untilTick}] is a temporary channel summed
+    // here (EC-C give/take) and pruned once entries expire.
     let tempMod = 0;
     if (Array.isArray(town.happyMods)) {
       const kept = [];
@@ -1342,18 +1353,16 @@ Sim.tick = function (State) {
       town.happyMods = kept;
     }
     const hTarget = Math.max(0, Math.min(100,
-      N.happyBaseline + N.happyRange * needSatisfaction - penalty + tempMod));
+      N.basicHappy * basicSat + N.extraHappy * extraSat + tempMod));
     const hPrev = (typeof town.happiness === "number") ? town.happiness : hTarget;
     town.happiness = hPrev + (hTarget - hPrev) * N.happyEase; // ease (snap on first read)
 
     // --- 4. Population from housing scales with happiness --------------
-    // Effective target per tier = round(capacity × happiness/100): a cap-2
-    // house yields 1 resident at 50% happiness, 2 at 100%. A tier grows toward
-    // its target while its SECONDARY needs are AVAILABLE (beer for workers,
-    // beer+clothes for burghers) — food is NOT a growth gate (it drives
-    // happiness, which already scales the target), so peasants fill to half-cap
-    // even with no food. Over target, or with a secondary need missing, the
-    // tier declines after a sustained low streak (unchanged decline behavior).
+    // Effective target per tier = round(capacity × happiness/100). A tier grows
+    // toward its target while its EXTRA-need goods are AVAILABLE (beer for workers,
+    // beer+clothes for burghers) — basics aren't a growth gate (they drive
+    // happiness, which already scales the target). Over target, or with an extra
+    // need missing, the tier declines after a sustained low streak.
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
       ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
       : { peasants: 0, workers: 0, burghers: 0 };
@@ -1390,6 +1399,17 @@ Sim.tick = function (State) {
       pop[tier] = Math.min(clamp0(n), cap);      // clamp 0 <= pop <= capacity
     }
 
+    // --- 4b. People-tax: population funds the city's TRADE budget ------
+    // EV3: each tick the population pays gold into town.gold, scaled by happiness.
+    // At happyBase the multiplier is 1×; every point above adds bonusPerPoint, so
+    // happier cities accrue trade money faster (modest, but enough to fund carts).
+    const pt = N.peopleTax;
+    const popNow = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    if (pt && popNow > 0) {
+      const mult = 1 + Math.max(0, town.happiness - pt.happyBase) * pt.bonusPerPoint;
+      town.gold = (town.gold || 0) + popNow * pt.goldPerPop * mult;
+    }
+
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
     // P4-C hook: a "demand craze" event triples one good's demand (price rises).
     if (typeof Events !== "undefined" && Events.crazeGood) {
@@ -1400,25 +1420,17 @@ Sim.tick = function (State) {
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
 
-    // --- 6. No negative stockpiles ------------------------------------
-    for (const gid in stock) if (!(stock[gid] > 0)) stock[gid] = 0;
+    // --- 6. Clamp stockpiles to [0, storageCap] -----------------------
+    // EV3: a city holds at most CONFIG.town.storageCap of EACH good — production
+    // (and any other Sim increase) can never bank more than the cap.
+    const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+    for (const gid in stock) {
+      if (!(stock[gid] > 0)) stock[gid] = 0;
+      else if (stock[gid] > capG) stock[gid] = capG;
+    }
   }
   return State;
 };
-
-// One deterministic secondary-need pass (beer / clothes). When the consuming tier
-// is present (req>0) it records demand, eats from stock, and returns the satisfied
-// ratio in 0..1. When the tier is empty (req<=0) it consumes nothing and reports
-// pure AVAILABILITY (1 if any is in stock, else 0) so a zero-population tier can
-// still gate its growth on whether the need-good exists. Hoisted; used by Sim.tick.
-function needSat(stock, gid, req, addDemand) {
-  if (req <= 0) return (stock[gid] || 0) > 0 ? 1 : 0;
-  addDemand(gid, req);
-  const have = stock[gid] || 0;
-  const consume = Math.min(have, req);
-  stock[gid] = have - consume;
-  return consume / req;
-}
 // === SIM-CORE END ===
 
 // === BUILDINGS-CORE START ===  (TI-A / slot #2 — placement rules + housing)
@@ -1984,7 +1996,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         const buyer = byId.get(cart.fromId);
         if (buyer) {
           if (!buyer.stock) buyer.stock = {};
-          buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + cart.qty;
+          // EV3: clamp delivered stock to the per-city storage cap (80/good).
+          const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+          buyer.stock[cart.goodId] = Math.min(capG, (buyer.stock[cart.goodId] || 0) + cart.qty);
         }
         cart.done = true;
       }
@@ -3926,9 +3940,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   function renderPopulation(t) {
     const tiers = [
-      { key: "peasants", label: "Peasants", needs: "food" },
-      { key: "workers",  label: "Workers",  needs: "food + beer" },
-      { key: "burghers", label: "Burghers", needs: "food + beer + clothes" },
+      { key: "peasants", label: "Peasants", needs: "wood + potato + fish + wool" },
+      { key: "workers",  label: "Workers",  needs: "+ beer" },
+      { key: "burghers", label: "Burghers", needs: "+ clothes" },
     ];
     let rows = "";
     for (const tier of tiers) {
@@ -5064,12 +5078,11 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const pop = t.pop;
     const total = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
     const stock = t.stock || {};
-    // 1. food shortage — less than ~4 ticks of food buffer for the population
-    if (total > 0 && N && N.foodOrder) {
-      let foodUnits = 0;
-      for (const gid of N.foodOrder) foodUnits += (stock[gid] || 0) * (N.foodValue[gid] || 1);
-      const perTick = N.perCapita.peasants.food * total;
-      if (perTick > 0 && foodUnits < perTick * 4) out.push("🍽");
+    // 1. food shortage — less than ~4 ticks of BASIC-food (potato) buffer
+    if (total > 0 && N && N.perCapita && N.perCapita.peasants) {
+      const potato = stock.potato || 0;
+      const perTick = (N.perCapita.peasants.potato || 0) * total;
+      if (perTick > 0 && potato < perTick * 4) out.push("🍽");
     }
     // 2. idle producer — a building with worker slots but no assigned labour
     if (Array.isArray(t.buildings)) {
@@ -5969,8 +5982,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.9.0";
+  const GAME_VERSION = "0.10.0";
   const PATCH_NOTES = [
+    { v: "0.10.0", notes: [
+      "New needs: peasants want Wood + Potato (→70% happy), then Fish + Wool (→100%)",
+      "New Potato good + Potato Farm; each city stores up to 80 of a resource",
+      "Happy cities earn gold over time (people-tax); new cities start with 20 wood",
+      "Research now needs materials — the castle's traders buy them (while the castle panel is open)",
+      "Sawmill is a Peasant building; locked buildings & tiers hidden until researched",
+    ] },
     { v: "0.9.0", notes: [
       "Click the castle to open its panel (prestige, level, tariff, warehouse) — like city panels",
       "Balance pass on building costs & prices",

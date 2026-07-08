@@ -72,12 +72,26 @@ ok("CONFIG.town.slotCap = [0,7,9,11,13]", JSON.stringify(CONFIG.town.slotCap) ==
 ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q === 0 && CONFIG.town.castle.r === 0);
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
-ok("CONFIG.town.startStock has wood to build a lumberjack + hut", CONFIG.town.startStock.wood >= (CONFIG.buildings.lumberjack.cost.wood + CONFIG.buildings.hut.cost.wood));
+// EV3: a new city starts with 20 wood (a basic peasant need — firewood).
+ok("CONFIG.town.startStock is { wood: 20 }", CONFIG.town.startStock.wood === 20);
+// EV3: per-city storage cap.
+ok("CONFIG.town.storageCap === 80", CONFIG.town.storageCap === 80);
 ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);
 ok("basic house (hut) shelters 2", CONFIG.buildings.hut.houseCapacity === 2);
-ok("basic buildings are wood-only (lumberjack/farm/hut)", [
+// EV3: the three starters (lumberjack/farm/hut) cost GOLD ONLY at level 1.
+ok("starter buildings are gold-only (lumberjack/farm/hut)", [
   "lumberjack", "farm", "hut",
-].every(id => { const c = CONFIG.buildings[id].cost; return c.wood > 0 && !c.stone && !c.planks; }));
+].every(id => { const c = CONFIG.buildings[id].cost; return c.gold > 0 && !c.wood && !c.stone && !c.planks; }));
+// EV3: exact costs.
+ok("starter costs: lumberjack 100 / hut 200 / farm 250 (gold)",
+  CONFIG.buildings.lumberjack.cost.gold === 100 && CONFIG.buildings.hut.cost.gold === 200 && CONFIG.buildings.farm.cost.gold === 250);
+// EV3: potato_farm — a startUnlocked, gold-only food extractor on fertile terrain.
+ok("potato_farm exists (fertile extractor → potato, startUnlocked, gold-only)", (() => {
+  const p = CONFIG.buildings.potato_farm;
+  return p && p.kind === "extractor" && p.terrain === "fertile" && p.workerTier === "peasant" &&
+    p.output && p.output.goodId === "potato" && p.startUnlocked === true &&
+    p.cost && p.cost.gold > 0 && !p.cost.wood && !p.cost.stone && !p.cost.planks;
+})());
 const kinds = Object.values(CONFIG.buildings).map(b => b.kind);
 ok("catalog has extractors/processors/houses", kinds.includes("extractor") && kinds.includes("processor") && kinds.includes("house"));
 ok("extractors are peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant"));
@@ -94,11 +108,11 @@ const STARTERS = ["hut", "lumberjack", "farm", "sawmill"];
 ok("the four starters are startUnlocked (and carry no unlockedBy)",
   STARTERS.every(id => CONFIG.buildings[id].startUnlocked === true && !CONFIG.buildings[id].unlockedBy));
 const researchIds = new Set((CONFIG.research || []).map(n => n.id));
-ok("every non-starter building has an unlockedBy that exists in CONFIG.research",
+ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.research",
   Object.values(CONFIG.buildings).every(b =>
-    STARTERS.includes(b.id)
-      ? true
-      : (typeof b.unlockedBy === "string" && researchIds.has(b.unlockedBy) && !b.startUnlocked)));
+    b.startUnlocked
+      ? !b.unlockedBy                       // startUnlocked (incl. EV3 potato_farm) → no gate
+      : (typeof b.unlockedBy === "string" && researchIds.has(b.unlockedBy))));
 
 // ============================================================================
 // 3) Footprint + adjacency + castle helpers.

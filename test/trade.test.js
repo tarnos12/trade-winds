@@ -40,38 +40,39 @@ function mkTown(over) {
     stock: {}, prices: {}, demand: {}, buildings: [], happiness: 100,
   }, over);
 }
-// A 3-city cycle, each SHORT on what a neighbour has in SURPLUS:
-//   FARM(0,0)  — floods GRAIN; its workers want beer.
-//   MINE(6,0)  — floods ORE; makes no grain, so it must BUY grain (food).
-//   MILL(3,1)  — brewery(grain→beer)+smelter(ore+wood→tools): makes BEER, and must
-//                BUY grain (food+brew input) and ORE (smelt input).
-// So grain flows FARM→{MINE,MILL}, ore flows MINE→MILL, beer flows MILL→others.
+// EV3 3-city cycle, each SHORT on what a neighbour has in SURPLUS. Basic peasant
+// needs are now WOOD + POTATO (food); extras are fish + wool (+beer for workers):
+//   FARM(0,0)  — floods GRAIN + POTATO; its workers want beer.
+//   MINE(6,0)  — floods ORE; makes no potato, so it must BUY POTATO (food).
+//   MILL(3,1)  — brewery(grain→beer)+smelter(ore+wood→tools): must BUY GRAIN
+//                (brew input) and ORE (smelt input).
+// So potato flows FARM→MINE, grain flows FARM→MILL, ore flows MINE→MILL.
 // Huts+cottages give each city housing so workers persist (Sim caps pop at housing).
-// EC-A dropped basic house cap to 2 (cottage 3), so supply enough houses to shelter
-// each city's seeded pop (≤12 peasants / ≤8 workers → 8 huts + 3 cottages).
 function homes() {
   const a = [];
   for (let i = 0; i < 8; i++) a.push({ typeId: "hut" });      // 8×2 = 16 peasant cap
   for (let i = 0; i < 3; i++) a.push({ typeId: "cottage" });  // 3×3 =  9 worker cap
   return a;
 }
+// Every town has a LUMBERJACK for its own firewood (wood is a basic need now, and
+// nothing else produces it), so the food (potato) flow is the clean differentiator.
+// The farm exports GRAIN (for the mill's brewery) AND POTATO (food for the mine).
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
-  stock: { grain: 80, beer: 20 } }); }
-// The mine only staffs MINERS (peasant tier) — it has no worker-tier building and
-// no beer source, so give it peasant-only housing (huts) and no workers. That keeps
-// its happiness driven by FOOD (grain), so grain flow vs a road-less famine reads
-// on happiness instead of being masked by an unfeedable-worker beer penalty.
+  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
+  stock: { grain: 80, potato: 80, wood: 80, beer: 20 } }); }
+// The mine staffs MINERS + a lumberjack (peasant tier) — peasant-only housing, no
+// workers. It self-produces WOOD but has NO POTATO, so its happiness (and pop) is
+// driven by the POTATO food flow: connected ⇒ fed & happy, road-less ⇒ food-starved.
 function peasantHomes(n) { const a = []; for (let i = 0; i < n; i++) a.push({ typeId: "hut" }); return a; }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
   pop: { peasants: 12, workers: 0, burghers: 0 },
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...peasantHomes(6)],
-  stock: { ore: 80, grain: 15 } }); }
+  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(6)],
+  stock: { ore: 80, wood: 80 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
   pop: { peasants: 8, workers: 8, burghers: 0 },
-  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, ...homes()],
-  stock: { grain: 15, ore: 12, wood: 5000, beer: 12 } }); }
+  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
+  stock: { grain: 15, ore: 12, wood: 80, potato: 80, beer: 12 } }); }
 
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];  // FARM(0,0)↔MINE(6,0); MILL(3,1)→(3,0)
 
@@ -88,7 +89,8 @@ function price(st, id, gid) {
   const t = townById(st, id);
   return (t.prices && typeof t.prices[gid] === "number") ? t.prices[gid] : Sim.priceFor(t, gid);
 }
-function grainGap(st) { return Math.abs(price(st, 1, "grain") - price(st, 2, "grain")); }
+// The FARM(1)↔MINE(2) POTATO price gap — the food flow that feeds the mine.
+function potatoGap(st) { return Math.abs(price(st, 1, "potato") - price(st, 2, "potato")); }
 
 // Run `n` full economy ticks (Sim then Trade, exactly as the browser loop does).
 function run(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tick(st); } }
@@ -170,22 +172,22 @@ ok("no treasury income without roads", isolated.treasury === 0);
 ok("no carts are ever created without roads", isolated.carts.length === 0);
 
 // Goods flow surplus→shortfall, observed directly on the carts:
-ok("grain is bought FROM the farm (surplus → shortfall cities)", flows.has("grain<-1"));
+ok("potato is bought FROM the farm (surplus → shortfall cities)", flows.has("potato<-1"));
 ok("ore is bought FROM the mine (surplus → shortfall city)", flows.has("ore<-2"));
 
-// Grain flow keeps the grain-less MINE better fed: the connected mine holds a
-// real population AND is happier than the road-less one. (EC-B: a starved city
-// no longer collapses to ~0 — it floors at its ~50%-happiness capacity — so the
-// "alive vs starved" contrast now reads on HAPPINESS, not pop→0.)
-ok("grain flow keeps the mine fed (happier + populated vs road-less)",
+// Potato (food) flow keeps the potato-less MINE better fed: the connected mine
+// holds a real population AND is happier than the road-less one. (A food-starved
+// city floors at its low happiness-scaled capacity — the "fed vs starved" contrast
+// reads on HAPPINESS + population.)
+ok("potato flow keeps the mine fed (happier + populated vs road-less)",
   popTotal(connected.towns[1]) > 5 && connected.towns[1].happiness > isolated.towns[1].happiness);
 // Ore flow lets the MILL's smelter keep making tools; the road-less mill stalls.
 ok("ore flow lets the mill out-produce tools vs the road-less baseline",
   stockOf(connected, 3, "tools") > stockOf(isolated, 3, "tools"));
 
-// Prices converge: the farm↔mine grain-price gap is smaller WITH trade than without.
-ok("grain prices converge (connected gap < isolated gap)",
-  grainGap(connected) < grainGap(isolated));
+// Prices converge: the farm↔mine POTATO-price gap is smaller WITH trade than without.
+ok("potato prices converge (connected gap < isolated gap)",
+  potatoGap(connected) < potatoGap(isolated));
 
 // Treasury keeps climbing across the run (sampled monotonic-ish growth).
 {
@@ -198,26 +200,26 @@ ok("grain prices converge (connected gap < isolated gap)",
 
 // =========================================================================
 // 3) The crisis: cut the road → route null → trade stops → shortfalls persist,
-//    grain prices DIVERGE again.
+//    potato prices DIVERGE again.
 // =========================================================================
 Pathing.invalidate();
 {
   const st = buildState(4242, true);
   run(st, 200);
   ok("connected before the cut", Pathing.route(st, K(0, 0), K(6, 0)) !== null);
-  const gapBefore = grainGap(st);
+  const gapBefore = potatoGap(st);
   const treasuryBefore = st.treasury;
 
-  // Cut the farm's only road access hex (1,0) → the farm (sole grain source) is
-  // isolated from all. No grain can reach the mine/mill any more.
+  // Cut the farm's only road access hex (1,0) → the farm (sole potato source) is
+  // isolated from all. No potato can reach the mine/mill any more.
   st.roads.delete(K(1, 0));
   Pathing.invalidate();
   ok("after cut + invalidate: farm↔mine route is null", Pathing.route(st, K(0, 0), K(6, 0)) === null);
   ok("after cut: farm↔mill route is null too", Pathing.route(st, K(0, 0), K(3, 1)) === null);
 
   run(st, 160);
-  const gapAfter = grainGap(st);
-  ok("grain prices diverge after the crisis cut (gap widens)", gapAfter > gapBefore);
+  const gapAfter = potatoGap(st);
+  ok("potato prices diverge after the crisis cut (gap widens)", gapAfter > gapBefore);
   // The cut-off farm can no longer be reached by (or reach) any trader.
   ok("the isolated farm neither buys nor is bought from",
     st.carts.every(c => c.fromId !== 1 && c.toId !== 1));
