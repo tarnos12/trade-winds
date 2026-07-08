@@ -16,7 +16,16 @@ integrates in the merge order below.
   25% tariff → treasury), cart render + treasury HUD + castle warehouse.
   `pathing` 24, `trade` 28. Towns start level 2 so they trade.
 
-## Milestone: Town Interiors (player agency — GDD §4.1–4.3, §5.2)
+## Milestone: Town Interiors ✅ DONE (player agency — GDD §4.1–4.3, §5.2)
+
+Merged TI-A → TI-B → TI-C. Player now places buildings (15-type catalog:
+extractors on terrain / processors / houses) capped by town level, `Sim` staffs
+them from population and grows workers/burghers from housing as needs are met;
+auto-seeding removed. Founding kit (wood/stone) lets a new town build. Verified
+end-to-end (empty town → farm+hut → workers staffed, food produced, pop 8→18).
+Tests: `buildings` 37, `sim` 40 (+ board 25, prices 51, pathing 24, trade 28).
+
+## Milestone (done): Town Interiors (player agency — GDD §4.1–4.3, §5.2)
 
 Fixes the core gap: today buildings **auto-seed** and there's **no housing**, so
 the only decisions are placing towns + roads. Replace with real choices — the
@@ -59,7 +68,7 @@ are rejected with a reason.
 |---|---|---|---|
 | TI-A — building catalog + placement rules + housing model (`Buildings` pure) | #2 | contract only | 🔲 assigned |
 | TI-B — `Sim.tick`: pop-from-housing + worker assignment + production from placed buildings | #3 | TI-A catalog + `Buildings` | ✅ merged |
-| TI-C — build-mode UI + build menu + remove auto-seed + render buildings | #4 | TI-A `canPlace` + catalog | 🔲 assigned |
+| TI-C — build-mode UI + build menu + remove auto-seed + render buildings | #4 | TI-A `canPlace` + catalog | ✅ merged |
 
 Legend: 🔲 assigned · 🟡 in progress · 🔵 returned · ✅ merged.
 **Merge order: TI-A → TI-B → TI-C.** TI-A lands first; then TI-B ∥ TI-C.

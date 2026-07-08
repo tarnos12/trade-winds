@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–3 DONE (Board · Towns & Production · Trade). Phase 4 — Progression: next.**
+**Phases 1–3 DONE + Town Interiors DONE (player-placed buildings & housing). Phase 4 — Progression: next.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -79,6 +79,14 @@ Done:
   Towns start at level 2 so they trade on placement. Tests: `pathing` 24 ·
   `trade` 28. Verified end-to-end headless (carts trade, treasury grows, goods
   flow; road cut nulls the route). DoD met.
+
+- **Town Interiors** landed via the agent team (TI-A → TI-B → TI-C): replaced
+  auto-seeded buildings with player placement — a 15-type catalog (extractors on
+  terrain / processors / houses), `Buildings.canPlace` (terrain + radius + slot
+  cap + affordability), `Sim.tick` staffs buildings from population and grows
+  workers/burghers from housing as needs are met, build-menu UI + placement
+  overlay, buildings rendered. Towns start center-only with a founding kit.
+  Tests: `buildings` 37, `sim` 40.
 
 Next (recommended order):
 1. **Phase 4 — Progression** (GDD §7): research tree (15 nodes), population tiers
