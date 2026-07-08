@@ -191,6 +191,24 @@ panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
   cities using treasury gold; the castle only requests materials **when selected**.
   Builds on CP.
 
+## Milestone: Economy v3 (needs + taxes + caps) — QUEUED (after BAL/CP/CRE)
+Author directives (supersede parts of the BAL balance pass — apply these specifics):
+- **City storage cap:** each city holds **≤ 80 per resource** (warehouse limit).
+  *(Assumption: per-good cap 80; confirm if it means 80 total.)*
+- **New city spawns with 20 wood** (startStock = {wood:20}).
+- **Starter building costs (GOLD only, no resources at lvl 1):** lumberjack **100 g**,
+  hut/house **200 g**, farm **250 g**. (Higher levels/tiers add resources later.)
+- **New needs / happiness model (peasant):** basic needs = **Wood + Potato** (tier-1
+  food) → **70% happiness**; extra needs = **Fish + Wool** → the remaining **30%**
+  (→100%). Introduces a new good **potato** + a **potato farm** building (tier-1 food).
+  *(This revises EC-B's baseline-50 model: base needs met = 70, extras = +30.)*
+- **People-tax income:** a city's population **generates gold over time**, scaled by
+  happiness — **above base happiness → more tax gold**. (Funds the city's trade budget.)
+- **Trade tariff 25% → castle/treasury** (confirmed): a 10-gold buy → seller city
+  +7.5 g, castle +2.5 g.
+Sizeable — likely its own multi-slice pass (goods/needs model + potato content;
+storage caps + costs; people-tax income). Sequence after the castle/balance round.
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode

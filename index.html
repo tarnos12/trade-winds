@@ -237,6 +237,9 @@
   .bb-btn.active { background: var(--accent); color: #201607; border-color: #e0a860; }
   .bb-btn.disabled { opacity: 0.4; cursor: not-allowed; }
   .bb-btn.disabled:hover { background: #1c160f; border-color: var(--panel-edge); }
+  /* BAL: research-locked building — greyed, with an amber "Research …" hint. */
+  .bb-btn.locked { opacity: 0.5; }
+  .bb-btn.locked .bb-cost { color: #c98a3c; opacity: 0.95; }
   .bb-btn .bb-name { font-weight: bold; font-size: 11.5px; }
   .bb-btn .bb-cost { font-size: 9.5px; opacity: 0.8; font-variant-numeric: tabular-nums; }
   .bb-btn.active .bb-cost { opacity: 0.95; }
@@ -908,17 +911,17 @@ Object.assign(CONFIG, {
     grain:  { id: "grain",  tier: 1, basePrice: 4 },
     fish:   { id: "fish",   tier: 1, basePrice: 5 },
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
-    // --- tier 2 (processed) ---
-    planks: { id: "planks", tier: 2, basePrice: 12, inputs: { wood: 2 } },
-    tools:  { id: "tools",  tier: 2, basePrice: 20, inputs: { ore: 1, wood: 1 } },
-    flour:  { id: "flour",  tier: 2, basePrice: 10, inputs: { grain: 2 } },
-    beer:   { id: "beer",   tier: 2, basePrice: 14, inputs: { grain: 2 } },
-    cloth:  { id: "cloth",  tier: 2, basePrice: 16, inputs: { wool: 2 } },
-    // --- tier 3 (luxury) ---
-    bread:     { id: "bread",     tier: 3, basePrice: 22, inputs: { flour: 2 } },
-    clothes:   { id: "clothes",   tier: 3, basePrice: 36, inputs: { cloth: 2 } },
-    jewelry:   { id: "jewelry",   tier: 3, basePrice: 60, inputs: { ore: 3 } },
-    furniture: { id: "furniture", tier: 3, basePrice: 44, inputs: { planks: 2, tools: 1 } },
+    // --- tier 2 (processed) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
+    planks: { id: "planks", tier: 2, basePrice: 14, inputs: { wood: 2 } },    // wood 5×2=10
+    tools:  { id: "tools",  tier: 2, basePrice: 20, inputs: { ore: 1, wood: 1 } }, // ore8+wood5=13
+    flour:  { id: "flour",  tier: 2, basePrice: 12, inputs: { grain: 2 } },   // grain 4×2=8
+    beer:   { id: "beer",   tier: 2, basePrice: 14, inputs: { grain: 2 } },   // grain 4×2=8
+    cloth:  { id: "cloth",  tier: 2, basePrice: 20, inputs: { wool: 2 } },    // wool 7×2=14
+    // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
+    bread:     { id: "bread",     tier: 3, basePrice: 30, inputs: { flour: 2 } },              // flour 12×2=24
+    clothes:   { id: "clothes",   tier: 3, basePrice: 50, inputs: { cloth: 2 } },              // cloth 20×2=40
+    jewelry:   { id: "jewelry",   tier: 3, basePrice: 54, inputs: { ore: 3 } },                // ore 8×3=24 (luxury margin)
+    furniture: { id: "furniture", tier: 3, basePrice: 64, inputs: { planks: 2, tools: 1 } },   // planks14×2+tools20=48
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -934,102 +937,125 @@ Object.assign(CONFIG, {
   // - Processors sit on any buildable town hex (`terrain:null`); staffed by
   //   workers; consume `inputs` per unit produced (Sim.tick honours these).
   // - Houses hold no workers — they add `houseCapacity` of their `houseTier`.
+  // BAL: each building carries a per-building unlock — `startUnlocked:true` on the
+  // four starters (hut / lumberjack / farm / sawmill), else `unlockedBy:"<research
+  // node id>"`. A building is AVAILABLE iff startUnlocked OR Research.has(unlockedBy).
+  // The gate is UI-level only (build menu) — the pure placement core is untouched.
+  // Cost ladder: basic (starters) = wood + small gold; mid = + stone; late/luxury
+  // = + planks & higher gold.
   buildings: {
     // --- extractors (peasant labour, sit on their resource hex) ---
     lumberjack: {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
       output: { goodId: "wood", ratePerWorker: 1 },
-      // EC-A: basic building — wood only (+ small treasury gold).
+      // BAL: starter — basic building, wood only (+ small treasury gold).
+      startUnlocked: true,
       workerSlots: 3, cost: { wood: 20, gold: 40 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "grain", ratePerWorker: 2 },
-      // EC-A: basic building — wood only.
+      // BAL: starter — basic building, wood only.
+      startUnlocked: true,
       workerSlots: 3, cost: { wood: 25, gold: 40 },
     },
     miner: {
       id: "miner", name: "Miner", kind: "extractor",
       terrain: "hills", workerTier: "peasant",
       output: { goodId: "ore", ratePerWorker: 1 },
-      workerSlots: 3, cost: { wood: 20, stone: 15, gold: 80 },
+      unlockedBy: "deep_veins",   // BAL: mining group
+      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
       terrain: "mountains", workerTier: "peasant",
       output: { goodId: "stone", ratePerWorker: 1 },
-      // EC-A: the bootstrap stone source — wood only, so a wood-only city can
-      // build it and start producing stone for everything else.
-      workerSlots: 3, cost: { wood: 30, gold: 70 },
+      // BAL: bootstrap stone source — wood only, so a wood-only city can build it
+      // and start producing stone for everything else.
+      unlockedBy: "deep_veins",   // BAL: mining group
+      workerSlots: 3, cost: { wood: 35, gold: 80 },
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
       terrain: null, adjacent: "water", workerTier: "peasant",
       output: { goodId: "fish", ratePerWorker: 1 },
+      unlockedBy: "crop_rotation",   // BAL: food/agriculture extractors
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
       id: "shepherd", name: "Shepherd", kind: "extractor",
       terrain: "meadow", workerTier: "peasant",
       output: { goodId: "wool", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 15, gold: 50 },
+      unlockedBy: "crop_rotation",   // BAL: food/agriculture extractors
+      workerSlots: 2, cost: { wood: 20, stone: 5, gold: 60 },
     },
     // --- processors (worker labour, any buildable town hex) ---
     sawmill: {
       id: "sawmill", name: "Sawmill", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { wood: 2 }, output: { goodId: "planks", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 20, stone: 10, gold: 60 },
+      // BAL: starter — the one basic processor, wood only so a fresh city can raise
+      // it from its founding wood and start refining planks immediately.
+      startUnlocked: true,
+      workerSlots: 2, cost: { wood: 30, gold: 60 },
     },
     mill: {
       id: "mill", name: "Mill", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { grain: 2 }, output: { goodId: "flour", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 20, stone: 15, gold: 90 },
+      unlockedBy: "guild_halls",   // BAL: workshops group
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     bakery: {
       id: "bakery", name: "Bakery", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { flour: 2 }, output: { goodId: "bread", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 15, stone: 20, gold: 100 },
+      unlockedBy: "master_crafts",   // BAL: tier-3 crafts
+      workerSlots: 2, cost: { wood: 30, stone: 25, planks: 5, gold: 150 },
     },
     brewery: {
       id: "brewery", name: "Brewery", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { grain: 2 }, output: { goodId: "beer", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 20, stone: 15, gold: 95 },
+      unlockedBy: "guild_halls",   // BAL: workshops group
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 100 },
     },
     smelter: {
       id: "smelter", name: "Smelter", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { ore: 1, wood: 1 }, output: { goodId: "tools", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 20, stone: 25, gold: 120 },
+      unlockedBy: "guild_halls",   // BAL: workshops group (guild_halls needs deep_veins → miner)
+      workerSlots: 2, cost: { wood: 30, stone: 25, gold: 130 },
     },
     weaver: {
       id: "weaver", name: "Weaver", kind: "processor",
       terrain: null, workerTier: "worker",
       inputs: { wool: 2 }, output: { goodId: "cloth", ratePerWorker: 1 },
-      workerSlots: 2, cost: { wood: 15, stone: 10, gold: 85 },
+      unlockedBy: "guild_halls",   // BAL: workshops group
+      workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
     // --- houses (no workers; add population capacity by tier) ---
     hut: {
       id: "hut", name: "Hut", kind: "house",
-      // EC-A: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
+      // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // EC-A: basic building — wood only.
+      // BAL: starter — basic building, wood only.
+      startUnlocked: true,
       cost: { wood: 15, gold: 20 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
       terrain: null, houseTier: "worker", houseCapacity: 3,
-      cost: { wood: 20, stone: 10, gold: 60 },
+      unlockedBy: "royal_census",   // BAL: worker housing
+      cost: { wood: 30, stone: 15, gold: 90 },
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
       terrain: null, houseTier: "burgher", houseCapacity: 4,
-      cost: { wood: 25, stone: 25, planks: 5, gold: 150 },
+      unlockedBy: "town_charters",   // BAL: burgher/luxury housing (late)
+      cost: { wood: 40, stone: 30, planks: 10, gold: 220 },
     },
   },
 
@@ -1043,9 +1069,10 @@ Object.assign(CONFIG, {
     radius: 2,                  // (legacy) unused by Placement v2 — cities grow by
                                 // contiguity now; kept so old saves/tuning don't break.
     baseWorkers: { peasants: 0 }, // 0 pop until a house is built (population comes only from housing).
-    // EC-A: a new city starts with just enough WOOD to build a lumberjack (20) +
-    // a hut (15) with buffer; gold/stone come from treasury/quarry, not the kit.
-    startStock: { wood: 80 },
+    // BAL: a new city starts with enough WOOD to raise the whole starter set —
+    // lumberjack (20) + farm (25) + hut (15) + sawmill (30) = 90 — plus buffer;
+    // gold comes from the treasury, stone/planks from research-gated buildings.
+    startStock: { wood: 120 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
@@ -3716,15 +3743,30 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // are UI-gated behind a research node — the gate is cosmetic only; the pure
   // placement logic (Buildings.canPlaceBuilding / chargeBuilding) is untouched.
   //  1. 🏗 Build  — City (town mode) · Road (road mode) · Bridge (coming soon).
-  //  2. 🌾 Peasant — hut + every workerTier:'peasant' building. Always open.
-  //  3. 🔨 Worker  — cottage + every workerTier:'worker' building. Gated: guild_halls.
-  //  4. 👑 Burgher — manor + every workerTier:'burgher' building. Gated: master_crafts.
+  //  2. 🌾 Peasant — hut + every workerTier:'peasant' building.
+  //  3. 🔨 Worker  — cottage + every workerTier:'worker' building.
+  //  4. 👑 Burgher — manor + every workerTier:'burgher' building.
+  // BAL: categories are ALWAYS open — availability is now per-building (startUnlocked
+  // / unlockedBy), shown as a locked item inside the flyout, not a whole-category gate.
   const BUILD_CATEGORIES = [
     { id: "build",   icon: "🏗", label: "Build",   kind: "special" },
     { id: "peasant", icon: "🌾", label: "Peasant", kind: "tier", tier: "peasant" },
-    { id: "worker",  icon: "🔨", label: "Worker",  kind: "tier", tier: "worker",  gate: "guild_halls" },
-    { id: "burgher", icon: "👑", label: "Burgher", kind: "tier", tier: "burgher", gate: "master_crafts" },
+    { id: "worker",  icon: "🔨", label: "Worker",  kind: "tier", tier: "worker"  },
+    { id: "burgher", icon: "👑", label: "Burgher", kind: "tier", tier: "burgher" },
   ];
+  // BAL: per-building availability. A building is available iff it is a starter
+  // (startUnlocked) or its unlockedBy research node has been unlocked.
+  function bbBuildingAvailable(def) {
+    if (!def) return false;
+    if (def.startUnlocked) return true;
+    if (!def.unlockedBy) return true;   // ungated (defensive: no field ⇒ available)
+    return !!(typeof Research !== "undefined" && Research.has(state, def.unlockedBy));
+  }
+  function bbUnlockNodeName(def) {
+    const node = (def && def.unlockedBy && typeof Research !== "undefined" && Research.get)
+      ? Research.get(def.unlockedBy) : null;
+    return node ? node.name : (def && def.unlockedBy) || "";
+  }
   // Buildings whose worker/house tier matches (houses first, then producers).
   function bbTierBuildings(tier) {
     const all = Object.values(CONFIG.buildings);
@@ -3793,6 +3835,17 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const defs = bbTierBuildings(cat.tier);
     let html = `<div class="bb-fly-title">${cat.icon} ${esc(cat.label)}</div>`;
     for (const def of defs) {
+      // BAL: per-building lock — greyed + disabled with a research tooltip; the
+      // click handler ignores .disabled so it can't be selected/placed.
+      if (!bbBuildingAvailable(def)) {
+        const nodeName = bbUnlockNodeName(def);
+        const tip = esc("🔒 Research " + nodeName + " to unlock " + def.name);
+        html += `<button type="button" class="bb-btn disabled locked" data-typeid="${esc(def.id)}"
+          aria-disabled="true" title="${tip}">
+          <span class="bb-name">🔒 ${esc(def.name)}</span>
+          <span class="bb-cost">Research ${esc(nodeName)}</span></button>`;
+        continue;
+      }
       const tip = esc(def.name + " — " + bbTerrainReq(def) + " · " + bbCostStr(def.cost));
       const active = placing && placing.typeId === def.id;
       html += `<button type="button" class="bb-btn${active ? " active" : ""}" data-typeid="${esc(def.id)}" title="${tip}">
@@ -3853,7 +3906,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // Enter placement mode for `typeId`. Forces pan mode so the map stays draggable
   // and the road/town/erase tools don't interfere. Toggles off if re-selected.
   function startPlacing(typeId) {
-    if (!CONFIG.buildings[typeId]) return;
+    const bdef = CONFIG.buildings[typeId];
+    if (!bdef) return;
+    // BAL: never enter placement for a research-locked building (defensive — the
+    // menu already disables it).
+    if (!bbBuildingAvailable(bdef)) {
+      buildBarHintEl.className = "bad";
+      buildBarHintEl.textContent = "🔒 Research " + bbUnlockNodeName(bdef) + " to unlock " + bdef.name + ".";
+      return;
+    }
     if (placing && placing.typeId === typeId) { cancelPlacing(); return; }
     setMode("pan");
     placing = { typeId };

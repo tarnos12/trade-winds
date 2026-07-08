@@ -88,6 +88,17 @@ ok("expected extractor ids present", ["lumberjack", "farm", "miner", "quarry", "
 ok("expected processor ids present", ["sawmill", "mill", "bakery", "brewery", "smelter", "weaver"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
 ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "house"));
 
+// ---- BAL: per-building research unlock ----
+const STARTERS = ["hut", "lumberjack", "farm", "sawmill"];
+ok("the four starters are startUnlocked (and carry no unlockedBy)",
+  STARTERS.every(id => CONFIG.buildings[id].startUnlocked === true && !CONFIG.buildings[id].unlockedBy));
+const researchIds = new Set((CONFIG.research || []).map(n => n.id));
+ok("every non-starter building has an unlockedBy that exists in CONFIG.research",
+  Object.values(CONFIG.buildings).every(b =>
+    STARTERS.includes(b.id)
+      ? true
+      : (typeof b.unlockedBy === "string" && researchIds.has(b.unlockedBy) && !b.startUnlocked)));
+
 // ============================================================================
 // 3) Footprint + adjacency + castle helpers.
 // ============================================================================
@@ -233,12 +244,13 @@ ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.
   const noGold = Buildings.canPlaceBuilding(st, "lumberjack", 6, 0);
   ok("empty treasury → not ok + 'gold'", noGold.ok === false && /gold/i.test(noGold.reason));
 
-  // With a full treasury but a city missing a required RESOURCE (sawmill needs
-  // stone) → rejected on the resource, not the gold.
+  // With a full treasury but a city missing a required RESOURCE (mill needs
+  // stone) → rejected on the resource, not the gold. (BAL: sawmill is now
+  // wood-only, so probe with a processor that still needs stone.)
   const st2 = makeState();
-  const noStone = makeTown({ stock: { wood: 100 } }); // sawmill needs stone
+  const noStone = makeTown({ stock: { wood: 100 } }); // mill needs stone
   st2.towns.push(noStone);
-  const short = Buildings.canPlaceBuilding(st2, "sawmill", 5, -1);
+  const short = Buildings.canPlaceBuilding(st2, "mill", 5, -1);
   ok("city missing resource → not ok + 'stone'", short.ok === false && /stone/i.test(short.reason));
 }
 
@@ -318,9 +330,10 @@ ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.
   st.towns.push(town);
   const t0 = st.treasury, g0 = town.gold, wood0 = town.stock.wood, stone0 = town.stock.stone;
 
-  // sawmill costs { wood, stone, gold } — a good split-charge probe.
-  const def = CONFIG.buildings.sawmill;
-  Buildings.chargeBuilding(st, town, "sawmill");
+  // mill costs { wood, stone, gold } — a good split-charge probe (BAL: sawmill is
+  // now wood-only as a starter, so use a building that still spends stone).
+  const def = CONFIG.buildings.mill;
+  Buildings.chargeBuilding(st, town, "mill");
   ok("chargeBuilding deducts gold from treasury", st.treasury === t0 - (def.cost.gold || 0));
   ok("chargeBuilding leaves town.gold (trade budget) untouched", town.gold === g0);
   ok("chargeBuilding deducts wood from city stock", town.stock.wood === wood0 - (def.cost.wood || 0));
