@@ -633,40 +633,43 @@ Object.assign(CONFIG, {
     // Eaten in this fixed priority (best value first) so the tick is deterministic.
     foodOrder: ["bread", "fish", "grain"],
     foodValue: { bread: 2, fish: 1, grain: 1 },
-    // Per-resident consumption per tick, by tier (GDD §4.2 needs table).
+    // Per-resident consumption per tick, by tier (GDD §4.2 needs table):
+    //   peasants → food; workers → food + beer; burghers → food + beer + clothes.
     perCapita: {
       peasants: { food: 0.10 },
       workers:  { food: 0.10, beer: 0.05 },
       burghers: { food: 0.10, beer: 0.05, clothes: 0.03 },
     },
-    // Max total population by town-center level (GDD §4.1).
-    capByLevel: { 1: 15, 2: 30, 3: 55, 4: 90 },
-    growthThreshold: 0.9999, // satisfaction at/above this => grow toward cap
-    declineThreshold: 0.5,   // sustained satisfaction below this => decline
-    declineAfterTicks: 3,    // consecutive low-satisfaction ticks before decline
-    growthRate: 0.03,        // fraction of free house capacity added per tick
-    declineRate: 0.05,       // fraction of population lost per decline tick
+    growthThreshold: 0.9999, // per-tier need satisfaction at/above this => grow toward housing
+    declineThreshold: 0.5,   // sustained per-tier satisfaction below this => decline
+    declineAfterTicks: 3,    // consecutive low-satisfaction ticks before a tier declines
+    growthRate: 0.03,        // fraction of free housing capacity a tier gains per tick
+    declineRate: 0.05,       // fraction of a tier's population lost per decline tick
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
   },
 });
 
-// One deterministic good-satisfaction pass (beer/clothes): records demand, eats
-// from stock, returns satisfaction in 0..1. Hoisted, used by Sim.tick below.
-function simConsume(stock, gid, req, addDemand) {
-  if (req <= 0) return 1;
-  addDemand(gid, req);
-  const have = stock[gid] || 0;
-  const consume = Math.min(have, req);
-  stock[gid] = have - consume;
-  return consume / req;
-}
+// singular workerTier/houseTier -> plural pop bucket key (mirrors BUILDINGS_TIER_KEY).
+const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
 
 // Advance the whole economy by one tick. Mutates every town in State.towns:
-// production → consumption → happiness → population → demand/prices → clamp.
+//   worker assignment → production → consumption → happiness → population → prices.
+//
+// Sim OWNS worker assignment: buildings are placed with `workers:0` and this
+// function derives each producer's effective `workers` every tick by distributing
+// each tier's live population (peasants→extractors, workers→processors, …) across
+// the buildings that accept it, capped by each building's `workerSlots`. Population
+// itself is generated FROM HOUSING: each tier grows toward
+//   capacity(peasant) = CONFIG.town.baseWorkers.peasants + housing.peasants
+//   capacity(worker)  = housing.workers ; capacity(burgher) = housing.burghers
+// (housing from Buildings.housingCapacity) when that tier's needs are met, and
+// shrinks when they are not — so workers/burghers only appear once the matching
+// cottages/manors exist AND food (+beer/+clothes) is satisfied.
 Sim.tick = function (State) {
   if (!State || !State.towns) return State;
   const N = CONFIG.needs;
+  const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
   const clamp0 = (x) => (x > 0 ? x : 0);
 
   for (const town of State.towns) {
@@ -675,6 +678,7 @@ Sim.tick = function (State) {
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0 };
     const stock = town.stock;
     const pop = town.pop;
+    const buildings = Array.isArray(town.buildings) ? town.buildings : [];
     const demand = {};                 // rebuilt every tick (drives Sim.priceFor)
     const addDemand = (g, amt) => { if (amt > 0) demand[g] = (demand[g] || 0) + amt; };
 
@@ -682,16 +686,34 @@ Sim.tick = function (State) {
     const h = (typeof town.happiness === "number") ? town.happiness : 100;
     const hf = N.effMin + (Math.min(100, Math.max(0, h)) / 100) * (N.effMax - N.effMin);
 
+    // --- 0. Worker assignment (derived every tick) ---------------------
+    // Greedy, deterministic fill in building array order: each producer draws
+    // from its tier's remaining labour pool, up to workerSlots. Houses (and any
+    // building without a workerTier) get 0. Sim WRITES b.workers here.
+    const pool = {
+      peasant: pop.peasants || 0,
+      worker:  pop.workers  || 0,
+      burgher: pop.burghers || 0,
+    };
+    for (const b of buildings) {
+      const type = CONFIG.buildings[b.typeId];
+      if (!type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
+        b.workers = 0; continue;
+      }
+      const tier = type.workerTier;
+      const avail = pool[tier] || 0;
+      const take = Math.min(type.workerSlots, avail);
+      b.workers = take > 0 ? take : 0;
+      pool[tier] = avail - b.workers;
+    }
+
     // --- 1. Production -------------------------------------------------
-    // Each staffed building outputs ratePerWorker × effectiveWorkers × happiness,
-    // consuming its per-worker inputs; throughput is throttled by missing inputs
-    // and the available labour pool (workerSlots is the per-building cap).
-    let labor = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
-    const buildings = town.buildings || [];
+    // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
+    // consuming its inputs (processors); throughput is throttled by missing inputs.
     for (const b of buildings) {
       const type = CONFIG.buildings[b.typeId];
       if (!type || !type.output) continue;
-      const w = Math.min(b.workers || 0, type.workerSlots || 0, labor);
+      const w = b.workers || 0;
       if (w <= 0) continue;
       // Inputs cap effective workers; record full desired input as demand.
       let effW = w;
@@ -704,17 +726,19 @@ Sim.tick = function (State) {
         }
       }
       if (effW <= 0) continue;          // inputs missing → building idles this tick
-      labor -= w;
       if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
       stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf;
     }
 
     // --- 2. Consumption + per-need satisfaction ------------------------
+    // foodSat is the shared category need; beerSat/clothesSat are computed even
+    // when the consuming tier is empty (req<=0 → 1 if any is in stock, else 0) so
+    // an empty tier can still test whether its need-good is AVAILABLE before growing.
     const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
-    const sats = [];
+
+    let foodSat = 1;
     if (totalPop > 0) {
-      // FOOD (every tier) — category need; best-value food eaten first.
       const foodReq = N.perCapita.peasants.food * totalPop; // same food rate all tiers
       let remaining = foodReq;
       for (const gid of N.foodOrder) {
@@ -727,36 +751,55 @@ Sim.tick = function (State) {
         stock[gid] = have - consume;
         remaining -= consume * val;
       }
-      sats.push(foodReq > 0 ? (foodReq - clamp0(remaining)) / foodReq : 1);
+      foodSat = foodReq > 0 ? (foodReq - clamp0(remaining)) / foodReq : 1;
+    }
 
-      // BEER (workers + burghers), CLOTHES (burghers) — GDD §4.2.
-      const beerPop = (pop.workers || 0) + (pop.burghers || 0);
-      if (beerPop > 0) sats.push(simConsume(stock, "beer", N.perCapita.workers.beer * beerPop, addDemand));
-      if ((pop.burghers || 0) > 0) sats.push(simConsume(stock, "clothes", N.perCapita.burghers.clothes * pop.burghers, addDemand));
+    const beerPop = (pop.workers || 0) + (pop.burghers || 0);
+    const beerSat = needSat(stock, "beer", N.perCapita.workers.beer * beerPop, addDemand);
+    const clothesSat = needSat(stock, "clothes", N.perCapita.burghers.clothes * (pop.burghers || 0), addDemand);
+
+    // --- 3. Happiness (0..100) = average of ACTIVE need satisfactions ---
+    const sats = [];
+    if (totalPop > 0) {
+      sats.push(foodSat);
+      if (beerPop > 0) sats.push(beerSat);
+      if ((pop.burghers || 0) > 0) sats.push(clothesSat);
     }
     const avgSat = sats.length ? sats.reduce((a, b) => a + b, 0) / sats.length : 1;
-
-    // --- 3. Happiness (0..100) = average need satisfaction (GDD §4.3) --
     town.happiness = totalPop > 0 ? avgSat * 100 : (town.happiness == null ? 100 : town.happiness);
 
-    // --- 4. Population: sustained starvation shrinks, plenty grows ------
-    const cap = N.capByLevel[town.level] || N.capByLevel[1];
-    if (totalPop > 0) {
-      if (avgSat >= N.growthThreshold) {
-        town._lowSatTicks = 0;
-        const headroom = cap - totalPop;
-        if (headroom > 0) pop.peasants = (pop.peasants || 0) + N.growthRate * headroom;
-      } else if (avgSat < N.declineThreshold) {
-        town._lowSatTicks = (town._lowSatTicks || 0) + 1;
-        if (town._lowSatTicks >= N.declineAfterTicks) {
-          const keep = 1 - N.declineRate;   // residents "move away" across all tiers
-          pop.peasants = clamp0((pop.peasants || 0) * keep);
-          pop.workers = clamp0((pop.workers || 0) * keep);
-          pop.burghers = clamp0((pop.burghers || 0) * keep);
-        }
+    // --- 4. Population from housing: grow when a tier's needs are met, ---
+    //         shrink (after a sustained low streak) when they are not.
+    const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
+      ? Buildings.housingCapacity(town)
+      : { peasants: 0, workers: 0, burghers: 0 };
+    const capacity = {
+      peasants: (base.peasants || 0) + (housing.peasants || 0),
+      workers:  (housing.workers  || 0),
+      burghers: (housing.burghers || 0),
+    };
+    // Each tier is satisfied only if ALL its needs are (food; +beer; +beer+clothes).
+    const tierSat = {
+      peasants: foodSat,
+      workers:  Math.min(foodSat, beerSat),
+      burghers: Math.min(foodSat, beerSat, clothesSat),
+    };
+    if (!town._lowSat) town._lowSat = { peasants: 0, workers: 0, burghers: 0 };
+    for (const tier in capacity) {
+      const cap = capacity[tier];
+      const sat = tierSat[tier];
+      let n = pop[tier] || 0;
+      if (sat >= N.growthThreshold) {
+        town._lowSat[tier] = 0;
+        const headroom = cap - n;
+        if (headroom > 0) n += N.growthRate * headroom;   // grow toward housing capacity
+      } else if (sat < N.declineThreshold) {
+        town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;
+        if (town._lowSat[tier] >= N.declineAfterTicks) n *= (1 - N.declineRate); // "move away"
       } else {
-        town._lowSatTicks = 0;             // in the comfortable band: reset the streak
+        town._lowSat[tier] = 0;            // comfortable band: reset the streak
       }
+      pop[tier] = Math.min(clamp0(n), cap); // clamp 0 <= pop <= capacity
     }
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
@@ -769,6 +812,20 @@ Sim.tick = function (State) {
   }
   return State;
 };
+
+// One deterministic secondary-need pass (beer / clothes). When the consuming tier
+// is present (req>0) it records demand, eats from stock, and returns the satisfied
+// ratio in 0..1. When the tier is empty (req<=0) it consumes nothing and reports
+// pure AVAILABILITY (1 if any is in stock, else 0) so a zero-population tier can
+// still gate its growth on whether the need-good exists. Hoisted; used by Sim.tick.
+function needSat(stock, gid, req, addDemand) {
+  if (req <= 0) return (stock[gid] || 0) > 0 ? 1 : 0;
+  addDemand(gid, req);
+  const have = stock[gid] || 0;
+  const consume = Math.min(have, req);
+  stock[gid] = have - consume;
+  return consume / req;
+}
 // === SIM-CORE END ===
 
 // === BUILDINGS-CORE START ===  (TI-A / slot #2 — placement rules + housing)
