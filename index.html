@@ -131,25 +131,40 @@
   .trend.down { color: #e0503c; }
   .trend.flat { color: var(--paper); opacity: 0.5; }
   .tp-empty { opacity: 0.6; font-style: italic; padding: 6px 0; }
-  /* build menu (TI-C) */
-  .tp-build { display: flex; justify-content: space-between; align-items: center; gap: 8px;
-    padding: 5px 7px; margin: 3px 0; border: 1px solid var(--panel-edge); border-radius: 6px;
-    background: #1c160f; cursor: pointer; }
-  .tp-build:hover { background: #2a2015; border-color: var(--accent); }
-  .tp-build.active { background: var(--accent); color: #201607; border-color: var(--accent); }
-  .tp-build.disabled { opacity: 0.4; cursor: not-allowed; }
-  .tp-build.disabled:hover { background: #1c160f; border-color: var(--panel-edge); }
-  .tp-build .bn { font-weight: bold; }
-  .tp-build .bm { font-size: 10.5px; opacity: 0.8; text-align: right; white-space: nowrap; }
-  .tp-build.active .bm { opacity: 0.9; }
-  .tp-place { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-    padding: 6px 8px; margin: 4px 0 8px; border-radius: 6px;
-    background: rgba(111,191,115,0.12); border: 1px solid #4f9d5a; font-size: 12px; }
-  .tp-place #tpPlaceHint { flex: 1 0 100%; font-size: 11px; opacity: 0.85; }
-  .tp-place #tpPlaceHint.ok { color: #6fbf73; }
-  .tp-place #tpPlaceHint.bad { color: #e0503c; }
-  .tp-cancel { padding: 2px 8px; font-size: 11px; }
+  /* PV2-B: the build action moved to #buildBar; the Buildings tab is read-only. */
+  .tp-hint2 { font-size: 11.5px; opacity: 0.7; font-style: italic; margin: 2px 0 8px; line-height: 1.45; }
   /* === TOWN-UI CSS END === */
+
+  /* === BUILD-BAR CSS START === (PV2-B) persistent bottom-center build bar.
+     Floats above the corner widgets (#hint bottom-left, #hud bottom-right) so it
+     never overlaps them; content scrolls horizontally if it overflows. */
+  #buildBar {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    max-width: calc(100vw - 24px); z-index: 15;
+    display: flex; flex-direction: column; gap: 5px;
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 7px 9px; box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+  }
+  #buildBarGroups { display: flex; gap: 9px; align-items: stretch; overflow-x: auto; padding-bottom: 2px; }
+  .bb-group { display: flex; flex-direction: column; gap: 3px; padding-right: 9px; border-right: 1px solid var(--panel-edge); }
+  .bb-group:last-child { border-right: none; padding-right: 0; }
+  .bb-glabel { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); opacity: 0.85; font-weight: bold; }
+  .bb-row { display: flex; gap: 3px; }
+  .bb-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: 3px 6px; min-width: 62px; border: 1px solid var(--panel-edge);
+    border-radius: 6px; background: #1c160f; cursor: pointer; white-space: nowrap; }
+  .bb-btn:hover { background: #2a2015; border-color: var(--accent); }
+  .bb-btn.active { background: var(--accent); color: #201607; border-color: #e0a860; }
+  .bb-btn .bb-name { font-weight: bold; font-size: 11.5px; }
+  .bb-btn .bb-cost { font-size: 9.5px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+  .bb-btn.active .bb-cost { opacity: 0.95; }
+  #buildBarFoot { display: flex; align-items: center; gap: 8px; min-height: 16px; }
+  #buildBarHint { flex: 1; font-size: 11.5px; opacity: 0.85; }
+  #buildBarHint.ok { color: #6fbf73; opacity: 1; }
+  #buildBarHint.bad { color: #e0503c; opacity: 1; }
+  #buildBarCancel { padding: 2px 10px; font-size: 11px; }
+  #buildBarCancel.hidden { display: none; }
+  /* === BUILD-BAR CSS END === */
 
   /* === CASTLE-UI CSS START === (T9 / slot #4 — treasury HUD + castle warehouse) */
   /* Treasury line in the shared HUD (keeps existing fps/stat intact). */
@@ -473,6 +488,18 @@
   <div><span class="fps" id="fps">—</span> fps</div>
   <div id="stat">—</div>
 </div>
+
+<!-- === BUILD-BAR HTML START === (PV2-B / slot #4 — persistent bottom build bar) -->
+<!-- Not tied to a selected town: clicking a type enters placement mode and the
+     owning city is resolved on click by footprint adjacency (canPlaceBuilding). -->
+<div id="buildBar" aria-label="Build menu">
+  <div id="buildBarGroups"></div>
+  <div id="buildBarFoot">
+    <span id="buildBarHint">Pick a building, then click a hex bordering a city.</span>
+    <button id="buildBarCancel" class="hidden" title="Stop placing (Esc)">Cancel</button>
+  </div>
+</div>
+<!-- === BUILD-BAR HTML END === -->
 
 <!-- === TUTORIAL HTML START === (P5D-C / slot #4 — onboarding coach) -->
 <div id="tutorial" class="hidden" aria-live="polite" aria-hidden="true">
@@ -2431,8 +2458,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   // Main render
   // ---------------------------------------------------------------
   let hoverHex = null;
-  // TI-C: active building-placement session — { town, typeId } or null. Shared by
-  // the render overlay (below) and the town-panel build menu (TOWN-UI section).
+  // PV2-B: active building-placement session — { typeId } or null (NO town: the
+  // owning city is resolved per-hex by Buildings.canPlaceBuilding on click).
+  // Shared by the render overlay (below) and the bottom build bar (BUILD-BAR).
   let placing = null;
 
   function drawRoads() {
@@ -2514,34 +2542,47 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
 
-  // TI-C: while placing, tint every hex in the town's build radius green (valid)
-  // or red (invalid) via the pure Buildings.canPlace, and outline the hover hex.
+  // === BUILD-BAR === (PV2-B) while placing a building type, tint every hex that
+  // BORDERS ANY city footprint (union over all towns) green (valid) / red
+  // (invalid) via the adjacency model Buildings.canPlaceBuilding, and outline the
+  // hover hex. The owning city is resolved per-hex by the model — no selected town.
   function drawPlacementOverlay() {
     if (!placing) return;
-    const town = placing.town;
-    if (!state.towns.includes(town)) { placing = null; return; }
-    const R = (CONFIG.town && CONFIG.town.radius) || 2;
-    for (const h of HexMath.range(town.q, town.r, R)) {
-      if (h.q === town.q && h.r === town.r) continue;
-      const k = HexMath.key(h.q, h.r);
-      if (!state.map.hexes.has(k) || !isVisible(k)) continue;
-      const res = Buildings.canPlace(state, town, placing.typeId, h.q, h.r);
-      const p = HexMath.hexToPixel(h.q, h.r, SIZE);
+    // Footprint key set (skip occupied hexes) + candidate ring = footprint neighbours.
+    const footSet = new Set();
+    for (const t of state.towns) for (const fk of Buildings.footprint(t)) footSet.add(fk);
+    const seen = new Set();
+    const candidates = [];
+    for (const t of state.towns) {
+      for (const fk of Buildings.footprint(t)) {
+        const [fq, fr] = fk.split(",").map(Number);
+        for (const n of HexMath.neighbors(fq, fr)) {
+          const nk = HexMath.key(n.q, n.r);
+          if (seen.has(nk) || footSet.has(nk)) continue;   // don't tint occupied footprint hexes
+          seen.add(nk);
+          candidates.push({ q: n.q, r: n.r, k: nk });
+        }
+      }
+    }
+    for (const c of candidates) {
+      if (!state.map.hexes.has(c.k) || !isVisible(c.k)) continue;
+      const res = Buildings.canPlaceBuilding(state, placing.typeId, c.q, c.r);
+      const p = HexMath.hexToPixel(c.q, c.r, SIZE);
       const pts = hexCorners(p.x, p.y);
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
-      ctx.fillStyle = res.ok ? "rgba(80,200,110,0.30)" : "rgba(224,80,60,0.16)";
+      ctx.fillStyle = res.ok ? "rgba(80,200,110,0.30)" : "rgba(224,80,60,0.14)";
       ctx.fill();
       ctx.lineWidth = res.ok ? 2 : 1;
-      ctx.strokeStyle = res.ok ? "#6fbf73" : "rgba(224,80,60,0.5)";
+      ctx.strokeStyle = res.ok ? "#6fbf73" : "rgba(224,80,60,0.45)";
       ctx.stroke();
     }
     if (hoverHex) {
       const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
       const pts = hexCorners(p.x, p.y);
-      const res = Buildings.canPlace(state, town, placing.typeId, hoverHex.q, hoverHex.r);
+      const res = Buildings.canPlaceBuilding(state, placing.typeId, hoverHex.q, hoverHex.r);
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -2609,11 +2650,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       return true;
     }
     if (state.mode === "town") {
-      if (!CONFIG.terrain[hex.terrain].buildable) return false;
-      if (q === 0 && r === 0) return false;                       // castle sits here
-      if (state.towns.some(t => t.q === q && t.r === r)) return false;
-      if (state.roads.has(k)) return false;
-      return true;
+      // PV2-B: gap-enforced town-center placement (not adjacent to any city
+      // footprint or the castle). Owned by the pure Buildings.canPlaceTown.
+      return Buildings.canPlaceTown(state, q, r).ok;
     }
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
@@ -3156,59 +3195,20 @@ var Events = (typeof Events !== "undefined" && Events) || {};
       <tr><th>Good</th><th>Stock</th><th>Price</th></tr>${rows}</table>`;
   }
 
-  // TI-C: describe a building type's terrain requirement in one short phrase.
-  function terrainReq(def) {
-    if (def.kind === "extractor" && def.adjacent) return "Borders " + def.adjacent;
-    if (def.kind === "extractor" && def.terrain) return GOOD_LABEL(def.terrain) + " hex";
-    return "Any land";
-  }
-  // TI-C: format a cost object as "40g · 10 wood" (gold first).
-  function costStr(cost) {
-    const parts = [];
-    if (cost && cost.gold) parts.push(cost.gold + "g");
-    for (const gid in (cost || {})) {
-      if (gid === "gold") continue;
-      parts.push(cost[gid] + " " + gid);
-    }
-    return parts.join(" · ") || "free";
-  }
-
-  // TI-C: Buildings tab = build menu (grouped) + placement banner + placed list.
+  // PV2-B: Buildings tab is now READ-ONLY — slots used/free + the placed list.
+  // The build ACTION moved to the persistent bottom build bar (BUILD-BAR); a
+  // building attaches to whichever city its hex borders, so it is no longer a
+  // per-town menu.
   function renderBuildings(t) {
     const used = Buildings.usedSlots(t);
     const cap = Buildings.slotCap(t.level, state);   // P5-A: reflect slotBonus research
-    const full = used >= cap;
     let html = `<div class="tp-row"><span class="k">Building slots</span><span class="v">${used} / ${cap}</span></div>`;
-
-    // Active placement banner (only for this town).
-    if (placing && placing.town === t) {
-      const def = CONFIG.buildings[placing.typeId] || {};
-      html += `<div class="tp-place">Placing <b>${esc(def.name || placing.typeId)}</b> — click a green hex.
-        <button class="tp-cancel" data-cancel>Cancel</button>
-        <span id="tpPlaceHint"></span></div>`;
-    }
-
-    // Grouped build menu.
-    const groups = [["extractor", "Extractors"], ["processor", "Processors"], ["house", "Houses"]];
-    for (const [kind, label] of groups) {
-      const defs = Object.values(CONFIG.buildings).filter(d => d.kind === kind);
-      if (!defs.length) continue;
-      html += `<div class="tp-sec">${label}</div>`;
-      for (const def of defs) {
-        const active = placing && placing.town === t && placing.typeId === def.id;
-        const cls = "tp-build" + (active ? " active" : "") + (full && !active ? " disabled" : "");
-        const attr = full && !active ? "" : ` data-build="${def.id}"`;
-        html += `<div class="${cls}"${attr}>
-          <span class="bn">${esc(def.name)}</span>
-          <span class="bm">${esc(terrainReq(def))}<br>${esc(costStr(def.cost))}</span></div>`;
-      }
-    }
-    if (full) html += `<div class="tp-empty">All building slots are full.</div>`;
+    html += `<div class="tp-hint2">Build from the bar at the bottom of the screen — a building attaches to the city whose edge it borders.</div>`;
 
     // Placed buildings.
     html += `<div class="tp-sec">Placed — ${t.buildings.length}</div>`;
     if (!t.buildings.length) {
-      html += `<div class="tp-empty">No buildings placed yet. Pick one above to build.</div>`;
+      html += `<div class="tp-empty">No buildings placed yet. Use the build bar to add one bordering this city.</div>`;
     } else {
       let rows = "";
       for (const b of t.buildings) {
@@ -3266,69 +3266,136 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     renderTownPanel();
   }
   function closeTownPanel() {
-    cancelPlacing();
+    // PV2-B: closing the town panel no longer cancels placement — the build bar
+    // owns the placement session independently of any open panel.
     activeTown = null;
     panelEl.classList.add("hidden");
     panelEl.setAttribute("aria-hidden", "true");
   }
 
-  // ---- TI-C: building placement ----
-  // Enter placement mode for `town`/`typeId`. Forces pan mode so the map stays
-  // draggable (look around while placing) and no other build tool interferes.
-  function startPlacing(town, typeId) {
-    if (!town || !CONFIG.buildings[typeId]) return;
-    // toggle off if re-selecting the same building
-    if (placing && placing.town === town && placing.typeId === typeId) { cancelPlacing(); return; }
+  // ---- PV2-B: building placement (driven by the bottom build bar) ----
+  // === BUILD-BAR === bottom build bar DOM + wiring. Placement is NOT tied to a
+  // selected town: startPlacing takes only a typeId; the owning city is resolved
+  // per-hex on click by Buildings.canPlaceBuilding (res.town), and cost is charged
+  // to THAT city.
+  const buildBarEl = document.getElementById("buildBar");
+  const buildBarGroupsEl = document.getElementById("buildBarGroups");
+  const buildBarHintEl = document.getElementById("buildBarHint");
+  const buildBarCancelEl = document.getElementById("buildBarCancel");
+  const BB_DEFAULT_HINT = "Pick a building, then click a hex bordering a city.";
+
+  function bbCostStr(cost) {
+    const parts = [];
+    if (cost && cost.gold) parts.push(cost.gold + "g");
+    for (const gid in (cost || {})) { if (gid === "gold") continue; parts.push(cost[gid] + " " + gid); }
+    return parts.join(" · ") || "free";
+  }
+  function bbTerrainReq(def) {
+    if (def.kind === "extractor" && def.adjacent) return "borders " + def.adjacent;
+    if (def.kind === "extractor" && def.terrain) return def.terrain + " hex";
+    return "any land";
+  }
+  // Build the grouped buttons once (CONFIG.buildings is static).
+  function buildBuildBar() {
+    const groups = [["extractor", "Extractors"], ["processor", "Processors"], ["house", "Houses"]];
+    let html = "";
+    for (const [kind, label] of groups) {
+      const defs = Object.values(CONFIG.buildings).filter(d => d.kind === kind);
+      if (!defs.length) continue;
+      html += `<div class="bb-group"><div class="bb-glabel">${esc(label)}</div><div class="bb-row">`;
+      for (const def of defs) {
+        const tip = esc(def.name + " — " + bbTerrainReq(def) + " · " + bbCostStr(def.cost));
+        html += `<button type="button" class="bb-btn" data-typeid="${esc(def.id)}" title="${tip}">
+          <span class="bb-name">${esc(def.name)}</span>
+          <span class="bb-cost">${esc(bbCostStr(def.cost))}</span></button>`;
+      }
+      html += `</div></div>`;
+    }
+    buildBarGroupsEl.innerHTML = html;
+  }
+  // Reflect the active type + cancel button; reset the hint when idle.
+  function updateBuildBar() {
+    const active = placing ? placing.typeId : null;
+    buildBarGroupsEl.querySelectorAll(".bb-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.typeid === active));
+    if (placing) {
+      buildBarCancelEl.classList.remove("hidden");
+    } else {
+      buildBarCancelEl.classList.add("hidden");
+      buildBarHintEl.className = "";
+      buildBarHintEl.textContent = BB_DEFAULT_HINT;
+    }
+  }
+
+  // Enter placement mode for `typeId`. Forces pan mode so the map stays draggable
+  // and the road/town/erase tools don't interfere. Toggles off if re-selected.
+  function startPlacing(typeId) {
+    if (!CONFIG.buildings[typeId]) return;
+    if (placing && placing.typeId === typeId) { cancelPlacing(); return; }
     setMode("pan");
-    placing = { town, typeId };
-    renderTownPanel();
+    placing = { typeId };
+    buildBarHintEl.className = "";
+    buildBarHintEl.textContent = "Placing " + (CONFIG.buildings[typeId].name || typeId) +
+      " — click a hex bordering a city.";
+    updateBuildBar();
+    if (activeTown) renderTownPanel();
   }
   function cancelPlacing() {
     if (!placing) return;
     placing = null;
+    updateBuildBar();
     if (activeTown) renderTownPanel();
   }
-  // Attempt to place the active building at the screen point; deduct cost, push
-  // { typeId, q, r, workers:0 } (Sim.tick assigns real workers). Stays in
-  // placement mode so several can be placed; exits when slots fill.
+  // Place the active building at the screen point. Resolves the OWNING city via
+  // Buildings.canPlaceBuilding(res.town), charges def.cost to THAT city, pushes
+  // { typeId, q, r, workers:0 } (Sim.tick assigns real workers), and stays in
+  // placement mode so several can be placed. Exits only when no city has a free slot.
   function tryPlaceBuilding(sx, sy) {
     if (!placing) return;
-    const town = placing.town;
-    if (!state.towns.includes(town)) { cancelPlacing(); return; }
     const h = hexAtScreen(sx, sy);
-    const res = Buildings.canPlace(state, town, placing.typeId, h.q, h.r);
-    const hintEl = document.getElementById("tpPlaceHint");
+    const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
     if (!res.ok) {
-      if (hintEl) { hintEl.textContent = "✗ " + res.reason; hintEl.className = "bad"; }
+      buildBarHintEl.textContent = "✗ " + res.reason;
+      buildBarHintEl.className = "bad";
       return;
     }
+    const owner = res.town;
     const def = CONFIG.buildings[placing.typeId];
     const cost = def.cost || {};
-    town.gold = (town.gold || 0) - (cost.gold || 0);
-    if (!town.stock) town.stock = {};
+    owner.gold = (owner.gold || 0) - (cost.gold || 0);
+    if (!owner.stock) owner.stock = {};
     for (const gid in cost) {
       if (gid === "gold") continue;
-      town.stock[gid] = (town.stock[gid] || 0) - cost[gid];
+      owner.stock[gid] = (owner.stock[gid] || 0) - cost[gid];
     }
-    town.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
+    if (!Array.isArray(owner.buildings)) owner.buildings = [];
+    owner.buildings.push({ typeId: placing.typeId, q: h.q, r: h.r, workers: 0 });
     scheduleSave();
     SFX.play("place");
-    if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level, state)) cancelPlacing();
-    renderTownPanel();
+    buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;
+    buildBarHintEl.className = "ok";
+    // Exit only if NO city can accept another building (all slot caps reached).
+    const anyRoom = state.towns.some(t => Buildings.usedSlots(t) < Buildings.slotCap(t.level, state));
+    if (!anyRoom) cancelPlacing();
+    if (activeTown) renderTownPanel();
   }
 
-  // Build-menu clicks (delegated — panel HTML is re-rendered each refresh).
+  // Bottom-bar wiring.
+  buildBuildBar();
+  updateBuildBar();
+  buildBarGroupsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".bb-btn");
+    if (btn) startPlacing(btn.dataset.typeid);
+  });
+  buildBarCancelEl.addEventListener("click", () => cancelPlacing());
+
+  // Town-panel clicks (delegated — the panel now only carries the upgrade action).
   tpBodyEl.addEventListener("click", (e) => {
-    const cancelBtn = e.target.closest("[data-cancel]");
-    if (cancelBtn) { cancelPlacing(); return; }
     const upBtn = e.target.closest("[data-town-upgrade]");
     if (upBtn && activeTown) {
       const res = Town.upgrade(activeTown);
       if (res.ok) { scheduleSave(); renderTownPanel(); SFX.play("levelup"); }
-      return;
     }
-    const buildRow = e.target.closest("[data-build]");
-    if (buildRow && activeTown) { startPlacing(activeTown, buildRow.dataset.build); }
   });
 
   tpTabEls.forEach(btn => btn.addEventListener("click", () => {
@@ -3338,15 +3405,25 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   }));
   document.getElementById("tpClose").addEventListener("click", closeTownPanel);
 
-  // Live placement hint: update the reason line as the cursor moves over hexes.
+  // === BUILD-BAR === live placement hint in the bottom bar. While placing a
+  // building, show the per-hex validity/reason from canPlaceBuilding; while the
+  // Town tool is active, show the town-center reason from canPlaceTown; else idle.
   canvas.addEventListener("mousemove", (e) => {
-    if (!placing) return;
-    const hintEl = document.getElementById("tpPlaceHint");
-    if (!hintEl) return;
     const h = hexAtScreen(e.clientX, e.clientY);
-    const res = Buildings.canPlace(state, placing.town, placing.typeId, h.q, h.r);
-    hintEl.textContent = res.ok ? "✓ valid — click to build" : "✗ " + res.reason;
-    hintEl.className = res.ok ? "ok" : "bad";
+    if (placing) {
+      const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
+      buildBarHintEl.textContent = res.ok
+        ? "✓ valid — click to build in Town #" + res.town.id
+        : "✗ " + res.reason;
+      buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (state.mode === "town") {
+      const res = Buildings.canPlaceTown(state, h.q, h.r);
+      buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city" : "✗ " + res.reason;
+      buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (buildBarHintEl.textContent !== BB_DEFAULT_HINT) {
+      buildBarHintEl.className = "";
+      buildBarHintEl.textContent = BB_DEFAULT_HINT;
+    }
   });
   // Esc cancels placement.
   window.addEventListener("keydown", (e) => { if (e.key === "Escape" && placing) cancelPlacing(); });
