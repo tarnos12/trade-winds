@@ -178,6 +178,36 @@ priority order, closed slots, delivery); CB-B visuals (build-state look,
 missing-resource + trader cargo icons + priority routing); CB-C per-building click
 panel (info + slot lock/unlock + priority star); CB-D city-panel worker roster.
 
+### Shared data contract (CB-A owns; CB-B/C/D consume — do not redefine)
+Each placed building object gains fields (defaults keep old saves working):
+- **`built`** (bool) — `false` at placement; flips `true` once all resource cost is
+  delivered. A building with **no resource cost** (gold-only starters) is `built:true`
+  immediately. Sim skips unbuilt buildings (0 workers, 0 production).
+- **`delivered`** (`{goodId:qty}`) — materials delivered so far toward construction.
+- **`need()`** — remaining construction materials = `cost(resources) − delivered`
+  (derived; not stored). Unbuilt buildings add their remaining `need` to **town demand**
+  (so the external trader buys those materials → "city demand derived from its buildings").
+- **`closedSlots`** (int, default 0) — player-locked slots; effective slots =
+  `workerSlots − closedSlots` (min 0). Sim staffs only effective slots.
+- **`priority`** (bool, default false) — ⭐; priority buildings are staffed **first**
+  (and CB-B routes internal traders to them first).
+
+**Placement charge change (CB-A):** placement deducts **GOLD → treasury only**;
+resource costs are **NOT** deducted upfront — they become the construction `need`,
+delivered from `town.stock` over time. `Buildings.canPlace` affordability checks
+**gold only** (a city may place a building it can't yet afford in resources; its
+traders buy them). Construction delivery is a pure step (`CONFIG.town.deliveryRate`
+units/tick from stock → `delivered`, priority buildings first).
+
+### Board
+| Task | Slot | Depends on | Status |
+|---|---|---|---|
+| CB-A — construction + delivery + worker-assignment logic (pure) | #2 | contract | 🔲 |
+| CB-B — visuals: build-state look + missing-resources on map + trader cargo icons + priority routing | #3 | CB-A fields | 🔲 |
+| CB-C — per-building click panel (info + slot lock/unlock + ⭐) | #4 | CB-A fields | 🔲 |
+| CB-D — city-panel worker roster (icons + hover available/assigned) | #2 | CB-A fields | 🔲 |
+**Merge order: CB-A → then CB-B ∥ CB-C ∥ CB-D.**
+
 ## Milestone: Balance + castle overhaul ✅ DONE (BAL/CP/CRE merged)
 - **BAL — balance + starting buildings:** rebalance costs/rates/prices/research; only
   **hut (house) / lumberjack (woodcutter) / farm / sawmill** available at start; every
