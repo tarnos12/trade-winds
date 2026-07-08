@@ -1001,6 +1001,12 @@ Object.assign(CONFIG, {
     declineRate: 0.05,       // fraction of a tier's population lost per decline tick
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
+    // EC-B — single-city happiness model (0..100, ~50 baseline). Happiness eases
+    // toward: happyBaseline + happyRange*needSatisfaction − penalties + tempMods.
+    happyBaseline: 50,       // happiness with zero needs met (empty / foodless city)
+    happyRange: 50,          // met needs raise happiness by up to this (⇒ ~100 all met)
+    happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
+    needPenalty: 30,         // happiness lost per fully-unmet SECONDARY need (beer/clothes)
   },
 });
 
@@ -1022,6 +1028,9 @@ const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burgher
 // cottages/manors exist AND food (+beer/+clothes) is satisfied.
 Sim.tick = function (State) {
   if (!State || !State.towns) return State;
+  // Global tick counter (drives happyMods expiry). One increment per economy
+  // step, shared by every town — EC-C pushes {delta, untilTick: State.tick+n}.
+  State.tick = ((typeof State.tick === "number" && isFinite(State.tick)) ? State.tick : 0) + 1;
   const N = CONFIG.needs;
   const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
   const clamp0 = (x) => (x > 0 ? x : 0);
@@ -1131,18 +1140,64 @@ Sim.tick = function (State) {
     const beerSat = needSat(stock, "beer", N.perCapita.workers.beer * beerPop, addDemand);
     const clothesSat = needSat(stock, "clothes", N.perCapita.burghers.clothes * (pop.burghers || 0), addDemand);
 
-    // --- 3. Happiness (0..100) = average of ACTIVE need satisfactions ---
-    const sats = [];
+    // --- 3. Happiness (single 0..100 city value, ~50 baseline) ---------
+    // Eases toward: happyBaseline + happyRange*needSatisfaction − penalties +
+    // tempMods, clamped 0..100. needSatisfaction is the average of the ACTIVE
+    // tiers' met-need fractions (food for peasants; +beer for workers;
+    // +beer+clothes for burghers) — 0 met ⇒ ~50, all met ⇒ ~100. An EMPTY
+    // city reads food AVAILABILITY instead, so a stocked pantry (⇒1) draws the
+    // first residents while an empty one (⇒0) idles at the 50 baseline. Food
+    // scarcity only FAILS TO RAISE happiness (holds ~50); unmet SECONDARY needs
+    // (beer/clothes) of tiers that already exist apply a penalty that pulls it
+    // below 50. town.happyMods = [{delta, untilTick}] is a temporary channel
+    // (EC-C give/take) summed here and pruned once entries expire.
+    const tierSat = {
+      peasants: foodSat,
+      workers:  Math.min(foodSat, beerSat),
+      burghers: Math.min(foodSat, beerSat, clothesSat),
+    };
+    let needSatisfaction;
     if (totalPop > 0) {
-      sats.push(foodSat);
-      if (beerPop > 0) sats.push(beerSat);
-      if ((pop.burghers || 0) > 0) sats.push(clothesSat);
+      const parts = [];
+      if ((pop.peasants || 0) > 0) parts.push(tierSat.peasants);
+      if ((pop.workers  || 0) > 0) parts.push(tierSat.workers);
+      if ((pop.burghers || 0) > 0) parts.push(tierSat.burghers);
+      needSatisfaction = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : foodSat;
+    } else {
+      // Empty city: is there food on the shelf to attract the first residents?
+      needSatisfaction = N.foodOrder.some((g) => (stock[g] || 0) > 0) ? 1 : 0;
     }
-    const avgSat = sats.length ? sats.reduce((a, b) => a + b, 0) / sats.length : 1;
-    town.happiness = totalPop > 0 ? avgSat * 100 : (town.happiness == null ? 100 : town.happiness);
+    // Penalty from unmet SECONDARY needs of tiers that already exist (food is
+    // never penalised — a foodless city stays at the ~50 baseline by design).
+    let penalty = 0;
+    if ((pop.workers  || 0) > 0) penalty += N.needPenalty * (1 - beerSat);
+    if ((pop.burghers || 0) > 0) penalty += N.needPenalty * (1 - clothesSat);
+    // Temporary modifier channel: sum un-expired deltas; prune the expired.
+    let tempMod = 0;
+    if (Array.isArray(town.happyMods)) {
+      const kept = [];
+      for (const mod of town.happyMods) {
+        if (!mod) continue;
+        if (mod.untilTick == null || mod.untilTick >= State.tick) {
+          tempMod += (mod.delta || 0);
+          kept.push(mod);
+        }
+      }
+      town.happyMods = kept;
+    }
+    const hTarget = Math.max(0, Math.min(100,
+      N.happyBaseline + N.happyRange * needSatisfaction - penalty + tempMod));
+    const hPrev = (typeof town.happiness === "number") ? town.happiness : hTarget;
+    town.happiness = hPrev + (hTarget - hPrev) * N.happyEase; // ease (snap on first read)
 
-    // --- 4. Population from housing: grow when a tier's needs are met, ---
-    //         shrink (after a sustained low streak) when they are not.
+    // --- 4. Population from housing scales with happiness --------------
+    // Effective target per tier = round(capacity × happiness/100): a cap-2
+    // house yields 1 resident at 50% happiness, 2 at 100%. A tier grows toward
+    // its target while its SECONDARY needs are AVAILABLE (beer for workers,
+    // beer+clothes for burghers) — food is NOT a growth gate (it drives
+    // happiness, which already scales the target), so peasants fill to half-cap
+    // even with no food. Over target, or with a secondary need missing, the
+    // tier declines after a sustained low streak (unchanged decline behavior).
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
       ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
       : { peasants: 0, workers: 0, burghers: 0 };
@@ -1151,28 +1206,32 @@ Sim.tick = function (State) {
       workers:  (housing.workers  || 0),
       burghers: (housing.burghers || 0),
     };
-    // Each tier is satisfied only if ALL its needs are (food; +beer; +beer+clothes).
-    const tierSat = {
-      peasants: foodSat,
-      workers:  Math.min(foodSat, beerSat),
-      burghers: Math.min(foodSat, beerSat, clothesSat),
+    // Secondary-need availability gate per tier (food excluded on purpose).
+    const growGate = {
+      peasants: 1,
+      workers:  beerSat,
+      burghers: Math.min(beerSat, clothesSat),
     };
+    const h01 = Math.max(0, Math.min(100, town.happiness)) / 100;
     if (!town._lowSat) town._lowSat = { peasants: 0, workers: 0, burghers: 0 };
     for (const tier in capacity) {
       const cap = capacity[tier];
-      const sat = tierSat[tier];
+      const target = Math.round(cap * h01);      // happiness-scaled target
       let n = pop[tier] || 0;
-      if (sat >= N.growthThreshold) {
+      const canGrow = growGate[tier] >= N.growthThreshold;
+      if (canGrow && n < target) {
         town._lowSat[tier] = 0;
-        const headroom = cap - n;
-        if (headroom > 0) n += N.growthRate * headroom;   // grow toward housing capacity
-      } else if (sat < N.declineThreshold) {
-        town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;
-        if (town._lowSat[tier] >= N.declineAfterTicks) n *= (1 - N.declineRate); // "move away"
+        n += N.growthRate * (target - n);        // grow toward the target
+      } else if (n > target) {
+        town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;   // over target (happiness fell)
+        if (town._lowSat[tier] >= N.declineAfterTicks) n = target + (n - target) * (1 - N.declineRate);
+      } else if (!canGrow && n > 0) {
+        town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;   // secondary need missing
+        if (town._lowSat[tier] >= N.declineAfterTicks) n *= (1 - N.declineRate);
       } else {
-        town._lowSat[tier] = 0;            // comfortable band: reset the streak
+        town._lowSat[tier] = 0;                  // at/below target and content
       }
-      pop[tier] = Math.min(clamp0(n), cap); // clamp 0 <= pop <= capacity
+      pop[tier] = Math.min(clamp0(n), cap);      // clamp 0 <= pop <= capacity
     }
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----

@@ -114,8 +114,10 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 }
 
 // ========================================================================
-// 4) A foodless town STARVES: happiness collapses, then population declines
-//    (only after a sustained low-satisfaction streak, not instantly).
+// 4) A foodless town holds the ~50 happiness BASELINE (EC-B: food scarcity no
+//    longer collapses happiness — it just fails to raise it), and population
+//    eases down to the happiness-scaled target (round(cap × 50%)) after a
+//    sustained low streak, not instantly. [was: happiness<50, pop→~0.]
 // ========================================================================
 {
   const t = town({ pop: { peasants: BASE_PEASANTS, workers: 0, burghers: 0 } }); // no food
@@ -123,11 +125,12 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("starting pop is within housing capacity (no instant clamp)", startPop === BASE_PEASANTS);
 
   Sim.tick({ towns: [t] });
-  ok("no food => happiness collapses after 1 tick", t.happiness < 50);
+  // EC-B: no food ⇒ needSatisfaction 0, no secondary tiers ⇒ no penalty ⇒ ~50 baseline.
+  ok("no food => happiness holds the ~50 baseline (not a collapse)", Math.abs(t.happiness - 50) < 1e-9);
   ok("population survives the first starving tick", totalPop(t) === startPop);
 
-  for (let i = 0; i < 8; i++) Sim.tick({ towns: [t] });
-  ok("sustained starvation shrinks population", totalPop(t) < startPop);
+  for (let i = 0; i < 12; i++) Sim.tick({ towns: [t] });
+  ok("sustained starvation shrinks population toward the 50% target", totalPop(t) < startPop);
   ok("population never goes negative", totalPop(t) >= 0);
   ok("food scarcity pushes grain price up toward ceiling", t.prices.grain > CONFIG.goods.grain.basePrice);
 }
@@ -143,8 +146,10 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("fed-from-stock town grows toward base cap", grownPop > 4 && t.pop.peasants <= BASE_PEASANTS + 1e-9);
 
   t.stock.grain = 0; // famine
-  for (let i = 0; i < 12; i++) Sim.tick({ towns: [t] });
-  ok("town starves once the pantry is empty", totalPop(t) < grownPop);
+  for (let i = 0; i < 80; i++) Sim.tick({ towns: [t] });
+  // EC-B: starvation eases pop DOWN to the ~50%-happiness floor (round(cap × 0.5)),
+  // it no longer collapses to ~0. So it shrinks below the fed peak but survives.
+  ok("town starves down to the ~50% floor once the pantry is empty", totalPop(t) < grownPop);
 }
 
 // ========================================================================
@@ -205,6 +210,89 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   // 2 labourers × rate 2 × happiness 1.2x = 4.8 grain max; unbounded would be 9.6.
   ok("labour pool caps production across buildings", (t.stock.grain || 0) <= 4.8 + 1e-9);
   ok("labour-capped town still produced something", (t.stock.grain || 0) > 0);
+}
+
+// ========================================================================
+// EC-B) Single-city happiness model — ~50 baseline, happiness-scaled housing,
+//       a temporary-modifier channel, and a below-50 pull from unmet needs.
+// ========================================================================
+
+// A basic PEASANT house with cap 2 and no housing-free base peasants, matching
+// the EC-A economy this model targets (EC-A owns the real start values; we tweak
+// CONFIG locally here so the "1 @ 50% / 2 @ 100%" arithmetic is exact, then restore).
+function withCap2House(run) {
+  const savedBase = CONFIG.town.baseWorkers;
+  const savedCap  = CONFIG.buildings.hut.houseCapacity;
+  CONFIG.town.baseWorkers = { peasants: 0 };
+  CONFIG.buildings.hut.houseCapacity = 2;
+  try { run(); } finally {
+    CONFIG.town.baseWorkers = savedBase;
+    CONFIG.buildings.hut.houseCapacity = savedCap;
+  }
+}
+
+// A1) House + NO food ⇒ happiness settles at the ~50 baseline and the house
+//     fills to half its cap (round(2 × 50%) = 1) — pop appears without food.
+withCap2House(() => {
+  const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
+                   stock: {}, buildings: [b("hut", 0, 1)] });
+  for (let i = 0; i < 400; i++) Sim.tick({ towns: [t] });
+  ok("EC-B: no food ⇒ happiness settles near ~50", t.happiness > 45 && t.happiness <= 50 + 1e-9);
+  ok("EC-B: no food ⇒ ~1 peasant from a cap-2 house (half at 50%)", Math.round(t.pop.peasants) === 1);
+  ok("EC-B: even with no food a house yields some pop", t.pop.peasants > 0.5);
+});
+
+// B) House + ABUNDANT food ⇒ happiness →~100 and the house fills to full cap (2).
+withCap2House(() => {
+  const t = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
+                   stock: { grain: 100000 }, buildings: [b("hut", 0, 1)] });
+  for (let i = 0; i < 400; i++) Sim.tick({ towns: [t] });
+  ok("EC-B: all needs met ⇒ happiness ~100", t.happiness > 95);
+  ok("EC-B: all needs met ⇒ house fills to full cap (2)", Math.round(t.pop.peasants) === 2);
+});
+
+// C) happyMods temporary channel: an active +10 raises happiness; an already-
+//    expired entry is ignored AND pruned. Baseline is the foodless ~50 city so
+//    the +10 is visible (not clamped away at 100).
+{
+  const s = { towns: [ town({ pop: { peasants: 2, workers: 0, burghers: 0 }, stock: {} }) ] };
+  for (let i = 0; i < 20; i++) Sim.tick(s);        // settle at ~50 (peasants, no food)
+  const t = s.towns[0];
+  const before = t.happiness;
+  t.happyMods = [ { delta: 10,  untilTick: s.tick + 5 },   // active for 5 more ticks
+                  { delta: -40, untilTick: s.tick - 1 } ]; // already expired → ignored+pruned
+  Sim.tick(s);
+  ok("EC-B: active +10 happyMod raises happiness above the ~50 baseline", t.happiness > before);
+  ok("EC-B: expired happyMod is ignored (no −40 applied)", t.happiness > before);
+  ok("EC-B: expired happyMod is pruned, active one kept", t.happyMods.length === 1 && t.happyMods[0].delta === 10);
+  // Let the +10 expire; happiness eases back down toward ~50.
+  for (let i = 0; i < 40; i++) Sim.tick(s);
+  ok("EC-B: happyMod decays — happiness returns toward ~50", t.happiness < before + 1 && t.happyMods.length === 0);
+}
+
+// D) Unmet SECONDARY needs pull happiness BELOW 50 (workers present, no beer),
+//    while the same town WITH beer sits at ~100.
+{
+  const noBeer   = town({ pop: { peasants: 0, workers: 5, burghers: 0 }, stock: { grain: 100000 } });
+  const withBeer = town({ pop: { peasants: 0, workers: 5, burghers: 0 }, stock: { grain: 100000, beer: 100000 } });
+  Sim.tick({ towns: [noBeer] });
+  Sim.tick({ towns: [withBeer] });
+  ok("EC-B: unmet secondary need (no beer for workers) pulls happiness below 50", noBeer.happiness < 50);
+  ok("EC-B: met needs keep happiness ~100", withBeer.happiness > 95);
+}
+
+// E) happyMods absent is treated as no modifier (no throw, no effect).
+{
+  const t = town({ pop: { peasants: 3, workers: 0, burghers: 0 }, stock: { grain: 100000 } });
+  delete t.happyMods;
+  ok("EC-B: absent happyMods is safe (no throw)", (() => { Sim.tick({ towns: [t] }); return typeof t.happiness === "number"; })());
+}
+
+// F) State.tick counter increments once per Sim.tick call.
+{
+  const s = { towns: [ town({ pop: { peasants: 1, workers: 0, burghers: 0 } }) ] };
+  Sim.tick(s); const t1 = s.tick; Sim.tick(s); const t2 = s.tick;
+  ok("EC-B: State.tick increments each tick", t1 === 1 && t2 === 2);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

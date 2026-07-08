@@ -163,9 +163,12 @@ ok("no carts are ever created without roads", isolated.carts.length === 0);
 ok("grain is bought FROM the farm (surplus → shortfall cities)", flows.has("grain<-1"));
 ok("ore is bought FROM the mine (surplus → shortfall city)", flows.has("ore<-2"));
 
-// Grain flow keeps the grain-less MINE alive; without roads it starves to nothing.
-ok("grain flow sustains the mine's population (starves when road-less)",
-  popTotal(connected.towns[1]) > 5 && popTotal(isolated.towns[1]) < 1);
+// Grain flow keeps the grain-less MINE better fed: the connected mine holds a
+// real population AND is happier than the road-less one. (EC-B: a starved city
+// no longer collapses to ~0 — it floors at its ~50%-happiness capacity — so the
+// "alive vs starved" contrast now reads on HAPPINESS, not pop→0.)
+ok("grain flow keeps the mine fed (happier + populated vs road-less)",
+  popTotal(connected.towns[1]) > 5 && connected.towns[1].happiness > isolated.towns[1].happiness);
 // Ore flow lets the MILL's smelter keep making tools; the road-less mill stalls.
 ok("ore flow lets the mill out-produce tools vs the road-less baseline",
   stockOf(connected, 3, "tools") > stockOf(isolated, 3, "tools"));
