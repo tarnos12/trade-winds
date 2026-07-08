@@ -27,6 +27,18 @@ buildings until researched (already true).
   🔲 queued
 - **Citizen display rename:** all player-facing "Burgher" → "Citizen". 🔲 with RT-B
 
+## Milestone: Kingdom resource overview (LTT-style sidebar) — QUEUED (after research tree)
+Author design (screenshot 2026-07-08, main game screen): a **top-left resource
+grid** — one chip per UNLOCKED resource (i.e. producible with currently-researched
+buildings), each showing the **total across all cities** + **average price**, with
+rise/fall trend arrows. **Click a resource** → left detail panel: storage vs
+capacity bars (per-tier/warehouse), **net production rate**, producer/consumer
+stats, and a **mean market price line chart** (~5 min rolling window; needs a
+small ring-buffer price history sampled per econ tick — keep it render-side/
+non-Sim or explicitly bounded). Slices when started: KR-A price/production
+history + aggregation (pure, tested) → KR-B sidebar UI + chart (canvas 2D DOM
+panel). Sequence AFTER RT-B so unlock-awareness reads the new research model.
+
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
 4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
 (luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
