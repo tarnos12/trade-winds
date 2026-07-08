@@ -5,17 +5,17 @@ Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
 non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
 integrates in the merge order below.
 
-## Milestone: Phase 5 content (design-free) — IN PROGRESS
+## Milestone: Phase 5 content (design-free) ✅ DONE
 
-Author steer: keep the title, ship sandbox v1, defer campaign scenarios + combat.
-Four independent slices; merge order P5D-D → P5D-A → P5D-B → P5D-C.
+Merged P5D-D → P5D-A → P5D-B → P5D-C. Speed/pause controls (⏸/1×/2×/4× + Space/
+1/2/4 hotkeys), start/title screen (New Game / Continue, boot gated), onboarding
+tutorial coach (state-detected, skippable, persisted), and a research-gated
+10–40% tariff slider. Merges reconciled (boot: reflect speed → show title →
+tutorial starts on New Game/Continue). Tests: `tariff` 11 (307 total). Full-stack
+headless smoke clean (all systems present, tutorial gates correctly).
 
-| Task | Slot | Scope | Owns (avoid collisions) |
-|---|---|---|---|
-| P5D-A — speed & pause controls | #2 | ⏸/1×/2×/4× top-bar buttons + space/1-4 hotkeys set `state.gameSpeed` (0/1/2/4), active-speed indicator | top bar |
-| P5D-B — start/title screen | #3 | fullscreen overlay on load: title + New Game (seed) + Continue (if save exists); gate boot behind it | a boot overlay + boot flow |
-| P5D-C — tutorial/onboarding | #4 | dismissible/skippable step coach detecting player actions (found town → farm → house → road → first trade) with tips | its own coach overlay |
-| P5D-D — tariff slider | #2b | wire `tariff_slider` research → a 10–40% slider adjusting the effective tariff (compose with research `tariffBonus`); gated on unlock | `state.tariffRate` + Trade tariff read + a control near treasury HUD |
+Author steer applied: kept the title, shipping sandbox v1. **Deferred (needs
+author design):** campaign scenarios, combat scope.
 
 ## Milestone: Phase 5 groundwork (design-free polish) ✅ DONE
 
