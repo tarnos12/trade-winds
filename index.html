@@ -3184,6 +3184,70 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     house:     { fill: "#9d6b4f", edge: "#5c3a26" },
   };
 
+  // === CB-B: shared cargo/needs chip helpers (canvas only) ===
+  // A small "colored dot + number" chip centred at (cx,cy), used for both
+  // under-construction resource needs and trader cargo. Draws a dark legibility
+  // pill behind the dot+number. opts: { alpha, muted } — muted greys the dot
+  // (keeping the good colour as a ring) to read as "requested, not yet held".
+  function cbChipRect(x, y, w, h, r) {
+    r = Math.min(r, h / 2, w / 2);
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawGoodChip(cx, cy, gid, num, opts) {
+    opts = opts || {};
+    const alpha = opts.alpha == null ? 1 : opts.alpha;
+    const muted = !!opts.muted;
+    const label = String(num);
+    const dotR = Math.max(2.5, SIZE * 0.085);
+    const fontPx = Math.max(9, Math.round(SIZE * 0.19));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width;
+    const padX = Math.max(2, SIZE * 0.05), gap = Math.max(2, SIZE * 0.05);
+    const totalW = padX * 2 + dotR * 2 + gap + tw;
+    const totalH = Math.max(dotR * 2 + 3, fontPx + 3);
+    const bx = cx - totalW / 2, by = cy - totalH / 2;
+    // legibility pill
+    ctx.fillStyle = "rgba(18,12,5,0.62)";
+    cbChipRect(bx, by, totalW, totalH, totalH * 0.5); ctx.fill();
+    // dot
+    const col = goodColor(gid);
+    ctx.lineWidth = 1;
+    if (muted) { ctx.fillStyle = "#8f8a80"; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, dotR * 0.4); }
+    else { ctx.fillStyle = col; ctx.strokeStyle = "rgba(0,0,0,0.5)"; }
+    ctx.beginPath(); ctx.arc(bx + padX + dotR, cy, dotR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // number
+    ctx.fillStyle = "#f4ecdd";
+    ctx.fillText(label, bx + padX + dotR * 2 + gap, cy + 0.5);
+    ctx.restore();
+  }
+  // Stack the top-3 owed goods for an under-construction building above its circle.
+  function drawConstructionNeed(b, p, rad) {
+    const need = (typeof Buildings !== "undefined" && Buildings.constructionNeed)
+      ? Buildings.constructionNeed(b) : null;
+    if (!need) return;
+    const entries = [];
+    for (const gid in need) { const q = Number(need[gid]); if (q > 0.05) entries.push([gid, q]); }
+    if (!entries.length) return;
+    entries.sort((a, c) => c[1] - a[1]);
+    const top = entries.slice(0, 3);
+    const step = Math.max(11, SIZE * 0.26);
+    const baseY = p.y - rad - step * 0.6;
+    for (let i = 0; i < top.length; i++) {
+      drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96 });
+    }
+  }
+  // === /CB-B ===
+
   // Draw every town's placed buildings as a small labelled token on its hex.
   function drawBuildings() {
     for (const t of state.towns) {
@@ -3194,6 +3258,43 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         const p = HexMath.hexToPixel(b.q, b.r, SIZE);
         const st = BUILDING_STYLE[def.kind] || BUILDING_STYLE.processor;
         const rad = SIZE * 0.3;
+        // === CB-B: under-construction look (unfinished until b.built !== false) ===
+        const underConstruction = b && b.built === false;
+        if (underConstruction) {
+          const priority = !!b.priority;
+          // muted, desaturated fill
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = st.fill;
+          ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+          // dashed scaffold outline (gold + brighter when prioritized)
+          ctx.save();
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = priority ? 2.5 : 2;
+          ctx.strokeStyle = priority ? "#ffce4d" : st.edge;
+          ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.stroke();
+          if (priority) {   // extra "next up" ring
+            ctx.setLineDash([2, 3]);
+            ctx.lineWidth = 1.4;
+            ctx.strokeStyle = "rgba(255,206,77,0.85)";
+            ctx.beginPath(); ctx.arc(p.x, p.y, rad + Math.max(2, SIZE * 0.09), 0, Math.PI * 2); ctx.stroke();
+          }
+          ctx.restore();
+          // scaffold / construction glyph + priority star badge
+          ctx.fillStyle = "#3a2c12";
+          ctx.font = Math.round(SIZE * 0.32) + "px system-ui, sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("🏗", p.x, p.y + 0.5);
+          if (priority) {
+            ctx.font = Math.round(SIZE * 0.24) + "px system-ui, sans-serif";
+            ctx.fillText("⭐", p.x + rad * 0.85, p.y - rad * 0.85);
+          }
+          // missing-resource chips (hide when far out, mirroring drawCarts' zoomedOut)
+          if (!(state.zoom < 0.6)) drawConstructionNeed(b, p, rad);
+          continue;
+        }
+        // === /CB-B ===
         ctx.fillStyle = st.fill;
         ctx.strokeStyle = st.edge;
         ctx.lineWidth = 2;
@@ -4526,6 +4627,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         ctx.beginPath(); ctx.arc(rp.x, rp.y, SIZE * 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else {
         drawCartToken(rp.x, rp.y, gc);
+        // === CB-B: cargo chip above the wagon. outbound = requested (greyed/
+        // translucent); return = carried (solid). Castle carts share the look. ===
+        const cargoNum = Math.round(Number(cart.qty) || 0);
+        if (cargoNum > 0) {
+          const outbound = cart.phase === "outbound";
+          drawGoodChip(rp.x, rp.y - SIZE * 0.5, cart.goodId, cargoNum,
+            { alpha: outbound ? 0.5 : 1, muted: outbound });
+        }
+        // === /CB-B ===
       }
     }
     // prune render cache for carts that vanished/finished
