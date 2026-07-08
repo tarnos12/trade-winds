@@ -59,10 +59,15 @@ function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
   buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
   stock: { grain: 80, beer: 20 } }); }
+// The mine only staffs MINERS (peasant tier) — it has no worker-tier building and
+// no beer source, so give it peasant-only housing (huts) and no workers. That keeps
+// its happiness driven by FOOD (grain), so grain flow vs a road-less famine reads
+// on happiness instead of being masked by an unfeedable-worker beer penalty.
+function peasantHomes(n) { const a = []; for (let i = 0; i < n; i++) a.push({ typeId: "hut" }); return a; }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
-  pop: { peasants: 12, workers: 5, burghers: 0 },
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()],
-  stock: { ore: 80, grain: 15, beer: 20 } }); }
+  pop: { peasants: 12, workers: 0, burghers: 0 },
+  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...peasantHomes(6)],
+  stock: { ore: 80, grain: 15 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
   pop: { peasants: 8, workers: 8, burghers: 0 },
   buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, ...homes()],

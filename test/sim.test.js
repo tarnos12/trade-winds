@@ -18,7 +18,8 @@ vm.createContext(sandbox);
 vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Sim=Sim; this.Buildings=Buildings;", sandbox);
 const { CONFIG, Sim, Buildings } = sandbox;
 
-const BASE_PEASANTS = CONFIG.town.baseWorkers.peasants; // housing-independent peasant cap
+const BASE_PEASANTS = CONFIG.town.baseWorkers.peasants; // housing-independent peasant cap (0 now: pop comes from houses)
+const HUT_CAP = CONFIG.buildings.hut.houseCapacity;     // peasant housing per hut (2)
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -43,7 +44,8 @@ ok("Sim.tick is a function", typeof Sim.tick === "function");
 ok("Sim.priceFor still present (not clobbered)", typeof Sim.priceFor === "function");
 ok("Buildings.housingCapacity present (TI-A merged)", typeof Buildings.housingCapacity === "function");
 ok("CONFIG.needs merged in", !!CONFIG.needs && !!CONFIG.needs.perCapita);
-ok("CONFIG.town.baseWorkers.peasants set", BASE_PEASANTS > 0);
+ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
+   typeof BASE_PEASANTS === "number" && BASE_PEASANTS >= 0);
 ok("baseTickMs preserved (non-destructive merge)", CONFIG.econ.baseTickMs === 500);
 ok("goods/buildings still present", !!CONFIG.goods.grain && !!CONFIG.buildings.farm && !!CONFIG.buildings.cottage);
 
@@ -57,12 +59,15 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 })());
 
 // ========================================================================
-// 1) A town with a farm + base peasants: Sim ASSIGNS workers and it produces
-//    grain; pop grows toward the base-peasant cap (no houses yet).
+// 1) A town with a farm + PEASANT HOUSING: Sim ASSIGNS workers and it produces
+//    grain; pop grows toward the HOUSING cap (peasants come only from huts now).
 // ========================================================================
 {
-  const t = town({ pop: { peasants: 5, workers: 0, burghers: 0 },
-                   buildings: [b("farm", 0, 1)] });
+  // 3 huts = cap 6 peasants — enough to keep the 3-slot farm fully staffed while
+  // pop grows from a below-cap start. (Base peasants are 0: no house ⇒ no pop.)
+  const PEA_CAP = 3 * HUT_CAP;
+  const t = town({ pop: { peasants: 3, workers: 0, burghers: 0 },
+                   buildings: [b("farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
   const grain = [];
   for (let i = 0; i < 6; i++) { Sim.tick({ towns: [t] }); grain.push(t.stock.grain || 0); }
 
@@ -70,8 +75,8 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("farm produces grain (stock > 0)", grain[0] > 0);
   ok("grain stock strictly grows each tick", grain.every((g, i) => i === 0 || g > grain[i - 1]));
   ok("well-fed town stays happy (~100)", t.happiness > 95);
-  ok("well-fed town population grows toward base cap", totalPop(t) > 5 && t.pop.peasants <= BASE_PEASANTS + 1e-9);
-  ok("no houses ⇒ workers/burghers stay 0", t.pop.workers === 0 && t.pop.burghers === 0);
+  ok("well-fed town population grows toward housing cap", totalPop(t) > 3 && t.pop.peasants <= PEA_CAP + 1e-9);
+  ok("no worker/burgher housing ⇒ those tiers stay 0", t.pop.workers === 0 && t.pop.burghers === 0);
   ok("grain surplus pushes price below base", (() => {
     for (let i = 0; i < 40; i++) Sim.tick({ towns: [t] });
     return t.prices.grain < CONFIG.goods.grain.basePrice;
@@ -79,14 +84,16 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 }
 
 // ========================================================================
-// 2) Population is capped by HOUSING. No houses ⇒ peasants cap at baseWorkers,
-//    workers/burghers stay 0 even with beer+clothes on the shelf.
+// 2) Population is capped by HOUSING. Only PEASANT houses ⇒ peasants grow to the
+//    hut cap, workers/burghers stay 0 even with beer+clothes on the shelf.
 // ========================================================================
 {
-  const t = town({ pop: { peasants: 6, workers: 0, burghers: 0 },
-                   stock: { grain: 1000, beer: 1000, clothes: 1000 } });
+  const PEA_CAP = 3 * HUT_CAP; // 3 huts, no worker/burgher housing
+  const t = town({ pop: { peasants: 2, workers: 0, burghers: 0 },
+                   stock: { grain: 1000, beer: 1000, clothes: 1000 },
+                   buildings: [b("hut", 0, 1), b("hut", 0, 2), b("hut", 0, 3)] });
   for (let i = 0; i < 60; i++) Sim.tick({ towns: [t] });
-  ok("peasants grow but never exceed baseWorkers cap", t.pop.peasants > 6 && t.pop.peasants <= BASE_PEASANTS + 1e-9);
+  ok("peasants grow but never exceed housing cap", t.pop.peasants > 2 && t.pop.peasants <= PEA_CAP + 1e-9);
   ok("no worker/burgher housing ⇒ those tiers stay 0", t.pop.workers === 0 && t.pop.burghers === 0);
 }
 
@@ -120,9 +127,14 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 //    sustained low streak, not instantly. [was: happiness<50, pop→~0.]
 // ========================================================================
 {
-  const t = town({ pop: { peasants: BASE_PEASANTS, workers: 0, burghers: 0 } }); // no food
+  // 2 huts (cap 4) start FULL, no food. Peasants exist (from housing) so the
+  // happiness-scaled decline is observable: at ~50% happiness the target is
+  // round(4 × 0.5) = 2, so pop eases down from 4 toward 2 (not to 0).
+  const PEA_CAP = 2 * HUT_CAP;
+  const t = town({ pop: { peasants: PEA_CAP, workers: 0, burghers: 0 },
+                   buildings: [b("hut", 0, 1), b("hut", 0, 2)] }); // no food
   const startPop = totalPop(t);
-  ok("starting pop is within housing capacity (no instant clamp)", startPop === BASE_PEASANTS);
+  ok("starting pop is within housing capacity (no instant clamp)", startPop === PEA_CAP);
 
   Sim.tick({ towns: [t] });
   // EC-B: no food ⇒ needSatisfaction 0, no secondary tiers ⇒ no penalty ⇒ ~50 baseline.
@@ -139,11 +151,15 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 // 4b) Full "grow then starve" arc: grow from stocked pantry, then cut food.
 // ========================================================================
 {
-  const t = town({ pop: { peasants: 4, workers: 0, burghers: 0 },
-                   stock: { grain: 500 } });  // stocked pantry, no production
-  for (let i = 0; i < 10; i++) Sim.tick({ towns: [t] });
+  // 3 huts (cap 6), a stocked pantry, start below cap: pop grows toward the
+  // housing cap while fed, then eases back to the ~50%-happiness floor on famine.
+  const PEA_CAP = 3 * HUT_CAP;
+  const t = town({ pop: { peasants: 2, workers: 0, burghers: 0 },
+                   stock: { grain: 5000 },  // stocked pantry, no production
+                   buildings: [b("hut", 0, 1), b("hut", 0, 2), b("hut", 0, 3)] });
+  for (let i = 0; i < 40; i++) Sim.tick({ towns: [t] });
   const grownPop = totalPop(t);
-  ok("fed-from-stock town grows toward base cap", grownPop > 4 && t.pop.peasants <= BASE_PEASANTS + 1e-9);
+  ok("fed-from-stock town grows toward housing cap", grownPop > 2 && t.pop.peasants <= PEA_CAP + 1e-9);
 
   t.stock.grain = 0; // famine
   for (let i = 0; i < 80; i++) Sim.tick({ towns: [t] });
