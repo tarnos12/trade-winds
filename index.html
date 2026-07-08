@@ -888,7 +888,10 @@ Object.assign(CONFIG, {
   // (index 0 unused); every placed building — house or producer — takes a slot.
   town: {
     slotCap: [0, 3, 5, 7, 9],   // buildings allowed by town-center level 1..4
-    radius: 2,                  // hexes from center a building may be placed in
+    castle: { q: 0, r: 0 },     // PV2-A: the King's hub (map center). Not a city —
+                                // it carries a footprint so cities keep a 1-hex gap.
+    radius: 2,                  // (legacy) unused by Placement v2 — cities grow by
+                                // contiguity now; kept so old saves/tuning don't break.
     baseWorkers: { peasants: 8 }, // starting pop before any houses are built
     // Founding kit: a small food buffer + enough wood/stone to build the first
     // few structures (a farm/lumberjack + a house or two) before any trade.
@@ -1226,22 +1229,60 @@ Buildings.housingCapacity = function (town, state) {
   return cap;
 };
 
-// May `typeId` be placed at hex (q,r) for `town` in the game `state`?
-// Returns { ok:true } or { ok:false, reason:"…" }. Pure: reads only, no mutation.
-Buildings.canPlace = function (state, town, typeId, q, r) {
+// === PLACEMENT V2 (PV2-A) — contiguous-city model ===========================
+// Cities grow as CONTIGUOUS clusters. A building belongs to the single city
+// whose FOOTPRINT it borders; the map-center castle carries a footprint too, so
+// different cities (and the castle) can never be adjacent — always a 1-hex gap.
+// Radius is gone from the model (CONFIG.town.radius is retained but unused).
+
+// The castle hub hex (map center). It is the King's hub, NOT a buildable city,
+// but its footprint enforces the gap rule around it.
+Buildings.castleHex = function () {
+  const c = (CONFIG.town && CONFIG.town.castle) || { q: 0, r: 0 };
+  return { q: c.q, r: c.r };
+};
+
+// Footprint of a town = its center hex PLUS all its building hexes, as hex keys.
+Buildings.footprint = function (town) {
+  const keys = [];
+  if (!town) return keys;
+  keys.push(HexMath.key(town.q, town.r));
+  const list = Array.isArray(town.buildings) ? town.buildings : [];
+  for (const b of list) keys.push(HexMath.key(b.q, b.r));
+  return keys;
+};
+
+// The DISTINCT towns whose footprint is adjacent to (q,r). Returns an array of
+// 0 (touches no city), 1 (the owner), or ≥2 (would fuse cities — invalid) towns.
+Buildings.footprintCitiesAdjacent = function (state, q, r) {
+  const out = [];
+  const towns = (state && Array.isArray(state.towns)) ? state.towns : [];
+  const nbrSet = new Set(HexMath.neighbors(q, r).map(n => HexMath.key(n.q, n.r)));
+  for (const t of towns) {
+    if (Buildings.footprint(t).some(k => nbrSet.has(k))) out.push(t);
+  }
+  return out;
+};
+
+// True if (q,r) is the castle hex itself or one of its 6 neighbours.
+Buildings.touchesCastle = function (state, q, r) {
+  const c = Buildings.castleHex();
+  if (c.q === q && c.r === r) return true;
+  return HexMath.neighbors(q, r).some(n => n.q === c.q && n.r === c.r);
+};
+
+// May `typeId` be built at hex (q,r)? Resolves the OWNING city by footprint
+// adjacency. Returns { ok:true, town } (town = the city that gains the building)
+// or { ok:false, reason:"…" }. Pure: reads only, no mutation.
+Buildings.canPlaceBuilding = function (state, typeId, q, r) {
   const def = CONFIG.buildings[typeId];
   if (!def) return { ok: false, reason: "Unknown building type" };
-  if (!town) return { ok: false, reason: "No town" };
 
-  // (a) hex exists on the map and is within the town's build radius.
   const map = state && state.map;
   const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
   if (!hex) return { ok: false, reason: "No hex here" };
-  if (HexMath.dist(town.q, town.r, q, r) > CONFIG.town.radius) {
-    return { ok: false, reason: "Outside town radius" };
-  }
 
-  // (b) terrain rule.
+  // (1) terrain / buildable-land rule.
   const terr = hex.terrain;
   const terrDef = CONFIG.terrain[terr];
   const isLand = !!(terrDef && terrDef.buildable);
@@ -1257,41 +1298,95 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
     // sits directly on its resource hex (may be non-town-buildable, e.g. mountains)
     if (terr !== def.terrain) return { ok: false, reason: "Needs " + def.terrain + " terrain" };
   } else {
-    // processor / house: any buildable land hex in the town.
+    // processor / house: any buildable land hex.
     if (!isLand) return { ok: false, reason: "Needs buildable land" };
   }
 
-  // (c) hex must be free: not a road, not another town's center, not this town's
-  //     center, not already holding one of this town's buildings.
+  // (2) hex must be free: not a road, not the castle, not any town center, not
+  //     any existing building of any town.
   const key = HexMath.key(q, r);
   if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (Array.isArray(state.towns)) {
     for (const t of state.towns) {
-      if (t !== town && t.q === q && t.r === r) return { ok: false, reason: "Another town is here" };
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
     }
   }
-  if (town.q === q && town.r === r) return { ok: false, reason: "Town center is here" };
-  const placed = Array.isArray(town.buildings) ? town.buildings : [];
-  for (const b of placed) {
-    if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
-  }
 
-  // (d) slot cap by town level (P5-A: town_charters research grants +1 slot).
-  if (Buildings.usedSlots(town) >= Buildings.slotCap(town.level, state)) {
+  // (3) contiguity: exactly ONE city footprint may border this hex.
+  const cities = Buildings.footprintCitiesAdjacent(state, q, r);
+  if (cities.length === 0) return { ok: false, reason: "Must touch a city" };
+  if (cities.length >= 2) return { ok: false, reason: "Would join two cities — leave a gap" };
+  const owner = cities[0];
+
+  // (4) keep the gap to the castle.
+  if (Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Too close to the castle" };
+
+  // (5) slot cap of the OWNING town (P5-A: town_charters research grants +1 slot).
+  if (Buildings.usedSlots(owner) >= Buildings.slotCap(owner.level, state)) {
     return { ok: false, reason: "No free building slots" };
   }
 
-  // (e) affordability: gold + each resource in the cost.
+  // (6) affordability from the OWNING town: gold + each resource in the cost.
   const cost = def.cost || {};
-  if ((cost.gold || 0) > (town.gold || 0)) return { ok: false, reason: "Not enough gold" };
-  const stock = town.stock || {};
+  if ((cost.gold || 0) > (owner.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  const stock = owner.stock || {};
   for (const gid in cost) {
     if (gid === "gold") continue;
     if ((stock[gid] || 0) < cost[gid]) return { ok: false, reason: "Not enough " + gid };
   }
 
+  return { ok: true, town: owner };
+};
+
+// May a NEW town center be founded at (q,r)? Enforces the gap rule: buildable
+// land, hex free, and not adjacent to any existing city footprint nor touching
+// the castle. Returns { ok:true } | { ok:false, reason:"…" }.
+Buildings.canPlaceTown = function (state, q, r) {
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is here" };
+    }
+  }
+
+  // Gap rule: an isolated site only — not bordering any city, not near the castle.
+  if (Buildings.footprintCitiesAdjacent(state, q, r).length > 0) {
+    return { ok: false, reason: "Too close to another city" };
+  }
+  if (Buildings.touchesCastle(state, q, r)) {
+    return { ok: false, reason: "Too close to the castle" };
+  }
   return { ok: true };
 };
+
+// Back-compat wrapper for existing callers that pass an explicit `town`. Placement
+// v2 resolves the owner by adjacency; this thin shim keeps the old signature by
+// requiring the resolved owner to BE the passed town (so a building can only be
+// added to the town the caller intended). PV2-B will migrate callers to
+// canPlaceBuilding directly. Returns { ok:true } | { ok:false, reason }.
+Buildings.canPlace = function (state, town, typeId, q, r) {
+  if (!town) return { ok: false, reason: "No town" };
+  const res = Buildings.canPlaceBuilding(state, typeId, q, r);
+  if (!res.ok) return res;
+  if (res.town !== town) return { ok: false, reason: "Not adjacent to this city" };
+  return { ok: true };
+};
+// === PLACEMENT V2 (PV2-A) END ================================================
 // === BUILDINGS-CORE END ===
 
 // === PATHING START ===
