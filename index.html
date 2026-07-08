@@ -1289,7 +1289,10 @@ Sim.tick = function (State) {
       if (!type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
         b.workers = 0; return;
       }
-      const eff = Math.max(0, type.workerSlots - (b.closedSlots || 0));
+      // === RU-A: upgrade slotPlus adds effective worker slots ===
+      const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
+      const eff = Math.max(0, type.workerSlots + slotPlus - (b.closedSlots || 0));
+      // === /RU-A ===
       const tier = type.workerTier;
       const avail = pool[tier] || 0;
       const take = Math.min(eff, avail);
@@ -1341,7 +1344,10 @@ Sim.tick = function (State) {
           resMult *= Research.effect(State, "processorOutput", 1);
         }
       }
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult;
+      // === RU-A: compose per-building upgrade outputMult ===
+      const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
+      // === /RU-A ===
     }
 
     // === CB-A: construction delivery ==================================
@@ -1352,31 +1358,39 @@ Sim.tick = function (State) {
     // need reaches empty flips to built:true. EVERY unbuilt building's remaining
     // need (whether or not the budget reached it this tick) is added to the town
     // demand, so the external trader buys the materials the city cannot yet make.
+    // === RU-A: delivery also feeds pending upgrades (shared budget). Targets
+    // are built priority-first WITHIN each kind: unbuilt-priority, upgrade-
+    // priority, unbuilt-nonpriority, upgrade-nonpriority. When no upgrades are
+    // pending the sequence is identical to the CB-A construction order.
     {
       let budget = (CONFIG.town && CONFIG.town.deliveryRate) || 5;
-      const order = [];
-      for (const b of buildings) if (b && b.built === false && b.priority) order.push(b);
-      for (const b of buildings) if (b && b.built === false && !b.priority) order.push(b);
-      for (const b of order) {
-        if (!b.delivered) b.delivered = {};
-        const need = Buildings.constructionNeed(b);   // resourceCost − delivered
+      const targets = [];   // { b, kind: "build" | "upgrade" }
+      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
+      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
+      for (const t of targets) {
+        const b = t.b;
+        if (t.kind === "build" && !b.delivered) b.delivered = {};
+        if (t.kind === "upgrade" && !b.pendingUpgrade.delivered) b.pendingUpgrade.delivered = {};
+        const dst = t.kind === "build" ? b.delivered : b.pendingUpgrade.delivered;
+        const need = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
         for (const gid in need) {
           if (budget <= 0) break;
           const have = stock[gid] || 0;
           const move = Math.min(need[gid], have, budget);
-          if (move > 0) {
-            stock[gid] = have - move;
-            b.delivered[gid] = (b.delivered[gid] || 0) + move;
-            budget -= move;
-          }
+          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
         }
-        const remain = Buildings.constructionNeed(b);  // recompute after delivery
+        const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
         let done = true;
         for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
-        if (done) b.built = true;
+        if (done) {
+          if (t.kind === "build") b.built = true;
+          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
+        }
       }
     }
-    // === /CB-A ========================================================
+    // === /CB-A + /RU-A ================================================
 
     // --- 2. Consumption + basic/extra need satisfaction ----------------
     // EV3: every resident consumes BASIC (wood+potato) + EXTRA (fish+wool, +beer
@@ -1386,12 +1400,21 @@ Sim.tick = function (State) {
     const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
 
     const required = {};                 // goodId -> units the population wants this tick
+    // === RU-A: capacity-weighted basic-consumption reduction from house upgrades.
+    // Only BASIC-need goods (N.basicNeeds) are scaled; extra-need goods are not.
+    const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
+      ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1 };
     for (const tierKey in N.perCapita) {
       const n = pop[tierKey] || 0;
       if (n <= 0) continue;
       const rates = N.perCapita[tierKey];
-      for (const gid in rates) required[gid] = (required[gid] || 0) + rates[gid] * n;
+      const tierBcm = bcm[tierKey] || 1;
+      for (const gid in rates) {
+        const isBasic = N.basicNeeds.indexOf(gid) >= 0;
+        required[gid] = (required[gid] || 0) + rates[gid] * n * (isBasic ? tierBcm : 1);
+      }
     }
+    // === /RU-A ===
     const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
     for (const gid in required) {
       const req = required[gid];
@@ -1566,7 +1589,9 @@ Buildings.housingCapacity = function (town, state) {
     if (!def || def.kind !== "house") continue;
     const key = BUILDINGS_TIER_KEY[def.houseTier];
     if (!key) continue;
-    cap[key] += def.houseCapacity || 0;
+    // === RU-A: upgrade capacityPlus adds to each house's contribution ===
+    cap[key] += (def.houseCapacity || 0) + (Buildings.upgradeEffect(b).capacityPlus || 0);
+    // === /RU-A ===
   }
   if (state && typeof Research !== "undefined" && Research.effect) {
     const hb = Research.effect(state, "housingBonus", 1);   // multiplier (1x default)
@@ -1608,11 +1633,164 @@ Buildings.constructionNeed = function (b) {
   const out = {};
   for (const gid in rc) {
     const rem = rc[gid] - (delivered[gid] || 0);
-    if (rem > 0) out[gid] = rem;
+    if (rem > 1e-6) out[gid] = rem;   // epsilon: float-dust remainders count as done
   }
   return out;
 };
 // === /CB-A ===================================================================
+
+// === RU-A: per-building upgrade data + pure helpers =========================
+// Two-part upgrades: a "development" research node unlocks the POSSIBILITY of a
+// building's upgrades (Part 1); the player then buys a specific upgrade LEVEL on
+// a building (Part 2) — gold charged at purchase, resources delivered from the
+// town's own stock over time (reusing the CB-A construction-delivery step).
+// CONFIG.upgrades[typeId] = ordered array of level entries (level>=2), each:
+//   { level, name, unlockedBy:<researchNodeId>, cost:{gold, <good>...},
+//     effect:{ capacityPlus?, slotPlus?, outputMult?, basicConsumptionMult? } }
+// Ladders are defined for the 4 starter buildings only.
+Object.assign(CONFIG, {
+  upgrades: {
+    hut: [
+      { level: 2, name: "Sturdy Hut",   unlockedBy: "hut_upgrades", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",     unlockedBy: "hut_upgrades", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",    unlockedBy: "hut_upgrades", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+    ],
+    lumberjack: [
+      { level: 2, name: "Sharpened Axes", unlockedBy: "lumberjack_upgrades", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Logging Camp",   unlockedBy: "lumberjack_upgrades", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+    ],
+    farm: [
+      { level: 2, name: "Better Plows",  unlockedBy: "farm_upgrades", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Great Estate",  unlockedBy: "farm_upgrades", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+    ],
+    sawmill: [
+      { level: 2, name: "Water Wheel",   unlockedBy: "sawmill_upgrades", cost: { gold: 220, wood: 25 },           effect: { outputMult: 1.25 } },
+      { level: 3, name: "Great Sawmill", unlockedBy: "sawmill_upgrades", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
+    ],
+  },
+});
+
+// The upgrade ladder for a building type (or [] when it has none).
+Buildings.upgradeLadder = function (typeId) {
+  return (CONFIG.upgrades && CONFIG.upgrades[typeId]) || [];
+};
+
+// The ladder entry for a specific level, or null.
+Buildings.upgradeAt = function (typeId, level) {
+  const ladder = Buildings.upgradeLadder(typeId);
+  for (let i = 0; i < ladder.length; i++) if (ladder[i].level === level) return ladder[i];
+  return null;
+};
+
+// Is the given upgrade level unlocked by research? Entries without unlockedBy are
+// always unlocked; a missing entry is never unlocked.
+Buildings.upgradeUnlocked = function (state, typeId, level) {
+  const entry = Buildings.upgradeAt(typeId, level);
+  if (!entry) return false;
+  if (!entry.unlockedBy) return true;
+  return (typeof Research !== "undefined" && Research.has) ? Research.has(state, entry.unlockedBy) : false;
+};
+
+// The next available (level+1) upgrade entry for a building IF it exists AND is
+// unlocked, else null. Legacy buildings default to upgradeLevel 1.
+Buildings.nextUpgrade = function (state, b) {
+  if (!b) return null;
+  const lvl = b.upgradeLevel || 1;
+  const entry = Buildings.upgradeAt(b.typeId, lvl + 1);
+  return (entry && Buildings.upgradeUnlocked(state, b.typeId, lvl + 1)) ? entry : null;
+};
+
+// Can the player start the next upgrade on this building? Gold-gated only —
+// resources are delivered over time (like CB-A construction), not required up
+// front. Returns {ok:true} or {ok:false, reason}.
+Buildings.canStartUpgrade = function (state, town, b) {
+  if (!b) return { ok: false, reason: "No building" };
+  if (b.built === false) return { ok: false, reason: "Under construction" };
+  if (b.pendingUpgrade) return { ok: false, reason: "Upgrade in progress" };
+  const nxt = Buildings.nextUpgrade(state, b);
+  if (!nxt) return { ok: false, reason: "No upgrade available" };
+  if ((state.treasury || 0) < (nxt.cost.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  return { ok: true };
+};
+
+// Charge the upgrade's GOLD to the treasury and mark the building pending. The
+// resources are delivered from town stock over time by the Sim delivery step.
+Buildings.startUpgrade = function (state, town, b) {
+  if (!Buildings.canStartUpgrade(state, town, b).ok) return false;
+  const nxt = Buildings.nextUpgrade(state, b);
+  state.treasury = (state.treasury || 0) - (nxt.cost.gold || 0);
+  b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
+  return true;
+};
+
+// The non-gold (resource) portion of an upgrade level's cost.
+Buildings.upgradeResourceCost = function (typeId, level) {
+  const out = {};
+  const entry = Buildings.upgradeAt(typeId, level);
+  if (!entry || !entry.cost) return out;
+  for (const gid in entry.cost) {
+    if (gid === "gold") continue;
+    if (entry.cost[gid] > 0) out[gid] = entry.cost[gid];
+  }
+  return out;
+};
+
+// Remaining materials a pending upgrade still needs = resourceCost − delivered,
+// positive remainders only. {} when nothing is pending.
+Buildings.upgradeConstructionNeed = function (b) {
+  if (!b || !b.pendingUpgrade) return {};
+  const rc = Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel);
+  const delivered = b.pendingUpgrade.delivered || {};
+  const out = {};
+  for (const gid in rc) {
+    const rem = rc[gid] - (delivered[gid] || 0);
+    if (rem > 1e-6) out[gid] = rem;   // epsilon: float-dust remainders count as done
+  }
+  return out;
+};
+
+// Aggregate the effect of ALL applied upgrade levels (2..upgradeLevel):
+// capacityPlus/slotPlus are SUMMED (default 0); outputMult/basicConsumptionMult
+// are MULTIPLIED (default 1). Identity when b is missing or still at level 1.
+Buildings.upgradeEffect = function (b) {
+  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1 };
+  if (!b) return agg;
+  const lvl = b.upgradeLevel || 1;
+  if (lvl < 2) return agg;
+  const ladder = Buildings.upgradeLadder(b.typeId);
+  for (let i = 0; i < ladder.length; i++) {
+    const e = ladder[i];
+    if (e.level < 2 || e.level > lvl || !e.effect) continue;
+    if (typeof e.effect.capacityPlus === "number") agg.capacityPlus += e.effect.capacityPlus;
+    if (typeof e.effect.slotPlus === "number") agg.slotPlus += e.effect.slotPlus;
+    if (typeof e.effect.outputMult === "number") agg.outputMult *= e.effect.outputMult;
+    if (typeof e.effect.basicConsumptionMult === "number") agg.basicConsumptionMult *= e.effect.basicConsumptionMult;
+  }
+  return agg;
+};
+
+// Capacity-weighted basic-consumption multiplier per pop tier, from house
+// upgrades. For each tier: Σ(cap_i × bcm_i) / Σ(cap_i) over that tier's houses
+// (cap includes capacityPlus). Defaults to 1 when a tier has no houses.
+Buildings.basicConsumptionMult = function (town) {
+  const res = { peasants: 1, workers: 1, burghers: 1 };
+  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 } };
+  const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  for (const b of list) {
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.kind !== "house") continue;
+    const key = BUILDINGS_TIER_KEY[def.houseTier];
+    if (!key) continue;
+    const eff = Buildings.upgradeEffect(b);
+    const cap = (def.houseCapacity || 0) + eff.capacityPlus;
+    if (cap <= 0) continue;
+    acc[key].w += cap;
+    acc[key].wm += cap * eff.basicConsumptionMult;
+  }
+  for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
+  return res;
+};
+// === /RU-A ==================================================================
 
 // === PLACEMENT V2 (PV2-A) — contiguous-city model ===========================
 // Cities grow as CONTIGUOUS clusters. A building belongs to the single city
@@ -2160,7 +2338,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 // Contract: state.research = { unlocked:[ids], active:<id|null>, progress:<ticks>,
 // spent:<gold paid so far on the active node> }.
 //
-// 3 branches × 5 nodes. Each node:
+// 3 core branches × 5 nodes + a "development" branch (RU-A: 4 per-building
+// upgrade-unlock nodes, chained). Each node:
 //   { id, branch, name, desc, cost(gold), timeTicks, prereqs:[ids], effect }
 // `effect` is a plain data bag of queryable flags/multipliers. This slice does
 // NOT wire the effects into Sim/Trade/Buildings (those live in other fenced
@@ -2186,6 +2365,14 @@ Object.assign(CONFIG, {
     { id: "royal_census",    branch: "administration", name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
     { id: "town_charters",   branch: "administration", name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
     { id: "bureaucracy",     branch: "administration", name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+    // === RU-A: development branch — unlocks per-building upgrade ladders ====
+    // Chained into a single root so "exactly one prereq-less root per branch"
+    // holds. effect:{} (unlock-only); materials attached via RESEARCH_MATERIALS.
+    { id: "hut_upgrades",        branch: "development", name: "Master Builders",     desc: "Unlocks upgrades for Huts.",        cost: 250, timeTicks: 20, prereqs: [],                     effect: {} },
+    { id: "lumberjack_upgrades", branch: "development", name: "Forestry",            desc: "Unlocks upgrades for Lumberjacks.", cost: 400, timeTicks: 25, prereqs: ["hut_upgrades"],        effect: {} },
+    { id: "farm_upgrades",       branch: "development", name: "Husbandry",           desc: "Unlocks upgrades for Farms.",       cost: 400, timeTicks: 25, prereqs: ["lumberjack_upgrades"], effect: {} },
+    { id: "sawmill_upgrades",    branch: "development", name: "Sawmill Engineering", desc: "Unlocks upgrades for Sawmills.",     cost: 550, timeTicks: 30, prereqs: ["farm_upgrades"],       effect: {} },
+    // === /RU-A =============================================================
   ],
 });
 
@@ -2210,7 +2397,7 @@ const Research = {
     return null;
   },
   all() { return CONFIG.research || []; },
-  branches() { return ["production", "logistics", "administration"]; },
+  branches() { return ["production", "logistics", "administration", "development"]; },   // RU-A: +development
   nodesIn(branch) { return Research.all().filter(n => n.branch === branch); },
 
   has(state, id) {
@@ -2370,6 +2557,12 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, cloth: 20 },
   town_charters: { tools: 20, furniture: 15 },
   bureaucracy:   { jewelry: 15, furniture: 25 },
+  // === RU-A: development branch materials (tier-1 amounts) ==
+  hut_upgrades:        { wood: 20, stone: 10 },
+  lumberjack_upgrades: { wood: 25, stone: 10 },
+  farm_upgrades:       { wood: 25, stone: 10 },
+  sawmill_upgrades:    { wood: 30, stone: 15 },
+  // === /RU-A ===============================================
 };
 for (const _rn of (CONFIG.research || [])) {
   if (!_rn.materials) _rn.materials = RESEARCH_MATERIALS[_rn.id] || {};
@@ -4537,6 +4730,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     owner.buildings.push({
       typeId: placing.typeId, q: h.q, r: h.r, workers: 0,
       built: Buildings.isInstant(def), delivered: {}, closedSlots: 0, priority: false,
+      // === RU-A: per-building upgrade state (helpers default these when absent) ===
+      upgradeLevel: 1, pendingUpgrade: null,
+      // === /RU-A ===
     });
     if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();

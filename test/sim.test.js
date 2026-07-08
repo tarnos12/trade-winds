@@ -465,5 +465,93 @@ function place(typeId, q, r, over) {
   ok("CB-A: non-priority building left unstaffed when pool is exhausted", t.buildings[0].workers === 0);
 }
 
+// === RU-A: per-building upgrade wiring (end-to-end through Sim.tick) ========
+{
+  const near = (a, b, eps) => Math.abs(a - b) < (eps || 1e-6);
+
+  // -- outputMult: a farm at upgradeLevel 2 produces 1.25× the grain (grain is
+  //    NOT a need good, so nothing consumes it — the stock IS the production). --
+  {
+    const mk = (lvl) => town({
+      pop: { peasants: 3, workers: 0, burghers: 0 },
+      stock: { wood: 1000, potato: 1000, fish: 1000, wool: 1000 },
+      buildings: [place("farm", 0, 1, { upgradeLevel: lvl })],
+    });
+    const t1 = mk(1), t2 = mk(2);
+    Sim.tick({ towns: [t1] });
+    Sim.tick({ towns: [t2] });
+    ok("RU-A: upgradeLevel 2 farm yields 1.25× grain", t1.stock.grain > 0 && near(t2.stock.grain / t1.stock.grain, 1.25, 1e-6));
+  }
+
+  // -- slotPlus: sawmill at L3 (base 2 slots + 1) staffs 3 workers from a big pool
+  //    (built:true so an under-construction sawmill isn't skipped). --
+  {
+    const t = town({
+      pop: { peasants: 10, workers: 0, burghers: 0 },
+      stock: { wood: 1000 },
+      buildings: [place("sawmill", 0, 1, { built: true, upgradeLevel: 3 })],
+    });
+    Sim.tick({ towns: [t] });
+    ok("RU-A: slotPlus raises staffed workers to workerSlots+1", t.buildings[0].workers === 3);
+  }
+
+  // -- housing capacityPlus raises the population ceiling: two self-sufficient
+  //    towns (all needs produced locally); the hut-L3 town settles at a higher
+  //    peasant count than the hut-L1 town (cap 4 vs 2). --
+  {
+    const mk = (lvl) => town({
+      level: 3, pop: { peasants: 12, workers: 0, burghers: 0 },
+      stock: { wood: 60, potato: 60, fish: 60, wool: 60 },
+      buildings: [
+        place("hut", 0, 1, { upgradeLevel: lvl }),
+        place("potato_farm", 0, 2, { built: true }),
+        place("lumberjack", 0, 3, { built: true }),
+        place("fishery", 1, 1, { built: true }),
+        place("shepherd", 1, 2, { built: true }),
+      ],
+    });
+    const t1 = mk(1), t3 = mk(3);
+    for (let i = 0; i < 600; i++) { Sim.tick({ towns: [t1] }); Sim.tick({ towns: [t3] }); }
+    ok("RU-A: capacityPlus lifts pop ceiling above the base hut cap", t3.pop.peasants > t1.pop.peasants + 0.5);
+  }
+
+  // -- basicConsumptionMult: a hut-L4 town burns less wood+potato but the SAME
+  //    fish+wool (extra needs are unscaled). Stock stays under storageCap so the
+  //    consumption difference isn't masked by the end-of-tick clamp. --
+  {
+    const mk = (lvl) => town({
+      pop: { peasants: 2, workers: 0, burghers: 0 },
+      stock: { wood: 50, potato: 50, fish: 50, wool: 50 },
+      buildings: [place("hut", 0, 1, { upgradeLevel: lvl })],
+    });
+    const tHi = mk(1), tLo = mk(4);   // L4 hut cuts basic consumption to 0.7×
+    Sim.tick({ towns: [tHi] });
+    Sim.tick({ towns: [tLo] });
+    ok("RU-A: L4 hut consumes less wood", tLo.stock.wood > tHi.stock.wood);
+    ok("RU-A: L4 hut consumes less potato", tLo.stock.potato > tHi.stock.potato);
+    ok("RU-A: extra needs (fish) consumed equally", near(tLo.stock.fish, tHi.stock.fish, 1e-9));
+    ok("RU-A: extra needs (wool) consumed equally", near(tLo.stock.wool, tHi.stock.wool, 1e-9));
+  }
+
+  // -- pending upgrade: its material need shows in demand, drains stock over
+  //    ticks, and flips upgradeLevel when delivered. --
+  {
+    const t = town({
+      pop: { peasants: 0, workers: 0, burghers: 0 },
+      stock: { wood: 100 },
+      buildings: [place("lumberjack", 0, 1, { upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } })],
+    });
+    Sim.tick({ towns: [t] });   // L2 upgrade needs wood:20; deliveryRate < 20 so still pending
+    const bld = t.buildings[0];
+    ok("RU-A: pending upgrade adds its need to town demand", (t.demand.wood || 0) > 0);
+    ok("RU-A: pending upgrade still pending after one tick", bld.pendingUpgrade && bld.upgradeLevel === 1);
+    ok("RU-A: delivery drains town stock", t.stock.wood < 100);
+    for (let i = 0; i < 20; i++) Sim.tick({ towns: [t] });
+    ok("RU-A: upgrade completes → upgradeLevel 2", bld.upgradeLevel === 2);
+    ok("RU-A: pendingUpgrade cleared on completion", bld.pendingUpgrade === null);
+  }
+}
+// === /RU-A =================================================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

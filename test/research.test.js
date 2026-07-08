@@ -38,8 +38,11 @@ function fillMats(st, id) {
 // =========================================================================
 // Catalog shape
 // =========================================================================
-ok("15 research nodes", CONFIG.research.length === 15);
-ok("3 branches × 5 nodes", Research.branches().every(b => Research.nodesIn(b).length === 5));
+ok("19 research nodes", CONFIG.research.length === 19);   // RU-A: +4 development nodes
+// RU-A: 3 core branches × 5 nodes + a development branch of 4 nodes.
+ok("core branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
+ok("development branch has 4 nodes", Research.nodesIn("development").length === 4);
+ok("branches() includes development (4 branches)", Research.branches().length === 4 && Research.branches().indexOf("development") >= 0);
 ok("every node has required fields", CONFIG.research.every(n =>
   n.id && n.branch && n.name && n.desc && typeof n.cost === "number" &&
   typeof n.timeTicks === "number" && Array.isArray(n.prereqs) && n.effect && typeof n.effect === "object"));
@@ -47,7 +50,7 @@ ok("every node has required fields", CONFIG.research.every(n =>
 ok("every node has a materials requirement", CONFIG.research.every(n =>
   n.materials && typeof n.materials === "object" && Object.keys(n.materials).length > 0 &&
   Object.keys(n.materials).every(g => !!CONFIG.goods[g] && n.materials[g] > 0)));
-ok("node ids are unique", new Set(CONFIG.research.map(n => n.id)).size === 15);
+ok("node ids are unique", new Set(CONFIG.research.map(n => n.id)).size === 19);   // RU-A: 19 total
 ok("all prereqs reference real nodes", CONFIG.research.every(n =>
   n.prereqs.every(p => !!Research.get(p))));
 ok("each branch has exactly one root (no prereqs)", Research.branches().every(b =>
@@ -290,5 +293,21 @@ function mkCity(over) {
 })();
 
 // =========================================================================
+// === RU-A: development branch — unlock nodes exist, gated, unlock normally ===
+(() => {
+  const devIds = ["hut_upgrades", "lumberjack_upgrades", "farm_upgrades", "sawmill_upgrades"];
+  ok("4 development nodes exist", devIds.every(id => !!Research.get(id) && Research.get(id).branch === "development"));
+  const st = mkState({ treasury: 100000 });
+  ok("dev root available, others gated", Research.isAvailable(st, "hut_upgrades")
+    && !Research.isAvailable(st, "lumberjack_upgrades"));
+  ok("dev nodes locked before research", devIds.every(id => !Research.has(st, id)));
+  fillMats(st, "hut_upgrades");
+  Research.start(st, "hut_upgrades");
+  tick(st, Research.get("hut_upgrades").timeTicks);
+  ok("dev root unlocks via normal flow", Research.has(st, "hut_upgrades"));
+  ok("next dev node available after prereq", Research.canStart(st, "lumberjack_upgrades"));
+})();
+// === /RU-A ===================================================================
+
 console.log(`research: ${pass}/${pass + fail} passed` + (fail ? ` (${fail} FAILED)` : ""));
 process.exit(fail ? 1 : 0);
