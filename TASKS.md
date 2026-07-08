@@ -46,6 +46,67 @@ non-Sim or explicitly bounded). Slices when started: KR-A price/production
 history + aggregation (pure, tested) → KR-B sidebar UI + chart (canvas 2D DOM
 panel). Sequence AFTER RT-B so unlock-awareness reads the new research model.
 
+## Milestone: LTT panel parity + trade fleets (PP) — QUEUED (after RT-B + KR land; author: "I want it all implemented")
+Author design (12 screenshots, 2026-07-08). **Author Q&A:** Provisioner/scouting
+section SKIPPED until a knights/combat milestone exists. Cities trade FULLY
+AUTOMATICALLY (buy by needs, sell surplus — keep current model; NO player
+thresholds on cities). The CASTLE is the player-controlled hub: per-resource
+**toggle + stock limit** — castle buys enabled goods up to the limit and
+automatically sells from its warehouse when a city requests that good.
+
+**PP-A — mechanics (pure core, workflow w/ adversarial reviews). Nothing UI.**
+1. **Trader fleets scale with city level:** external traders per city = 2×level
+   (L1 2 … L4 8); internal transporters = 3+level (L4 7). Transporters multiply
+   the construction/upgrade `deliveryRate` (rate is per-transporter). Trade.tick
+   dispatches up to the fleet count concurrently (today: 1).
+2. **Multi-good cargo:** one trip can carry several goods from the same seller
+   (cart capacity 10 total across goods; reservation/agreed-price per good).
+3. **Per-tier happiness + income:** each tier's happiness from ITS OWN needs
+   satisfaction (70/30 basic/extra as today, per tier); town happiness =
+   pop-weighted average (keeps old save semantics roughly); people-tax income
+   attributed **per tier** (scaled by that tier's happiness) and **per house**
+   (for the house panel display).
+4. **Castle market:** `state.castleTrade[goodId] = {enabled, limit}` — castle
+   traders keep enabled goods stocked to the limit (priority BELOW active-research
+   materials); enabled goods in the castle warehouse are SELLABLE: city external
+   traders may buy from the castle like from a city (price basis: avg market/
+   basePrice; proceeds → treasury; tariff does not apply to the castle's own sales).
+5. **City ledgers:** per-city rolling budget history (~5 min of town.gold, bounded
+   like KR's Market buffers) + per-tick income/expense tally: taxes +, sales +,
+   purchases −, give/take ±, net. Feeds the budget chart + breakdown rows.
+**PP-B — city panel redesign (worktree):** header (level badge + Upgrade arrow,
+city gold, slots x/y, happiness % + face, Give/Take 1k buttons); **tab 1
+Overview**: tier rows (portrait/glyph, count, % — greyed when tier locked) with
+hover tooltip "Homes x/y · Jobs x/y · Happiness % · Income"; green transporter
+bar (hover: "N Transporters — distribute resources inside the city. Upgrade the
+city to increase their number."); red trader bar (hover: "N Traders — buy
+resources from other cities…" + numbered LIVE list: "#k: (42%) Buy 3 🐟 4 🪵 from
+<city> for 22🪙" / "Not Trading"); **budget line chart** (5-min, min/max labels);
+income/expense breakdown rows + net. **tab 2 Warehouse (read-only)**: per-good
+icon, stock + capacity bar, production rate, trade flow, price; sort buttons.
+**tab 3 Buildings & workforce**: grouped by tier — houses (occupancy x/y, per-
+house occupant pips) and workplaces (slot pips, ⚠ badge on problems: unstaffed /
+missing inputs / under construction); click a card → that building's panel.
+**PP-C — castle panel redesign (worktree):** **tab 1 Keep**: Research Center
+pipeline visual — per-material rows (castleStock, per-tick consumption) → progress
+book (n/total + %) → the active research; queue glance. NO Provisioner (deferred).
+**tab 2 Warehouse**: fleet utilization bar with hover listing ALL castle traders
+("#1: (50%) Buy 1 🔨 from Willowholt for 930🪙" / "Not Trading"); per-good rows:
+castle stock, **enable-trading toggle + limit control**, price, flow; Summary
+(Sell/Buy/Balance + Total Resource Value).
+**PP-D — house building panel (worktree):** for kind:'house' buildings: occupant
+slots, **Basic/Luxury needs icons with satisfaction rings**, house income, a
+happiness meter with bonus-income zone, resident glyphs, ⭐ (exists), level +
+upgrade (exists).
+**PP-E — map juice (worktree):** city **speech bubbles** (shortage "We don't have
+any 🍞 Bread." / content "All is fine here." / "Peasants are very happy and pay
+our city more." — throttled, one at a time per city); **wanted-goods icon row**
+above each city (yellow highlight = shortage); cart/boat **owner-name labels +
+multi-good cargo chips**; small gold floaters on tax ticks. City cards: show
+happiness %.
+Order: PP-A (workflow, reviews) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (worktrees) → merge
+B→C→D→E → verify → version bump.
+
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
 4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
 (luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
