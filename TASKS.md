@@ -140,6 +140,16 @@ Interpretations (correct if off): player gold = `state.treasury`; slot count =
 temporary modifier (decays over ~60 s) symmetric with give; "bricks" tier
 deferred until a bricks good is added; population per house ≈ `cap × happiness%`.
 
+## Milestone: Categorized build menu — IN PROGRESS
+Hide the flat build bar behind **category buttons** (each opens a submenu):
+1. **Build** — City (town mode), Road, Bridge (bridge stub until water-roads).
+2. **Peasant** (worker tier 1) — peasant house (hut) + `workerTier:'peasant'` buildings.
+3. **Worker** (tier 2, **research-gated**) — cottage + `workerTier:'worker'` buildings.
+4. **Burgher** (tier 3, **research-gated**) — manor + `workerTier:'burgher'` buildings.
+Group by existing `workerTier`/`houseTier`; locked categories show a "research to
+unlock" hint. UI-only gate (canPlace logic unchanged; tests bypass the UI).
+Deferred content (future chain): potato farm, woodcutter, clothing/chairs/wine goods.
+
 ## Done
 
 - **Phase 1 — The Board ✅** — hex map, seeded MapGen, fog, camera, build mode
