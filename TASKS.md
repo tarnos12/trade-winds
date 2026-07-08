@@ -41,7 +41,7 @@ slot cap; castle center = a footprint that enforces the gap (not a buildable cit
 
 | Task | Slot | Scope | Status |
 |---|---|---|---|
-| PV2-A — adjacency placement model (pure `Buildings`) | #2 | replace radius `canPlace` with `canPlaceBuilding(state,typeId,q,r)→{ok,town,reason}` (owning city by footprint adjacency; reject if adjacent to a 2nd city or the castle; terrain/occupancy/slotCap/afford) + `canPlaceTown(state,q,r)` (gap from all footprints + castle) + footprint/owner helpers + castle-center const; update `buildings.test.js` | 🔲 |
+| PV2-A — adjacency placement model (pure `Buildings`) | #2 | replace radius `canPlace` with `canPlaceBuilding(state,typeId,q,r)→{ok,town,reason}` (owning city by footprint adjacency; reject if adjacent to a 2nd city or the castle; terrain/occupancy/slotCap/afford) + `canPlaceTown(state,q,r)` (gap from all footprints + castle) + footprint/owner helpers + castle-center const; update `buildings.test.js` | ✅ merged (buildings 59) |
 | PV2-B — bottom build bar + wiring | #4 | move build menu to a persistent bottom bar (Extractors/Processors/Houses, cost, slots); placement uses `canPlaceBuilding` (highlight valid hexes near any city, auto-join the returned town); route town-center placement through `canPlaceTown`; keep building render | 🔲 |
 
 ## Done
