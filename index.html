@@ -1936,6 +1936,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     // --- 2. Advance traders; buy at the seller (its passive sale), deliver home --
     for (const cart of state.carts) {
       if (cart.done) continue;
+      if (cart.kind === "castle") continue;   // CRE: castle-owned traders are driven by ResearchEconomy.tick
       cart.progress += cartSpeed;
       if (cart.progress < 1) continue;
       cart.progress = 1;
@@ -2104,16 +2105,30 @@ const Research = {
     const node = Research.get(R.active);
     if (!node) { R.active = null; R.progress = 0; R.spent = 0; return; }
     const total = Math.max(1, node.timeTicks | 0);
-    const nextProgress = (R.progress || 0) + 1;
-    const targetSpent = node.cost * (nextProgress / total);
-    const due = targetSpent - (R.spent || 0);
-    if (due > (state.treasury || 0) + 1e-9) return;   // can't afford → stall
-    if (due > 0) {
-      state.treasury = (state.treasury || 0) - due;
-      R.spent = (R.spent || 0) + due;
+    // Advance the labour clock + pay the proportional gold installment, but NEVER
+    // past `total` — so gold caps at node.cost while the node waits on materials
+    // (CRE gate below). The old behaviour is preserved for the labour phase.
+    if ((R.progress || 0) < total) {
+      const nextProgress = (R.progress || 0) + 1;
+      const targetSpent = node.cost * (nextProgress / total);
+      const due = targetSpent - (R.spent || 0);
+      if (due > (state.treasury || 0) + 1e-9) return;   // can't afford → stall
+      if (due > 0) {
+        state.treasury = (state.treasury || 0) - due;
+        R.spent = (R.spent || 0) + due;
+      }
+      R.progress = nextProgress;
     }
-    R.progress = nextProgress;
-    if (R.progress >= total) {
+    // === RESEARCH-ECONOMY === (CRE) completion is materials-gated: the node only
+    // unlocks once the labour clock is full AND the castle's traders have delivered
+    // every required material into state.castleStock. Then those materials are
+    // consumed. A node with no materials (or before the CRE module loads) behaves
+    // exactly like the old time-only model. Without materials the node STALLS at
+    // progress=total (gold already fully paid), waiting for the royal buyers.
+    const matsReady = (typeof ResearchEconomy === "undefined") ||
+      ResearchEconomy.materialsSatisfied(state, node);
+    if (R.progress >= total && matsReady) {
+      if (typeof ResearchEconomy !== "undefined") ResearchEconomy.consumeMaterials(state, node);
       if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
       R.active = null; R.progress = 0; R.spent = 0;
     }
@@ -2146,6 +2161,236 @@ const Research = {
 };
 
 // === RESEARCH-CORE END ===
+
+// === RESEARCH-ECONOMY START ===  (CRE — castle research economy)
+// Pure, deterministic layer (no DOM / canvas / Math.random). The King's castle
+// owns up to N traders that BUY the active research node's required MATERIALS
+// from cities (with treasury gold) and haul them to state.castleStock; a node
+// only completes once its materials are gathered (see Research.tick's CRE gate).
+//
+// It mirrors the Trade.tick external-buyer model: reservation (town.reserved) at
+// dispatch, agreed unit price locked at departure, carried gold deducted from the
+// treasury up front, race-safe settlement on arrival. Differences from city
+// trade: the buyer is the CASTLE (fromId = ResearchEconomy.CASTLE_ID sentinel,
+// path starts at the castle hex), goods deliver into state.castleStock (NOT a
+// town), and NO tariff is levied — the castle IS the kingdom buying for itself,
+// so the selling city receives the full agreed price (documented choice).
+//
+// GATING: new traders are dispatched ONLY while the castle panel is SELECTED
+// (the `open` arg, from CastleUI.isOpen) AND a node is active. Close the panel ⇒
+// no new dispatches; in-flight traders still finish their run. Concurrent castle
+// traders are capped at CONFIG.researchEconomy.maxTraders (10).
+Object.assign(CONFIG, {
+  researchEconomy: {
+    maxTraders: 10,     // hard cap on concurrent castle-owned traders
+    cartCapacity: 10,   // units one royal buyer hauls per trip
+    cartSpeed: 0.5,     // progress (0..1) added per tick (paved-roads boosts it)
+    buyThreshold: 0,    // min still-needed qty before a buyer is sent (0 = any)
+    topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
+  },
+});
+
+// Materials each research node requires (goodId → qty). Applied ADDITIVELY onto
+// the P4-A CONFIG.research nodes (does not edit the RESEARCH-CORE literals), so
+// any layer can read `node.materials`. Early/root nodes need basic raw goods;
+// deeper nodes need processed / luxury goods (the gate scales with tier).
+const RESEARCH_MATERIALS = {
+  // -- production branch --
+  crop_rotation: { wood: 20, stone: 10 },
+  deep_veins:    { stone: 25, ore: 15 },
+  guild_halls:   { planks: 20, stone: 25 },
+  master_crafts: { planks: 30, tools: 20 },
+  industrialize: { tools: 30, furniture: 15 },
+  // -- logistics branch --
+  paved_roads:   { stone: 30, wood: 15 },
+  larger_carts:  { planks: 25, wood: 20 },
+  extra_caravan: { planks: 30, tools: 15 },
+  warehousing:   { planks: 40, stone: 30 },
+  trade_network: { tools: 30, furniture: 20 },
+  // -- administration branch --
+  tax_ledgers:   { grain: 20, wood: 15 },
+  tariff_office: { cloth: 15, planks: 20 },
+  royal_census:  { bread: 20, cloth: 20 },
+  town_charters: { tools: 20, furniture: 15 },
+  bureaucracy:   { jewelry: 15, furniture: 25 },
+};
+for (const _rn of (CONFIG.research || [])) {
+  if (!_rn.materials) _rn.materials = RESEARCH_MATERIALS[_rn.id] || {};
+}
+
+var ResearchEconomy = (function () {
+  const CASTLE_ID = "castle";   // sentinel fromId marking a castle-owned trader
+  const cfg = () => CONFIG.researchEconomy;
+  function castleHex() {
+    const c = (CONFIG.town && CONFIG.town.castle) || { q: 0, r: 0 };
+    return HexMath.key(c.q, c.r);
+  }
+  function stock(state) {
+    if (!state.castleStock || typeof state.castleStock !== "object") state.castleStock = {};
+    return state.castleStock;
+  }
+  function need(node) { return (node && node.materials) || {}; }
+
+  // Materials already secured in transit on live castle carts (any phase), so we
+  // never over-dispatch beyond what a node still needs.
+  function inFlight(state, gid) {
+    let n = 0;
+    for (const c of (state.carts || [])) if (!c.done && c.kind === "castle" && c.goodId === gid) n += c.qty;
+    return n;
+  }
+  // Still-needed qty of a material = required − held in castleStock − in transit.
+  function remaining(state, node, gid) {
+    return (need(node)[gid] || 0) - (stock(state)[gid] || 0) - inFlight(state, gid);
+  }
+  function materialsSatisfied(state, node) {
+    const m = need(node), s = stock(state);
+    for (const gid in m) if ((s[gid] || 0) < m[gid]) return false;
+    return true;
+  }
+  function consumeMaterials(state, node) {
+    const m = need(node), s = stock(state);
+    for (const gid in m) s[gid] = Math.max(0, (s[gid] || 0) - m[gid]);
+  }
+  function activeCastleCarts(state) {
+    let n = 0;
+    for (const c of (state.carts || [])) if (!c.done && c.kind === "castle") n++;
+    return n;
+  }
+
+  // Seller reservation helpers — identical model to Trade.tick's EC-D reservation.
+  function reservedOf(t, gid) { return (t && t.reserved && t.reserved[gid]) || 0; }
+  function reserve(t, gid, n) { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; }
+  function release(t, gid, n) { if (t && t.reserved) t.reserved[gid] = Math.max(0, (t.reserved[gid] || 0) - n); }
+  function priceOf(town, gid) {
+    const p = town.prices && town.prices[gid];
+    if (typeof p === "number") return p;
+    if (typeof Sim !== "undefined" && Sim.priceFor) return Sim.priceFor(town, gid);
+    return (CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 1;
+  }
+  const townKey = (t) => HexMath.key(t.q, t.r);
+
+  // Advance the castle-trade layer one tick. `open` = is the castle panel
+  // selected? Mutates State only (state.carts, state.treasury, town stock/gold,
+  // state.castleStock). Deterministic via a dedicated seed (state.researchSeed).
+  function tick(state, open) {
+    if (!state) return state;
+    if (!Array.isArray(state.carts)) state.carts = [];
+    if (typeof state.treasury !== "number") state.treasury = 0;
+    if (typeof state.researchSeed !== "number") state.researchSeed = 0;
+    stock(state);
+    const C = cfg();
+    const towns = state.towns || [];
+    const byId = new Map(towns.map(t => [t.id, t]));
+
+    // Per-tick seeded RNG (independent of Trade's stream), advanced by a fixed LCG
+    // step each tick so the sequence is reproducible and never touches Math.random.
+    const rng = mulberry32(state.researchSeed | 0);
+    state.researchSeed = (Math.imul(state.researchSeed | 0, 1664525) + 1013904223) | 0;
+
+    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+    const cartCapacity = C.cartCapacity;
+    const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
+    const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
+
+    // --- 1. Dispatch (ONLY while the castle panel is open + a node is active) ---
+    const R = state.research;
+    const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
+    if (open && node && Object.keys(need(node)).length) {
+      const fromKey = castleHex();
+      let guard = 0;
+      // Fill up to the trader cap; each pass buys one material batch from one city.
+      while (activeCastleCarts(state) < C.maxTraders && guard++ <= C.maxTraders) {
+        // (a) Still-needed materials (respecting stock + in-flight).
+        const gaps = [];
+        for (const gid in need(node)) {
+          const rem = remaining(state, node, gid);
+          if (rem > C.buyThreshold && rem > 0) gaps.push({ gid, rem });
+        }
+        if (!gaps.length) break;   // everything gathered or already on the road
+        gaps.sort((a, b) => b.rem - a.rem || (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
+        const gapSlate = gaps.slice(0, C.topRandom);
+        const want = gapSlate[Math.min(gapSlate.length - 1, Math.floor(rng() * gapSlate.length))];
+
+        // (b) Best reachable seller holding a genuine surplus of want.gid.
+        const offers = [];
+        for (const seller of towns) {
+          if (!seller || !seller.stock) continue;
+          const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - needOf(seller, want.gid);
+          if (surplus <= 0) continue;
+          const route = Pathing.route(state, fromKey, townKey(seller));
+          if (!route) continue;
+          offers.push({ seller, surplus, route, price: priceOf(seller, want.gid) });
+        }
+        if (!offers.length) break;   // no reachable seller for a needed material
+        offers.sort((a, b) => b.surplus - a.surplus || a.price - b.price || a.route.cost - b.route.cost || a.seller.id - b.seller.id);
+        const slate = offers.slice(0, C.topRandom);
+        const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))];
+
+        // (c) Dispatch: qty capped by cart capacity, seller surplus, remaining
+        //     need, and treasury affordability at the AGREED unit price (carried).
+        const agreedUnit = pick.price;
+        const affordable = agreedUnit > 0 ? (state.treasury || 0) / agreedUnit : cartCapacity;
+        const qty = Math.min(cartCapacity, pick.surplus, want.rem, affordable);
+        if (!(qty > 0)) break;   // can't afford / nothing to buy → stop this tick
+        const agreedGold = agreedUnit * qty;
+
+        reserve(pick.seller, want.gid, qty);
+        state.treasury = (state.treasury || 0) - agreedGold;   // carried up front
+
+        state.carts.push({
+          id: (state._nextCartId = (state._nextCartId || 0) + 1),
+          kind: "castle",                        // renders as a cart; Trade.tick ignores it
+          fromId: CASTLE_ID, toId: pick.seller.id,
+          goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
+          path: pick.route.path.slice(),         // castle → seller hex keys
+          progress: 0, phase: "outbound", done: false,
+        });
+      }
+    }
+
+    // --- 2. Advance castle traders: buy at the seller, deliver to castleStock ---
+    for (const cart of state.carts) {
+      if (cart.done || cart.kind !== "castle") continue;
+      cart.progress += cartSpeed;
+      if (cart.progress < 1) continue;
+      cart.progress = 1;
+
+      if (cart.phase === "outbound") {
+        const seller = byId.get(cart.toId);
+        const carried = cart.agreedGold || (cart.unitBuy || 0) * cart.qty;
+        if (seller) release(seller, cart.goodId, cart.qty);   // release reservation on arrival
+        if (!seller) { state.treasury = (state.treasury || 0) + carried; cart.done = true; continue; }
+        if (!seller.stock) seller.stock = {};
+        const take = Math.min(cart.qty, Math.max(0, seller.stock[cart.goodId] || 0));
+        if (!(take > 0)) { state.treasury = (state.treasury || 0) + carried; cart.done = true; continue; }
+        const value = (cart.unitBuy || 0) * take;             // AGREED unit × delivered qty
+        // NO tariff (documented): the castle is the kingdom purchasing for itself,
+        // so the city nets the full agreed price.
+        seller.stock[cart.goodId] = (seller.stock[cart.goodId] || 0) - take;
+        seller.gold = (seller.gold || 0) + value;
+        if (carried > value) state.treasury = (state.treasury || 0) + (carried - value);  // refund undelivered
+        cart.qty = take;
+        cart.phase = "return"; cart.progress = 0;
+        cart.path = cart.path.slice().reverse();              // seller → castle
+      } else {
+        stock(state)[cart.goodId] = (stock(state)[cart.goodId] || 0) + cart.qty;   // into the castle
+        cart.done = true;
+      }
+    }
+
+    // --- 3. Prune retired carts (shared with Trade.tick's filter) --------------
+    if (state.carts.some(c => c.done)) state.carts = state.carts.filter(c => !c.done);
+    return state;
+  }
+
+  return {
+    tick, materialsSatisfied, consumeMaterials, remaining, need,
+    activeCastleCarts, stock, castleHex, CASTLE_ID,
+  };
+})();
+// === RESEARCH-ECONOMY END ===
+
 // === PROGRESS-CORE START ===  (P4-B / slot #3 — town leveling + King's quests + prestige + castle levels)
 // Pure, deterministic progression layer (GDD §3.3, §7.2, §7.4). No DOM / canvas /
 // I/O and no Math.random — Quests.tick reads/mutates only State (state.quest,
@@ -3169,6 +3414,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
+    state.castleStock = {};      // CRE: castle research-material stockpile
+    state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.quest = null;
@@ -3210,6 +3457,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         research: state.research,          // RESEARCH (P4-A): tech tree progress
         revealed: Array.from(state.revealed),
         warehouse: state.warehouse,        // CASTLE-UI (T9): player warehouse
+        castleStock: state.castleStock,    // CRE: castle research-material stockpile
+        researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
         prestige: state.prestige,          // P4-B
         castleLevel: state.castleLevel,    // P4-B
         quest: state.quest,                // P4-B
@@ -3244,6 +3493,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
     state.research = Research.normalize(data.research);   // RESEARCH (P4-A)
     state.warehouse = data.warehouse || {};   // CASTLE-UI (T9)
+    state.castleStock = (data.castleStock && typeof data.castleStock === "object") ? data.castleStock : {};   // CRE
+    if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.quest = data.quest || null;
@@ -3328,6 +3579,12 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         const _treasBefore = state.treasury || 0;
         Trade.tick(state);
         if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
+        // CRE: run the castle's research-buyer traders BEFORE Research.tick so any
+        // material delivered this tick counts toward completion. Dispatch is gated on
+        // the castle panel being selected (CastleUI.isOpen).
+        if (typeof ResearchEconomy !== "undefined") {
+          ResearchEconomy.tick(state, !!(window.CastleUI && window.CastleUI.isOpen));
+        }
         Research.tick(state); Quests.tick(state);
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
         if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
@@ -4575,6 +4832,46 @@ var Events = (typeof Events !== "undefined" && Events) || {};
                       // section (e.g. research materials) to the castle panel body.
                       addPanelSection(fn) { if (typeof fn === "function") { castlePanelSections.push(fn); if (castleOpen) renderCastlePanel(); } },
                       get isOpen() { return castleOpen; } };
+
+  // === RESEARCH-ECONOMY (CRE) castle-panel section ===
+  // Shows the active research node, its material requirement vs what the castle
+  // has gathered (state.castleStock), and how many royal buyers are on the road.
+  // Rendered only while the panel is open (renderCastlePanel appends it); idle
+  // when no node is active.
+  window.CastleUI.addPanelSection(function (st) {
+    const R = st.research;
+    const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
+    let out = '<div class="cre-box"><div class="cre-title">🔬 Royal Commission</div>';
+    if (!node) {
+      return out + '<div class="cre-idle">No project underway. Start one in the 🔬 Research panel to commission the King\'s buyers.</div></div>';
+    }
+    const cs = (st.castleStock && typeof st.castleStock === "object") ? st.castleStock : {};
+    const mats = node.materials || {};
+    const keys = Object.keys(mats);
+    const outCarts = (typeof ResearchEconomy !== "undefined") ? ResearchEconomy.activeCastleCarts(st) : 0;
+    const maxCarts = (CONFIG.researchEconomy && CONFIG.researchEconomy.maxTraders) || 0;
+    out += '<div class="cre-node">Researching <b>' + esc(node.name) + '</b></div>';
+    if (!keys.length) {
+      out += '<div class="cre-idle">Needs no materials — completes on labour alone.</div>';
+    } else {
+      out += '<table class="cre-tbl">';
+      for (const gid of keys) {
+        const have = Math.floor(cs[gid] || 0);
+        const req = mats[gid];
+        const done = have >= req;
+        out += '<tr><td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + esc(GOOD_LABEL(gid)) + '</td>' +
+               '<td>' + have + ' / ' + req + '</td><td>' + (done ? '✓' : '…') + '</td></tr>';
+      }
+      out += '</table>';
+    }
+    out += '<div class="cre-carts">🐎 ' + outCarts + ' / ' + maxCarts + ' royal buyers on the road' +
+           (castleOpen ? '' : ' (paused — panel closed)') + '</div>';
+    return out + '</div>';
+  });
+
+  // CRE: tiny test/debug surface for the headless smoke (state lives in this
+  // closure and isn't otherwise reachable). Harmless during normal play.
+  window.__cre = { get state() { return state; } };
   // === CARTS + CASTLE-UI END ===
 
   // === RESEARCH-UI START ===  (P4-A / slot #2 — research panel, DOM over canvas)
