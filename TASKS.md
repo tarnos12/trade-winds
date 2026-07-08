@@ -149,6 +149,27 @@ parallel with PP-B..E after PP-A merges (TV2 = pure core on live tree, PP UI in
 worktrees). Slices: TV2-A terrain+goods+buildings+placement (pure) → TV2-B
 MapGen presets + start screen → TV2-C research-tree & balance wiring.
 
+## Milestone: Content chains v2 (CC) — SPEC'D (author lists, 2026-07-08; sequence after TV2 merges)
+**Definitive WORKER building list (author):**
+- **Tailoring** — wool → **clothes**; clothes = LUXURY for Workers (moves down
+  from citizen tier). **Weaver + cloth good RETIRED** (no intermediate; assume
+  confirmed unless author objects).
+- **Mill** — wheat → flour (exists). **Bakery** — flour → bread; **bread =
+  BASIC need for Workers**. **Brewery** — wheat → **Mead** (display rename from
+  beer; internal id may stay) = LUXURY for Workers.
+- **Claypit / Brickworks / Coalmine / Iron Mine / Gold Mine** — as in TV2.
+- **Charcoal Burning** — wood → coal (second coal source besides the mine).
+- **StoneTools Maker** — planks + stone → **stone tools** (new good); "used by
+  some buildings later, not decided yet" — wire into some research materials +
+  upgrade costs for now.
+- **Oil Maker** — fish → **oil** (new good); used for research + later systems.
+**Needs model (Workers):** basic = bread (+wood assumed for heating — confirm);
+luxury = mead + clothes.
+**Open (awaiting author's Citizen list):** Smelter (iron+coal→tools) assumed to
+move to the CITIZEN band (LTT Forge analog); Jeweler (gold→jewelry) citizen-tier.
+All new buildings get unlock nodes in the WORKER research band + materials;
+research-tree pos/prereqs mirror the LTT reference layout loosely.
+
 ## Milestone: Aristocrats tier — FUTURE (author-deferred)
 4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
 (luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
