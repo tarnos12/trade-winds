@@ -101,10 +101,18 @@ per-kind icons. **DoD (headless smoke):** found a town, open Buildings tab, plac
 lumberjack on a forest hex (accepted) and reject an invalid hex; building renders;
 no console errors.
 
-## Milestone: Phase 4 — Progression (GDD §7)
+## Milestone: Phase 4 — Progression ✅ DONE (GDD §7)
 
-Give the game goals + a difficulty arc. Three parallel slices, each fenced; the
-manager integrates P4-A → P4-B → P4-C.
+Merged P4-A → P4-B → P4-C. Research tree (15 nodes, treasury-funded), town
+leveling (L1→4, upgrade to L2 to trade), King's quests + prestige, castle levels
+1→5 (L5 = victory), Kingdom screen, town alerts, and random events (bumper/craze/
+fair/bridge). Accumulator runs Sim→Trade→Research→Quests→Events. Verified full
+headless (0 console errors, all panels open, live loop). Tests: `research` 40,
+`progress` 29 (+ board 25, prices 51, sim 40, pathing 24, trade 28, buildings 37
+= 274 total). **Next: Phase 5 — Content & Polish** (scenarios, tutorial, audio,
+juice; GDD §10).
+
+## Milestone (done): Phase 4 — Progression (GDD §7)
 
 ### Shared data contract (ownership — avoids collisions on the single file)
 - **state keys:** P4-A adds `state.research`; P4-B adds `state.prestige`,

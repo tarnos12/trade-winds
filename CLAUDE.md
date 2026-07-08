@@ -48,7 +48,7 @@ central-dispatch model is in the claude-rules template; not used here.)
 
 ## Current status (update this section every commit)
 
-**Phases 1–3 DONE + Town Interiors DONE (player-placed buildings & housing). Phase 4 — Progression: next.**
+**Phases 1–4 DONE + Town Interiors DONE. Phase 5 — Content & Polish: next.**
 
 Done:
 - Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
@@ -88,13 +88,21 @@ Done:
   overlay, buildings rendered. Towns start center-only with a founding kit.
   Tests: `buildings` 37, `sim` 40.
 
+- **Phase 4 — Progression** landed via the agent team (P4-A → P4-B → P4-C):
+  research tree (15 nodes, treasury-funded, effects queryable), town leveling
+  (L1→4; a town must reach L2 to trade — replaces the old auto-L2 bridge), King's
+  quests + prestige, castle levels 1→5 (L5 = victory), Kingdom screen, town
+  alerts, and random events (bumper/craze/fair/collapsed-bridge). Accumulator runs
+  Sim→Trade→Research→Quests→Events. Tests: `research` 40, `progress` 29.
+
 Next (recommended order):
-1. **Phase 4 — Progression** (GDD §7): research tree (15 nodes), population tiers
-   + tier-3 goods, King's requests + prestige + castle levels, random events,
-   Kingdom screen + alerts. **Includes proper town leveling/upgrade** (towns
-   currently auto-start at level 2 as a Phase 3 bridge — replace with tariff/
-   requirement-gated upgrades).
-2. Phase 5 — Content & Polish. (GDD §10.)
+1. **Phase 5 — Content & Polish** (GDD §10): campaign scenarios + start screen,
+   tutorial (first King's requests as onboarding), audio (WebAudio), juice
+   (chimney smoke, transaction particles), optional bandits/guards. Also wire
+   more research effects into Sim/Trade/Buildings (currently queryable but only
+   lightly applied).
+2. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
+   goods count, win condition, title) — resolve before/along Phase 5.
 3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
    goods count, win condition, title) — not blockers yet.
 
