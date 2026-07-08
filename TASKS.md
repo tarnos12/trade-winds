@@ -163,8 +163,22 @@ MapGen presets + start screen → TV2-C research-tree & balance wiring.
   some buildings later, not decided yet" — wire into some research materials +
   upgrade costs for now.
 - **Oil Maker** — fish → **oil** (new good); used for research + later systems.
-**Needs model (Workers):** basic = bread (+wood assumed for heating — confirm);
-luxury = mead + clothes.
+**DEFINITIVE NEEDS MATRIX (author, 2026-07-08 — supersedes ALL earlier needs
+statements, incl. "bread = workers' basic"):**
+- **T1 Peasant** — basic: potato, wood · luxury: fish, wool. (= current model)
+- **T2 Worker** — basic: fish, COAL · luxury: basic clothing, bread, mead.
+- **T3 Citizen** — basic: lamps, bread, mead, basic clothing · luxury:
+  furniture (chairs), pottery, jewelry (gold ring).
+- **T4 Aristocrat** — basic: lamps, mead, iron armor, furniture, pottery ·
+  luxury: BRANDY (the Distillery's T3 alcohol — renamed; NOT a citizen good),
+  luxury clothing, jewelry. Iron armor IS consumed (not military-only).
+**Economy rules (author):** every tier produces ONLY gold (tax); each higher
+tier pays more per capita. **70% happiness = full housing/worker capacity**
+(below 70 scales capacity down); **above 70% = extra gold income per house**.
+Aristocrat homes: **1 capacity slot**, upgradable further (ladder adds capacity).
+**Aristocrats tier: no longer deferred** — implement as the final CC slice (all
+T4 consumption goods exist in these chains): 4th houseTier + band + needs +
+research nodes; supersedes the "FUTURE" note below.
 **Definitive CITIZEN building list (author, 2026-07-08):**
 - **Pottery** — clay → pottery.
 - **Distillery** — mead + pottery → **alcohol** (T3) = LUXURY for Citizens.
