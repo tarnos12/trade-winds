@@ -95,7 +95,7 @@ happiness %.
 Order: PP-A (workflow, reviews) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (worktrees) → merge
 B→C→D→E → verify → version bump.
 
-## Milestone: Terrain & resources v2 (TV2) — SPEC'D, awaiting author's follow-up details before launch
+## Milestone: Terrain & resources v2 (TV2) — 🟡 IN PROGRESS (workflow, worktree)
 Author directives (2026-07-08, after the PP batch). Replaces the current terrain
 enum (`water, meadow, forest, hills, mountains, fertile, wasteland`).
 **Generic buildable tiles** (ANY building unless it requires a resource tile):
