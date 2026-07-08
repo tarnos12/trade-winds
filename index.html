@@ -2221,6 +2221,156 @@ var Events = (typeof Events !== "undefined" && Events) || {};
 
   function isVisible(k) { return state.revealAll || state.revealed.has(k); }
 
+  // === TILE-ICONS ===
+  // Small, code-drawn terrain motifs baked into the offscreen terrain layer
+  // (drawn once per fog-reveal / resize, 0 extra cost per frame). Kept quiet and
+  // low-contrast so town / building / cart glyphs drawn per-frame on top read
+  // clearly. Pure canvas paths — no external images/emoji (CSP blocks them).
+  // Tints: DARK = a soft shadow, LITE = a soft highlight, both scaled off the
+  // hex fill so icons sit on the warm/sepia palette rather than fight it.
+  const ICON_DARK = "rgba(40,30,15,0.34)";
+  const ICON_LITE = "rgba(255,249,233,0.42)";
+  function drawTerrainIcon(ctx, cx, cy, size, terrain) {
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const s = size; // hex radius
+    switch (terrain) {
+      case "forest": {
+        // A couple of simple pine trees (stacked triangles + trunk).
+        const drawPine = (ox, oy, sc) => {
+          const w = s * 0.34 * sc, hgt = s * 0.7 * sc;
+          ctx.fillStyle = ICON_DARK;
+          // two triangular tiers
+          ctx.beginPath();
+          ctx.moveTo(cx + ox, cy + oy - hgt);
+          ctx.lineTo(cx + ox - w, cy + oy - hgt * 0.15);
+          ctx.lineTo(cx + ox + w, cy + oy - hgt * 0.15);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(cx + ox, cy + oy - hgt * 0.55);
+          ctx.lineTo(cx + ox - w * 1.15, cy + oy + hgt * 0.28);
+          ctx.lineTo(cx + ox + w * 1.15, cy + oy + hgt * 0.28);
+          ctx.closePath();
+          ctx.fill();
+        };
+        drawPine(-s * 0.34, s * 0.16, 0.95);
+        drawPine(s * 0.36, s * 0.02, 1.15);
+        break;
+      }
+      case "hills": {
+        // Two rounded bumps.
+        ctx.fillStyle = ICON_DARK;
+        ctx.beginPath();
+        ctx.arc(cx - s * 0.3, cy + s * 0.14, s * 0.34, Math.PI, 0);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + s * 0.32, cy + s * 0.24, s * 0.42, Math.PI, 0);
+        ctx.fill();
+        break;
+      }
+      case "mountains": {
+        // Triangular peaks with a small snow cap on the tallest.
+        ctx.fillStyle = ICON_DARK;
+        ctx.beginPath();
+        ctx.moveTo(cx - s * 0.5, cy + s * 0.38);
+        ctx.lineTo(cx - s * 0.12, cy - s * 0.28);
+        ctx.lineTo(cx + s * 0.24, cy + s * 0.38);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + s * 0.04, cy + s * 0.38);
+        ctx.lineTo(cx + s * 0.34, cy - s * 0.08);
+        ctx.lineTo(cx + s * 0.56, cy + s * 0.38);
+        ctx.closePath();
+        ctx.fill();
+        // snow cap
+        ctx.fillStyle = ICON_LITE;
+        ctx.beginPath();
+        ctx.moveTo(cx - s * 0.12, cy - s * 0.28);
+        ctx.lineTo(cx - s * 0.26, cy - s * 0.04);
+        ctx.lineTo(cx - s * 0.02, cy - s * 0.02);
+        ctx.lineTo(cx + s * 0.03, cy - s * 0.12);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case "water": {
+        // A couple of wavy lines.
+        ctx.strokeStyle = ICON_LITE;
+        ctx.lineWidth = Math.max(1, s * 0.09);
+        for (let row = -1; row <= 1; row++) {
+          const yy = cy + row * s * 0.32;
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.5, yy);
+          ctx.quadraticCurveTo(cx - s * 0.25, yy - s * 0.16, cx, yy);
+          ctx.quadraticCurveTo(cx + s * 0.25, yy + s * 0.16, cx + s * 0.5, yy);
+          ctx.stroke();
+        }
+        break;
+      }
+      case "fertile": {
+        // Crop rows / wheat strokes.
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.08);
+        for (let i = -2; i <= 2; i++) {
+          const xx = cx + i * s * 0.24;
+          ctx.beginPath();
+          ctx.moveTo(xx, cy + s * 0.4);
+          ctx.lineTo(xx, cy - s * 0.32);
+          ctx.stroke();
+          // little wheat tick at the top
+          ctx.beginPath();
+          ctx.moveTo(xx, cy - s * 0.2);
+          ctx.lineTo(xx - s * 0.12, cy - s * 0.34);
+          ctx.moveTo(xx, cy - s * 0.2);
+          ctx.lineTo(xx + s * 0.12, cy - s * 0.34);
+          ctx.stroke();
+        }
+        break;
+      }
+      case "meadow": {
+        // A few grass tufts (fanned strokes).
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.07);
+        const tuft = (ox) => {
+          const bx = cx + ox, by = cy + s * 0.28;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx, by - s * 0.4);
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx - s * 0.18, by - s * 0.34);
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + s * 0.18, by - s * 0.34);
+          ctx.stroke();
+        };
+        tuft(-s * 0.34);
+        tuft(s * 0.02);
+        tuft(s * 0.38);
+        break;
+      }
+      case "wasteland": {
+        // A bare dry crack + a couple of small rocks — nearly empty.
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(cx - s * 0.42, cy - s * 0.1);
+        ctx.lineTo(cx - s * 0.1, cy + s * 0.04);
+        ctx.lineTo(cx + s * 0.16, cy - s * 0.14);
+        ctx.lineTo(cx + s * 0.46, cy + s * 0.06);
+        ctx.stroke();
+        ctx.fillStyle = ICON_DARK;
+        ctx.beginPath();
+        ctx.arc(cx - s * 0.22, cy + s * 0.3, s * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+    }
+    ctx.restore();
+  }
+  // === END TILE-ICONS ===
+
   // ---------------------------------------------------------------
   // Terrain pre-render
   // ---------------------------------------------------------------
@@ -2250,6 +2400,8 @@ var Events = (typeof Events !== "undefined" && Events) || {};
         g.lineWidth = 1;
         g.strokeStyle = "rgba(30,22,12,0.28)";
         g.stroke();
+        // TILE-ICONS: bake a subtle terrain motif into the cached layer.
+        drawTerrainIcon(g, cx, cy, SIZE, hex.terrain);
       } else {
         g.fillStyle = CONFIG.fogColor;
         g.fill();
