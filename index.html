@@ -1745,8 +1745,13 @@ Object.assign(CONFIG, {
     },
     charcoal_burner: {
       id: "charcoal_burner", name: "Charcoal Burning", kind: "processor",
-      terrain: null, workerTier: "worker",
-      inputs: { wood: 2 }, output: { goodId: "coal", ratePerWorker: 1 },
+      // BAL2: coal is a WORKER BASIC need but had only worker-tier producers — a
+      // bootstrap deadlock (no coal → no workers → no coal). Peasant-staffed,
+      // research stays in the worker band (researchBand — the wheat-farm pattern).
+      terrain: null, workerTier: "peasant", researchBand: "worker",
+      // BAL2: 1:1 wood→coal — at 2:1 the burner out-ate the peasants' own
+      // wood (their BASIC need) and crashed peasant happiness in playthroughs.
+      inputs: { wood: 1 }, output: { goodId: "coal", ratePerWorker: 1 },
       unlockedBy: "unlock_charcoal_burner",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
@@ -1802,7 +1807,9 @@ Object.assign(CONFIG, {
     },
     lamp_maker: {
       id: "lamp_maker", name: "Lamp Maker", kind: "processor",
-      terrain: null, workerTier: "burgher",
+      // BAL2: lamps are a CITIZEN BASIC need — worker-staffed so citizens can
+      // bootstrap; research stays in the citizen band via researchBand.
+      terrain: null, workerTier: "worker", researchBand: "burgher",
       inputs: { oil: 2 }, output: { goodId: "lamp", ratePerWorker: 1 },
       unlockedBy: "unlock_lamp_maker",
       workerSlots: 2, cost: { wood: 30, stone: 20, gold: 150 },
@@ -1834,7 +1841,10 @@ Object.assign(CONFIG, {
       id: "cottage", name: "Cottage", kind: "house",
       terrain: null, houseTier: "worker", houseCapacity: 3,
       unlockedBy: "unlock_cottage",   // RT-A: per-building unlock node
-      cost: { wood: 30, stone: 15, bricks: 5, gold: 90 },   // === TV2: bricks component ===
+      // BAL2: NO bricks — bricks need worker-staffed producers, and workers need a
+      // cottage first (construction-layer bootstrap deadlock). T1 materials only;
+      // the manor + citizen-tier buildings keep their bricks components.
+      cost: { wood: 30, stone: 20, planks: 5, gold: 90 },
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
@@ -1854,7 +1864,7 @@ Object.assign(CONFIG, {
   // Town-interior layout constants (GDD §4.1). slotCap is indexed by town level
   // (index 0 unused); every placed building — house or producer — takes a slot.
   town: {
-    slotCap: [0, 7, 9, 11, 13], // EC-A: buildable slots by town-center level 1..4
+    slotCap: [0, 8, 12, 16, 20], // EC-A→BAL2: buildable slots by level 1..4 (a peasant base + one worker chain must fit)
                                 // (the center is separate → level 1 = 7 buildings + center).
     castle: { q: 0, r: 0 },     // PV2-A: the King's hub (map center). Not a city —
                                 // it carries a footprint so cities keep a 1-hex gap.
@@ -2271,21 +2281,13 @@ Sim.tick = function (State) {
     if (basicSat === null) basicSat = totalPop > 0 ? 1 : availFrac(repBasic);
     if (extraSat === null) extraSat = totalPop > 0 ? 1 : availFrac(repExtra);
 
-    // === CC: per-tier extra (luxury) availability — gates that tier's GROWTH even
-    // when the tier is still empty (req=0 → read pure shelf availability). ALL of a
-    // tier's luxuries must be available (min) for it to grow. Peasants are ungated
-    // (their extras drive happiness, not a hard growth gate) so a fresh food-only
-    // town can still bootstrap its first settlers. ===
-    const extraAvail = (tierKey) => {
-      const list = N.tiers[tierKey].extra;
-      if (!list.length) return 1;
-      let m = 1;
-      for (const g of list) {
-        const s = (g in gsat) ? gsat[g] : ((stock[g] || 0) > 0 ? 1 : 0);
-        if (s < m) m = s;
-      }
-      return m;
-    };
+    // === CC→BAL2: the per-tier LUXURY growth gate is GONE. It deadlocked the
+    // economy: workers/burghers gate-listed goods only their own tier produces,
+    // so tiers could never bootstrap from zero (BAL2 playthrough: nothing above
+    // peasants ever appeared in 120k ticks). The author's model needs no gate —
+    // capacity already follows happiness (70% = full), and luxuries only lift
+    // happiness above 70 for bonus income. Empty tiers bootstrap from their OWN
+    // shelf availability (below). ===
 
     // --- 3. Happiness = basicHappy·basicSat + extraHappy·extraSat -------
     // EV3: basics (wood+potato) fully met floor happiness at ~70; extras (fish+wool
@@ -2353,36 +2355,32 @@ Sim.tick = function (State) {
       burghers: (housing.burghers || 0),
       aristocrats: (housing.aristocrats || 0),   // === CC: aristocrat housing ===
     };
-    // === CC: luxury-need availability gate per tier (basic food/goods excluded —
-    // they drive happiness, which already scales the target). Peasants ungated. ===
-    const growGate = {
-      peasants: 1,
-      workers:  extraAvail("workers"),
-      burghers: extraAvail("burghers"),
-      aristocrats: extraAvail("aristocrats"),
-    };
     if (!town._lowSat) town._lowSat = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };
     for (const tier in capacity) {
       const cap = capacity[tier];
-      // === CC: 70% happiness = full capacity. Use this tier's OWN happiness (empty
-      // tier → town.happiness). target = round(cap × min(1, happiness/capacityFullAt)). ===
-      const th = (town.tierHappiness && town.tierHappiness[tier] != null)
-        ? town.tierHappiness[tier] : town.happiness;
+      // === CC→BAL2: 70% happiness = full capacity (author rule). A PRESENT tier
+      // uses its own eased happiness. An EMPTY tier bootstraps from its OWN
+      // basic/extra shelf availability (goods stocked → settlers arrive; e.g.
+      // stock fish+coal and workers move into a cottage), NOT the town average
+      // — so no tier appears before its needs exist, and none is deadlocked. ===
+      let th;
+      if (town.tierHappiness && town.tierHappiness[tier] != null) {
+        th = town.tierHappiness[tier];
+      } else {
+        const tl = N.tiers[tier] || { basic: [], extra: [] };
+        th = N.basicHappy * availFrac(tl.basic) + N.extraHappy * availFrac(tl.extra);
+      }
       const capFrac = Math.min(1, Math.max(0, Math.min(100, th)) / N.capacityFullAt);
       const target = Math.round(cap * capFrac);
       let n = pop[tier] || 0;
-      const canGrow = growGate[tier] >= N.growthThreshold;
-      if (canGrow && n < target) {
+      if (n < target) {
         town._lowSat[tier] = 0;
         n += N.growthRate * (target - n);        // grow toward the target
       } else if (n > target) {
         town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;   // over target (happiness fell)
         if (town._lowSat[tier] >= N.declineAfterTicks) n = target + (n - target) * (1 - N.declineRate);
-      } else if (!canGrow && n > 0) {
-        town._lowSat[tier] = (town._lowSat[tier] || 0) + 1;   // secondary need missing
-        if (town._lowSat[tier] >= N.declineAfterTicks) n *= (1 - N.declineRate);
       } else {
-        town._lowSat[tier] = 0;                  // at/below target and content
+        town._lowSat[tier] = 0;                  // at target and content
       }
       pop[tier] = Math.min(clamp0(n), cap);      // clamp 0 <= pop <= capacity
     }
@@ -2557,6 +2555,7 @@ Buildings.housingCapacity = function (town, state) {
   const cap = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC: 4th tier ===
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
+    if (b && b.built === false) continue;   // BAL2: scaffolds don't house anyone
     const def = CONFIG.buildings[b.typeId];
     if (!def || def.kind !== "house") continue;
     const key = BUILDINGS_TIER_KEY[def.houseTier];
@@ -2756,6 +2755,7 @@ Buildings.basicConsumptionMult = function (town) {
   const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
+    if (b && b.built === false) continue;   // BAL2: scaffolds don't house anyone
     const def = CONFIG.buildings[b.typeId];
     if (!def || def.kind !== "house") continue;
     const key = BUILDINGS_TIER_KEY[def.houseTier];
@@ -4103,9 +4103,9 @@ var ResearchEconomy = (function () {
 Object.assign(CONFIG.town, {
   maxLevel: 4,
   upgrade: {
-    2: { pop: 12, gold: 150 },
-    3: { pop: 25, gold: 400 },
-    4: { pop: 45, gold: 900 },
+    2: { pop: 8,  gold: 150 },   // BAL2: reachable on peasant housing (hut cap 2)
+    3: { pop: 16, gold: 400 },
+    4: { pop: 30, gold: 900 },
   },
 });
 
@@ -10077,8 +10077,15 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.17.1";
+  const GAME_VERSION = "0.18.0";
   const PATCH_NOTES = [
+    { v: "0.18.0", notes: [
+      "POPULATION REWORK: higher classes actually arrive now — stock a tier's basic needs and settlers move in",
+      "The old luxury requirement deadlocked Workers/Citizens (they needed goods only they could make) — gone",
+      "Charcoal Burning is peasant-run (and gentler on wood); Lamp Making is worker-run — so classes can bootstrap",
+      "More building slots per city level (8/12/16/20) and easier town-level requirements (8/16/30 pop)",
+      "Cottages no longer need bricks; scaffolding no longer houses anyone",
+    ] },
     { v: "0.17.1", notes: [
       "FIX: research no longer gets stuck at 100% — the castle starts with materials for early research",
       "Cities now sense what the active research needs and produce/import it for the royal buyers",

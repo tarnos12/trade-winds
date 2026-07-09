@@ -112,9 +112,9 @@ function stockAfterTick(typeId, good, unlocked) {
 // =========================================================================
 (() => {
   ok("slotCap base by level unchanged (no state)",
-    Buildings.slotCap(1) === 7 && Buildings.slotCap(2) === 9 && Buildings.slotCap(3) === 11 && Buildings.slotCap(4) === 13);
-  ok("slotCap with empty research == base", Buildings.slotCap(2, { research: withResearch([]) }) === 9);
-  ok("slotBonus adds +1 slot", Buildings.slotCap(2, { research: withResearch(["town_charters"]) }) === 10);
+    Buildings.slotCap(1) === 8 && Buildings.slotCap(2) === 12 && Buildings.slotCap(3) === 16 && Buildings.slotCap(4) === 20);
+  ok("slotCap with empty research == base", Buildings.slotCap(2, { research: withResearch([]) }) === 12);
+  ok("slotBonus adds +1 slot", Buildings.slotCap(2, { research: withResearch(["town_charters"]) }) === 13);
 })();
 
 // =========================================================================

@@ -57,18 +57,18 @@ function makeTown(over) {
 }
 
 // ============================================================================
-// 1) slotCap by town level = 7 / 9 / 11 / 13 (EC-A; index 0 unused; fallback 3).
+// 1) slotCap by town level = 8 / 12 / 16 / 20 (EC-A -> BAL2 retune; index 0 unused; fallback 3).
 // ============================================================================
-ok("slotCap(1) === 7", Buildings.slotCap(1) === 7);
-ok("slotCap(2) === 9", Buildings.slotCap(2) === 9);
-ok("slotCap(3) === 11", Buildings.slotCap(3) === 11);
-ok("slotCap(4) === 13", Buildings.slotCap(4) === 13);
+ok("slotCap(1) === 8", Buildings.slotCap(1) === 8);
+ok("slotCap(2) === 12", Buildings.slotCap(2) === 12);
+ok("slotCap(3) === 16", Buildings.slotCap(3) === 16);
+ok("slotCap(4) === 20", Buildings.slotCap(4) === 20);
 ok("slotCap(unknown) falls back to 3", Buildings.slotCap(99) === 3);
 
 // ============================================================================
 // 2) CONFIG.town + catalog sanity (shared data contract).
 // ============================================================================
-ok("CONFIG.town.slotCap = [0,7,9,11,13]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 7, 9, 11, 13]));
+ok("CONFIG.town.slotCap = [0,8,12,16,20]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 8, 12, 16, 20]));
 ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q === 0 && CONFIG.town.castle.r === 0);
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
@@ -105,7 +105,11 @@ ok("expected extractor ids present", ["lumberjack", "farm", "iron_mine", "quarry
 // === CC: smelter/weaver RETIRED; new worker + citizen processors present. ===
 ok("smelter + weaver retired (removed from catalog)", !CONFIG.buildings.smelter && !CONFIG.buildings.weaver);
 ok("expected WORKER processor ids present", ["sawmill", "mill", "bakery", "brewery", "brickworks", "tailoring", "charcoal_burner", "stonetool_maker", "oil_maker"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
-ok("expected CITIZEN processor ids present + burgher-staffed", ["forge", "armory", "pottery_workshop", "distillery", "goldsmith", "lamp_maker", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "burgher"));
+ok("expected CITIZEN processor ids present + burgher-staffed", ["forge", "armory", "pottery_workshop", "distillery", "goldsmith", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "burgher"));
+// BAL2 bootstrap staffing: lamp (citizen BASIC) is worker-made; coal (worker BASIC)
+// is peasant-made via Charcoal Burning — research bands preserved via researchBand.
+ok("lamp_maker is worker-staffed with citizen-band research", CONFIG.buildings.lamp_maker.workerTier === "worker" && CONFIG.buildings.lamp_maker.researchBand === "burgher");
+ok("charcoal_burner is peasant-staffed with worker-band research", CONFIG.buildings.charcoal_burner.workerTier === "peasant" && CONFIG.buildings.charcoal_burner.researchBand === "worker");
 ok("new processors sit on any land (terrain:null)", ["tailoring", "charcoal_burner", "stonetool_maker", "oil_maker", "forge", "armory", "pottery_workshop", "distillery", "goldsmith", "lamp_maker", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id].terrain === null));
 ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "house"));
 // === CC: aristocrat_home — houseTier 'aristocrat', 1 slot, ladder to +2 capacity. ===
@@ -304,13 +308,14 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 // ============================================================================
 {
   const st = makeState();
-  // EC-A: level-1 cap is now 7 — fill 7 slots so the 8th is rejected. (Only the
-  // usedSlots count matters here, so the filler hexes need not be valid placements.)
+  // BAL2: level-1 cap is 8 — fill the cap so the next placement is rejected. (Only
+  // the usedSlots count matters here, so the filler hexes need not be valid placements.)
+  const CAP1 = Buildings.slotCap(1);
   const fill = [];
-  for (let i = 0; i < 7; i++) fill.push({ typeId: "hut", q: 10 + i, r: 3, workers: 0 });
+  for (let i = 0; i < CAP1; i++) fill.push({ typeId: "hut", q: 10 + i, r: 3, workers: 0 });
   const town = makeTown({ level: 1, buildings: fill });
   st.towns.push(town);
-  ok("usedSlots counts all placed buildings", Buildings.usedSlots(town) === 7);
+  ok("usedSlots counts all placed buildings", Buildings.usedSlots(town) === CAP1);
   // (4,1) borders the center → contiguous, but the level-1 cap (3) is full.
   const capped = Buildings.canPlaceBuilding(st, "cottage", 4, 1);
   ok("over slot cap → not ok + 'slot'", capped.ok === false && /slot/i.test(capped.reason));

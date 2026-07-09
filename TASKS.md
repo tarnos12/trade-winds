@@ -197,6 +197,29 @@ luxury clothes. Citizen unlock nodes in the CITIZEN research band.
 (+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
 consumption good (reserved for future military/quests).
 
+## Milestone: 4-tier balance pass (BAL2) — PHASE 1 SHIPPED (v0.18.0), pacing grind REMAINING
+Diagnosed via a scripted 120k-tick headless playthrough (tools preserved at the
+manager scratchpad `bal2-tools/`; run: `TW_HTML=<index.html> node playthrough.js
+120000`). **Found & FIXED (v0.18.0):** (1) tier growth-gate deadlock — growth
+required luxuries only the tier itself produced; gate removed, empty tiers now
+bootstrap from their OWN basic/extra shelf availability + the author's
+70%-capacity rule (workers appear @tick ~1600 vs NEVER); (2) coal/lamp bootstrap
+— charcoal_burner → peasant-staffed, lamp_maker → worker-staffed (researchBand
+keeps their tree bands; wheat-farm pattern); (3) cottage bricks cost recreated
+the deadlock at the construction layer — removed (T1 materials only);
+(4) unbuilt houses wrongly granted housing — scaffolds excluded; (5) charcoal
+wood input 2→1 (burners out-ate peasant heating wood, crashing happiness);
+(6) slot caps [7,9,11,13]→[8,12,16,20]; town-level pop gates 12/25/45→8/16/30.
+Suite 1,164 green. Playthrough after fixes: peasants 72–100% happy, workers
+sustained in all cities, worker chains produce (mead/clothes/oil), research
+37/53 in 60k ticks.
+**REMAINING (resume when agent budget allows — tuner can reuse the diagnosis):**
+burgher→aristocrat pacing (cities exhaust slots before the citizen build path;
+options: deeper slot ladder, hut-upgrade density, plan-aware slot budget),
+castle L5 victory pacing, quest rotation jams on not-yet-producible deliver
+goods (filter templates via Market.producible), worker fish/coal happiness
+plateau (~50–65%), 2nd-seed + oasis/big_world playthrough verification.
+
 ## Milestone: Aristocrats tier ✅ DONE (shipped with CC/v0.17.0 — author un-deferred it with the full T4 needs spec)
 
 Manager's board for the **in-session agent team** ([PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)).

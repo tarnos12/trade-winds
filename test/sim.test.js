@@ -178,13 +178,23 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
      fed.pop.workers <= CONFIG.buildings.cottage.houseCapacity + 1e-9);
   ok("cottage (a house) is never assigned workers", fed.buildings[0].workers === 0);
 
-  // Same, but NO mead (one luxury missing): workers must NOT appear.
+  // BAL2: the luxury growth-GATE is gone (it deadlocked tiers that produce their
+  // own luxuries). With basics (fish+coal) stocked but a luxury (mead) missing,
+  // workers DO appear — at/near full capacity (basics alone reach the 70% rule) —
+  // but their happiness stays at/below the bonus zone (no luxury income boost).
   const dry = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
                      stock: { wood: 100000, potato: 100000, fish: 100000, wool: 100000,
                               coal: 100000, clothes: 100000, bread: 100000 }, // no mead
                      buildings: [b("cottage", 0, 1)] });
-  for (let i = 0; i < 60; i++) Sim.tick({ towns: [dry] });
-  ok("CC: cottage but a luxury (mead) missing ⇒ workers stay 0", dry.pop.workers === 0);
+  for (let i = 0; i < 120; i++) Sim.tick({ towns: [dry] });
+  ok("BAL2: workers appear from basics alone (no luxury gate)", dry.pop.workers > 0);
+  ok("BAL2: without luxuries worker happiness stays below ~95",
+     (dry.tierHappiness.workers || 0) < 95);
+  // And with NO basics stocked at all, an empty tier still does NOT appear.
+  const none = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
+                      stock: {}, buildings: [b("cottage", 0, 1)] });
+  for (let i = 0; i < 120; i++) Sim.tick({ towns: [none] });
+  ok("BAL2: no basics stocked ⇒ no workers bootstrap", none.pop.workers === 0);
 }
 
 // ========================================================================
@@ -573,10 +583,10 @@ function place(typeId, q, r, over) {
 {
   const near = (a, b, eps) => Math.abs(a - b) < (eps || 1e-9);
   const homesFor = (peas, work, burg) => {
-    const a = [];
-    for (let i = 0; i < peas; i++) a.push(place("hut", i, 3));       // 2 peasant cap each
-    for (let i = 0; i < work; i++) a.push(place("cottage", i, 4));   // 3 worker cap each
-    for (let i = 0; i < burg; i++) a.push(place("manor", i, 5));     // 4 burgher cap each
+    const a = [];   // BAL2: completed homes — scaffolds house nobody
+    for (let i = 0; i < peas; i++) a.push(place("hut", i, 3, { built: true }));       // 2 peasant cap each
+    for (let i = 0; i < work; i++) a.push(place("cottage", i, 4, { built: true }));   // 3 worker cap each
+    for (let i = 0; i < burg; i++) a.push(place("manor", i, 5, { built: true }));     // 4 burgher cap each
     return a;
   };
 
@@ -724,7 +734,7 @@ function place(typeId, q, r, over) {
     const A = CONFIG.needs.tiers.aristocrats;
     const refill = (t) => { for (const g of A.basic) t.stock[g] = 80; for (const g of A.extra) t.stock[g] = 80; };
     const t = town({ level: 4, gold: 0, pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 1 },
-      stock: {}, buildings: [place("aristocrat_home", 0, 1, { upgradeLevel: 3 })] });   // cap 3
+      stock: {}, buildings: [place("aristocrat_home", 0, 1, { upgradeLevel: 3, built: true })] });   // cap 3 (BAL2: completed home — scaffolds house nobody)
     for (let i = 0; i < 400; i++) { refill(t); Sim.tick({ towns: [t] }); }
     ok("CC: aristocrats grow from aristocrat_home when all their needs are met", t.pop.aristocrats > 1.5);
     ok("CC: aristocrat pop respects house capacity (L3 → 3)", t.pop.aristocrats <= 3 + 1e-9 && t.pop.aristocrats > 2.5);
@@ -746,7 +756,7 @@ function place(typeId, q, r, over) {
       // enough houses of this tier to hold 4 at full happiness
       const buildings = [];
       const per = CONFIG.buildings[houseId].houseCapacity;
-      for (let i = 0; i < Math.ceil(4 / per); i++) buildings.push(place(houseId, i, 7));
+      for (let i = 0; i < Math.ceil(4 / per); i++) buildings.push(place(houseId, i, 7, { built: true }));   // BAL2: completed homes
       return town({ level: 4, gold: 0, pop, stock, buildings });
     };
     const tp = mk("peasants", "hut", 2), tw = mk("workers", "cottage", 3),
@@ -767,7 +777,7 @@ function place(typeId, q, r, over) {
     const t = town({ level: 4, pop: { peasants: 3, workers: 2, burghers: 1, aristocrats: 1 },
       stock: { potato: 100, wood: 100, fish: 100, wool: 100, coal: 100, clothes: 100, bread: 100, mead: 100,
                lamp: 100, chairs: 100, pottery: 100, gold_ring: 100, iron_armor: 100, brandy: 100, luxury_clothes: 100 },
-      buildings: [place("hut", 0, 1), place("cottage", 1, 1), place("manor", 2, 1), place("aristocrat_home", 3, 1)] });
+      buildings: [place("hut", 0, 1), place("cottage", 1, 1, { built: true }), place("manor", 2, 1, { built: true }), place("aristocrat_home", 3, 1, { built: true })] });   // BAL2: completed homes
     for (let i = 0; i < 20; i++) Sim.tick({ towns: [t] });
     ok("CC/mutation: Sim.tick does not mutate CONFIG.needs.tiers", JSON.stringify(CONFIG.needs.tiers) === before);
   }
