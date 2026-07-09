@@ -420,6 +420,65 @@
   .cw-btn:disabled { opacity: 0.3; cursor: default; }
   /* === CASTLE-UI CSS END === */
 
+  /* === PP-C CASTLE-PANEL CSS START === (LTT-style two-tab castle panel) */
+  #castlePanel { width: 404px; }
+  #cwTabs { border-bottom: 1px solid var(--panel-edge); padding-bottom: 6px; }
+  #castlePanel .tp-body.hidden { display: none; }   /* no generic .hidden rule exists */
+  #cwKeepBody .cw-tariff { padding: 4px 0 8px; margin-bottom: 6px; }
+  #cwWhBody .cw-summary { padding: 6px 0; }
+  #cwWhBody .cw-cap { margin: 0 0 8px; }
+  .cw-sec { margin: 12px 0 2px; font-weight: bold; color: var(--accent); font-size: 12.5px; }
+  .cw-sec .hint { font-weight: normal; font-size: 10.5px; opacity: 0.6; font-style: italic; margin-left: 4px; }
+  /* Research Center pipeline (Keep tab) */
+  .rc-box { border: 1px solid var(--panel-edge); border-radius: 8px; padding: 8px 10px 9px;
+    margin-top: 10px; background: #1c160f; }
+  .rc-title { font-weight: bold; color: var(--accent); margin-bottom: 6px; font-size: 12.5px; }
+  .rc-flow { display: flex; align-items: center; gap: 8px; }
+  .rc-mats { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .rc-mat { display: flex; align-items: center; gap: 5px; font-size: 12px;
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rc-mat.ok { color: #a6e0a8; }
+  .rc-mat .fly { font-size: 10.5px; opacity: 0.8; color: #e0b877; }
+  .rc-arrow { opacity: 0.45; font-size: 13px; }
+  .rc-book { text-align: center; min-width: 88px; font-size: 15px; }
+  .rc-book .bar { height: 6px; border-radius: 3px; background: #120f0a; border: 1px solid var(--panel-edge);
+    overflow: hidden; margin: 3px 0 2px; }
+  .rc-book .bar > span { display: block; height: 100%; background: linear-gradient(90deg, #b06b2c, var(--accent)); }
+  .rc-book .pct { font-size: 11.5px; font-weight: bold; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .rc-book .gold { font-size: 10.5px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+  .rc-node { text-align: center; min-width: 82px; max-width: 108px; font-size: 17px; }
+  .rc-node .nm { font-size: 11.5px; font-weight: bold; line-height: 1.25; }
+  .rc-queue { margin-top: 7px; font-size: 11px; opacity: 0.75; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; border-top: 1px dashed var(--panel-edge); padding-top: 5px; }
+  .rc-idle { opacity: 0.75; font-style: italic; font-size: 12px; }
+  /* fleet bar (Warehouse tab) */
+  .cwf-box { border: 1px solid var(--panel-edge); border-radius: 8px; padding: 6px 9px 8px;
+    background: #1c160f; margin-bottom: 8px; cursor: help; }
+  .cwf-line { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .cwf-line b { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .cwf-bar { height: 7px; border-radius: 4px; background: #120f0a; border: 1px solid var(--panel-edge); overflow: hidden; }
+  .cwf-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #5a7c9c, #7a9bd4); }
+  /* per-good market rows */
+  table.cwm-tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.cwm-tbl th, table.cwm-tbl td { padding: 2px 4px; text-align: right; font-size: 12px; }
+  table.cwm-tbl th:first-child, table.cwm-tbl td:first-child { text-align: left; }
+  table.cwm-tbl th { font-size: 10px; opacity: 0.7; border-bottom: 1px solid var(--panel-edge); font-weight: normal; }
+  table.cwm-tbl tr.off td { opacity: 0.5; }
+  table.cwm-tbl tr.off td:nth-last-child(-n+2) { opacity: 1; }
+  .cwm-lim { width: 52px; background: #120f0a; color: var(--paper); border: 1px solid var(--panel-edge);
+    border-radius: 4px; padding: 1px 3px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .cwm-flow { font-size: 11px; }
+  .cwm-flow.up { color: #6fbf73; }
+  .cwm-flow.down { color: #e0a860; }
+  .cwm-flow.flat { opacity: 0.4; }
+  /* summary footer */
+  .cwm-sum { margin-top: 8px; padding: 6px 9px; border: 1px solid var(--panel-edge); border-radius: 8px;
+    background: #1c160f; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .cwm-sum .up { color: #6fbf73; }
+  .cwm-sum .down { color: #e0a860; }
+  .cwm-total { margin-top: 3px; font-size: 11px; opacity: 0.75; }
+  /* === PP-C CASTLE-PANEL CSS END === */
+
   /* === RT-B TECH-TREE CSS START === (full-screen tiered tech tree, DOM over canvas) */
   #btnResearch.active { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
   #techTree { position: fixed; inset: 0; z-index: 60; background: rgba(10,8,5,0.94); }
@@ -891,21 +950,42 @@
     <div class="tp-title">👑 Castle</div>
     <button id="cwClose" class="tp-close" title="Close">✕</button>
   </div>
-  <div class="cw-summary">
-    <div class="box"><div class="k">Treasury</div><div class="v" id="cwTreasury">0 g</div></div>
-    <div class="box"><div class="k">Market</div><div class="v" id="cwMarket">—</div></div>
-    <div class="box"><div class="k">Storage</div><div class="v" id="cwCapText">0 / 0</div></div>
+  <!-- === PP-C HTML START === (LTT-style castle panel: 🏰 Keep / 🏪 Warehouse tabs).
+       Existing sections are RELOCATED, not removed: castle level + upgrade, prestige
+       and the tariff control live on the Keep tab (plus the Research Center pipeline,
+       which replaces the old CRE "Royal Commission" box); the treasury/market/storage
+       summary, capacity bar and the manual buy/sell Royal Stores (state.warehouse —
+       still the King's-quest 'deliver' target) live on the Warehouse tab BELOW the
+       new castle-market controls (state.castleTrade, PP-A). -->
+  <div class="tp-tabs" id="cwTabs">
+    <button class="tp-tab active" data-cwtab="keep">🏰 Keep</button>
+    <button class="tp-tab" data-cwtab="warehouse">🏪 Warehouse</button>
   </div>
-  <div class="cw-cap"><span id="cwCapBar" style="width:0%"></span></div>
-  <!-- CP: tariff rate + slider (moved from #hud). The slider (TARIFF-SLIDER P5D-D)
-       stays hidden until the Tariff Office research unlocks it. -->
-  <div class="cw-tariff" id="tariffCtl">
-    <span class="lbl">Tariff</span> <b id="tariffPct">25%</b>
-    <input type="range" id="tariffSlider" min="10" max="40" step="1" value="25"
-      style="display:none" title="Higher tariff earns more per trade but makes fewer routes profitable (GDD §6.3)">
-    <span class="hint" id="tariffHint">Research the Tariff Office to adjust</span>
+  <div class="tp-body" id="cwKeepBody">
+    <!-- CP: tariff rate + slider (moved from #hud). The slider (TARIFF-SLIDER P5D-D)
+         stays hidden until the Tariff Office research unlocks it. -->
+    <div class="cw-tariff" id="tariffCtl">
+      <span class="lbl">Tariff</span> <b id="tariffPct">25%</b>
+      <input type="range" id="tariffSlider" min="10" max="40" step="1" value="25"
+        style="display:none" title="Higher tariff earns more per trade but makes fewer routes profitable (GDD §6.3)">
+      <span class="hint" id="tariffHint">Research the Tariff Office to adjust</span>
+    </div>
+    <div id="cwBody"></div>
   </div>
-  <div class="tp-body" id="cwBody"></div>
+  <div class="tp-body hidden" id="cwWhBody">
+    <div id="cwFleet" class="cwf-box"></div>
+    <div id="cwMarketRows"></div>
+    <div id="cwFlowSum" class="cwm-sum"></div>
+    <div class="cw-sec">📦 Royal Stores <span class="hint">manual trade · fills King's-quest deliveries</span></div>
+    <div class="cw-summary">
+      <div class="box"><div class="k">Treasury</div><div class="v" id="cwTreasury">0 g</div></div>
+      <div class="box"><div class="k">Market</div><div class="v" id="cwMarket">—</div></div>
+      <div class="box"><div class="k">Storage</div><div class="v" id="cwCapText">0 / 0</div></div>
+    </div>
+    <div class="cw-cap"><span id="cwCapBar" style="width:0%"></span></div>
+    <div id="cwStores"></div>
+  </div>
+  <!-- === PP-C HTML END === -->
 </div>
 <!-- === CASTLE-UI HTML END === -->
 
@@ -6506,6 +6586,29 @@ var CastleMarket = (function () {
   const cwCapTextEl = document.getElementById("cwCapText");
   const cwCapBarEl = document.getElementById("cwCapBar");
   let castleOpen = false;
+  // === PP-C === two-tab castle panel (🏰 Keep / 🏪 Warehouse) — DOM handles + tab state.
+  const cwTabsEl = document.getElementById("cwTabs");
+  const cwKeepBodyEl = document.getElementById("cwKeepBody");
+  const cwWhBodyEl = document.getElementById("cwWhBody");
+  const cwFleetEl = document.getElementById("cwFleet");
+  const cwMarketRowsEl = document.getElementById("cwMarketRows");
+  const cwFlowSumEl = document.getElementById("cwFlowSum");
+  const cwStoresEl = document.getElementById("cwStores");
+  let cwTab = "keep";
+  function cwSetTab(tab) {
+    cwTab = (tab === "warehouse") ? "warehouse" : "keep";
+    for (const b of cwTabsEl.querySelectorAll("[data-cwtab]"))
+      b.classList.toggle("active", b.dataset.cwtab === cwTab);
+    cwKeepBodyEl.classList.toggle("hidden", cwTab !== "keep");
+    cwWhBodyEl.classList.toggle("hidden", cwTab !== "warehouse");
+    renderCastlePanel(true);
+  }
+  cwTabsEl.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cwtab]");
+    if (b) cwSetTab(b.dataset.cwtab);
+  });
+  const cwCityName = (id) => "City #" + id;
+  // === /PP-C ===
 
   function nearestTownToCastle() {
     let best = null, bd = Infinity;
@@ -6560,14 +6663,161 @@ var CastleMarket = (function () {
     SFX.playThrottled("trade", 120);
   }
   function afterCastleTrade() {
-    renderCastlePanel();
+    renderCastlePanel(true);   // PP-C: force — the pointer is over the panel
     updateTreasuryHud();
     scheduleSave();
   }
 
-  function renderCastlePanel() {
-    if (!castleOpen) return;
+  // === PP-C === Warehouse-tab widgets (fleet bar, per-good market rows, flow
+  // summary, relocated Royal Stores). All READ the live state (state.carts,
+  // state.castleStock, state.castleTrade) — mutations happen only through the
+  // delegated input handlers below, which write state.castleTrade (PP-A's
+  // persisted market config) and scheduleSave().
+  const CW_DEFAULT_LIMIT = 50;
+  function cwGoodIds() {
+    return Object.keys(CONFIG.goods).sort((a, b) =>
+      CONFIG.goods[a].tier - CONFIG.goods[b].tier || a.localeCompare(b));
+  }
+  function cwCastleSellPrice(gid) {
+    const g = CONFIG.goods[gid]; const base = g ? g.basePrice : 0;
+    return base * ((CONFIG.trade && CONFIG.trade.castleSellMargin) || 1);
+  }
+  // Overall trip fraction of a castle-owned trader (phase-weighted; honest but
+  // approximate: travel legs 35% each, load/unload dwell 15% each).
+  function cwCastleCartPct(c) {
+    const leg = Math.max(0, Math.min(1, c.progress || 0));
+    const q = Math.max(1, c.qty || 1);
+    if (c.phase === "outbound") return 0.35 * leg;
+    if (c.phase === "loading") return 0.35 + 0.15 * Math.min(1, (c.loaded || 0) / q);
+    if (c.phase === "return") return 0.50 + 0.35 * leg;
+    if (c.phase === "unloading") return 0.85 + 0.15 * Math.min(1, (c.unloaded || 0) / q);
+    return 0;
+  }
+  function cwCastleCartLine(c, k) {
+    const pct = Math.round(cwCastleCartPct(c) * 100);
+    const gold = Math.round(c.agreedGold || (c.unitBuy || 0) * (c.qty || 0));
+    const phase = c.phase === "outbound" ? "en route"
+      : c.phase === "loading" ? "loading"
+      : c.phase === "return" ? "hauling home"
+      : "unloading (" + fmt(Math.min(c.unloaded || 0, c.qty || 0)) + "/" + fmt(c.qty || 0) + ")";
+    return "#" + k + ": (" + pct + "%) Buy " + fmt(c.qty || 0) + " " + goodIcon(c.goodId) +
+      " from " + cwCityName(c.toId) + " for " + gold + "🪙 — " + phase;
+  }
+  function cwRenderFleet() {
+    const max = (CONFIG.researchEconomy && CONFIG.researchEconomy.maxTraders) || 0;
+    const live = [];
+    for (const c of (state.carts || [])) if (!c.done && c.kind === "castle") live.push(c);
+    const pct = max ? Math.max(0, Math.min(100, live.length / max * 100)) : 0;
+    const lines = [];
+    for (let k = 1; k <= max; k++)
+      lines.push(k <= live.length ? cwCastleCartLine(live[k - 1], k) : "#" + k + ": Not Trading");
+    cwFleetEl.innerHTML = '<div class="cwf-line"><span>🐎 Royal traders</span><b>' +
+      live.length + " / " + max + "</b></div>" +
+      '<div class="cwf-bar"><span style="width:' + pct + '%"></span></div>';
+    cwFleetEl.title = lines.join("\n");   // hover tooltip: every trader slot
+  }
+  // Live flow of a good through the castle: units on royal buyers heading IN
+  // (kind:"castle") vs units committed to city buyers heading OUT (sellerCastle).
+  function cwGoodFlow(gid) {
+    let buying = 0, selling = 0;
+    for (const c of (state.carts || [])) {
+      if (c.done) continue;
+      if (c.kind === "castle") { if (c.goodId === gid) buying += (c.qty || 0); continue; }
+      if (!c.sellerCastle) continue;
+      const items = Array.isArray(c.cargo) ? c.cargo : [{ goodId: c.goodId, qty: c.qty }];
+      for (const it of items) if (it.goodId === gid) selling += (it.qty || 0);
+    }
+    return { buying, selling };
+  }
+  function cwRenderMarketRows() {
+    const ct = (state.castleTrade && typeof state.castleTrade === "object") ? state.castleTrade : {};
+    const cs = state.castleStock || {};
+    let rows = "";
+    for (const gid of cwGoodIds()) {
+      const e = ct[gid];
+      const enabled = !!(e && e.enabled);
+      const limit = (e && typeof e.limit === "number") ? e.limit : CW_DEFAULT_LIMIT;
+      const stock = Math.floor(cs[gid] || 0);
+      const flow = cwGoodFlow(gid);
+      let fl = '<span class="cwm-flow flat" title="Idle">—</span>';
+      if (flow.selling > 0) fl = '<span class="cwm-flow up" title="Selling: ' + fmt(flow.selling) + ' committed to city buyers">▲</span>';
+      else if (flow.buying > 0) fl = '<span class="cwm-flow down" title="Buying: ' + fmt(flow.buying) + ' inbound on royal buyers">▼</span>';
+      else if (enabled && stock < limit) fl = '<span class="cwm-flow down" style="opacity:.5" title="Under limit — royal buyers will buy when a city has surplus">▼</span>';
+      rows += '<tr class="' + (enabled ? "" : "off") + '">' +
+        '<td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + goodIcon(gid) + " " + esc(GOOD_LABEL(gid)) + "</td>" +
+        "<td>" + fmt(stock) + "</td>" +
+        "<td>" + fmt(cwCastleSellPrice(gid)) + "g</td>" +
+        "<td>" + fl + "</td>" +
+        '<td><input type="number" class="cwm-lim" data-ct-limit="' + gid + '" min="0" step="5" value="' + limit + '" title="Buy limit: royal buyers stock the castle up to this many"></td>' +
+        '<td><input type="checkbox" data-ct-toggle="' + gid + '"' + (enabled ? " checked" : "") + ' title="Enable castle trading: buy up to the limit, sell castle stock to cities"></td>' +
+        "</tr>";
+    }
+    cwMarketRowsEl.innerHTML = '<table class="cwm-tbl"><tr>' +
+      "<th>Good</th><th>Castle</th><th>Price</th><th></th><th>Limit</th><th>Trade</th></tr>" + rows + "</table>";
+  }
+  // In-flight gold summary. Honest numbers only: Sell = agreed gold city buyers
+  // will pay on arrival at the castle (outbound sellerCastle carts); Buy = gold
+  // already committed on live royal buyers (incl. research materials — the fleet
+  // is shared, PP-A market carts are indistinguishable by design). Plus the
+  // castle warehouse's total value at base prices.
+  function cwRenderFlowSummary() {
+    let buyGold = 0, sellGold = 0;
+    for (const c of (state.carts || [])) {
+      if (c.done) continue;
+      if (c.kind === "castle") { buyGold += (c.unitBuy || 0) * (c.qty || 0); continue; }
+      if (c.sellerCastle && c.phase === "outbound") {
+        const items = Array.isArray(c.cargo) ? c.cargo : [{ qty: c.qty, unitBuy: c.unitBuy }];
+        for (const it of items) sellGold += (it.unitBuy || 0) * (it.qty || 0);
+      }
+    }
+    const cs = state.castleStock || {};
+    let val = 0;
+    for (const gid in cs) { const g = CONFIG.goods[gid]; if (g) val += (cs[gid] || 0) * g.basePrice; }
+    const net = sellGold - buyGold;
+    cwFlowSumEl.innerHTML =
+      '<span class="up" title="City buyers en route to the castle pay this on arrival">Sell: +' + Math.round(sellGold) + "🪙</span> · " +
+      '<span class="down" title="Gold committed on live royal buyers (incl. research materials)">Buy: −' + Math.round(buyGold) + "🪙</span> · " +
+      "<span>Balance: " + (net >= 0 ? "+" : "−") + Math.abs(Math.round(net)) + "🪙</span>" +
+      '<div class="cwm-total">Total Resource Value: ' + Math.round(val) + "🪙</div>";
+  }
+  // Relocated Royal Stores (the pre-PP-C manual buy/sell table on state.warehouse —
+  // unchanged mechanics; still what King's-quest 'deliver' requests consume).
+  function cwRenderStores() {
     const unit = CONFIG.castle.tradeUnit;
+    const cap = warehouseCapEff();
+    const used = warehouseUsed();
+    const treas = state.treasury || 0;
+    let rows = "";
+    for (const id of cwGoodIds()) {
+      const price = castlePriceOf(id);
+      const held = state.warehouse[id] || 0;
+      const canBuy = treas >= price * unit && used + unit <= cap;
+      const canSell = held > 0;
+      rows += `<tr class="${held > 0 ? "" : "dim"}">
+        <td><span class="cw-dot" style="background:${goodColor(id)}"></span>${goodIcon(id)} ${esc(GOOD_LABEL(id))}</td>
+        <td>${fmt(price)}g</td>
+        <td>${fmt(held)}</td>
+        <td>
+          <button class="cw-btn buy" data-buy="${id}" ${canBuy ? "" : "disabled"}>Buy ${unit}</button>
+          <button class="cw-btn sell" data-sell="${id}" ${canSell ? "" : "disabled"}>Sell ${unit}</button>
+        </td></tr>`;
+    }
+    cwStoresEl.innerHTML = `<table class="cw-tbl">
+      <tr><th>Good</th><th>Price</th><th>Held</th><th></th></tr>${rows}</table>`;
+  }
+  // === /PP-C ===
+
+  function renderCastlePanel(force) {
+    if (!castleOpen) return;
+    // === PP-C === hover-safe auto-refresh (the ttRenderQueue pattern): the 500ms
+    // interval rebuilds innerHTML, which would yank toggles/limit inputs out from
+    // under the pointer — so periodic refreshes skip while the panel is hovered or
+    // an input inside it has keyboard focus. Explicit calls (tab switch, clicks,
+    // open) pass force=true.
+    const ae = document.activeElement;
+    if (!force && (castleEl.matches(":hover") ||
+        (ae && ae.tagName === "INPUT" && castleEl.contains(ae)))) return;
+    // === /PP-C ===
     const cap = warehouseCapEff();
     const used = warehouseUsed();
     const treas = state.treasury || 0;
@@ -6592,34 +6842,23 @@ var CastleMarket = (function () {
     }
     castleHtml += `</div>`;
 
-    const ids = Object.keys(CONFIG.goods).sort((a, b) =>
-      CONFIG.goods[a].tier - CONFIG.goods[b].tier || a.localeCompare(b));
-    let rows = "";
-    for (const id of ids) {
-      const price = castlePriceOf(id);
-      const held = state.warehouse[id] || 0;
-      const canBuy = treas >= price * unit && used + unit <= cap;
-      const canSell = held > 0;
-      rows += `<tr class="${held > 0 ? "" : "dim"}">
-        <td><span class="cw-dot" style="background:${goodColor(id)}"></span>${goodIcon(id)} ${esc(GOOD_LABEL(id))}</td>
-        <td>${fmt(price)}g</td>
-        <td>${fmt(held)}</td>
-        <td>
-          <button class="cw-btn buy" data-buy="${id}" ${canBuy ? "" : "disabled"}>Buy ${unit}</button>
-          <button class="cw-btn sell" data-sell="${id}" ${canSell ? "" : "disabled"}>Sell ${unit}</button>
-        </td></tr>`;
-    }
     // CP: extension hook so later slices (e.g. CRE — castle research economy) can
     // inject their own section (research-materials list, etc.) without editing this
-    // function. Each hook returns an HTML string appended to the panel body.
+    // function. Each hook returns an HTML string appended to the Keep-tab body.
     let extraHtml = "";
     if (Array.isArray(castlePanelSections)) {
       for (const fn of castlePanelSections) {
         try { extraHtml += (fn(state) || ""); } catch (err) { /* a bad hook must not break the panel */ }
       }
     }
-    cwBodyEl.innerHTML = castleHtml + `<table class="cw-tbl">
-      <tr><th>Good</th><th>Price</th><th>Held</th><th></th></tr>${rows}</table>` + extraHtml;
+    // === PP-C === render both tab bodies (only one is visible), preserving scroll.
+    const ks = cwKeepBodyEl.scrollTop;
+    cwBodyEl.innerHTML = castleHtml + extraHtml;
+    cwKeepBodyEl.scrollTop = ks;
+    const ws = cwWhBodyEl.scrollTop;
+    cwRenderFleet(); cwRenderMarketRows(); cwRenderFlowSummary(); cwRenderStores();
+    cwWhBodyEl.scrollTop = ws;
+    // === /PP-C ===
   }
   // Registry of extra panel sections (CP hook; see renderCastlePanel).
   const castlePanelSections = [];
@@ -6630,7 +6869,7 @@ var CastleMarket = (function () {
     castleOpen = true;
     castleEl.classList.remove("hidden");
     castleEl.setAttribute("aria-hidden", "false");
-    renderCastlePanel();
+    renderCastlePanel(true);   // PP-C: force the first paint
   }
   function closeCastlePanel() {
     castleOpen = false;
@@ -6638,12 +6877,14 @@ var CastleMarket = (function () {
     castleEl.setAttribute("aria-hidden", "true");
   }
 
-  // buy/sell via delegation (rows are re-rendered each trade)
-  cwBodyEl.addEventListener("click", (e) => {
+  // buy/sell via delegation (rows are re-rendered each trade).
+  // PP-C: listener moved from #cwBody to the panel root — the stores table now
+  // lives on the Warehouse tab (#cwStores) while the upgrade button stays on Keep.
+  castleEl.addEventListener("click", (e) => {
     if (e.target.closest("button[data-castle-upgrade]")) {
       const res = Castle.upgrade(state);
       if (res.ok) {
-        renderCastlePanel();
+        renderCastlePanel(true);
         updateProgressHud();
         if (res.victory) showVictory();
         scheduleSave();
@@ -6656,6 +6897,38 @@ var CastleMarket = (function () {
     if (b) castleBuy(b.dataset.buy);
     else if (s) castleSell(s.dataset.sell);
   });
+  // === PP-C === castle-market controls (Warehouse tab): the enable-trading toggle
+  // and the buy-limit input write state.castleTrade[gid] = {enabled, limit} — the
+  // PP-A config the pure CastleMarket/Trade layers read. Already persisted by the
+  // PP-A save/load fields; nothing new is stored.
+  castleEl.addEventListener("change", (e) => {
+    const t = e.target.closest("input[data-ct-toggle]");
+    if (t) {
+      const gid = t.dataset.ctToggle;
+      if (!CONFIG.goods[gid]) return;
+      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
+      cur.enabled = !!t.checked;
+      if (typeof cur.limit !== "number" || !isFinite(cur.limit) || cur.limit < 0) cur.limit = CW_DEFAULT_LIMIT;
+      state.castleTrade[gid] = cur;
+      scheduleSave();
+      renderCastlePanel(true);   // row dim/flow state changed
+      return;
+    }
+    const l = e.target.closest("input[data-ct-limit]");
+    if (l) {
+      const gid = l.dataset.ctLimit;
+      if (!CONFIG.goods[gid]) return;
+      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
+      const v = Math.floor(parseFloat(l.value));
+      cur.limit = (isFinite(v) && v >= 0) ? v : 0;
+      state.castleTrade[gid] = cur;
+      l.value = String(cur.limit);   // reflect the clamped value
+      scheduleSave();
+    }
+  });
+  // === /PP-C ===
   document.getElementById("cwClose").addEventListener("click", closeCastlePanel);
 
   // Castle-click detection at the center hex (0,0), pan-mode only. Own down-pos
@@ -7084,40 +7357,62 @@ var CastleMarket = (function () {
                       addPanelSection(fn) { if (typeof fn === "function") { castlePanelSections.push(fn); if (castleOpen) renderCastlePanel(); } },
                       get isOpen() { return castleOpen; } };
 
-  // === RESEARCH-ECONOMY (CRE) castle-panel section ===
-  // Shows the active research node, its material requirement vs what the castle
-  // has gathered (state.castleStock), and how many royal buyers are on the road.
-  // Rendered only while the panel is open (renderCastlePanel appends it); idle
-  // when no node is active.
+  // === PP-C === Research Center pipeline (Keep tab) — replaces the CRE "Royal
+  // Commission" box. Visual row-flow: material rows (castleStock have/required,
+  // en-route hint from live royal buyers) → progress "book" (Research.activeFraction
+  // + gold installments, RESEARCH-CORE's spent/cost with a per-tick hint) → the node.
+  // Below: a one-line queue glance (state.research.queue). Registered through the CP
+  // addPanelSection hook so renderCastlePanel stays hook-driven.
   window.CastleUI.addPanelSection(function (st) {
-    const R = st.research;
-    const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
-    let out = '<div class="cre-box"><div class="cre-title">🔬 Royal Commission</div>';
+    const R = st.research || {};
+    const node = (R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
+    const GLYPH = { production: "⚒️", logistics: "🛞", administration: "📜" };
+    let out = '<div class="rc-box"><div class="rc-title">📖 Research Center</div>';
     if (!node) {
-      return out + '<div class="cre-idle">No project underway. Start one in the 🔬 Research panel to commission the King\'s buyers.</div></div>';
-    }
-    const cs = (st.castleStock && typeof st.castleStock === "object") ? st.castleStock : {};
-    const mats = node.materials || {};
-    const keys = Object.keys(mats);
-    const outCarts = (typeof ResearchEconomy !== "undefined") ? ResearchEconomy.activeCastleCarts(st) : 0;
-    const maxCarts = (CONFIG.researchEconomy && CONFIG.researchEconomy.maxTraders) || 0;
-    out += '<div class="cre-node">Researching <b>' + esc(node.name) + '</b></div>';
-    if (!keys.length) {
-      out += '<div class="cre-idle">Needs no materials — completes on labour alone.</div>';
+      out += '<div class="rc-idle">The scholars are idle — open the 🔬 Research tree to start a project.</div>';
     } else {
-      out += '<table class="cre-tbl">';
-      for (const gid of keys) {
-        const have = Math.floor(cs[gid] || 0);
-        const req = mats[gid];
-        const done = have >= req;
-        out += '<tr><td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + goodIcon(gid) + ' ' + esc(GOOD_LABEL(gid)) + '</td>' +
-               '<td>' + have + ' / ' + req + '</td><td>' + (done ? '✓' : '…') + '</td></tr>';
+      const cs = (st.castleStock && typeof st.castleStock === "object") ? st.castleStock : {};
+      const mats = node.materials || {};
+      const keys = Object.keys(mats);
+      let matHtml = "";
+      if (!keys.length) {
+        matHtml = '<div class="rc-mat" style="opacity:.7">no materials needed</div>';
+      } else {
+        for (const gid of keys) {
+          const have = Math.floor(cs[gid] || 0), req = mats[gid];
+          let fly = 0;
+          for (const c of (st.carts || [])) if (!c.done && c.kind === "castle" && c.goodId === gid) fly += (c.qty || 0);
+          const done = have >= req;
+          matHtml += '<div class="rc-mat' + (done ? " ok" : "") + '" title="' +
+            esc(GOOD_LABEL(gid)) + ' — consumed in full when the project completes">' +
+            goodIcon(gid) + " <span>" + Math.min(have, req) + "/" + req + "</span>" +
+            (done ? " ✓" : (fly > 0 ? ' <span class="fly" title="En route on royal buyers">🐎+' + fmt(fly) + "</span>" : "")) +
+            "</div>";
+        }
       }
-      out += '</table>';
+      const pct = Math.round((Research.activeFraction ? Research.activeFraction(st) : 0) * 100);
+      const spent = Math.round(R.spent || 0);
+      const perTickGold = Math.round(10 * node.cost / Math.max(1, node.timeTicks | 0)) / 10;
+      const glyph = node.kind === "unlock" ? "🏗" : node.kind === "upgrade" ? "⬆️" : (GLYPH[node.branch] || "🔬");
+      out += '<div class="rc-flow">' +
+        '<div class="rc-mats">' + matHtml + "</div>" +
+        '<div class="rc-arrow">➜</div>' +
+        '<div class="rc-book">📖<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+          '<div class="pct">' + pct + '%</div>' +
+          '<div class="gold" title="Paid in installments, ~' + perTickGold + '🪙 per tick of labour">' + spent + "/" + node.cost + "🪙</div></div>" +
+        '<div class="rc-arrow">➜</div>' +
+        '<div class="rc-node">' + glyph + '<div class="nm">' + esc(node.name) + "</div></div>" +
+        "</div>";
     }
-    out += '<div class="cre-carts">🐎 ' + outCarts + ' / ' + maxCarts + ' royal buyers on the road</div>';
-    return out + '</div>';
+    const q = Array.isArray(R.queue) ? R.queue : [];
+    const names = [];
+    for (const id of q) { const n = (typeof Research !== "undefined") ? Research.get(id) : null; names.push(n ? n.name : id); }
+    out += '<div class="rc-queue">' + (names.length ? "Next: " + esc(names.join(" · ")) : "Queue empty") + "</div>";
+    return out + "</div>";
   });
+  // PP-C: tab switch exposed for the headless smoke / console debugging.
+  window.CastleUI.setTab = cwSetTab;
+  // === /PP-C ===
 
   // CRE: tiny test/debug surface for the headless smoke (state lives in this
   // closure and isn't otherwise reachable). Harmless during normal play.
