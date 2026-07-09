@@ -258,6 +258,71 @@
   .tp-tbar .st { flex: 0 0 auto; min-width: 46px; text-align: right; font-size: 11px;
     opacity: 0.85; font-variant-numeric: tabular-nums; }
   /* === TRADE-UI CSS END === */
+  /* === PP-B CSS START === (city-panel redesign: header strip, tier rows,
+     logistics bars + fleet list, budget chart, warehouse grid, building cards) */
+  #townPanel { width: 356px; }
+  #ppHead { display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+    padding: 6px 10px; border-bottom: 1px solid var(--panel-edge);
+    font-size: 12px; background: rgba(0,0,0,0.14); }
+  #ppHead .pp-stat { white-space: nowrap; font-variant-numeric: tabular-nums; cursor: default; }
+  #ppHead .pp-face.good { color: #6fbf73; }
+  #ppHead .pp-face.mid  { color: #e0b23c; }
+  #ppHead .pp-face.bad  { color: #e0503c; }
+  #ppHead .pp-headbtns { margin-left: auto; display: flex; gap: 4px; }
+  #ppHead button { padding: 2px 7px; font-size: 10.5px; border-radius: 5px; }
+  #ppHead .pp-cool { flex-basis: 100%; font-size: 10.5px; opacity: 0.7; margin-top: -3px; }
+  .pp-tier { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 6px; cursor: default; }
+  .pp-tier:hover { background: rgba(255,255,255,0.045); }
+  .pp-tier .glyph { flex: 0 0 22px; text-align: center; }
+  .pp-tier .lbl { flex: 1; }
+  .pp-tier .cnt { font-weight: bold; font-variant-numeric: tabular-nums; }
+  .pp-tier .hap { flex: 0 0 46px; text-align: right; opacity: 0.85; font-variant-numeric: tabular-nums; }
+  .pp-tier.off { opacity: 0.35; }
+  .pp-lbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; cursor: default; }
+  .pp-lbar .lbl { flex: 0 0 122px; opacity: 0.85; white-space: nowrap; }
+  .pp-lbar .bar { flex: 1 1 auto; height: 9px; border-radius: 4px; background: #1c160f;
+    border: 1px solid var(--panel-edge); overflow: hidden; }
+  .pp-lbar .bar > span { display: block; height: 100%; transition: width .3s ease; }
+  .pp-lbar .bar.green > span { background: linear-gradient(90deg, #3f7d3a, #6fbf73); }
+  .pp-lbar .bar.red   > span { background: linear-gradient(90deg, #a04a28, #e0784a); }
+  .pp-lbar .st { flex: 0 0 44px; text-align: right; font-size: 11px; opacity: 0.9; font-variant-numeric: tabular-nums; }
+  .pp-fleet { margin: 0 0 8px; font-size: 11.5px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .pp-fleet .idle { opacity: 0.4; font-style: italic; }
+  .pp-chart-wrap { position: relative; margin: 2px 0 3px; }
+  #ppBudget { display: block; width: 100%; height: 74px; background: #150f09;
+    border: 1px solid var(--panel-edge); border-radius: 6px; }
+  .pp-chart-wrap .ax { position: absolute; right: 5px; font-size: 9.5px; opacity: 0.7;
+    pointer-events: none; font-variant-numeric: tabular-nums; }
+  .pp-chart-wrap .ax.max { top: 2px; }
+  .pp-chart-wrap .ax.min { bottom: 2px; }
+  .pp-chart-cap { display: flex; justify-content: space-between; font-size: 11px; opacity: 0.85; margin-bottom: 7px; }
+  .pp-brk .pos { color: #6fbf73; }
+  .pp-brk .neg { color: #e0503c; }
+  .pp-brk .net { font-weight: bold; border-top: 1px solid var(--panel-edge); margin-top: 2px; padding-top: 3px; }
+  .pp-wsort { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .pp-wsort .cap { font-size: 10px; opacity: 0.6; margin-right: auto; }
+  .pp-wsort button { padding: 1px 8px; font-size: 10.5px; border-radius: 5px; opacity: 0.75; }
+  .pp-wsort button.active { background: var(--accent); color: #201607; opacity: 1; font-weight: bold; }
+  .pp-wrow { display: grid; grid-template-columns: minmax(0,1fr) 56px 52px 34px 62px; gap: 4px;
+    align-items: center; padding: 2px 0; font-size: 11.5px; font-variant-numeric: tabular-nums; cursor: default; }
+  .pp-wrow.hdr { font-size: 10px; opacity: 0.65; border-bottom: 1px solid var(--panel-edge); }
+  .pp-wrow .num { text-align: right; }
+  .pp-wrow .up { color: #6fbf73; }
+  .pp-wrow .down { color: #e0503c; }
+  .pp-wrow .dim { opacity: 0.4; }
+  .pp-wrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pp-cap { display: block; height: 3px; border-radius: 2px; background: #1c160f; overflow: hidden; margin-top: 1px; }
+  .pp-cap > span { display: block; height: 100%; background: var(--accent); }
+  .pp-grp { font-size: 11px; opacity: 0.8; margin: 2px 0 3px; }
+  .pp-cards { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .pp-card { position: relative; display: flex; align-items: center; gap: 4px; padding: 3px 7px;
+    background: #1c160f; border: 1px solid var(--panel-edge); border-radius: 6px;
+    cursor: pointer; font-size: 12.5px; color: var(--paper); }
+  .pp-card:hover { background: #2a2015; border-color: var(--accent); }
+  .pp-card .pips { font-size: 9px; letter-spacing: 1px; color: #d8b06a; }
+  .pp-card .badge { position: absolute; top: -6px; right: -5px; font-size: 10px; }
+  .pp-card .star { position: absolute; top: -7px; left: -5px; font-size: 9px; }
+  /* === PP-B CSS END === */
   /* === TOWN-UI CSS END === */
 
   /* === BUILD-BAR CSS START === (PV2-B) persistent bottom-center build bar.
@@ -794,11 +859,15 @@
     <div class="tp-title"><span id="tpName">Town</span><span class="tp-lvl" id="tpLevel">Lv 1</span></div>
     <button id="tpClose" class="tp-close" title="Close">✕</button>
   </div>
+  <!-- === PP-B === header stat strip: gold · slots · happiness · upgrade · give/take -->
+  <div id="ppHead"></div>
+  <!-- === /PP-B === -->
   <div class="tp-tabs">
+    <!-- === PP-B === 3-tab layout (LTT style): Overview / Warehouse / Buildings -->
     <button class="tp-tab active" data-tab="overview">Overview</button>
-    <button class="tp-tab" data-tab="stock">Stock+Prices</button>
+    <button class="tp-tab" data-tab="warehouse">Warehouse</button>
     <button class="tp-tab" data-tab="buildings">Buildings</button>
-    <button class="tp-tab" data-tab="population">Population</button>
+    <!-- === /PP-B === -->
   </div>
   <div class="tp-body" id="tpBody"></div>
 </div>
@@ -5144,6 +5213,7 @@ var CastleMarket = (function () {
   const tpNameEl = document.getElementById("tpName");
   const tpLevelEl = document.getElementById("tpLevel");
   const tpBodyEl = document.getElementById("tpBody");
+  const ppHeadEl = document.getElementById("ppHead");   // === PP-B === header stat strip
   const tpTabEls = Array.from(panelEl.querySelectorAll(".tp-tab"));
 
   let activeTown = null;
@@ -5174,269 +5244,437 @@ var CastleMarket = (function () {
 
   function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
-  // === TRADE-UI START === (EC-E) READ-ONLY city-panel trade views. No economy or
-  // Sim/Trade changes here: everything below is derived from the shared model —
-  // town.demand / town.stock / town.reserved (the same fields Trade.tick reads),
-  // CONFIG.econ.bufferTarget, and state.carts (the city's one external trader).
+  // === PP-B START === city-panel redesign (Let Them Trade style). READ-ONLY over
+  // the shared model — town fields (pop / stock / demand / prices / tierHappiness /
+  // tierIncome / ledger from PP-A), state.carts, and the pure helpers
+  // Trade.externalFleet / Buildings.* / Ledger. The ONLY writes are the existing
+  // player actions the panel hosts: the P4-B town upgrade and the EC-C Give/Take
+  // transfer (delegated to window.CityCards.give/take). Replaces the old EC-E
+  // trade views + the old Overview/Stock/Buildings/Population tab renderers.
 
-  // A good's trade pressure for a city, using the SAME "comfortable stock" the
-  // Trade module uses (demand × bufferTarget, raw demand, no minDemand floor —
-  // matches Trade.tick's needOf). Positive `want` ⇒ shortfall (city buys);
-  // positive `surplus` ⇒ spendable stock a buyer could take (city sells).
-  function goodTrade(t, gid) {
-    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const stock = (t.stock && t.stock[gid]) || 0;
-    const demand = (t.demand && t.demand[gid]) || 0;
-    const reserved = (t.reserved && t.reserved[gid]) || 0;
-    const need = demand * buffer;                 // comfortable stock
-    const want = need - stock;                    // >0 → wants to buy this many
-    const surplus = stock - reserved - need;      // >0 → this many free to sell
-    return { want, surplus };
+  const escAttr = s => esc(s).replace(/"/g, "&quot;");
+  const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1);
+  const PP_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+  // Burgher DISPLAYS as "Citizen" everywhere (RT-B rename).
+  const PP_TIERS = [
+    { key: "peasants", tier: "peasant", label: "Peasant", glyph: "🧑‍🌾", color: "#8bc34a" },
+    { key: "workers",  tier: "worker",  label: "Worker",  glyph: "🔨",   color: "#ff9800" },
+    { key: "burghers", tier: "burgher", label: "Citizen", glyph: "🎩",   color: "#9c88ff" },
+  ];
+  // Per-building glyphs (same set the RT-B tech tree uses — that map lives in a
+  // later closure, so keep a local copy).
+  const PP_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
+    quarry: "⛏️", fishery: "🎣", miner: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥",
+    weaver: "🧵", cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️" };
+  const ppGlyph = id => PP_GLYPH[id] || "🏚";
+
+  // Live external traders this city owns (buyer-side carts on the road).
+  function ppLiveCarts(t) {
+    const out = [];
+    for (const c of (state.carts || []))
+      if (c && !c.done && c.fromId === t.id && (c.kind || "external") === "external") out.push(c);
+    return out;
   }
 
-  // The buy/sell/neutral marker + optional quantity for the Stock tab.
-  function tradeMark(t, gid) {
-    const EPS = 0.05;
-    const { want, surplus } = goodTrade(t, gid);
-    if (want > EPS)
-      return { cls: "tw-buy",  mark: "↑", title: "Wants to buy", qty: Math.ceil(want) };
-    if (surplus > EPS)
-      return { cls: "tw-sell", mark: "↓", title: "Surplus to sell", qty: Math.floor(surplus) };
-    return { cls: "tw-neu", mark: "—", title: "Balanced", qty: null };
-  }
-
-  // The city's current external trader (one per city). null ⇒ Idle.
-  function externalCart(t) {
-    if (!Array.isArray(state.carts)) return null;
-    return state.carts.find(c => c && c.fromId === t.id && !c.done) || null;
-  }
-
-  // Human-readable activity line for the external trader (drives the hover tip).
-  function externalActivity(t) {
-    const c = externalCart(t);
-    if (!c) return "Idle — no external trader out right now.";
-    const good = (c.goodId ? goodIcon(c.goodId) + " " : "") + GOOD_LABEL(c.goodId || "goods");
-    const qty = fmt(c.qty || 0);
-    if (c.phase === "loading")
-      return `Loading ${fmt(c.loaded || 0)}/${qty} ${good} at City #${c.toId}.`;
-    if (c.phase === "unloading")
-      return `Unloading ${fmt(c.unloaded || 0)}/${qty} ${good} at home.`;
-    if (c.phase === "return")
-      return `Returning with ${qty} ${good} from City #${c.toId}.`;
-    return `Buying ${qty} ${good} from City #${c.toId} (en route).`;
-  }
-
-  // Internal-trader utilization = staffed producers / total producers. Mirrors
-  // the porter rule (a producer emits a porter only when workers>0), so this is a
-  // faithful 0..1 proxy for how busy the city's internal hauling is.
-  function internalUtil(t) {
-    let producers = 0, staffed = 0;
+  // Per-tier jobs: filled / total EFFECTIVE slots (workerSlots + upgrade slotPlus
+  // − closedSlots) over BUILT producer buildings — mirrors Sim's staffing rule.
+  function ppTierJobs(t) {
+    const out = { peasants: { filled: 0, total: 0 }, workers: { filled: 0, total: 0 }, burghers: { filled: 0, total: 0 } };
     for (const b of (t.buildings || [])) {
+      if (!b || b.built === false) continue;
       const def = CONFIG.buildings[b.typeId];
-      if (!def || (def.kind !== "extractor" && def.kind !== "processor")) continue;
-      if (!(def.output && def.output.goodId)) continue;
-      producers++;
-      if (b.workers > 0) staffed++;
+      if (!def || def.kind === "house" || !def.workerSlots) continue;
+      const key = PP_TIER_KEY[def.workerTier];
+      if (!key) continue;
+      const plus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
+      const eff = Math.max(0, (def.workerSlots || 0) + plus - (b.closedSlots || 0));
+      out[key].total += eff;
+      out[key].filled += Math.min(eff, Math.round(b.workers || 0));
     }
-    return { producers, staffed, frac: producers ? staffed / producers : 0 };
+    return out;
   }
 
-  // The two Overview trader bars (external activity + internal utilization).
-  function renderTraderBars(t) {
-    const c = externalCart(t);
-    const extFrac = c ? Math.max(0, Math.min(1, c.progress || 0)) : 0;
-    const extBusy = !!c;
-    const extTip = esc(externalActivity(t));
-    const extLabel = extBusy
-      ? (c.phase === "loading" ? "Loading" : c.phase === "unloading" ? "Unloading"
-         : c.phase === "return" ? "Hauling" : "Buying")
-      : "Idle";
-    const iu = internalUtil(t);
-    const intTip = iu.producers
-      ? `${iu.staffed} of ${iu.producers} producer${iu.producers === 1 ? "" : "s"} staffed`
-      : "No producers yet";
-    return `<div class="tp-sec">Traders</div>
-      <div class="tp-tbar" title="${extTip}" aria-label="${extTip}">
-        <span class="lbl">External</span>
-        <span class="bar ${extBusy ? "" : "idle"}"><span style="width:${Math.round(extFrac * 100)}%"></span></span>
-        <span class="st">${extBusy ? Math.round(extFrac * 100) + "%" : "Idle"}</span>
-      </div>
-      <div class="tp-tbar" title="${esc(intTip)}" aria-label="${esc(intTip)}">
-        <span class="lbl">Internal</span>
-        <span class="bar ${iu.frac > 0 ? "" : "idle"}"><span style="width:${Math.round(iu.frac * 100)}%"></span></span>
-        <span class="st">${iu.producers ? iu.staffed + "/" + iu.producers : "—"}</span>
-      </div>`;
-  }
-  // === TRADE-UI END ===
-
-  function renderOverview(t) {
-    const popTotal = t.pop.peasants + t.pop.workers + t.pop.burghers;
-    const happy = Math.round(t.happiness);
-    const goodsHeld = Object.values(t.stock).filter(v => v > 0).length;
-    return `
-      <div class="tp-sec">Summary</div>
-      <div class="tp-row"><span class="k">Treasury</span><span class="v">${fmt(t.gold)} g</span></div>
-      <div class="tp-row"><span class="k">Population</span><span class="v">${Math.round(popTotal)}</span></div>
-      <div class="tp-row"><span class="k">Buildings</span><span class="v">${t.buildings.length} / ${TOWN_BUILDING_CAP[t.level] || 3}</span></div>
-      <div class="tp-row"><span class="k">Goods in stock</span><span class="v">${goodsHeld} / ${Object.keys(CONFIG.goods).length}</span></div>
-      ${renderUpgrade(t)}
-      ${renderTraderBars(t)}
-      <div class="tp-sec">Happiness — ${happy}%</div>
-      <div class="tp-bar"><span style="width:${Math.max(0, Math.min(100, happy))}%"></span></div>
-      <div class="tp-row"><span class="k">Location</span><span class="v">q ${t.q}, r ${t.r}</span></div>`;
-  }
-
-  // P4-B: the town-center upgrade block (level → level+1, gated by Town.canUpgrade).
-  // Level 2 is the trade threshold, so this is how a fresh L1 town starts trading.
-  function renderUpgrade(t) {
-    const req = Town.upgradeReq(t);
-    if (!req) return `<div class="up-box"><div class="up-max">Level ${t.level} — maximum</div></div>`;
-    const res = Town.canUpgrade(t);
-    const pop = Town.popTotal(t);
-    const note = ' <span style="opacity:.7">(+build slots)</span>';
-    return `<div class="up-box">
-      <div class="up-line"><b>Upgrade to Level ${t.level + 1}</b>${note}</div>
-      <div class="up-req">Requires ${req.pop} pop (have ${pop}) · ${req.gold} g (have ${Math.floor(t.gold || 0)} g)</div>
-      <button class="up-btn" data-town-upgrade ${res.ok ? "" : "disabled"}>${res.ok ? "Upgrade (−" + req.gold + " g)" : esc(res.reason)}</button>
-    </div>`;
-  }
-
-  function renderStock(t) {
-    const ids = Object.keys(CONFIG.goods).sort((a, b) =>
-      CONFIG.goods[a].tier - CONFIG.goods[b].tier || a.localeCompare(b));
-    let rows = "";
-    for (const id of ids) {
-      const qty = t.stock[id] || 0;
-      const price = priceOf(t, id);
-      const arrow = trendArrow(t, id, price);
-      // === TRADE-UI === buy/sell marker + wanted/surplus qty for this good.
-      const tm = tradeMark(t, id);
-      const tradeCell = `<span class="tw-mark ${tm.cls}" title="${esc(tm.title)}">${tm.mark}</span>`;
-      const qtyCell = tm.qty != null
-        ? `<span class="tw-qty ${tm.cls}">${fmt(tm.qty)}</span>`
-        : `<span class="tw-neu">—</span>`;
-      const rowDim = (qty > 0 || tm.qty != null) ? "" : "dim";
-      rows += `<tr class="${rowDim}">
-        <td>${goodIcon(id)} ${esc(GOOD_LABEL(id))}<span style="opacity:.5"> · T${CONFIG.goods[id].tier}</span></td>
-        <td>${fmt(qty)}</td>
-        <td>${fmt(price)}g ${arrow}</td>
-        <td>${tradeCell}</td>
-        <td>${qtyCell}</td></tr>`;
+  // Transporter usage this tick ≈ deliverable-now construction/upgrade materials
+  // vs the delivery budget (deliveryRate × transporterCount) — the same
+  // quantities the CB-A/PP-A Sim delivery step would move. Honest and cheap.
+  function ppTransporterUse(t) {
+    const n = (Buildings.transporterCount ? Buildings.transporterCount(t) : 1);
+    const budget = ((CONFIG.town && CONFIG.town.deliveryRate) || 5) * n;
+    const need = {};
+    for (const b of (t.buildings || [])) {
+      if (!b) continue;
+      if (b.built === false && Buildings.constructionNeed) {
+        const nd = Buildings.constructionNeed(b);
+        for (const g in nd) need[g] = (need[g] || 0) + nd[g];
+      }
+      if (b.pendingUpgrade && Buildings.upgradeConstructionNeed) {
+        const nd = Buildings.upgradeConstructionNeed(b);
+        for (const g in nd) need[g] = (need[g] || 0) + nd[g];
+      }
     }
-    return `<table class="tp-tbl">
-      <tr><th>Good</th><th>Stock</th><th>Price</th><th title="Buy ↑ / Sell ↓">Trade</th><th>Qty</th></tr>${rows}</table>`;
+    let pending = 0, deliverable = 0;
+    for (const g in need) {
+      pending += need[g];
+      deliverable += Math.min(need[g], (t.stock && t.stock[g]) || 0);
+    }
+    return { n, budget, pending, frac: budget > 0 ? Math.min(1, deliverable / budget) : 0 };
   }
 
-  // PV2-B: Buildings tab is now READ-ONLY — slots used/free + the placed list.
-  // The build ACTION moved to the persistent bottom build bar (BUILD-BAR); a
-  // building attaches to whichever city its hex borders, so it is no longer a
-  // per-town menu.
-  function renderBuildings(t) {
+  // ---- header strip: gold · slots · happiness · upgrade · Give/Take ----------
+  function renderPPHead(t, force) {
+    if (!ppHeadEl) return;
+    // Don't rebuild under the cursor — a mid-click rebuild would swallow the
+    // click and an open title-tooltip would flicker. Player actions force it.
+    if (!force && ppHeadEl.matches(":hover")) return;
     const used = Buildings.usedSlots(t);
-    const cap = Buildings.slotCap(t.level, state);   // P5-A: reflect slotBonus research
-    let html = `<div class="tp-row"><span class="k">Building slots</span><span class="v">${used} / ${cap}</span></div>`;
-    html += `<div class="tp-hint2">Build from the bar at the bottom of the screen — a building attaches to the city whose edge it borders.</div>`;
-
-    // Placed buildings.
-    html += `<div class="tp-sec">Placed — ${t.buildings.length}</div>`;
-    if (!t.buildings.length) {
-      html += `<div class="tp-empty">No buildings placed yet. Use the build bar to add one bordering this city.</div>`;
+    const cap = Buildings.slotCap(t.level, state);
+    const h = Math.max(0, Math.min(100, Math.round(t.happiness || 0)));
+    const face = h >= 70 ? "🙂" : h >= 40 ? "😐" : "☹";
+    const faceCls = h >= 70 ? "good" : h >= 40 ? "mid" : "bad";
+    const req = Town.upgradeReq(t);
+    let upBtn;
+    if (!req) {
+      upBtn = `<button disabled title="Level ${t.level} — maximum">⬆ Max</button>`;
     } else {
-      // === CB-C: per-building detail now lives in the #buildingPanel (click a
-      // building on the map). Keep this tab a compact, read-only name list.
-      const names = t.buildings.map(b => {
-        const def = CONFIG.buildings[b.typeId] || {};
-        const uc = (b && b.built === false) ? " 🔧" : "";   // under construction
-        return esc(def.name || b.typeId) + uc;
-      });
-      html += `<div class="tp-blist">${names.join(", ")}</div>`;
-      html += `<div class="tp-hint2">Click a building on the map for its details, workers and slots.</div>`;
-      // === /CB-C ===
+      const res = Town.canUpgrade(t);
+      const tip = `Upgrade to Level ${t.level + 1} (+build slots, +traders/transporters): needs ` +
+        `${req.pop} pop (have ${Math.round(Town.popTotal(t))}) and ${req.gold}🪙 city gold (have ${Math.floor(t.gold || 0)})` +
+        (res.ok ? "" : " — " + res.reason);
+      upBtn = `<button data-town-upgrade ${res.ok ? "" : "disabled"} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
+    }
+    const cooling = (t.cooldownUntil || 0) > (state.tick || 0);
+    let coolStr = "";
+    if (cooling) {
+      const secs = Math.ceil(((t.cooldownUntil || 0) - (state.tick || 0)) * 0.5);   // 500 ms/tick
+      coolStr = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
+    }
+    const canGive = !cooling && (state.treasury || 0) >= 1000;
+    const canTake = !cooling && (t.gold || 0) >= 1000;
+    const coolTip = cooling ? " — cooldown " + coolStr : "";
+    ppHeadEl.innerHTML =
+      `<span class="pp-stat" title="City gold (its trade budget)">🪙 ${Math.round(t.gold || 0).toLocaleString()}</span>` +
+      `<span class="pp-stat" title="Building slots used / capacity">🏠 ${used}/${cap}</span>` +
+      `<span class="pp-stat pp-face ${faceCls}" title="City happiness">${face} ${h}%</span>` +
+      `<span class="pp-headbtns">${upBtn}` +
+      `<button data-pp-give ${canGive ? "" : "disabled"} title="${escAttr("Give 1000🪙 from the Kingdom to this city (+happiness)" + coolTip)}">Give 1k</button>` +
+      `<button data-pp-take ${canTake ? "" : "disabled"} title="${escAttr("Take 1000🪙 from this city into the Kingdom (−happiness)" + coolTip)}">Take 1k</button></span>` +
+      (cooling ? `<span class="pp-cool">⏳ transfer cooldown ${coolStr}</span>` : "");
+  }
+
+  // ---- Tab 1: Overview --------------------------------------------------------
+  function renderPPOverview(t) {
+    const housing = (Buildings.housingCapacity ? Buildings.housingCapacity(t, state)
+                                               : { peasants: 0, workers: 0, burghers: 0 });
+    const jobs = ppTierJobs(t);
+    let html = `<div class="tp-sec">Population</div>`;
+    for (const ti of PP_TIERS) {
+      const pop = Math.round(t.pop[ti.key] || 0);
+      const homes = Math.round(housing[ti.key] || 0);
+      const th = (t.tierHappiness && t.tierHappiness[ti.key] != null) ? Math.round(t.tierHappiness[ti.key]) : null;
+      const inc = (t.tierIncome && t.tierIncome[ti.key]) || 0;
+      const j = jobs[ti.key];
+      const off = pop <= 0 && homes <= 0;
+      const tip = `Homes ${Math.min(pop, homes)}/${homes} · Jobs ${j.filled}/${j.total} · ` +
+        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(inc)}🪙/t`;
+      html += `<div class="pp-tier ${off ? "off" : ""}" title="${escAttr(tip)}">
+        <span class="glyph">${ti.glyph}</span>
+        <span class="lbl" style="color:${ti.color}">${ti.label}</span>
+        <span class="cnt">${pop}</span>
+        <span class="hap">${th == null ? "—" : th + "%"}</span></div>`;
+    }
+
+    // Logistics bars: transporters (green = delivery budget in use) + traders
+    // (amber-red = live carts / fleet), each with a hover explainer.
+    const tu = ppTransporterUse(t);
+    const fleet = (typeof Trade !== "undefined" && Trade.externalFleet) ? Trade.externalFleet(t) : 1;
+    const live = ppLiveCarts(t);
+    const transTip = `${tu.n} Transporters — Distribute resources inside the city. Upgrade the city to increase their number.`;
+    const tradTip = `${fleet} Traders — Buy resources from other cities. Upgrade the city to increase their number.`;
+    html += `<div class="tp-sec">Logistics</div>
+      <div class="pp-lbar" title="${escAttr(transTip)}">
+        <span class="lbl">🧺 Transporters</span>
+        <span class="bar green"><span style="width:${Math.round(tu.frac * 100)}%"></span></span>
+        <span class="st">${tu.n}</span></div>
+      <div class="pp-lbar" title="${escAttr(tradTip)}">
+        <span class="lbl">🛒 Traders</span>
+        <span class="bar red"><span style="width:${fleet > 0 ? Math.round(live.length / fleet * 100) : 0}%"></span></span>
+        <span class="st">${live.length}/${fleet}</span></div>`;
+
+    // One line per fleet slot.
+    html += `<div class="pp-fleet">`;
+    for (let k = 0; k < fleet; k++) {
+      const c = live[k];
+      html += c ? `<div>#${k + 1}: ${ppCartLine(c)}</div>`
+                : `<div class="idle">#${k + 1}: Not Trading</div>`;
+    }
+    html += `</div>`;
+
+    // Budget chart (line drawn onto #ppBudget after the innerHTML lands).
+    html += `<div class="tp-sec">Budget</div>
+      <div class="pp-chart-wrap">
+        <canvas id="ppBudget" width="320" height="74" aria-label="City gold history"></canvas>
+        <span class="ax max" id="ppBudMax"></span>
+        <span class="ax min" id="ppBudMin"></span>
+      </div>
+      <div class="pp-chart-cap"><span>Budget (last ~5 min)</span><b id="ppBudNow">${Math.round(t.gold || 0).toLocaleString()} 🪙</b></div>`;
+
+    // Income / expense breakdown — rolling per-tick averages from the PP-A ledger.
+    const N = 120;   // ~1 min of ticks at 1×
+    const avg = key => (typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
+    const tax = avg("tax"), sales = avg("sales"), buys = avg("buys"), transfers = avg("transfers");
+    const net = tax + sales - buys + transfers;
+    const row = (ico, lbl, v, cls, sign) =>
+      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/t</span></div>`;
+    html += `<div class="tp-sec">Income &amp; expenses</div><div class="pp-brk">` +
+      row("💰", "Taxes", tax, "pos", "+") +
+      row("📤", "Sales", sales, "pos", "+") +
+      row("📥", "Purchases", buys, buys > 0 ? "neg" : "", "−") +
+      row("🤝", "Transfers", transfers, transfers > 0 ? "pos" : transfers < 0 ? "neg" : "", transfers < 0 ? "−" : "+") +
+      `<div class="tp-row net"><span class="k">Net</span><span class="v ${net > 0 ? "pos" : net < 0 ? "neg" : ""}">` +
+      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/t</span></div></div>`;
+    return html;
+  }
+
+  // One fleet line: "(42%) Buy 3🐟 4🪵 from City #2 for 22🪙" (phase-aware verb,
+  // multi-good cargo, castle-sentinel seller).
+  function ppCartLine(c) {
+    const items = Array.isArray(c.cargo) ? c.cargo : [{ goodId: c.goodId, qty: c.qty, unloaded: c.unloaded }];
+    const cargoStr = items.filter(it => (it.qty || 0) > 0)
+      .map(it => `${Math.max(1, Math.round(it.qty))}${goodIcon(it.goodId)}`).join(" ") || "goods";
+    const isCastle = !!c.sellerCastle || c.toId === "castle";
+    let seller = "Castle";
+    if (!isCastle) {
+      const s = (state.towns || []).find(x => x && x.id === c.toId);
+      seller = "City #" + (s ? s.id : c.toId);
+    }
+    let frac, verb;
+    if (c.phase === "loading") { frac = c.qty > 0 ? (c.loaded || 0) / c.qty : 0; verb = "Loading"; }
+    else if (c.phase === "return") { frac = c.progress || 0; verb = "Hauling"; }
+    else if (c.phase === "unloading") {
+      let un = 0; for (const it of items) un += it.unloaded || 0;
+      const tot = c.totalQty || c.qty || 1;
+      frac = tot > 0 ? un / tot : 0; verb = "Unloading";
+    } else { frac = c.progress || 0; verb = "Buy"; }
+    const pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+    return `(${pct}%) ${verb} ${cargoStr} from ${esc(seller)} for ${Math.round(c.agreedGold || 0)}🪙`;
+  }
+
+  // Budget line chart — same look as the KR resource chart (drawChart).
+  function drawPPBudget(t) {
+    const cv = document.getElementById("ppBudget");
+    if (!cv || typeof cv.getContext !== "function") return;
+    const g = cv.getContext("2d");
+    const cw = cv.clientWidth || 320, ch = 74;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
+    if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, cw, ch);
+    g.fillStyle = "#150f09"; g.fillRect(0, 0, cw, ch);
+
+    const hist = (t.ledger && Array.isArray(t.ledger.hist)) ? t.ledger.hist : [];
+    const vals = [];
+    for (let i = 0; i < hist.length; i++) if (typeof hist[i] === "number" && isFinite(hist[i])) vals.push(hist[i]);
+    if (!vals.length) vals.push(t.gold || 0);
+    let min = vals[0], max = vals[0];
+    for (let i = 1; i < vals.length; i++) { if (vals[i] < min) min = vals[i]; if (vals[i] > max) max = vals[i]; }
+    if (max - min < 1e-6) { min -= 1; max += 1; }
+    const span = max - min, pad = 5;
+    const X = (i, n) => pad + (n <= 1 ? 0 : (i / (n - 1)) * (cw - 2 * pad));
+    const Y = (v) => ch - pad - ((v - min) / span) * (ch - 2 * pad);
+    if (vals.length >= 2) {
+      g.strokeStyle = "#e0a860"; g.lineWidth = 1.5; g.lineJoin = "round"; g.beginPath();
+      for (let i = 0; i < vals.length; i++) { const px = X(i, vals.length), py = Y(vals[i]); if (i === 0) g.moveTo(px, py); else g.lineTo(px, py); }
+      g.stroke();
+    } else {
+      g.fillStyle = "#e0a860"; g.beginPath(); g.arc(X(0, 1), Y(vals[0]), 2.5, 0, Math.PI * 2); g.fill();
+    }
+    const mn = document.getElementById("ppBudMin"), mx = document.getElementById("ppBudMax"),
+          nw = document.getElementById("ppBudNow");
+    if (mn) mn.textContent = Math.round(min).toLocaleString();
+    if (mx) mx.textContent = Math.round(max).toLocaleString();
+    if (nw) nw.textContent = Math.round(t.gold || 0).toLocaleString() + " 🪙";
+  }
+
+  // ---- Tab 2: Warehouse (read-only) -------------------------------------------
+  let ppWhSort = "az";     // "az" | "stock" | "price" — persists while the panel is open
+  let ppWhPrev = null;     // { townId, tick, stock:{}, rate:{} } net-rate sampler (UI-only)
+  function ppWhRates(t) {
+    const cur = {};
+    for (const gid in CONFIG.goods) cur[gid] = (t.stock && t.stock[gid]) || 0;
+    if (!ppWhPrev || ppWhPrev.townId !== t.id || (state.tick || 0) < ppWhPrev.tick) {
+      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate: {} };
+      return ppWhPrev.rate;
+    }
+    const dt = (state.tick || 0) - ppWhPrev.tick;
+    if (dt >= 8) {   // ~4 s window at 1× — smooth but honest (net Δstock / tick)
+      const rate = {};
+      for (const gid in cur) rate[gid] = (cur[gid] - (ppWhPrev.stock[gid] || 0)) / dt;
+      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate };
+    }
+    return ppWhPrev.rate;
+  }
+
+  function renderPPWarehouse(t) {
+    const cap = (CONFIG.town && CONFIG.town.storageCap) || 80;
+    // En-route units this city's own traders are hauling home, per good.
+    const inbound = {};
+    for (const c of ppLiveCarts(t)) {
+      const items = Array.isArray(c.cargo) ? c.cargo : [{ goodId: c.goodId, qty: c.qty, unloaded: c.unloaded }];
+      for (const it of items) {
+        const left = Math.max(0, (it.qty || 0) - (it.unloaded || 0));
+        if (left > 0) inbound[it.goodId] = (inbound[it.goodId] || 0) + left;
+      }
+    }
+    const rates = ppWhRates(t);
+    const ids = Object.keys(CONFIG.goods).filter(gid =>
+      ((t.stock && t.stock[gid]) || 0) > 0.05 || ((t.demand && t.demand[gid]) || 0) > 1e-3 || (inbound[gid] || 0) > 0);
+    const priceGet = gid => (t.prices && typeof t.prices[gid] === "number")
+      ? t.prices[gid] : ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
+    if (ppWhSort === "stock")
+      ids.sort((a, b) => ((t.stock && t.stock[b]) || 0) - ((t.stock && t.stock[a]) || 0) || a.localeCompare(b));
+    else if (ppWhSort === "price")
+      ids.sort((a, b) => priceGet(b) - priceGet(a) || a.localeCompare(b));
+    else ids.sort((a, b) => GOOD_LABEL(a).localeCompare(GOOD_LABEL(b)));
+
+    const sortBtn = (id, lbl, tip) =>
+      `<button data-pp-sort="${id}" class="${ppWhSort === id ? "active" : ""}" title="${escAttr(tip)}">${lbl}</button>`;
+    let html = `<div class="pp-wsort"><span class="cap">Storage cap ${cap}/good</span>` +
+      sortBtn("az", "A-Z", "Sort by name") +
+      sortBtn("stock", "Stock", "Sort by stock (high first)") +
+      sortBtn("price", "Price", "Sort by price (high first)") + `</div>`;
+    if (!ids.length) return html + `<div class="tp-empty">Nothing stocked or demanded yet.</div>`;
+    html += `<div class="pp-wrow hdr"><span>Good</span><span class="num">Stock</span>` +
+      `<span class="num">Rate</span><span class="num" title="Units your traders are hauling home">⇦</span>` +
+      `<span class="num">Price</span></div>`;
+    for (const gid of ids) {
+      const stock = (t.stock && t.stock[gid]) || 0;
+      const price = priceGet(gid);
+      const arrow = trendArrow(t, gid, price);
+      const r = rates[gid];
+      const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
+        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(r))}/t</span>`
+        : `<span class="num dim">—</span>`;
+      const inb = inbound[gid] || 0;
+      const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
+      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1((t.demand && t.demand[gid]) || 0)}/t` +
+        (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
+      html += `<div class="pp-wrow" title="${escAttr(tip)}">
+        <span class="nm">${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
+        <span class="num">${fmt(stock)}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
+        ${rateCell}${inCell}
+        <span class="num">${fmt1(price)}🪙 ${arrow}</span></div>`;
     }
     return html;
   }
 
-  function renderPopulation(t) {
-    const tiers = [
-      { key: "peasants", label: "Peasants", needs: "wood + potato + fish + wool" },
-      { key: "workers",  label: "Workers",  needs: "+ beer" },
-      { key: "burghers", label: "Citizens", needs: "+ clothes" },
-    ];
-    let rows = "";
-    for (const tier of tiers) {
-      rows += `<div class="tp-row"><span class="k">${tier.label}<span style="opacity:.5"> · needs ${tier.needs}</span></span><span class="v">${Math.round(t.pop[tier.key] || 0)}</span></div>`;
-    }
-    const total = t.pop.peasants + t.pop.workers + t.pop.burghers;
-    return `<div class="tp-sec">By tier — ${Math.round(total)} total</div>${rows}
-      ${renderWorkerRoster(t)}
-      <div class="tp-sec">Happiness — ${Math.round(t.happiness)}%</div>
-      <div class="tp-bar"><span style="width:${Math.max(0, Math.min(100, t.happiness))}%"></span></div>`;
-  }
-
-  // === CB-D: worker roster ===
-  // Read-only summary of how each worker tier is deployed: total / assigned /
-  // idle, with a per-building breakdown on hover (title attr). Assigned counts
-  // come from Sim-written `b.workers` on built producer buildings, grouped by
-  // CONFIG.buildings[typeId].workerTier. Pure additive DOM — no state mutation.
-  const CBD_TIERS = [
-    { key: "peasants", tier: "peasant", label: "Peasants", glyph: "🧑‍🌾", color: "#8bc34a" },
-    { key: "workers",  tier: "worker",  label: "Workers",  glyph: "🔨", color: "#ff9800" },
-    { key: "burghers", tier: "burgher", label: "Citizens", glyph: "🎩", color: "#9c88ff" },
-  ];
-  function renderWorkerRoster(t) {
-    if (!t || !t.pop) return "";
-    const buildings = Array.isArray(t.buildings) ? t.buildings : [];
-    let rows = "";
-    for (const info of CBD_TIERS) {
-      const pop = Math.round(t.pop[info.key] || 0);
-      if (pop <= 0) continue;   // hide empty tiers, keep it tidy
-      // Tally assigned workers by building name for this tier.
-      let assigned = 0;
-      const byName = {};
-      for (const b of buildings) {
-        if (!b) continue;
-        if (b.built === false) continue;   // treat missing `built` as built
+  // ---- Tab 3: Buildings & Workforce (merged old Buildings + Population tabs) ---
+  function renderPPBuildings(t) {
+    const bs = Array.isArray(t.buildings) ? t.buildings : [];
+    if (!bs.length)
+      return `<div class="tp-empty">No buildings yet — place some from the build bar at the bottom of the screen.</div>`;
+    const housing = (Buildings.housingCapacity ? Buildings.housingCapacity(t, state)
+                                               : { peasants: 0, workers: 0, burghers: 0 });
+    let html = "";
+    for (const ti of PP_TIERS) {
+      const houses = [], works = [];
+      bs.forEach((b, i) => {
+        if (!b) return;
         const def = CONFIG.buildings[b.typeId];
-        if (!def || def.kind === "house" || def.workerTier !== info.tier) continue;
-        const w = Math.round(b.workers || 0);
-        if (w <= 0) continue;
-        assigned += w;
-        const nm = def.name || b.typeId;
-        byName[nm] = (byName[nm] || 0) + w;
+        if (!def) return;
+        if (def.kind === "house" && def.houseTier === ti.tier) houses.push({ b, def, i });
+        else if (def.kind !== "house" && def.workerTier === ti.tier) works.push({ b, def, i });
+      });
+      if (!houses.length && !works.length) continue;
+      html += `<div class="tp-sec" style="color:${ti.color}">${ti.glyph} ${ti.label}s</div>`;
+      if (houses.length) {
+        const capT = Math.round(housing[ti.key] || 0);
+        const occT = Math.min(Math.round(t.pop[ti.key] || 0), capT);
+        html += `<div class="pp-grp">Houses ${occT}/${capT}</div><div class="pp-cards">`;
+        let left = occT;   // distribute the tier's residents across its houses in order
+        for (const hs of houses) {
+          const hcap = (hs.def.houseCapacity || 0)
+            + (Buildings.upgradeEffect ? (Buildings.upgradeEffect(hs.b).capacityPlus || 0) : 0);
+          const uc = hs.b.built === false;
+          const occ = uc ? 0 : Math.min(left, hcap);
+          left -= occ;
+          const pips = "●".repeat(occ) + "○".repeat(Math.max(0, hcap - occ));
+          const tip = `${hs.def.name}${(hs.b.upgradeLevel || 1) > 1 ? " L" + hs.b.upgradeLevel : ""} — ${occ}/${hcap} occupied` +
+            (uc ? " · ⚠ under construction" : "") + (hs.b.priority ? " · ⭐ priority" : "") + ". Click for details.";
+          html += `<button class="pp-card" data-pp-b="${hs.i}" title="${escAttr(tip)}">` +
+            `<span>${ppGlyph(hs.b.typeId)}</span><span class="pips">${pips}</span>` +
+            (hs.b.priority ? `<span class="star">⭐</span>` : "") +
+            (uc ? `<span class="badge">⚠</span>` : "") + `</button>`;
+        }
+        html += `</div>`;
       }
-      const idle = Math.max(0, pop - assigned);
-      const parts = Object.keys(byName).map(nm => byName[nm] + " in " + nm);
-      const tip = (parts.length ? parts.join(", ") : "none assigned") + " · " + idle + " idle";
-      rows += `<div class="tp-row" title="${esc(tip)}">
-        <span class="k"><span style="color:${info.color}">${info.glyph} ${info.label}</span>
-          <span style="opacity:.5"> · ${pop} total</span></span>
-        <span class="v">${assigned} assigned · ${idle} idle</span></div>`;
+      if (works.length) {
+        html += `<div class="pp-grp">Workplaces</div><div class="pp-cards">`;
+        for (const wk of works) {
+          const b = wk.b, def = wk.def;
+          const plus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
+          const slots = Math.max(0, (def.workerSlots || 0) + plus);
+          const closed = Math.min(slots, Math.max(0, Math.round(b.closedSlots || 0)));
+          const open = slots - closed;
+          const w = Math.min(open, Math.round(b.workers || 0));
+          const uc = b.built === false;
+          // Missing input ⇒ a recipe input the town shelf is (almost) out of.
+          let missing = "";
+          if (!uc && def.inputs)
+            for (const gid in def.inputs)
+              if (((t.stock && t.stock[gid]) || 0) <= 0.05) missing += (missing ? ", " : "") + GOOD_LABEL(gid);
+          const warn = uc || (open > 0 && w === 0) || !!missing;
+          const why = uc ? "under construction"
+            : (missing ? "missing input: " + missing : (open > 0 && w === 0 ? "no workers" : ""));
+          const pips = "●".repeat(w) + "○".repeat(Math.max(0, open - w)) + "🔒".repeat(closed);
+          const tip = `${def.name}${(b.upgradeLevel || 1) > 1 ? " L" + b.upgradeLevel : ""} — ${w}/${open} workers` +
+            (closed ? ` (${closed} locked)` : "") + (why ? " · ⚠ " + why : "") +
+            (b.priority ? " · ⭐ priority" : "") + ". Click for details.";
+          html += `<button class="pp-card" data-pp-b="${wk.i}" title="${escAttr(tip)}">` +
+            `<span>${ppGlyph(b.typeId)}</span><span class="pips">${pips}</span>` +
+            (b.priority ? `<span class="star">⭐</span>` : "") +
+            (warn ? `<span class="badge">⚠</span>` : "") + `</button>`;
+        }
+        html += `</div>`;
+      }
     }
-    if (!rows) return "";
-    return `<div class="tp-sec">Workforce</div>${rows}`;
+    return html;
   }
-  // === /CB-D ===
+  // === PP-B END ===
 
-  function renderTownPanel() {
+  // === PP-B === panel driver. The old renderOverview / renderUpgrade /
+  // renderStock / renderBuildings / renderPopulation / CB-D roster renderers are
+  // replaced by the PP-B header + 3 tabs above (upgrade moved into the header;
+  // the Population tab's info lives in the Overview tier rows + the Buildings &
+  // Workforce cards). `force` re-renders even under the cursor (player actions).
+  function renderTownPanel(force) {
     if (!activeTown) return;
     // panel outlived its town (erased)? close.
     if (!state.towns.includes(activeTown)) { closeTownPanel(); return; }
     const t = activeTown;
-    tpNameEl.textContent = "Town #" + t.id;
+    tpNameEl.textContent = "City #" + t.id;
     tpLevelEl.textContent = "Lv " + t.level;
-    let html = "";
-    if (activeTab === "overview") html = renderOverview(t);
-    else if (activeTab === "stock") html = renderStock(t);
-    else if (activeTab === "buildings") html = renderBuildings(t);
-    else if (activeTab === "population") html = renderPopulation(t);
-    tpBodyEl.innerHTML = html;
+    renderPPHead(t, force);
+    // Live-refresh guard (RT-B ttRenderQueue pattern): skip the innerHTML rebuild
+    // while a tooltip-bearing element (or clickable card/button) is hovered, so
+    // open title-tooltips don't flicker and mid-click rebuilds can't eat clicks.
+    const hovered = !force && tpBodyEl.querySelector("[title]:hover, button:hover");
+    if (!hovered) {
+      let html = "";
+      if (activeTab === "warehouse") html = renderPPWarehouse(t);
+      else if (activeTab === "buildings") html = renderPPBuildings(t);
+      else html = renderPPOverview(t);
+      tpBodyEl.innerHTML = html;
+    }
+    if (activeTab === "overview") drawPPBudget(t);   // canvas redraw is hover-safe
   }
+  // === /PP-B ===
 
   function openTownPanel(town) {
     activeTown = ensureTown(town);
     panelEl.classList.remove("hidden");
     panelEl.setAttribute("aria-hidden", "false");
-    renderTownPanel();
+    renderTownPanel(true);   // PP-B: force a full first paint
   }
   function closeTownPanel() {
     // PV2-B: closing the town panel no longer cancels placement — the build bar
@@ -5734,19 +5972,39 @@ var CastleMarket = (function () {
   // Keep category lock state live as research completes (accumulator unlocks it).
   setInterval(refreshCatButtons, 500);
 
-  // Town-panel clicks (delegated — the panel now only carries the upgrade action).
-  tpBodyEl.addEventListener("click", (e) => {
-    const upBtn = e.target.closest("[data-town-upgrade]");
-    if (upBtn && activeTown) {
+  // === PP-B === delegated panel clicks. Header strip: town upgrade (P4-B logic)
+  // + Give/Take 1k (EC-C transfer via window.CityCards — same cooldown/ledger
+  // path as the city-cards strip). Body: warehouse sort + building-card clicks.
+  ppHeadEl.addEventListener("click", (e) => {
+    if (!activeTown) return;
+    if (e.target.closest("[data-town-upgrade]")) {
       const res = Town.upgrade(activeTown);
-      if (res.ok) { scheduleSave(); renderTownPanel(); SFX.play("levelup"); }
+      if (res.ok) { scheduleSave(); renderTownPanel(true); SFX.play("levelup"); }
+      return;
+    }
+    if (e.target.closest("[data-pp-give]")) {
+      if (window.CityCards && CityCards.give(activeTown)) renderTownPanel(true);
+      return;
+    }
+    if (e.target.closest("[data-pp-take]")) {
+      if (window.CityCards && CityCards.take(activeTown)) renderTownPanel(true);
     }
   });
+  tpBodyEl.addEventListener("click", (e) => {
+    const sortBtn = e.target.closest("[data-pp-sort]");
+    if (sortBtn) { ppWhSort = sortBtn.dataset.ppSort; renderTownPanel(true); return; }
+    const card = e.target.closest("[data-pp-b]");
+    if (card && activeTown) {
+      const b = (activeTown.buildings || [])[+card.dataset.ppB];
+      if (b && window.BuildingUI) BuildingUI.openBuildingPanel(activeTown, b);
+    }
+  });
+  // === /PP-B ===
 
   tpTabEls.forEach(btn => btn.addEventListener("click", () => {
     activeTab = btn.dataset.tab;
     tpTabEls.forEach(b => b.classList.toggle("active", b === btn));
-    renderTownPanel();
+    renderTownPanel(true);   // PP-B: tab switch always repaints
   }));
   document.getElementById("tpClose").addEventListener("click", closeTownPanel);
 
