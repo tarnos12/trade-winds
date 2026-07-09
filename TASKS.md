@@ -197,6 +197,20 @@ luxury clothes. Citizen unlock nodes in the CITIZEN research band.
 (+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
 consumption good (reserved for future military/quests).
 
+## Milestone: Citizen+Aristocrat functional + victory ✅ DONE (v0.20.0)
+Author directive (2026-07-09, "start next phase"). Opus worktree agent applied
+the v0.19.0 bottom-tier treatment to the TOP tiers. Root cause (same class as the
+worker bakery bug): `unlock_manor` required `iron_tool` — a BURGHER-made good —
+but the Manor is the sole gateway to burgher housing, so burghers (and the whole
+citizen/aristocrat economy + castle L5) could never bootstrap. Fix: re-tier
+unlock_manor materials to worker-band `bricks`. A systematic gating audit over ALL
+citizen/aristocrat unlock nodes found no other offenders; producer/recipe/needs/
+castle numbers were already sound. Deterministic proof (balance.test.js +31→54,
+3 mutation-checked): citizen town bootstraps burghers 0→8 @88%; 4-tier capital
+grows aristocrats 0→6 @79% paying top tax; VICTORY drives Quests→prestige→castle
+L5 at tick 2859. 1,219 tests green. Models: Opus (diagnose+fix+proof), Haiku
+(release chores).
+
 ## Milestone: Peasant+Worker functional + research-tree layout ✅ DONE (v0.19.0)
 Author directive (2026-07-09). (1) Peasant+Worker fully functional: two Opus
 worktree agents — balance found `unlock_bakery` was gated behind `iron_tool`
