@@ -43,9 +43,9 @@ function fillMats(st, id) {
 const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
 const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
 const KINGDOM_COUNT = 15;
-const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // 15 + 11 + 9 = 35
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // TV2: 15 + 16 + 9 = 40
 ok("expected node count derived from CONFIG (15 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
-ok("EXPECT resolves to 35", EXPECT === 35);
+ok("EXPECT resolves to 40", EXPECT === 40);
 // The 3 kingdom branches remain 5 nodes each.
 ok("kingdom branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
 ok("branches() is the 3 kingdom branches, development dropped",
@@ -103,7 +103,9 @@ ok("every non-starter building maps to its unlock node", NON_STARTERS.every(b =>
   const node = Research.get("unlock_" + b.id);
   if (!node || node.kind !== "unlock" || node.buildingId !== b.id) return false;
   if (b.unlockedBy !== node.id) return false;
-  const tier = b.workerTier || b.houseTier;
+  // === TV2: researchBand overrides the node's tree lane (farm: peasant-staffed
+  // but its unlock lives in the worker band). ===
+  const tier = b.researchBand || b.workerTier || b.houseTier;
   return node.band === tier;
 }));
 ok("no unlock node points at a nonexistent building", CONFIG.research
@@ -261,14 +263,14 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 
 // materialsSatisfied / remaining helpers behave.
 (() => {
-  const node = Research.get("deep_veins");   // { stone, ore }
+  const node = Research.get("deep_veins");   // === TV2: { stone, iron } ===
   const st = mkState({ castleStock: {} });
   ok("materialsSatisfied false when empty", !ResearchEconomy.materialsSatisfied(st, node));
-  ok("remaining equals requirement when empty", ResearchEconomy.remaining(st, node, "ore") === node.materials.ore);
+  ok("remaining equals requirement when empty", ResearchEconomy.remaining(st, node, "iron") === node.materials.iron);
   st.castleStock.stone = node.materials.stone;
-  st.castleStock.ore = node.materials.ore;
+  st.castleStock.iron = node.materials.iron;
   ok("materialsSatisfied true once covered", ResearchEconomy.materialsSatisfied(st, node));
-  ok("remaining zero once covered", ResearchEconomy.remaining(st, node, "ore") === 0);
+  ok("remaining zero once covered", ResearchEconomy.remaining(st, node, "iron") === 0);
 })();
 
 // =========================================================================
@@ -412,13 +414,17 @@ function mkCity(over) {
 (() => {
   const st = mkState({ treasury: 100000 });
   ok("root unlock nodes available immediately", Research.isAvailable(st, "unlock_quarry") && Research.isAvailable(st, "unlock_fishery"));
-  ok("dependent unlock node gated before prereq", !Research.isAvailable(st, "unlock_miner"));
-  ok("miner building gated before its unlock node", !Research.has(st, "unlock_quarry") && CONFIG.buildings.miner.unlockedBy === "unlock_miner");
+  // === TV2-FIX: shepherd decoupled from the fishery — wool is a core peasant
+  // need, so unlock_shepherd is a ROOT of the peasant band (prereqs []). ===
+  ok("unlock_shepherd is a root (no prereqs)", Research.get("unlock_shepherd").prereqs.length === 0);
+  ok("unlock_shepherd available immediately (not gated by fishery)", Research.isAvailable(st, "unlock_shepherd"));
+  ok("dependent unlock node gated before prereq", !Research.isAvailable(st, "unlock_iron_mine"));
+  ok("iron_mine building gated before its unlock node", !Research.has(st, "unlock_quarry") && CONFIG.buildings.iron_mine.unlockedBy === "unlock_iron_mine");
   fillMats(st, "unlock_quarry");
   Research.start(st, "unlock_quarry");
   tick(st, Research.get("unlock_quarry").timeTicks);
   ok("unlock_quarry unlocks via normal start→tick flow", Research.has(st, "unlock_quarry"));
-  ok("unlock_miner now available after its prereq", Research.canStart(st, "unlock_miner"));
+  ok("unlock_iron_mine now available after its prereq", Research.canStart(st, "unlock_iron_mine"));
 })();
 // === /RT-A ===================================================================
 

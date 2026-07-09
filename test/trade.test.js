@@ -45,9 +45,9 @@ function mkTown(over) {
 // needs are now WOOD + POTATO (food); extras are fish + wool (+beer for workers):
 //   FARM(0,0)  — floods GRAIN + POTATO; its workers want beer.
 //   MINE(6,0)  — floods ORE; makes no potato, so it must BUY POTATO (food).
-//   MILL(3,1)  — brewery(grain→beer)+smelter(ore+wood→tools): must BUY GRAIN
+//   MILL(3,1)  — brewery(grain→beer)+smelter(iron+wood→tools): must BUY GRAIN
 //                (brew input) and ORE (smelt input).
-// So potato flows FARM→MINE, grain flows FARM→MILL, ore flows MINE→MILL.
+// So potato flows FARM→MINE, grain flows FARM→MILL, iron flows MINE→MILL.
 // Huts+cottages give each city housing so workers persist (Sim caps pop at housing).
 function homes() {
   const a = [];
@@ -62,18 +62,20 @@ function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
   buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
   stock: { grain: 80, potato: 80, wood: 80, beer: 20 } }); }
-// The mine staffs MINERS + a lumberjack (peasant tier) — peasant-only housing, no
-// workers. It self-produces WOOD but has NO POTATO, so its happiness (and pop) is
-// driven by the POTATO food flow: connected ⇒ fed & happy, road-less ⇒ food-starved.
+// === TV2: the mine floods IRON (80 stock, 0 self-demand → a permanent surplus
+// the neighbours buy). Peasant-only housing, so its happiness (and pop) tracks
+// the POTATO food flow: connected ⇒ fed & happy, road-less ⇒ food-starved. ===
 function peasantHomes(n) { const a = []; for (let i = 0; i < n; i++) a.push({ typeId: "hut" }); return a; }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
   pop: { peasants: 12, workers: 0, burghers: 0 },
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(6)],
-  stock: { ore: 80, wood: 80 } }); }
+  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(6)],
+  stock: { iron: 80, wood: 80 } }); }
+// === TV2: smelter now needs IRON + COAL; the mill keeps a local COAL stock so
+// the FLOWING input (iron, bought from the mine) is the limiter the test probes. ===
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
   pop: { peasants: 8, workers: 8, burghers: 0 },
   buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
-  stock: { grain: 15, ore: 12, wood: 80, potato: 80, beer: 12 } }); }
+  stock: { grain: 15, iron: 12, coal: 200, wood: 80, potato: 80, beer: 12 } }); }
 
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];  // FARM(0,0)↔MINE(6,0); MILL(3,1)→(3,0)
 
@@ -182,7 +184,7 @@ ok("no carts are ever created without roads", isolated.carts.length === 0);
 
 // Goods flow surplus→shortfall, observed directly on the carts:
 ok("potato is bought FROM the farm (surplus → shortfall cities)", flows.has("potato<-1"));
-ok("ore is bought FROM the mine (surplus → shortfall city)", flows.has("ore<-2"));
+ok("iron is bought FROM the mine (surplus → shortfall city)", flows.has("iron<-2"));
 
 // Potato (food) flow actually reaches the potato-less MINE: with roads, the mine's
 // external trader BUYS potato from the farm and DELIVERS it into the mine's stock
@@ -196,7 +198,7 @@ ok("the road-connected mine is no worse off than the road-less one",
   connected.towns[1].happiness >= isolated.towns[1].happiness &&
   popTotal(connected.towns[1]) >= popTotal(isolated.towns[1]));
 // Ore flow lets the MILL's smelter keep making tools; the road-less mill stalls.
-ok("ore flow lets the mill out-produce tools vs the road-less baseline",
+ok("iron flow lets the mill out-produce tools vs the road-less baseline",
   stockOf(connected, 3, "tools") > stockOf(isolated, 3, "tools"));
 
 // Prices converge: the farm↔mine POTATO-price gap is smaller WITH trade than without.
@@ -249,7 +251,7 @@ Pathing.invalidate();
   Pathing.invalidate();
   const b = buildState(2024, true); run(b, 150);
   ok("deterministic: identical treasury after N ticks", a.treasury === b.treasury);
-  ok("deterministic: identical mine ore stock", townById(a, 2).stock.ore === townById(b, 2).stock.ore);
+  ok("deterministic: identical mine iron stock", townById(a, 2).stock.iron === townById(b, 2).stock.iron);
   ok("deterministic: identical cart count", a.carts.length === b.carts.length);
 
   // A different seed routes traders differently → treasury generally differs.
@@ -424,9 +426,9 @@ Pathing.invalidate();
 Pathing.invalidate();
 {
   const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000,
-    stock: { grain: 0, ore: 0 }, demand: { grain: 3, ore: 3 } });
+    stock: { grain: 0, iron: 0 }, demand: { grain: 3, iron: 3 } });
   const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0,
-    stock: { grain: 100, ore: 100 }, prices: { grain: 5, ore: 4 }, demand: {} });
+    stock: { grain: 100, iron: 100 }, prices: { grain: 5, iron: 4 }, demand: {} });
   const st = { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 1 };
   Trade.tick(st);
   const c = st.carts[0];
@@ -437,7 +439,7 @@ Pathing.invalidate();
   ok("PP-A multi-good: totalQty mirrors summed cargo", Math.abs(c.totalQty - total) < 1e-9);
   ok("PP-A multi-good: mirror goodId/qty == primary cargo[0]", c.goodId === c.cargo[0].goodId && c.qty === c.cargo[0].qty);
   ok("PP-A multi-good: agreedGold == Sum unitBuy*qty", Math.abs(c.agreedGold - c.cargo.reduce((s, it) => s + it.unitBuy * it.qty, 0)) < 1e-9);
-  ok("PP-A multi-good: both goods reserved at the seller", (seller.reserved.grain || 0) > 0 && (seller.reserved.ore || 0) > 0);
+  ok("PP-A multi-good: both goods reserved at the seller", (seller.reserved.grain || 0) > 0 && (seller.reserved.iron || 0) > 0);
   ok("PP-A multi-good: buyer charged the whole cargo up front", Math.abs((100000 - townById(st, 1).gold) - c.agreedGold) < 1e-9);
 }
 
@@ -445,22 +447,22 @@ Pathing.invalidate();
 Pathing.invalidate();
 {
   const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000,
-    stock: { grain: 0, ore: 0 }, demand: { grain: 3, ore: 3 } });
+    stock: { grain: 0, iron: 0 }, demand: { grain: 3, iron: 3 } });
   const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0,
-    stock: { grain: 100, ore: 100 }, prices: { grain: 5, ore: 5 }, demand: {} });
+    stock: { grain: 100, iron: 100 }, prices: { grain: 5, iron: 5 }, demand: {} });
   const st = { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 1 };
   Trade.tick(st);
   const c = st.carts[0];
-  const oreItem = c.cargo.find(it => it.goodId === "ore");
+  const oreItem = c.cargo.find(it => it.goodId === "iron");
   const grainItem = c.cargo.find(it => it.goodId === "grain");
   const oreQty = oreItem.qty, grainQty = grainItem.qty;
   const goldAfterDispatch = townById(st, 1).gold;
-  seller.stock.ore = 1;      // only 1 ore left when the trader arrives
+  seller.stock.iron = 1;      // only 1 iron left when the trader arrives
   buyer.demand = {};         // freeze re-dispatch; the in-flight cart still completes
   for (let i = 0; i < 30; i++) Trade.tick(st);
-  ok("PP-A multi-good settle: undelivered ore refunded ((oreQty-1)*unit)",
+  ok("PP-A multi-good settle: undelivered iron refunded ((oreQty-1)*unit)",
      Math.abs(townById(st, 1).gold - (goldAfterDispatch + (oreQty - 1) * 5)) < 1e-9);
-  ok("PP-A multi-good settle: buyer got exactly the 1 ore the seller had", (townById(st, 1).stock.ore || 0) === 1);
+  ok("PP-A multi-good settle: buyer got exactly the 1 iron the seller had", (townById(st, 1).stock.iron || 0) === 1);
   ok("PP-A multi-good settle: the other good (grain) delivered in full", Math.abs((townById(st, 1).stock.grain || 0) - grainQty) < 1e-9);
 }
 
@@ -490,8 +492,8 @@ Pathing.invalidate();
 // (det) Determinism with fleets + a castle seller.
 Pathing.invalidate();
 function detState() {
-  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1e9, stock: { grain: 0, ore: 0 }, demand: { grain: 40, ore: 40 } });
-  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0, stock: { ore: 5000 }, prices: { ore: 4 }, demand: {} });
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1e9, stock: { grain: 0, iron: 0 }, demand: { grain: 40, iron: 40 } });
+  const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0, stock: { iron: 5000 }, prices: { iron: 4 }, demand: {} });
   return { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 42,
     castleStock: { grain: 5000 }, castleReserved: {}, castleTrade: { grain: { enabled: true, limit: 100000 } } };
 }
@@ -503,7 +505,7 @@ function detState() {
   ok("PP-A determinism: identical live cart count", a.carts.length === b.carts.length);
   ok("PP-A determinism: identical buyer stock",
      (townById(a, 1).stock.grain || 0) === (townById(b, 1).stock.grain || 0) &&
-     (townById(a, 1).stock.ore || 0) === (townById(b, 1).stock.ore || 0));
+     (townById(a, 1).stock.iron || 0) === (townById(b, 1).stock.iron || 0));
   ok("PP-A determinism: identical castle stock", (a.castleStock.grain || 0) === (b.castleStock.grain || 0));
   ok("PP-A determinism: fleet of >=1 exercised (L1 buyer, big shortfall)",
      a.carts.filter(c => c.fromId === 1).length >= 1);

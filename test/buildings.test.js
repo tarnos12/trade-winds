@@ -31,19 +31,19 @@ function ok(name, cond) {
 function hx(q, r, terrain) { return [HexMath.key(q, r), { q, r, terrain, revealed: true }]; }
 function makeState() {
   const hexes = new Map();
-  // broad meadow patch around the town area (radius 3 about (5,0))
-  for (const c of HexMath.range(5, 0, 3)) hexes.set(...hx(c.q, c.r, "meadow"));
+  // === TV2: broad BARREN patch (generic buildable ground) around (5,0), r=3 ===
+  for (const c of HexMath.range(5, 0, 3)) hexes.set(...hx(c.q, c.r, "barren"));
   // castle hex exists on the map too (buildable ground, per MapGen)
-  hexes.set(...hx(0, 0, "meadow"));
+  hexes.set(...hx(0, 0, "barren"));
   // a couple of hexes near the castle so castle-gap tests have real hexes
-  hexes.set(...hx(1, 0, "meadow"));
-  hexes.set(...hx(2, 0, "meadow"));
+  hexes.set(...hx(1, 0, "barren"));
+  hexes.set(...hx(2, 0, "barren"));
   // terrain overrides (all adjacent to town center (5,0) unless noted)
-  hexes.set(...hx(6, 0, "forest"));    // lumberjack (adj to A center)
-  hexes.set(...hx(5, 1, "fertile"));   // farm       (adj to A center)
-  hexes.set(...hx(6, -1, "hills"));    // miner      (adj to A center)
-  hexes.set(...hx(3, 0, "water"));     // water body (dist 2 from A)
-  hexes.set(...hx(4, 0, "meadow"));    // land adj to A AND bordering water → fishery
+  hexes.set(...hx(6, 0, "forest"));         // lumberjack (adj to A center)
+  hexes.set(...hx(5, 1, "fertile"));        // farm/shepherd (adj to A center)
+  hexes.set(...hx(6, -1, "iron_deposit"));  // iron_mine   (adj to A center)
+  hexes.set(...hx(3, 0, "water"));          // water body (dist 2 from A)
+  hexes.set(...hx(4, 0, "fish"));           // fish tile adj to A → fishery sits on it
   // EC-A: state.treasury is the Kingdom purse that pays all placement GOLD.
   return { map: { hexes }, roads: new Set(), towns: [], treasury: 10000 };
 }
@@ -94,17 +94,19 @@ ok("potato_farm exists (fertile extractor → potato, startUnlocked, gold-only)"
 })());
 const kinds = Object.values(CONFIG.buildings).map(b => b.kind);
 ok("catalog has extractors/processors/houses", kinds.includes("extractor") && kinds.includes("processor") && kinds.includes("house"));
-ok("extractors are peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant"));
+// === TV2: extractors are peasant- OR worker-staffed (T2 mines are worker) ===
+ok("extractors are peasant- or worker-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant" || b.workerTier === "worker"));
 // Processors are worker-staffed, except the starter sawmill which is peasant-run (basic wood→planks).
 ok("processors are worker- or peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "processor").every(b => b.workerTier === "worker" || b.workerTier === "peasant"));
 ok("houses declare houseTier + houseCapacity, no output/workers",
   Object.values(CONFIG.buildings).filter(b => b.kind === "house").every(b => b.houseTier && b.houseCapacity > 0 && !b.output && !b.workerSlots));
-ok("expected extractor ids present", ["lumberjack", "farm", "miner", "quarry", "fishery", "shepherd"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "extractor"));
-ok("expected processor ids present", ["sawmill", "mill", "bakery", "brewery", "smelter", "weaver"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
+ok("expected extractor ids present", ["lumberjack", "farm", "iron_mine", "quarry", "fishery", "shepherd", "clay_pit", "coal_mine", "gold_mine"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "extractor"));
+ok("expected processor ids present", ["sawmill", "mill", "bakery", "brewery", "smelter", "weaver", "brickworks"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
 ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "house"));
 
 // ---- BAL: per-building research unlock ----
-const STARTERS = ["hut", "lumberjack", "farm", "sawmill"];
+// === TV2: farm dropped from starters (now unlock_farm); potato_farm is a starter ===
+const STARTERS = ["hut", "lumberjack", "potato_farm", "sawmill"];
 ok("the four starters are startUnlocked (and carry no unlockedBy)",
   STARTERS.every(id => CONFIG.buildings[id].startUnlocked === true && !CONFIG.buildings[id].unlockedBy));
 const researchIds = new Set((CONFIG.research || []).map(n => n.id));
@@ -154,10 +156,57 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   ok("canPlaceBuilding returns the owning town", lj.town === town);
 
   ok("farm on adjacent fertile → ok", Buildings.canPlaceBuilding(st, "farm", 5, 1).ok === true);
-  ok("miner on adjacent hills → ok", Buildings.canPlaceBuilding(st, "miner", 6, -1).ok === true);
-  ok("fishery on land adj to center bordering water → ok", Buildings.canPlaceBuilding(st, "fishery", 4, 0).ok === true);
+  ok("iron_mine on adjacent iron_deposit → ok", Buildings.canPlaceBuilding(st, "iron_mine", 6, -1).ok === true);
+  ok("fishery on the fish tile → ok", Buildings.canPlaceBuilding(st, "fishery", 4, 0).ok === true);
   ok("sawmill (processor) on adjacent land → ok", Buildings.canPlaceBuilding(st, "sawmill", 5, -1).ok === true);
   ok("hut (house) on adjacent land → ok", Buildings.canPlaceBuilding(st, "hut", 4, 1).ok === true);
+}
+
+// ============================================================================
+// 4b) TV2 placement rules — deposits gate their extractor, fish-only fishery,
+//     snow houses-only, mountains fully blocked, generic tiles accept any.
+// ============================================================================
+{
+  const st = makeState();
+  const town = makeTown();
+  st.towns.push(town);
+  // Place an iron_mine at (6,-1) so the deposit hexes around it are contiguous
+  // to the city (footprint = {center (5,0), (6,-1)}).
+  town.buildings.push({ typeId: "iron_mine", q: 6, r: -1, workers: 0 });
+  const H = st.map.hexes;
+  H.set(...hx(5, -1, "snow"));           // houses only, borders center
+  H.set(...hx(4, 1, "desert"));          // generic ground, borders center
+  H.set(...hx(6, -2, "clay_deposit"));   // borders iron_mine (6,-1)
+  H.set(...hx(7, -2, "coal_deposit"));   // borders iron_mine (6,-1)
+  H.set(...hx(7, -1, "gold_deposit"));   // borders iron_mine (6,-1)
+  H.set(...hx(4, -1, "mountains"));      // obstacle
+
+  // deposits accept only their matching extractor
+  ok("clay_pit on clay_deposit → ok", Buildings.canPlaceBuilding(st, "clay_pit", 6, -2).ok === true);
+  ok("coal_mine on coal_deposit → ok", Buildings.canPlaceBuilding(st, "coal_mine", 7, -2).ok === true);
+  ok("gold_mine on gold_deposit → ok", Buildings.canPlaceBuilding(st, "gold_mine", 7, -1).ok === true);
+  ok("iron_mine on generic ground → not ok (needs deposit)", Buildings.canPlaceBuilding(st, "iron_mine", 4, 1).ok === false);
+  ok("clay_pit on wrong deposit → not ok", Buildings.canPlaceBuilding(st, "clay_pit", 7, -2).ok === false);
+
+  // fishery is fish-only; plain water rejects it
+  ok("fishery on plain water → not ok", Buildings.canPlaceBuilding(st, "fishery", 3, 0).ok === false);
+
+  // snow: houses only
+  const houseSnow = Buildings.canPlaceBuilding(st, "hut", 5, -1);
+  ok("house on snow → ok", houseSnow.ok === true);
+  const procSnow = Buildings.canPlaceBuilding(st, "sawmill", 5, -1);
+  ok("processor on snow → not ok + 'houses'", procSnow.ok === false && /house/i.test(procSnow.reason));
+
+  // generic ground accepts processor + house
+  ok("processor on desert → ok", Buildings.canPlaceBuilding(st, "sawmill", 4, 1).ok === true);
+  ok("house on fertile → ok", Buildings.canPlaceBuilding(st, "hut", 5, 1).ok === true);
+
+  // mountains fully block building
+  ok("building on mountains → not ok", Buildings.canPlaceBuilding(st, "sawmill", 4, -1).ok === false);
+  // terrain roadability flags (pathing / road tool honour these)
+  ok("mountains/water/fish not roadable, ground is", CONFIG.terrain.mountains.road === false &&
+     CONFIG.terrain.water.road === false && CONFIG.terrain.fish.road === false &&
+     CONFIG.terrain.barren.road === true && CONFIG.terrain.snow.road === true);
 }
 
 // ============================================================================
@@ -420,9 +469,9 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 
   // -- ladder / lookup --
   ok("upgradeLadder(hut) has 3 entries", Buildings.upgradeLadder("hut").length === 3);
-  ok("upgradeLadder(miner) empty", Buildings.upgradeLadder("miner").length === 0);
+  ok("upgradeLadder(iron_mine) empty", Buildings.upgradeLadder("iron_mine").length === 0);
   ok("upgradeAt(hut,4) is the final-consumption entry", Buildings.upgradeAt("hut", 4).effect.basicConsumptionMult === 0.7);
-  ok("upgradeAt(miner,2) is null", Buildings.upgradeAt("miner", 2) === null);
+  ok("upgradeAt(iron_mine,2) is null", Buildings.upgradeAt("iron_mine", 2) === null);
 
   // -- research gating of nextUpgrade --
   const hutB = { typeId: "hut", q: 0, r: 0, upgradeLevel: 1, pendingUpgrade: null };

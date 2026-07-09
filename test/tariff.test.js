@@ -48,13 +48,13 @@ function homes() {
 }
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
-  stock: { grain: 40, ore: 0 } }); }
+  stock: { grain: 40, iron: 0 } }); }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
-  buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()],
-  stock: { ore: 40, grain: 15 } }); }
+  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, ...homes()],
+  stock: { iron: 40, grain: 15 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
   buildings: [{ typeId: "mill", workers: 2 }, ...homes()],
-  stock: { grain: 30, ore: 0 } }); }
+  stock: { grain: 30, iron: 0 } }); }
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];
 
 // `over` lets a test tweak the state (tariffRate, research) before the run.

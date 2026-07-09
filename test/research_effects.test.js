@@ -40,10 +40,10 @@ function prodTown(typeId, extraStock) {
   return {
     id: 1, q: 0, r: 0, level: 4, gold: 0,
     pop: { peasants: 8, workers: 8, burghers: 0 },
-    // EV3: start the MEASURED outputs (grain/ore/flour) below the storage cap (80)
+    // EV3: start the MEASURED outputs (grain/iron/flour) below the storage cap (80)
     // so one tick's production has headroom and isn't clamped away — otherwise the
     // A/B research-multiplier comparison would read equal at the cap.
-    stock: Object.assign({ wood: 60, grain: 60, ore: 60, wool: 60 }, extraStock || {}),
+    stock: Object.assign({ wood: 60, grain: 60, iron: 60, wool: 60 }, extraStock || {}),
     prices: {}, demand: {}, happiness: 100,
     buildings: [{ typeId, q: 0, r: 1, workers: 0 }],
   };
@@ -69,10 +69,10 @@ function stockAfterTick(typeId, good, unlocked) {
   ok("extractorOutput raises farm production vs no-research", extract > base);
   ok("globalOutput raises farm production vs no-research", global > base);
 
-  // mineOutput stacks on top of extractorOutput for a hills/mountains extractor.
-  const mineBase = stockAfterTick("miner", "ore", ["crop_rotation"]);         // extractor only
-  const mineDeep = stockAfterTick("miner", "ore", ["crop_rotation", "deep_veins"]); // + mineOutput 1.25
-  ok("mineOutput further raises miner (ore) production", mineDeep > mineBase);
+  // === TV2: mineOutput stacks on extractorOutput for a deposit-tile extractor. ===
+  const mineBase = stockAfterTick("iron_mine", "iron", ["crop_rotation"]);         // extractor only
+  const mineDeep = stockAfterTick("iron_mine", "iron", ["crop_rotation", "deep_veins"]); // + mineOutput 1.25
+  ok("mineOutput further raises iron_mine (iron) production", mineDeep > mineBase);
 
   // A NON-mine extractor is untouched by mineOutput.
   const farmDeepless = stockAfterTick("farm", "grain", ["crop_rotation"]);
@@ -144,7 +144,7 @@ function buildTradeState(seed, unlocked, farmLevel) {
   // the chronic food BUYER the cart tests probe. Wood is stocked as firewood (a basic).
   const towns = [
     mkTradeTown({ id: 1, q: 0, r: 0, level: farmLevel || 4, buildings: [{ typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, ...homes()], stock: { potato: 5000, wood: 5000 } }),
-    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "miner", workers: 3 }, { typeId: "miner", workers: 3 }, ...homes()], stock: { ore: 5000, wood: 5000 } }),
+    mkTradeTown({ id: 2, q: 6, r: 0, buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, ...homes()], stock: { iron: 5000, wood: 5000 } }),
     mkTradeTown({ id: 3, q: 3, r: 1, buildings: [{ typeId: "mill", workers: 2 }, ...homes()], stock: { grain: 500, wood: 5000 } }),
   ];
   const st = { roads, towns, carts: [], treasury: 0, tradeSeed: seed >>> 0 };
@@ -242,8 +242,8 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
     noKey.treasury === emptyR.treasury);
   ok("no research key ≡ empty research: identical cart count",
     noKey.carts.length === emptyR.carts.length);
-  ok("no research key ≡ empty research: identical mine ore stock",
-    (noKey.towns[1].stock.ore || 0) === (emptyR.towns[1].stock.ore || 0));
+  ok("no research key ≡ empty research: identical mine iron stock",
+    (noKey.towns[1].stock.iron || 0) === (emptyR.towns[1].stock.iron || 0));
 })();
 
 // =========================================================================
@@ -254,7 +254,7 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
     Pathing.invalidate();
     const st = buildTradeState(313, ["crop_rotation", "deep_veins", "tax_ledgers", "larger_carts", "paved_roads", "extra_caravan"]);
     runTrade(st, 140);
-    return st.treasury + "|" + st.carts.length + "|" + (st.towns[1].stock.ore || 0);
+    return st.treasury + "|" + st.carts.length + "|" + (st.towns[1].stock.iron || 0);
   }
   ok("research effects are deterministic across identical runs", run() === run());
 })();

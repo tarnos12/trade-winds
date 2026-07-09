@@ -30,13 +30,14 @@ function town(goodId, stock, demand) {
 
 // ---- catalog: goods ----
 const EXPECTED = {
-  1: ["wood", "stone", "ore", "grain", "potato", "fish", "wool"],  // EV3: +potato
-  2: ["planks", "tools", "flour", "beer", "cloth"],
+  // === TV2: ore→iron; +clay (t1); +coal,+gold,+bricks (t2) → 20 goods ===
+  1: ["wood", "stone", "iron", "clay", "grain", "potato", "fish", "wool"],
+  2: ["planks", "tools", "flour", "beer", "cloth", "coal", "gold", "bricks"],
   3: ["bread", "clothes", "jewelry", "furniture"],
 };
-// EV3 added `potato` (tier-1 basic food) → 16 goods (tier1=7, tier2=5, tier3=4).
+// TV2 → 20 goods (tier1=8, tier2=8, tier3=4).
 const enumeratedCount = EXPECTED[1].length + EXPECTED[2].length + EXPECTED[3].length;
-ok("goods count matches enumerated list (16)", Object.keys(CONFIG.goods).length === enumeratedCount);
+ok("goods count matches enumerated list (20)", Object.keys(CONFIG.goods).length === enumeratedCount);
 for (const tier of [1, 2, 3]) {
   for (const id of EXPECTED[tier]) {
     ok(`good ${id} exists in tier ${tier}`, CONFIG.goods[id] && CONFIG.goods[id].tier === tier);
@@ -56,7 +57,7 @@ ok("basePrice climbs by tier (avg)", (() => {
 
 // ---- catalog: buildings ----
 ok("at least 6 buildings", Object.keys(CONFIG.buildings).length >= 6);
-for (const id of ["lumberjack", "miner", "farm", "fishery", "mill", "bakery"]) {
+for (const id of ["lumberjack", "iron_mine", "farm", "fishery", "mill", "bakery"]) {
   ok(`building ${id} exists`, !!CONFIG.buildings[id]);
 }
 // Producers (extractors + processors) have an output good + worker slots; houses don't.
