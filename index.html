@@ -1661,7 +1661,13 @@ Object.assign(CONFIG, {
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
       terrain: "fish", workerTier: "peasant",   // === TV2: sits ON the fish tile ===
-      output: { goodId: "fish", ratePerWorker: 1 },
+      // === BALPW: 1 → 2 fish/worker. Fish is triple-purposed (peasant LUXURY +
+      // worker BASIC + oil_maker input); at 1/worker a single 2-slot fishery
+      // (~2 fish/tick) could not cover a city's peasant-luxury + worker-basic draw
+      // once an oil_maker (2 fish/oil) was also pulling, so the WORKER fish basic
+      // was chronically starved and worker happiness capped below 70. Matches the
+      // 2/worker yield of the other staple extractors (potato_farm/farm). ===
+      output: { goodId: "fish", ratePerWorker: 2 },
       unlockedBy: "unlock_fishery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
@@ -3835,7 +3841,7 @@ const RESEARCH_MATERIALS = {
   unlock_mill:     { planks: 15, stone: 10 },
   unlock_cottage:  { planks: 15, stone: 15 },
   unlock_brewery:  { planks: 15, stone: 10 },
-  unlock_bakery:   { planks: 20, iron_tool: 10 },   // === CC: tools → iron_tool ===
+  unlock_bakery:   { planks: 20, stone: 10 },   // === BALPW: was {planks:20, iron_tool:10} — bread is a WORKER luxury but iron_tool is a BURGHER-tier good, so the worker food chain was gated behind burgher production and bread was NEVER produced. Re-tier the materials to the worker band (planks+stone, matching unlock_mill/brewery). ===
   unlock_manor:    { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
   // === TV2: new worker-band unlock nodes ===
   unlock_iron_mine:  { wood: 20, stone: 10 },
