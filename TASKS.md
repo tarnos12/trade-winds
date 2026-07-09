@@ -197,6 +197,21 @@ luxury clothes. Citizen unlock nodes in the CITIZEN research band.
 (+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
 consumption good (reserved for future military/quests).
 
+## Milestone: Polish pass ✅ DONE (v0.20.1)
+Author directive (2026-07-09, "polish it now"). Sonnet worktree agent, grounded in
+real Playwright screenshots of every screen (start → panels → research tree →
+late-game map → victory). Fixed: (1) VICTORY overlay overhaul — fade/scale-in card,
+animated crown, CSS-only reduced-motion-aware confetti (26 pieces), a run-stats
+recap (towns/treasury/prestige/minutes), and the SFX fanfare now fires from
+showVictory() so EVERY win path gets it; (2) real bug — the town-placement hover
+hint called only Buildings.canPlaceTown (fog-blind) while the click path also
+requires isVisible, so fogged hexes falsely showed "valid site" — hint now mirrors
+the click-time gate; (3) themed scrollbars on the town/castle warehouse tables
+(default dark scrollbar read as invisible). Deferred (taste calls, flagged): resource
+chart dock position, sidebar icon legibility. Additive CSS/DOM only, pure core
+untouched, 1,219 tests green, victory overlay verified end-to-end (confetti + recap,
+0 console errors). Models: Sonnet (polish sweep), Haiku (release chores).
+
 ## Milestone: Citizen+Aristocrat functional + victory ✅ DONE (v0.20.0)
 Author directive (2026-07-09, "start next phase"). Opus worktree agent applied
 the v0.19.0 bottom-tier treatment to the TOP tiers. Root cause (same class as the
