@@ -148,7 +148,7 @@ parallel with PP-B..E after PP-A merges (TV2 = pure core on live tree, PP UI in
 worktrees). Slices: TV2-A terrain+goods+buildings+placement (pure) → TV2-B
 MapGen presets + start screen → TV2-C research-tree & balance wiring.
 
-## Milestone: Content chains v2 (CC) — SPEC'D (author lists, 2026-07-08; sequence after TV2 merges)
+## Milestone: Content chains v2 (CC) — 🟡 IN PROGRESS (workflow, worktree; launched after TV2/v0.16.0)
 **Definitive WORKER building list (author):**
 - **Tailoring** — wool → **clothes**; clothes = LUXURY for Workers (moves down
   from citizen tier). **Weaver + cloth good RETIRED** (no intermediate; assume
