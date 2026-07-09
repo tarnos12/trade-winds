@@ -49,15 +49,15 @@ ok("MAX_SAMPLES is 600", Market.MAX_SAMPLES === 600);
   const p0 = Market.producible(stEmpty);
   // lumberjack is startUnlocked -> wood always producible.
   ok("producible: wood available at start (startUnlocked lumberjack)", p0.wood === true);
-  // miner (ore) is gated by research (deep_veins in this build) -> not yet.
-  ok("producible: ore NOT available before its research unlock", !p0.ore);
+  // === TV2: iron_mine (iron) is gated by research -> not yet. ===
+  ok("producible: iron NOT available before its research unlock", !p0.iron);
 
-  // find the research node that gates the ore producer, unlock it, re-check.
-  const oreDef = Object.values(CONFIG.buildings).find(b => b.output && b.output.goodId === "ore");
-  ok("ore has a gated producer with unlockedBy", oreDef && !oreDef.startUnlocked && !!oreDef.unlockedBy);
+  // find the research node that gates the iron producer, unlock it, re-check.
+  const oreDef = Object.values(CONFIG.buildings).find(b => b.output && b.output.goodId === "iron");
+  ok("iron has a gated producer with unlockedBy", oreDef && !oreDef.startUnlocked && !!oreDef.unlockedBy);
   const stUnlocked = { research: { unlocked: [oreDef.unlockedBy], active: null, progress: 0, spent: 0 }, towns: [] };
   const p1 = Market.producible(stUnlocked);
-  ok("producible: ore becomes available after unlocking its research", p1.ore === true);
+  ok("producible: iron becomes available after unlocking its research", p1.iron === true);
 
   // a def with NO unlockedBy and NO startUnlocked must be treated as available.
   CONFIG.buildings.__kr_test = { id: "__kr_test", output: { goodId: "__kr_good", ratePerWorker: 1 } };

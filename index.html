@@ -604,6 +604,12 @@
     padding: 7px 9px; font-family: inherit; font-size: 14px; text-align: center;
   }
   #ssDice { padding: 7px 10px; }
+  /* === TV2: map-preset select === */
+  #ssPreset {
+    width: 200px; background: #1c160f; color: var(--paper);
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    padding: 7px 9px; font-family: inherit; font-size: 14px; text-align: center;
+  }
   .ss-actions { display: flex; gap: 12px; justify-content: center; margin-top: 18px; }
   .ss-btn {
     font-size: 16px; padding: 11px 26px; border-radius: 9px; font-weight: bold;
@@ -673,6 +679,11 @@
       <label for="ssSeed">Seed</label>
       <input id="ssSeed" type="text" spellcheck="false" />
       <button id="ssDice" title="Random seed">🎲</button>
+    </div>
+    <!-- === TV2: map-preset picker (options populated from CONFIG.mapPresets) === -->
+    <div class="ss-seedrow">
+      <label for="ssPreset">Map</label>
+      <select id="ssPreset"></select>
     </div>
     <div class="ss-actions">
       <button id="ssNew" class="ss-btn">New Game</button>
@@ -906,22 +917,71 @@ const CONFIG = {
   // fractions* of the board, so the map stays varied for any seed.
   map: {
     radius: 14, hexSize: 24, edgeFalloff: 0.55,
-    frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // of whole board / elevation bands
-            forest: 0.28, fertile: 0.20, wasteland: 0.16 }, // of flat land / moisture bands
+    frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
+            forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
+  // === TV2 map presets ===  chosen on the start screen; persisted in the save.
+  // radius: board size · water.mode rim|center|none + frac · mountainFrac ·
+  // groundMix: fractions of the generic ground (barren/desert/fertile) grown as
+  // clumps · forest.patches/size · snow.mode pole|none (+rows) · deposits: per
+  // type { count, ring } where ring is the MIN hex-distance from the castle so
+  // T2 (iron/gold/coal/clay) spawns further out than T1 (stone). Numbers are
+  // tunable; MapGen v2 reads them (no hard-coded balance).
+  // === TV2-FIX: deposits.fish = { count, near } — fish shoals are WATER tiles
+  // adjacent to buildable land (so a shore city can reach them). `count` =
+  // shoal clusters (1–3 tiles each); `near` biases the FIRST shoal to within
+  // that hex-distance of the castle. Fish is a T1 resource: NO ring (exempt
+  // from the T2 push-out) and never far from spawn. ===
+  mapPresets: {
+    fertile: { label: "Fertile Land", radius: 14, water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.05,
+      groundMix: { fertile: 0.50, barren: 0.35, desert: 0.15 },
+      forest: { patches: 6, size: [6, 14] }, snow: { mode: "pole", rows: 2 },
+      deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 6 }, coal: { count: 2, ring: 6 }, gold: { count: 1, ring: 8 },
+                  fish: { count: 5, near: 6 } } },   // === TV2-FIX: ~4-6 shoals ===
+    oasis: { label: "Oasis", radius: 14, water: { mode: "center", frac: 0.12 }, mountainFrac: 0.06,
+      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },
+      forest: { patches: 2, size: [3, 7] }, snow: { mode: "none" },
+      deposits: { stone: { count: 2, ring: 0 }, clay: { count: 1, ring: 2 }, iron: { count: 2, ring: 5 }, coal: { count: 1, ring: 5 }, gold: { count: 1, ring: 7 },
+                  fish: { count: 4, near: 6 } } },   // === TV2-FIX: ~3-5 shoals, in the central water ===
+    big_world: { label: "Big World", radius: 18, water: { mode: "rim", frac: 0.15 }, mountainFrac: 0.07,
+      groundMix: { fertile: 0.40, barren: 0.45, desert: 0.15 },
+      forest: { patches: 8, size: [6, 16] }, snow: { mode: "pole", rows: 2 },
+      // T1 near spawn, T2 pushed far out (bigger rings).
+      deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 3 }, iron: { count: 3, ring: 9 }, coal: { count: 3, ring: 9 }, gold: { count: 2, ring: 12 },
+                  fish: { count: 6, near: 8 } } },   // === TV2-FIX: ~5-8 shoals, some near the start rings ===
+  },
+  mapPresetDefault: "fertile",
+  // === /TV2 map presets ===
   fog:    { castleReveal: 4, townReveal: 3 },
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500 },
+  // === TV2 terrain set ===
+  // buildable = a generic processor/house/road/town-center may sit here.
+  // road      = a road segment may cross this hex (traders/pathing).
+  // houseOnly = buildable, but ONLY house-kind buildings (e.g. snow).
+  // deposit   = a resource tile: buildable:false so the generic branch rejects
+  //             everything, while the extractor-on-terrain branch still lets the
+  //             ONE matching extractor sit on it (see canPlaceBuilding).
   terrain: {
-    // buildable = a town marker / road may sit here (water needs a bridge, later)
-    water:     { color: "#3f6079", buildable: false, road: false },
-    meadow:    { color: "#8ba75a", buildable: true,  road: true  },
-    forest:    { color: "#4d7738", buildable: true,  road: true  },
-    hills:     { color: "#ac9560", buildable: true,  road: true  },
-    mountains: { color: "#877f77", buildable: false, road: false },
-    fertile:   { color: "#c2ad46", buildable: true,  road: true  },
-    wasteland: { color: "#9c8b70", buildable: true,  road: true  },
+    // --- generic buildable ground (any processor/house; extractors only on their own terrain) ---
+    barren:        { color: "#b9a679", buildable: true,  road: true  }, // Barren Land (tan)
+    desert:        { color: "#d9c27a", buildable: true,  road: true  }, // Desert (sand-yellow)
+    fertile:       { color: "#7fa64b", buildable: true,  road: true  }, // Fertile Soil / grassland (green) — farm/shepherd terrain
+    // --- houses only ---
+    snow:          { color: "#dbe6ef", buildable: true,  road: true,  houseOnly: true }, // Iceland (white-blue)
+    // --- obstacles ---
+    water:         { color: "#3f6079", buildable: false, road: false }, // future harbor
+    mountains:     { color: "#877f77", buildable: false, road: false }, // obstacle: blocks build + road + pathing
+    // --- resource tiles (buildable:false → ONLY the matching extractor may sit here) ---
+    fish:          { color: "#4d7fa0", buildable: false, road: false, deposit: "fish"          }, // fishery sits ON it
+    forest:        { color: "#4d7738", buildable: false, road: true,  deposit: "forest"        }, // lumberjack only  (T1)
+    stone_deposit: { color: "#9aa0a6", buildable: false, road: true,  deposit: "stone_deposit" }, // quarry only      (T1)
+    clay_deposit:  { color: "#c98a5a", buildable: false, road: true,  deposit: "clay_deposit"  }, // clay_pit only    (T2)
+    iron_deposit:  { color: "#8f6f6a", buildable: false, road: true,  deposit: "iron_deposit"  }, // iron_mine only   (T2)
+    gold_deposit:  { color: "#d8b93f", buildable: false, road: true,  deposit: "gold_deposit"  }, // gold_mine only   (T2)
+    coal_deposit:  { color: "#4b4a4d", buildable: false, road: true,  deposit: "coal_deposit"  }, // coal_mine only   (T2)
   },
+  // === /TV2 terrain set ===
   fogColor: "#1b1710",
 };
 
@@ -1013,70 +1073,310 @@ function makeValueNoise(seed) {
 }
 
 // Deterministic seeded map generation (GDD §3).
+// === TV2 MapGen v2 =========================================================
+// Preset-driven, seeded, deterministic generation with CLUMPED terrain (seeded
+// patch growth, not per-hex noise) and distance-ringed deposits (T2 further from
+// the castle than T1). A post-gen playability repair guarantees a viable start
+// (fertile + forest near spawn). Same (seed, preset) ⇒ identical map.
 const MapGen = {
-  // Value at fraction f (0..1) through a sorted ascending array.
   quantile(sortedAsc, f) {
     if (sortedAsc.length === 0) return 0;
     const i = Math.min(sortedAsc.length - 1, Math.max(0, Math.round(f * (sortedAsc.length - 1))));
     return sortedAsc[i];
   },
-  // Returns { seed, radius, hexes: Map<key, hex> }.
-  // Two passes: (1) sample raw elevation+moisture noise per hex; (2) pick
-  // biome thresholds by quantile so the terrain mix matches CONFIG.map.frac
-  // for any seed (fixed cutoffs drift with the noise's mean; quantiles don't).
-  generate(seedInput, radius) {
-    radius = radius || CONFIG.map.radius;
-    const F = CONFIG.map.frac;
+  parseKey(k) { const i = k.indexOf(","); return { q: +k.slice(0, i), r: +k.slice(i + 1) }; },
+  // Deterministic seeded blob growth. startKey grows outward through neighbours
+  // that pass canTake, up to `size` hexes; each accepted hex is assign()'d.
+  // Frontier index is drawn from `rng` so growth is seeded but reproducible.
+  growPatch(hexes, startKey, size, canTake, assign, rng) {
+    const taken = new Set();
+    if (!hexes.has(startKey) || !canTake(startKey)) return taken;
+    const frontier = [startKey];
+    while (taken.size < size && frontier.length) {
+      const i = Math.floor(rng() * frontier.length);
+      const key = frontier.splice(i, 1)[0];
+      if (taken.has(key) || !canTake(key)) continue;
+      taken.add(key); assign(key);
+      const { q, r } = MapGen.parseKey(key);
+      for (const n of HexMath.neighbors(q, r)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (hexes.has(nk) && !taken.has(nk) && canTake(nk)) frontier.push(nk);
+      }
+    }
+    return taken;
+  },
+  // Returns { seed, radius, preset, hexes: Map<key, hex> }.
+  generate(seedInput, radius, presetId) {
+    presetId = presetId || (CONFIG.mapPresetDefault || "fertile");
+    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ||
+                   (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    radius = radius || preset.radius || CONFIG.map.radius;
     const seed = hashSeed(seedInput);
+    // Single seeded stream (seed ^ presetId) consumed in a FIXED order below.
+    const rng = mulberry32((hashSeed(seedInput) ^ hashSeed(presetId)) | 0);
     const elevN = makeValueNoise(seed);
-    const moistN = makeValueNoise(seed ^ 0x9e3779b9);
 
-    // ---- pass 1: sample fields ----
+    // ---- build the grid; sample elevation for water/mountain shaping ----
     const hexes = new Map();
+    const waterMode = (preset.water && preset.water.mode) || "rim";
+    const waterFrac = (preset.water && preset.water.frac) || 0;
     for (let q = -radius; q <= radius; q++) {
       const lo = Math.max(-radius, -q - radius), hi = Math.min(radius, -q + radius);
       for (let r = lo; r <= hi; r++) {
         const d = HexMath.dist(0, 0, q, r) / radius;     // 0 centre → 1 rim
-        const falloff = d * d * CONFIG.map.edgeFalloff;  // island bias: rim sinks
+        // rim mode sinks the rim (island); center mode (oasis) sinks the middle.
+        let falloff = 0;
+        if (waterMode === "rim") falloff = d * d * CONFIG.map.edgeFalloff;
+        else if (waterMode === "center") falloff = (1 - d) * (1 - d) * CONFIG.map.edgeFalloff;
         const elev = elevN(q * 0.11 + 100, r * 0.11 + 100, 4) - falloff;
-        const moist = moistN(q * 0.13 + 40, r * 0.13 + 40, 4);
-        hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, moisture: moist, revealed: false });
+        hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, revealed: false });
       }
     }
-    const all = Array.from(hexes.values());
+    const all = Array.from(hexes.values());   // deterministic insertion order
 
-    // ---- pass 2: quantile thresholds → biomes ----
-    const elevs = all.map(h => h.elevation).sort((a, b) => a - b);
-    const seaT  = MapGen.quantile(elevs, F.water);
-    // elevation bands are measured over LAND only (above sea)
-    const landElevs = elevs.filter(e => e >= seaT);
-    const mtnT  = MapGen.quantile(landElevs, 1 - F.mountains);
-    const hillT = MapGen.quantile(landElevs, 1 - F.mountains - F.hills);
-
-    // moisture bands are measured over FLAT land (not hill/mountain)
-    const flatMoist = all
-      .filter(h => h.elevation >= seaT && h.elevation < hillT)
-      .map(h => h.moisture).sort((a, b) => a - b);
-    const forestT = MapGen.quantile(flatMoist, 1 - F.forest);
-    const fertT   = MapGen.quantile(flatMoist, 1 - F.forest - F.fertile);
-    const wasteT  = MapGen.quantile(flatMoist, F.wasteland);
-
-    for (const h of all) {
-      if (h.elevation < seaT)       h.terrain = "water";
-      else if (h.elevation >= mtnT) h.terrain = "mountains";
-      else if (h.elevation >= hillT) h.terrain = "hills";
-      else if (h.moisture >= forestT) h.terrain = "forest";
-      else if (h.moisture >= fertT)   h.terrain = "fertile";
-      else if (h.moisture <  wasteT)  h.terrain = "wasteland";
-      else                            h.terrain = "meadow";
+    // ---- (1) water by elevation quantile ----
+    if (waterFrac > 0) {
+      const elevs = all.map(h => h.elevation).sort((a, b) => a - b);
+      const seaT = MapGen.quantile(elevs, waterFrac);
+      for (const h of all) if (h.elevation < seaT) h.terrain = "water";
+    }
+    // ---- (2) mountains: highest land by elevation ----
+    const mtnFrac = preset.mountainFrac || 0;
+    if (mtnFrac > 0) {
+      const landElevs = all.filter(h => h.terrain === null).map(h => h.elevation).sort((a, b) => a - b);
+      const mtnT = MapGen.quantile(landElevs, 1 - mtnFrac);
+      for (const h of all) if (h.terrain === null && h.elevation >= mtnT) h.terrain = "mountains";
     }
 
-    // The castle hub sits at map centre and must be buildable ground (GDD §3.3).
+    // ---- (3) base ground blobs (barren / desert / fertile) via patch growth ----
+    const mix = preset.groundMix || { fertile: 0.5, barren: 0.35, desert: 0.15 };
+    const mixKeys = Object.keys(mix);
+    let mixTotal = 0; for (const k of mixKeys) mixTotal += mix[k];
+    const pickGround = () => {
+      let x = rng() * mixTotal;
+      for (const k of mixKeys) { x -= mix[k]; if (x <= 0) return k; }
+      return mixKeys[mixKeys.length - 1];
+    };
+    const isGroundless = k => hexes.get(k).terrain === null;
+    for (const h of all) {
+      const k = HexMath.key(h.q, h.r);
+      if (h.terrain !== null) continue;
+      const type = pickGround();
+      const size = 8 + Math.floor(rng() * 11);   // 8..18 — coherent clumps
+      MapGen.growPatch(hexes, k, size, isGroundless, (kk) => { hexes.get(kk).terrain = type; }, rng);
+    }
+
+    // ---- (4) forest patches on generic ground ----
+    const fCfg = preset.forest || { patches: 0, size: [4, 8] };
+    const groundSet = { barren: 1, desert: 1, fertile: 1 };
+    const groundKeys = () => all.filter(h => groundSet[h.terrain]).map(h => HexMath.key(h.q, h.r));
+    for (let i = 0; i < (fCfg.patches || 0); i++) {
+      const pool = groundKeys();
+      if (!pool.length) break;
+      const start = pool[Math.floor(rng() * pool.length)];
+      const size = fCfg.size[0] + Math.floor(rng() * (fCfg.size[1] - fCfg.size[0] + 1));
+      MapGen.growPatch(hexes, start, size, k => groundSet[hexes.get(k).terrain], (kk) => { hexes.get(kk).terrain = "forest"; }, rng);
+    }
+
+    // ---- (5) deposit clusters (distance-ringed; T2 further out than T1) ----
+    const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
+    const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
+    const deps = preset.deposits || {};
+    // fixed order so RNG draws are reproducible
+    for (const type of ["stone", "clay", "iron", "coal", "gold"]) {
+      const cfg = deps[type]; if (!cfg) continue;
+      const terr = DEP_TERRAIN[type];
+      // === TV2-FIX: STRICT rings — growth candidates must respect the ring
+      // too, so a blob can never creep closer to the castle than cfg.ring
+      // (previously only the SEED hex was ring-filtered and growPatch could
+      // expand 1–2 hexes inward). Fish is exempt: it's T1, near-spawn. ===
+      const ringOk = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) >= (cfg.ring || 0); };
+      const takable = (k) => depositable[hexes.get(k).terrain] && ringOk(k);
+      for (let i = 0; i < (cfg.count || 0); i++) {
+        const pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
+                        .map(h => HexMath.key(h.q, h.r));
+        if (!pool.length) break;
+        const start = pool[Math.floor(rng() * pool.length)];
+        const size = 1 + Math.floor(rng() * 3);   // 1..3
+        MapGen.growPatch(hexes, start, size, takable, (kk) => { hexes.get(kk).terrain = terr; }, rng);
+      }
+    }
+
+    // ---- (5b) fish shoals — === TV2-FIX: WATER tiles ADJACENT TO buildable
+    // land become `fish`, so a shore city/road can always reach the tile (the
+    // fishery sits ON it). Runs in a FIXED slot in the single rng stream —
+    // after the land deposits (5), before snow (6) — so same (seed, preset)
+    // still yields an identical map (adding the phase changed maps vs the
+    // pre-fix build once, which is expected; determinism holds per version).
+    // Clustered 1–3 like the other deposits. cfg.near biases the FIRST shoal
+    // toward the castle: fish is a T1 resource and must not sit far out. ===
+    const fishCfg = deps.fish;
+    if (fishCfg) {
+      const landNeighbored = (k) => {
+        const p = MapGen.parseKey(k);
+        return HexMath.neighbors(p.q, p.r).some(n => {
+          const nh = hexes.get(HexMath.key(n.q, n.r));
+          const td = nh && CONFIG.terrain[nh.terrain];
+          return !!(td && td.buildable);
+        });
+      };
+      const fishTakable = (k) => hexes.get(k).terrain === "water" && landNeighbored(k);
+      for (let i = 0; i < (fishCfg.count || 0); i++) {
+        let pool = all.filter(h => h.terrain === "water" && landNeighbored(HexMath.key(h.q, h.r)))
+                      .map(h => HexMath.key(h.q, h.r));
+        if (i === 0 && fishCfg.near) {   // keep at least one shoal close to spawn
+          const nearPool = pool.filter(k => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) <= fishCfg.near; });
+          if (nearPool.length) pool = nearPool;
+        }
+        if (!pool.length) break;
+        const start = pool[Math.floor(rng() * pool.length)];
+        const size = 1 + Math.floor(rng() * 3);   // 1..3, same spread as deposits
+        MapGen.growPatch(hexes, start, size, fishTakable, (kk) => { hexes.get(kk).terrain = "fish"; }, rng);
+      }
+    }
+    // === /TV2-FIX (5b) ===
+
+    // ---- (6) snow region (polar rows) ----
+    const snowCfg = preset.snow || { mode: "none" };
+    if (snowCfg.mode === "pole") {
+      const rows = snowCfg.rows || 1;
+      for (const h of all) {
+        if (h.r <= (-radius + rows - 1) && groundSet[h.terrain]) h.terrain = "snow";
+      }
+    }
+
+    // ---- (7) castle hub: buildable grassland at map centre ----
     const c = hexes.get(HexMath.key(0, 0));
-    if (c && !CONFIG.terrain[c.terrain].buildable) { c.terrain = "meadow"; }
-    return { seed, radius, hexes };
+    if (c) c.terrain = "fertile";
+
+    // ---- (8) playability repair: viable start near the castle ----
+    // === TV2-FIX: extra args — guarantee >=1 usable fish tile within 6 of
+    // the castle (fish is a starter T1 food source). ===
+    MapGen.repairPlayability(hexes, 4, 6, 3, 6, 1);
+
+    return { seed, radius, preset: presetId, hexes };
+  },
+  // Guarantee at least `minFertile` fertile and `minForest` forest hexes within
+  // `K` of the castle so a fresh player can found a city + potato_farm + farm +
+  // lumberjack. Converts the NEAREST hexes, PREFERRING generic ground
+  // (barren/desert) but falling back to water then mountains when there isn't
+  // enough ground near the castle (e.g. the Oasis preset's central lake — a
+  // stated deviation from "never convert obstacles", required to keep every
+  // preset playable). Deposits and existing fertile/forest are never cannibalised.
+  // Deterministic (priority → distance → key tie-break).
+  repairPlayability(hexes, K, minFertile, minForest, fishK, minFish) {
+    const near = [];
+    for (const h of hexes.values()) {
+      if (HexMath.dist(0, 0, h.q, h.r) <= K) near.push(h);
+    }
+    const PRIORITY = { barren: 0, desert: 0, water: 1, mountains: 2 };  // convertible, cheapest first
+    const ensure = (target, need) => {
+      const targetBuildable = !!(CONFIG.terrain[target] && CONFIG.terrain[target].buildable);
+      let have = near.filter(h => h.terrain === target).length;
+      if (have >= need) return;
+      const cands = near.filter(h => h.terrain in PRIORITY && h.terrain !== target)
+        .sort((a, b) => PRIORITY[a.terrain] - PRIORITY[b.terrain] ||
+                        HexMath.dist(0, 0, a.q, a.r) - HexMath.dist(0, 0, b.q, b.r) ||
+                        (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
+      for (const h of cands) {
+        if (have >= need) break;
+        // === TV2-FIX: a conversion to NON-buildable terrain (forest) must not
+        // strand an adjacent fish tile (every fish tile stays shore-reachable). ===
+        if (!targetBuildable && MapGen.strandsFish(hexes, h)) continue;
+        h.terrain = target; have++;
+      }
+    };
+    ensure("fertile", minFertile);
+    ensure("forest", minForest);
+    // === TV2-FIX: fish guarantee (runs AFTER the fertile/forest repair so it
+    // sees the final near-spawn land; fertile/forest/deposits are never
+    // cannibalised by it, and PRIORITY above never converts fish). ===
+    if (fishK && minFish) MapGen.repairFish(hexes, fishK, minFish);
+  },
+  // === TV2-FIX: guarantee >= minFish USABLE fish tiles at dist 2..fishK of
+  // the castle. "Usable" = has a buildable-land neighbour (a shore city can
+  // reach it) and dist >= 2 (the castle-gap rule forbids placing a fishery on
+  // a castle-adjacent hex). Deterministic (fixed priority; dist → key
+  // tie-breaks; no rng). Repair ladder, cheapest conversion first:
+  //   1. shore water in the band  → fish;
+  //   2. any water in the band    → fish, + one adjacent water/mountains hex
+  //      → barren (creates the reachable shore);
+  //   3. no water near spawn      → carve a pocket: nearest barren/desert with
+  //      a buildable neighbour → fish (+ one spare adjacent barren/desert →
+  //      water for the pond look, only when another buildable neighbour
+  //      remains);
+  //   4. last resort (no water AND no barren/desert in the band): any other
+  //      buildable ground (snow/fertile) → fish, preferring hexes OUTSIDE the
+  //      fertile/forest repair radius so the start-kit guarantees keep.
+  // === TV2-FIX: would turning hex `h` into non-buildable terrain leave an
+  // adjacent fish tile with NO buildable-land neighbour (i.e. unreachable)?
+  strandsFish(hexes, h) {
+    const buildableHex = (x) => { const td = x && CONFIG.terrain[x.terrain]; return !!(td && td.buildable); };
+    for (const n of HexMath.neighbors(h.q, h.r)) {
+      const nh = hexes.get(HexMath.key(n.q, n.r));
+      if (!nh || nh.terrain !== "fish") continue;
+      const others = HexMath.neighbors(nh.q, nh.r)
+        .map(o => hexes.get(HexMath.key(o.q, o.r)))
+        .filter(o => o && !(o.q === h.q && o.r === h.r));
+      if (!others.some(buildableHex)) return true;
+    }
+    return false;
+  },
+  repairFish(hexes, fishK, minFish) {
+    const buildableHex = (h) => { const td = h && CONFIG.terrain[h.terrain]; return !!(td && td.buildable); };
+    const nbrsOf = (h) => HexMath.neighbors(h.q, h.r).map(n => hexes.get(HexMath.key(n.q, n.r))).filter(Boolean);
+    const hasBuildableNbr = (h) => nbrsOf(h).some(buildableHex);
+    const band = [];
+    for (const h of hexes.values()) {
+      const d = HexMath.dist(0, 0, h.q, h.r);
+      if (d >= 2 && d <= fishK) band.push(h);
+    }
+    const byNear = (arr) => arr.sort((a, b) =>
+      HexMath.dist(0, 0, a.q, a.r) - HexMath.dist(0, 0, b.q, b.r) ||
+      (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
+    let have = band.filter(h => h.terrain === "fish" && hasBuildableNbr(h)).length;
+    if (have >= minFish) return;
+    // 1: shore water → fish
+    for (const h of byNear(band.filter(h => h.terrain === "water" && hasBuildableNbr(h)))) {
+      if (have >= minFish) return;
+      h.terrain = "fish"; have++;
+    }
+    // 2: open water → fish, converting one obstacle neighbour into shore
+    for (const h of byNear(band.filter(h => h.terrain === "water"))) {
+      if (have >= minFish) return;
+      const conv = byNear(nbrsOf(h).filter(x => x.terrain === "water" || x.terrain === "mountains"));
+      if (!conv.length) continue;                 // no way to make a shore here
+      conv[0].terrain = "barren";
+      h.terrain = "fish"; have++;
+    }
+    // 3: pocket carved from generic ground (barren/desert only). Skip hexes
+    //    whose loss would strand a NEIGHBOURING fish tile.
+    for (const h of byNear(band.filter(h => (h.terrain === "barren" || h.terrain === "desert") && hasBuildableNbr(h)))) {
+      if (have >= minFish) return;
+      if (MapGen.strandsFish(hexes, h)) continue;
+      h.terrain = "fish"; have++;
+      const bNbrs = nbrsOf(h).filter(buildableHex);
+      const ground = bNbrs.filter(x => x.terrain === "barren" || x.terrain === "desert" );
+      if (bNbrs.length >= 2 && ground.length) {   // pond dressing, keeps a reachable shore
+        const pond = byNear(ground)[ground.length - 1];
+        if (!MapGen.strandsFish(hexes, pond)) pond.terrain = "water";
+      }
+    }
+    // 4: last resort — any remaining buildable ground, far-first so the
+    //    fertile/forest start guarantees (radius 4) are preserved. Same
+    //    no-stranding guard.
+    const far = (h) => (HexMath.dist(0, 0, h.q, h.r) > 4 ? 0 : 1);
+    for (const h of band.filter(x => buildableHex(x) && hasBuildableNbr(x))
+        .sort((a, b) => far(a) - far(b) ||
+                        HexMath.dist(0, 0, a.q, a.r) - HexMath.dist(0, 0, b.q, b.r) ||
+                        (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1))) {
+      if (have >= minFish) return;
+      if (MapGen.strandsFish(hexes, h)) continue;
+      h.terrain = "fish"; have++;
+    }
   },
 };
+// === /TV2 MapGen v2 ========================================================
 
 // === GOODS-PRICES START ===  (T5 / slot #3 — goods + buildings catalog + local price model)
 // Pure data + pure functions only (GDD §5, §6.1). No DOM, no canvas, no I/O.
@@ -1091,22 +1391,26 @@ Object.assign(CONFIG, {
     // --- tier 1 (raw) ---
     wood:   { id: "wood",   tier: 1, basePrice: 5 },
     stone:  { id: "stone",  tier: 1, basePrice: 6 },
-    ore:    { id: "ore",    tier: 1, basePrice: 8 },
+    iron:   { id: "iron",   tier: 1, basePrice: 8 },   // === TV2: renamed from "ore" ===
+    clay:   { id: "clay",   tier: 1, basePrice: 6 },   // === TV2: raw, priced like stone ===
     grain:  { id: "grain",  tier: 1, basePrice: 4 },
     potato: { id: "potato", tier: 1, basePrice: 4 },   // EV3: tier-1 basic food (the peasant staple)
     fish:   { id: "fish",   tier: 1, basePrice: 5 },
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
-    // --- tier 2 (processed) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
+    // --- tier 2 (processed / mined) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
     planks: { id: "planks", tier: 2, basePrice: 14, inputs: { wood: 2 } },    // wood 5×2=10
-    tools:  { id: "tools",  tier: 2, basePrice: 20, inputs: { ore: 1, wood: 1 } }, // ore8+wood5=13
+    tools:  { id: "tools",  tier: 2, basePrice: 22, inputs: { iron: 1, coal: 1 } }, // === TV2: iron+coal (Smelter) ===
     flour:  { id: "flour",  tier: 2, basePrice: 12, inputs: { grain: 2 } },   // grain 4×2=8
     beer:   { id: "beer",   tier: 2, basePrice: 14, inputs: { grain: 2 } },   // grain 4×2=8
     cloth:  { id: "cloth",  tier: 2, basePrice: 20, inputs: { wool: 2 } },    // wool 7×2=14
+    coal:   { id: "coal",   tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
+    gold:   { id: "gold",   tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
+    bricks: { id: "bricks", tier: 2, basePrice: 16, inputs: { clay: 2 } },    // === TV2: clay 6×2=12 (Brickworks) ===
     // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
     bread:     { id: "bread",     tier: 3, basePrice: 30, inputs: { flour: 2 } },              // flour 12×2=24
     clothes:   { id: "clothes",   tier: 3, basePrice: 50, inputs: { cloth: 2 } },              // cloth 20×2=40
-    jewelry:   { id: "jewelry",   tier: 3, basePrice: 54, inputs: { ore: 3 } },                // ore 8×3=24 (luxury margin)
-    furniture: { id: "furniture", tier: 3, basePrice: 64, inputs: { planks: 2, tools: 1 } },   // planks14×2+tools20=48
+    jewelry:   { id: "jewelry",   tier: 3, basePrice: 54, inputs: { gold: 2 } },               // === TV2: gold 42×... (inert: no producer yet) ===
+    furniture: { id: "furniture", tier: 3, basePrice: 64, inputs: { planks: 2, tools: 1 } },   // planks14×2+tools22=50
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -1142,8 +1446,10 @@ Object.assign(CONFIG, {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "grain", ratePerWorker: 2 },
-      // EV3: starter — GOLD ONLY at level 1.
-      startUnlocked: true,
+      // === TV2: wheat is a T2 resource unlocked by research (worker band of the
+      // tree) yet still worked by peasants. researchBand overrides the tree lane
+      // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
+      unlockedBy: "unlock_farm", researchBand: "worker",
       workerSlots: 3, cost: { gold: 250 },
     },
     potato_farm: {
@@ -1154,16 +1460,17 @@ Object.assign(CONFIG, {
       startUnlocked: true,
       workerSlots: 3, cost: { gold: 120 },
     },
-    miner: {
-      id: "miner", name: "Miner", kind: "extractor",
-      terrain: "hills", workerTier: "peasant",
-      output: { goodId: "ore", ratePerWorker: 1 },
-      unlockedBy: "unlock_miner",   // RT-A: per-building unlock node
+    // === TV2: renamed from "miner"; sits on iron_deposit, worker-staffed T2 ===
+    iron_mine: {
+      id: "iron_mine", name: "Iron Mine", kind: "extractor",
+      terrain: "iron_deposit", workerTier: "worker",
+      output: { goodId: "iron", ratePerWorker: 1 },
+      unlockedBy: "unlock_iron_mine",   // RT-A: per-building unlock node
       workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
-      terrain: "mountains", workerTier: "peasant",
+      terrain: "stone_deposit", workerTier: "peasant",   // === TV2: mountains → stone_deposit ===
       output: { goodId: "stone", ratePerWorker: 1 },
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
@@ -1172,17 +1479,39 @@ Object.assign(CONFIG, {
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
-      terrain: null, adjacent: "water", workerTier: "peasant",
+      terrain: "fish", workerTier: "peasant",   // === TV2: sits ON the fish tile ===
       output: { goodId: "fish", ratePerWorker: 1 },
       unlockedBy: "unlock_fishery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
       id: "shepherd", name: "Shepherd", kind: "extractor",
-      terrain: "meadow", workerTier: "peasant",
+      terrain: "fertile", workerTier: "peasant",   // === TV2: meadow → fertile ===
       output: { goodId: "wool", ratePerWorker: 1 },
       unlockedBy: "unlock_shepherd",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 20, stone: 5, gold: 60 },
+    },
+    // === TV2: new T2 deposit extractors (worker-staffed, sit on their deposit) ===
+    clay_pit: {
+      id: "clay_pit", name: "Clay Pit", kind: "extractor",
+      terrain: "clay_deposit", workerTier: "worker",
+      output: { goodId: "clay", ratePerWorker: 1 },
+      unlockedBy: "unlock_clay_pit",
+      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
+    },
+    coal_mine: {
+      id: "coal_mine", name: "Coal Mine", kind: "extractor",
+      terrain: "coal_deposit", workerTier: "worker",
+      output: { goodId: "coal", ratePerWorker: 1 },
+      unlockedBy: "unlock_coal_mine",
+      workerSlots: 3, cost: { wood: 30, stone: 20, gold: 120 },
+    },
+    gold_mine: {
+      id: "gold_mine", name: "Gold Mine", kind: "extractor",
+      terrain: "gold_deposit", workerTier: "worker",
+      output: { goodId: "gold", ratePerWorker: 1 },
+      unlockedBy: "unlock_gold_mine",
+      workerSlots: 3, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
     },
     // --- processors (worker labour, any buildable town hex) ---
     sawmill: {
@@ -1218,7 +1547,7 @@ Object.assign(CONFIG, {
     smelter: {
       id: "smelter", name: "Smelter", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { ore: 1, wood: 1 }, output: { goodId: "tools", ratePerWorker: 1 },
+      inputs: { iron: 1, coal: 1 }, output: { goodId: "tools", ratePerWorker: 1 },   // === TV2: iron + coal ===
       unlockedBy: "unlock_smelter",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 30, stone: 25, gold: 130 },
     },
@@ -1228,6 +1557,14 @@ Object.assign(CONFIG, {
       inputs: { wool: 2 }, output: { goodId: "cloth", ratePerWorker: 1 },
       unlockedBy: "unlock_weaver",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
+    },
+    // === TV2: new T2 processor — clay → bricks ===
+    brickworks: {
+      id: "brickworks", name: "Brickworks", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { clay: 2 }, output: { goodId: "bricks", ratePerWorker: 1 },
+      unlockedBy: "unlock_brickworks",
+      workerSlots: 2, cost: { wood: 25, stone: 20, gold: 110 },
     },
     // --- houses (no workers; add population capacity by tier) ---
     hut: {
@@ -1242,13 +1579,13 @@ Object.assign(CONFIG, {
       id: "cottage", name: "Cottage", kind: "house",
       terrain: null, houseTier: "worker", houseCapacity: 3,
       unlockedBy: "unlock_cottage",   // RT-A: per-building unlock node
-      cost: { wood: 30, stone: 15, gold: 90 },
+      cost: { wood: 30, stone: 15, bricks: 5, gold: 90 },   // === TV2: bricks component ===
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
       terrain: null, houseTier: "burgher", houseCapacity: 4,
       unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
-      cost: { wood: 40, stone: 30, planks: 10, gold: 220 },
+      cost: { wood: 40, stone: 30, planks: 10, bricks: 10, gold: 220 },   // === TV2: bricks component ===
     },
   },
 
@@ -1304,6 +1641,11 @@ Object.assign(CONFIG.econ, {
 // guard so whichever Phase-2 slice loads first creates the namespace and the
 // other just adds to it (single-file, no module system).
 var Sim = (typeof Sim !== "undefined" && Sim) || {};
+
+// === TV2: mines & quarries whose output the "deep_veins" research boosts
+// (mineOutput). Replaces the old hills/mountains terrain test now that those
+// terrains are gone. Forest/fish extractors are deliberately excluded. ===
+const MINE_TERRAINS = { stone_deposit: 1, iron_deposit: 1, gold_deposit: 1, coal_deposit: 1, clay_deposit: 1 };
 
 // Local price of one good in one town from stock vs demand (GDD §6.1):
 //   ratio = stock / (demand * bufferTarget)
@@ -1493,8 +1835,8 @@ Sim.tick = function (State) {
         resMult = Research.effect(State, "globalOutput", 1);
         if (type.kind === "extractor") {
           resMult *= Research.effect(State, "extractorOutput", 1);
-          if (type.terrain === "hills" || type.terrain === "mountains") {
-            resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: miners & quarries
+          if (MINE_TERRAINS[type.terrain]) {   // === TV2: deposit-tile mines & quarries ===
+            resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: mines & quarries
           }
         } else if (type.kind === "processor") {
           resMult *= Research.effect(State, "processorOutput", 1);
@@ -2123,6 +2465,9 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
   } else {
     // processor / house: any buildable land hex.
     if (!isLand) return { ok: false, reason: "Needs buildable land" };
+    // === TV2: snow (and any houseOnly terrain) accepts houses only ===
+    if (terrDef.houseOnly && def.kind !== "house")
+      return { ok: false, reason: "Only houses can be built on " + terr };
   }
 
   // (2) hex must be free: not a road, not the castle, not any town center, not
@@ -2793,14 +3138,20 @@ Object.assign(CONFIG, {
     // only). band = building's tier; branch mirrors band for legacy grouping. ----
     { id: "unlock_quarry",   branch: "peasant", band: "peasant", kind: "unlock", buildingId: "quarry",   pos: { col: 5, row: 0 }, name: "Quarry",   desc: "Unlocks the Quarry.",   cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
     { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 6, row: 0 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
-    { id: "unlock_miner",    branch: "peasant", band: "peasant", kind: "unlock", buildingId: "miner",    pos: { col: 5, row: 1 }, name: "Miner",    desc: "Unlocks the Miner.",    cost: 200,  timeTicks: 15, prereqs: ["unlock_quarry"],   effect: {} },
-    { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Shepherd", desc: "Unlocks the Shepherd.", cost: 180,  timeTicks: 14, prereqs: ["unlock_fishery"],  effect: {} },
+    { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Shepherd", desc: "Unlocks the Shepherd.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },   // === TV2-FIX: root node — wool is a core peasant need, not gated behind fish ===
     { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
-    { id: "unlock_smelter",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "smelter",  pos: { col: 1, row: 0 }, name: "Smelter",  desc: "Unlocks the Smelter.",  cost: 400,  timeTicks: 24, prereqs: ["unlock_miner"],    effect: {} },
+    { id: "unlock_smelter",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "smelter",  pos: { col: 1, row: 0 }, name: "Smelter",  desc: "Unlocks the Smelter.",  cost: 400,  timeTicks: 24, prereqs: ["unlock_iron_mine"], effect: {} },
     { id: "unlock_weaver",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "weaver",   pos: { col: 2, row: 0 }, name: "Weaver",   desc: "Unlocks the Weaver.",   cost: 350,  timeTicks: 22, prereqs: ["unlock_shepherd"], effect: {} },
     { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 3, row: 0 }, name: "Cottage",  desc: "Unlocks the Cottage.",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
     { id: "unlock_brewery",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "brewery",  pos: { col: 0, row: 1 }, name: "Brewery",  desc: "Unlocks the Brewery.",  cost: 350,  timeTicks: 22, prereqs: ["unlock_mill"],     effect: {} },
     { id: "unlock_bakery",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "bakery",   pos: { col: 1, row: 1 }, name: "Bakery",   desc: "Unlocks the Bakery.",   cost: 500,  timeTicks: 28, prereqs: ["unlock_mill"],     effect: {} },
+    // === TV2: worker-band unlock nodes — mines/pit/brickworks + wheat farm ===
+    { id: "unlock_iron_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "iron_mine",  pos: { col: 2, row: 1 }, name: "Iron Mine",  desc: "Unlocks the Iron Mine.",  cost: 200, timeTicks: 15, prereqs: ["unlock_quarry"],     effect: {} },
+    { id: "unlock_coal_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "coal_mine",  pos: { col: 3, row: 1 }, name: "Coal Mine",  desc: "Unlocks the Coal Mine.",  cost: 260, timeTicks: 18, prereqs: ["unlock_iron_mine"],  effect: {} },
+    { id: "unlock_gold_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "gold_mine",  pos: { col: 0, row: 2 }, name: "Gold Mine",  desc: "Unlocks the Gold Mine.",  cost: 400, timeTicks: 24, prereqs: ["unlock_iron_mine"],  effect: {} },
+    { id: "unlock_clay_pit",   branch: "worker", band: "worker", kind: "unlock", buildingId: "clay_pit",   pos: { col: 1, row: 2 }, name: "Clay Pit",   desc: "Unlocks the Clay Pit.",   cost: 220, timeTicks: 16, prereqs: ["unlock_quarry"],     effect: {} },
+    { id: "unlock_brickworks", branch: "worker", band: "worker", kind: "unlock", buildingId: "brickworks", pos: { col: 2, row: 2 }, name: "Brickworks", desc: "Unlocks the Brickworks.", cost: 300, timeTicks: 20, prereqs: ["unlock_clay_pit"],    effect: {} },
+    { id: "unlock_farm",       branch: "worker", band: "worker", kind: "unlock", buildingId: "farm",       pos: { col: 3, row: 2 }, name: "Wheat Farm", desc: "Unlocks the Farm (wheat).", cost: 250, timeTicks: 16, prereqs: ["unlock_quarry"],   effect: {} },
     { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
 
     // ---- Upgrade nodes: one per ladder level (replaces the 4 dev nodes). l2
@@ -2810,7 +3161,7 @@ Object.assign(CONFIG, {
     { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
     { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
     { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
-    { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 2, row: 0 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
+    { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 2, row: 0 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: ["unlock_farm"],           effect: {} },
     { id: "upg_farm_l3",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 3, pos: { col: 2, row: 0 }, name: "Great Estate",   desc: "Unlocks the Farm level 3 upgrade.",       cost: 400, timeTicks: 22, prereqs: ["upg_farm_l2"],           effect: {} },
     { id: "upg_sawmill_l2",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 2, pos: { col: 4, row: 0 }, name: "Water Wheel",    desc: "Unlocks the Sawmill level 2 upgrade.",    cost: 250, timeTicks: 16, prereqs: [],                        effect: {} },
     { id: "upg_sawmill_l3",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 3, pos: { col: 4, row: 0 }, name: "Great Sawmill",  desc: "Unlocks the Sawmill level 3 upgrade.",    cost: 500, timeTicks: 26, prereqs: ["upg_sawmill_l2"],        effect: {} },
@@ -2834,6 +3185,7 @@ const Research = {
       lumberjack_upgrades: ["upg_lumberjack_l2", "upg_lumberjack_l3"],
       farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
       sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],
+      unlock_miner:        ["unlock_iron_mine"],   // === TV2: renamed node ===
     };
     const rawUnlocked = Array.isArray(r.unlocked) ? r.unlocked : [];
     const expanded = [];
@@ -3057,7 +3409,7 @@ Object.assign(CONFIG, {
 const RESEARCH_MATERIALS = {
   // -- production branch --
   crop_rotation: { wood: 20, stone: 10 },
-  deep_veins:    { stone: 25, ore: 15 },
+  deep_veins:    { stone: 25, iron: 15 },   // === TV2: ore → iron ===
   guild_halls:   { planks: 20, stone: 25 },
   master_crafts: { planks: 30, tools: 20 },
   industrialize: { tools: 30, furniture: 15 },
@@ -3076,7 +3428,6 @@ const RESEARCH_MATERIALS = {
   // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },
-  unlock_miner:    { wood: 20, stone: 10 },
   unlock_shepherd: { wood: 20, stone: 5 },
   unlock_mill:     { planks: 15, stone: 10 },
   unlock_smelter:  { planks: 20, stone: 15 },
@@ -3085,6 +3436,13 @@ const RESEARCH_MATERIALS = {
   unlock_brewery:  { planks: 15, stone: 10 },
   unlock_bakery:   { planks: 20, tools: 10 },
   unlock_manor:    { planks: 30, tools: 15 },
+  // === TV2: new worker-band unlock nodes ===
+  unlock_iron_mine:  { wood: 20, stone: 10 },
+  unlock_clay_pit:   { wood: 15, stone: 10 },
+  unlock_coal_mine:  { wood: 20, stone: 15 },
+  unlock_gold_mine:  { stone: 20, planks: 10 },
+  unlock_brickworks: { planks: 15, stone: 15 },
+  unlock_farm:       { wood: 20, stone: 5 },
   // -- per-level upgrade nodes (replace the old development ids) --
   upg_hut_l2:        { wood: 15 },
   upg_hut_l3:        { wood: 20, stone: 10 },
@@ -4101,17 +4459,6 @@ var CastleMarket = (function () {
         drawPine(s * 0.36, s * 0.02, 1.15);
         break;
       }
-      case "hills": {
-        // Two rounded bumps.
-        ctx.fillStyle = ICON_DARK;
-        ctx.beginPath();
-        ctx.arc(cx - s * 0.3, cy + s * 0.14, s * 0.34, Math.PI, 0);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(cx + s * 0.32, cy + s * 0.24, s * 0.42, Math.PI, 0);
-        ctx.fill();
-        break;
-      }
       case "mountains": {
         // Triangular peaks with a small snow cap on the tallest.
         ctx.fillStyle = ICON_DARK;
@@ -4172,28 +4519,9 @@ var CastleMarket = (function () {
         }
         break;
       }
-      case "meadow": {
-        // A few grass tufts (fanned strokes).
-        ctx.strokeStyle = ICON_DARK;
-        ctx.lineWidth = Math.max(1, s * 0.07);
-        const tuft = (ox) => {
-          const bx = cx + ox, by = cy + s * 0.28;
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx, by - s * 0.4);
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx - s * 0.18, by - s * 0.34);
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx + s * 0.18, by - s * 0.34);
-          ctx.stroke();
-        };
-        tuft(-s * 0.34);
-        tuft(s * 0.02);
-        tuft(s * 0.38);
-        break;
-      }
-      case "wasteland": {
-        // A bare dry crack + a couple of small rocks — nearly empty.
+      // === TV2 terrain motifs (canvas paths — no emoji, matching the quiet style) ===
+      case "barren": {
+        // A bare dry crack + a small rock — nearly empty (ex-wasteland motif).
         ctx.strokeStyle = ICON_DARK;
         ctx.lineWidth = Math.max(1, s * 0.07);
         ctx.beginPath();
@@ -4206,6 +4534,130 @@ var CastleMarket = (function () {
         ctx.beginPath();
         ctx.arc(cx - s * 0.22, cy + s * 0.3, s * 0.1, 0, Math.PI * 2);
         ctx.fill();
+        break;
+      }
+      case "desert": {
+        // Rolling dune curves.
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.08);
+        for (let row = -1; row <= 1; row++) {
+          const yy = cy + row * s * 0.28 + s * 0.05;
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.5, yy);
+          ctx.quadraticCurveTo(cx - s * 0.1, yy - s * 0.22, cx + s * 0.2, yy);
+          ctx.quadraticCurveTo(cx + s * 0.4, yy + s * 0.14, cx + s * 0.5, yy - s * 0.04);
+          ctx.stroke();
+        }
+        break;
+      }
+      case "snow": {
+        // A few snow crystals (six-armed asterisks).
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.06);
+        const flake = (ox, oy, rr) => {
+          for (let a = 0; a < 3; a++) {
+            const ang = a * Math.PI / 3;
+            ctx.beginPath();
+            ctx.moveTo(cx + ox - Math.cos(ang) * rr, cy + oy - Math.sin(ang) * rr);
+            ctx.lineTo(cx + ox + Math.cos(ang) * rr, cy + oy + Math.sin(ang) * rr);
+            ctx.stroke();
+          }
+        };
+        flake(-s * 0.24, -s * 0.06, s * 0.2);
+        flake(s * 0.26, s * 0.18, s * 0.16);
+        break;
+      }
+      case "fish": {
+        // Water waves + a small fish body.
+        ctx.strokeStyle = ICON_LITE;
+        ctx.lineWidth = Math.max(1, s * 0.08);
+        for (let row = -1; row <= 0; row++) {
+          const yy = cy + row * s * 0.34 - s * 0.14;
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.5, yy);
+          ctx.quadraticCurveTo(cx - s * 0.25, yy - s * 0.14, cx, yy);
+          ctx.quadraticCurveTo(cx + s * 0.25, yy + s * 0.14, cx + s * 0.5, yy);
+          ctx.stroke();
+        }
+        // fish body (ellipse) + tail
+        ctx.fillStyle = ICON_LITE;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + s * 0.24, s * 0.26, s * 0.14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + s * 0.24, cy + s * 0.24);
+        ctx.lineTo(cx + s * 0.42, cy + s * 0.1);
+        ctx.lineTo(cx + s * 0.42, cy + s * 0.38);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case "stone_deposit": {
+        // Angular rock cluster.
+        ctx.fillStyle = ICON_DARK;
+        const rock = (ox, oy, rr) => {
+          ctx.beginPath();
+          ctx.moveTo(cx + ox - rr, cy + oy + rr * 0.6);
+          ctx.lineTo(cx + ox - rr * 0.3, cy + oy - rr);
+          ctx.lineTo(cx + ox + rr, cy + oy - rr * 0.2);
+          ctx.lineTo(cx + ox + rr * 0.4, cy + oy + rr * 0.7);
+          ctx.closePath();
+          ctx.fill();
+        };
+        rock(-s * 0.2, s * 0.1, s * 0.28);
+        rock(s * 0.28, s * 0.02, s * 0.22);
+        break;
+      }
+      case "clay_deposit": {
+        // Stacked brick lines.
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.07);
+        for (let row = 0; row < 3; row++) {
+          const yy = cy - s * 0.24 + row * s * 0.26;
+          ctx.beginPath(); ctx.moveTo(cx - s * 0.4, yy); ctx.lineTo(cx + s * 0.4, yy); ctx.stroke();
+          const off = (row % 2) ? s * 0.13 : -s * 0.13;
+          ctx.beginPath(); ctx.moveTo(cx + off, yy); ctx.lineTo(cx + off, yy + s * 0.26); ctx.stroke();
+        }
+        break;
+      }
+      case "iron_deposit": {
+        // Crossed pick + ore chunk.
+        ctx.strokeStyle = ICON_DARK;
+        ctx.lineWidth = Math.max(1, s * 0.09);
+        ctx.beginPath(); ctx.moveTo(cx - s * 0.4, cy + s * 0.34); ctx.lineTo(cx + s * 0.4, cy - s * 0.34); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - s * 0.42, cy - s * 0.28);
+        ctx.quadraticCurveTo(cx, cy - s * 0.46, cx + s * 0.1, cy - s * 0.18);
+        ctx.stroke();
+        ctx.fillStyle = ICON_DARK;
+        ctx.beginPath();
+        ctx.arc(cx - s * 0.06, cy + s * 0.16, s * 0.16, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case "gold_deposit": {
+        // Bright nugget dots.
+        ctx.fillStyle = ICON_LITE;
+        const nug = (ox, oy, rr) => { ctx.beginPath(); ctx.arc(cx + ox, cy + oy, rr, 0, Math.PI * 2); ctx.fill(); };
+        nug(-s * 0.2, s * 0.08, s * 0.16);
+        nug(s * 0.18, s * 0.2, s * 0.13);
+        nug(s * 0.08, -s * 0.18, s * 0.1);
+        break;
+      }
+      case "coal_deposit": {
+        // Dark lumps.
+        ctx.fillStyle = ICON_DARK;
+        const lump = (ox, oy, rr) => {
+          ctx.beginPath();
+          ctx.moveTo(cx + ox - rr, cy + oy);
+          ctx.lineTo(cx + ox - rr * 0.2, cy + oy - rr);
+          ctx.lineTo(cx + ox + rr, cy + oy - rr * 0.3);
+          ctx.lineTo(cx + ox + rr * 0.5, cy + oy + rr * 0.7);
+          ctx.closePath();
+          ctx.fill();
+        };
+        lump(-s * 0.18, s * 0.16, s * 0.24);
+        lump(s * 0.26, s * 0.04, s * 0.18);
         break;
       }
     }
@@ -4773,13 +5225,13 @@ var CastleMarket = (function () {
   speedButtons.forEach(b => b.addEventListener("click", () => setSpeed(b.dataset.speed)));
 
   document.getElementById("btnGen").addEventListener("click", () => {
-    newGame(document.getElementById("seed").value.trim() || randomSeed());
+    newGame(document.getElementById("seed").value.trim() || randomSeed(), state.mapPreset);  // === TV2: keep preset ===
     if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
   });
   document.getElementById("btnRandom").addEventListener("click", () => {
     const s = randomSeed();
     document.getElementById("seed").value = s;
-    newGame(s);
+    newGame(s, state.mapPreset);  // === TV2: keep preset ===
     if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
   });
   document.getElementById("btnReveal").addEventListener("click", () => {
@@ -4800,9 +5252,13 @@ var CastleMarket = (function () {
   // ---------------------------------------------------------------
   // New game / reset
   // ---------------------------------------------------------------
-  function newGame(seedInput) {
+  function newGame(seedInput, presetId) {
     state.seedInput = seedInput;
-    state.map = MapGen.generate(seedInput, CONFIG.map.radius);
+    // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
+    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
+    state.mapPreset = preset;
+    const pr = CONFIG.mapPresets[preset];
+    state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
     state.roads = new Set();
     state.towns = [];
     state.carts = [];
@@ -4847,6 +5303,7 @@ var CastleMarket = (function () {
       const data = {
         saveVersion: CONFIG.saveVersion,
         seed: state.seedInput,
+        preset: state.mapPreset,           // === TV2: persist chosen map preset ===
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -4884,12 +5341,39 @@ var CastleMarket = (function () {
     if (data.saveVersion !== CONFIG.saveVersion) return null;
     return data;
   }
+  // === TV2: rename ore→iron in a good-keyed map (in place), summing collisions. ===
+  function TV2_renameGood(obj, from, to) {
+    if (!obj || typeof obj !== "object" || !(from in obj)) return;
+    obj[to] = (typeof obj[to] === "number" ? obj[to] : 0) + obj[from];
+    delete obj[from];
+  }
+  // Walk loaded state and rename the ore→iron good + miner→iron_mine building so
+  // pre-TV2 (v1) saves keep running. The map already regenerated under v2 terrain.
+  function TV2_migrateData(st) {
+    const GOODMAPS = ["stock", "prices", "demand", "reserved", "produced", "consumed", "delivered", "need"];
+    for (const t of (st.towns || [])) {
+      for (const key of GOODMAPS) TV2_renameGood(t[key], "ore", "iron");
+      for (const b of (t.buildings || [])) {
+        if (b && b.typeId === "miner") b.typeId = "iron_mine";
+        if (b) { TV2_renameGood(b.delivered, "ore", "iron");
+                 if (b.pendingUpgrade) TV2_renameGood(b.pendingUpgrade.delivered, "ore", "iron"); }
+      }
+    }
+    for (const c of (st.carts || [])) {
+      if (c && c.goodId === "ore") c.goodId = "iron";
+      if (c && Array.isArray(c.cargo)) for (const it of c.cargo) if (it && it.goodId === "ore") it.goodId = "iron";
+    }
+    TV2_renameGood(st.warehouse, "ore", "iron");
+    TV2_renameGood(st.castleStock, "ore", "iron");
+    TV2_renameGood(st.castleReserved, "ore", "iron");
+    TV2_renameGood(st.castleTrade, "ore", "iron");
+  }
   function loadGame() {
     let data = null;
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) {}
     data = migrate(data);
     if (!data) return false;
-    newGame(data.seed);
+    newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
     state.roads = new Set(data.roads || []);
     state.towns = data.towns || [];
     state.carts = Array.isArray(data.carts) ? data.carts : [];
@@ -4935,6 +5419,13 @@ var CastleMarket = (function () {
     state.cam = data.cam || { x: 0, y: 0 };
     state.zoom = data.zoom || 1;
     setMode(data.mode || "pan");
+    // === TV2: in-place data migration for old (v1) saves — the map itself
+    // regenerates from the seed under the v2 terrain set (accepted in active
+    // dev), but town/cart/warehouse DATA must be renamed so nothing crashes and
+    // built buildings keep running (only NEW placement re-validates terrain):
+    //   building typeId "miner" → "iron_mine";  good id "ore" → "iron".
+    // Runs last, once every collection (towns/carts/warehouse/castle*) is restored.
+    TV2_migrateData(state);
     terrainDirty = true;
     return true;
   }
@@ -5156,10 +5647,10 @@ var CastleMarket = (function () {
   // === ICONS: per-good emoji (author request — no external images, single-file).
   // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
   const GOOD_ICON = {
-    wood: "🪵", stone: "🪨", ore: "⛏️", grain: "🌾", potato: "🥔",
+    wood: "🪵", stone: "🪨", iron: "🔩", clay: "🟫", grain: "🌾", potato: "🥔",
     fish: "🐟", wool: "🧶", planks: "🪚", tools: "🔨", flour: "🌸",
-    beer: "🍺", cloth: "🧵", bread: "🍞", clothes: "👕", jewelry: "💍",
-    furniture: "🪑",
+    beer: "🍺", cloth: "🧵", coal: "⬛", gold: "🪙", bricks: "🧱",
+    bread: "🍞", clothes: "👕", jewelry: "💍", furniture: "🪑",
   };
   const goodIcon = id => GOOD_ICON[id] || "📦";
   // === /ICONS ===
@@ -6080,10 +6571,11 @@ var CastleMarket = (function () {
 
   // Per-good token colours for the cart dot (goods have no colour in CONFIG).
   const GOOD_COLORS = {
-    wood: "#8a5a2b", planks: "#b07a3c", stone: "#9aa0a6", ore: "#6b7078",
+    wood: "#8a5a2b", planks: "#b07a3c", stone: "#9aa0a6", iron: "#6b7078",
+    clay: "#c07b4a", bricks: "#b5542f", coal: "#2f2e30", gold: "#e6c93f",
     grain: "#d9b44a", flour: "#e8d59a", fish: "#5aa6c9", wool: "#e2ddce",
     bread: "#c8863c", beer: "#c9902c", cloth: "#7a9bd4", clothes: "#5566c0",
-    tools: "#aab0b6", jewelry: "#e6c93f", furniture: "#a56a38",
+    tools: "#aab0b6", jewelry: "#f0d97a", furniture: "#a56a38",
   };
   function goodColor(id) {
     if (GOOD_COLORS[id]) return GOOD_COLORS[id];
@@ -6895,15 +7387,16 @@ var CastleMarket = (function () {
   const TT_BAND_LABEL      = { peasant: "Peasants", worker: "Workers", burgher: "Citizens", kingdom: "Kingdom" };
   // The 5 startUnlocked buildings have no unlock node — synthesize anchor cards so
   // their upgrade pips have a home and the full starter row shows (like the ref).
+  // === TV2: farm dropped from starters — it now has a real unlock_farm node ===
   const TT_STARTERS = [
     { id: "anchor_hut",         buildingId: "hut",         band: "peasant", pos: { col: 0, row: 0 }, name: "Hut" },
     { id: "anchor_lumberjack",  buildingId: "lumberjack",  band: "peasant", pos: { col: 1, row: 0 }, name: "Lumberjack" },
-    { id: "anchor_farm",        buildingId: "farm",        band: "peasant", pos: { col: 2, row: 0 }, name: "Farm" },
     { id: "anchor_potato_farm", buildingId: "potato_farm", band: "peasant", pos: { col: 3, row: 0 }, name: "Potato Farm" },
     { id: "anchor_sawmill",     buildingId: "sawmill",     band: "peasant", pos: { col: 4, row: 0 }, name: "Sawmill" },
   ];
   const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
-    quarry: "⛏️", fishery: "🎣", miner: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥", weaver: "🧵",
+    quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥", weaver: "🧵",
+    clay_pit: "🟫", coal_mine: "⬛", gold_mine: "🪙", brickworks: "🧱",
     cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️" };
   const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
   const TT_ROMAN = { 2: "II", 3: "III", 4: "IV" };
@@ -8038,10 +8531,21 @@ var CastleMarket = (function () {
   const StartScreen = (() => {
     const overlay = document.getElementById("startScreen");
     const seedEl = document.getElementById("ssSeed");
+    const presetEl = document.getElementById("ssPreset");   // === TV2: map picker ===
     const btnNew = document.getElementById("ssNew");
     const btnContinue = document.getElementById("ssContinue");
     const btnDice = document.getElementById("ssDice");
     let open = false;
+
+    // === TV2: fill the preset dropdown from CONFIG.mapPresets (once). ===
+    if (presetEl && !presetEl.options.length) {
+      for (const id of Object.keys(CONFIG.mapPresets || {})) {
+        const opt = document.createElement("option");
+        opt.value = id; opt.textContent = CONFIG.mapPresets[id].label || id;
+        presetEl.appendChild(opt);
+      }
+      presetEl.value = CONFIG.mapPresetDefault || "fertile";
+    }
 
     function refreshContinue() {
       const ok = hasValidSave();
@@ -8053,6 +8557,7 @@ var CastleMarket = (function () {
       state.gameSpeed = 0;                       // pause economy while the menu is up
       overlay.classList.remove("hidden");
       seedEl.value = state.seedInput || randomSeed();
+      if (presetEl) presetEl.value = state.mapPreset || CONFIG.mapPresetDefault || "fertile";   // === TV2 ===
       refreshContinue();
       requestAnimationFrame(() => overlay.classList.add("in"));
     }
@@ -8065,11 +8570,15 @@ var CastleMarket = (function () {
       setSpeed(1);   // route through P5D-A so the speed toolbar syncs to 1x on start
       hide();
     }
-    function startNew(seedArg) {
+    function startNew(seedArg, presetArg) {
       const seed = (typeof seedArg === "string" && seedArg.trim())
         ? seedArg.trim()
         : (seedEl.value.trim() || randomSeed());
-      newGame(seed);
+      // === TV2: preset from arg (smoke harness / API) or the dropdown. ===
+      const preset = (typeof presetArg === "string" && CONFIG.mapPresets[presetArg])
+        ? presetArg
+        : ((presetEl && presetEl.value) || CONFIG.mapPresetDefault || "fertile");
+      newGame(seed, preset);
       setMode(state.mode);
       begin();
       if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: onboarding on a new game
