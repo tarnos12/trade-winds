@@ -97,12 +97,32 @@ ok("catalog has extractors/processors/houses", kinds.includes("extractor") && ki
 // === TV2: extractors are peasant- OR worker-staffed (T2 mines are worker) ===
 ok("extractors are peasant- or worker-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "extractor").every(b => b.workerTier === "peasant" || b.workerTier === "worker"));
 // Processors are worker-staffed, except the starter sawmill which is peasant-run (basic wood→planks).
-ok("processors are worker- or peasant-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "processor").every(b => b.workerTier === "worker" || b.workerTier === "peasant"));
+// === CC: processors are peasant / worker / burgher(citizen)-staffed. ===
+ok("processors are peasant/worker/burgher-staffed", Object.values(CONFIG.buildings).filter(b => b.kind === "processor").every(b => ["peasant", "worker", "burgher"].indexOf(b.workerTier) >= 0));
 ok("houses declare houseTier + houseCapacity, no output/workers",
   Object.values(CONFIG.buildings).filter(b => b.kind === "house").every(b => b.houseTier && b.houseCapacity > 0 && !b.output && !b.workerSlots));
 ok("expected extractor ids present", ["lumberjack", "farm", "iron_mine", "quarry", "fishery", "shepherd", "clay_pit", "coal_mine", "gold_mine"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "extractor"));
-ok("expected processor ids present", ["sawmill", "mill", "bakery", "brewery", "smelter", "weaver", "brickworks"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
+// === CC: smelter/weaver RETIRED; new worker + citizen processors present. ===
+ok("smelter + weaver retired (removed from catalog)", !CONFIG.buildings.smelter && !CONFIG.buildings.weaver);
+ok("expected WORKER processor ids present", ["sawmill", "mill", "bakery", "brewery", "brickworks", "tailoring", "charcoal_burner", "stonetool_maker", "oil_maker"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
+ok("expected CITIZEN processor ids present + burgher-staffed", ["forge", "armory", "pottery_workshop", "distillery", "goldsmith", "lamp_maker", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "burgher"));
+ok("new processors sit on any land (terrain:null)", ["tailoring", "charcoal_burner", "stonetool_maker", "oil_maker", "forge", "armory", "pottery_workshop", "distillery", "goldsmith", "lamp_maker", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id].terrain === null));
 ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "house"));
+// === CC: aristocrat_home — houseTier 'aristocrat', 1 slot, ladder to +2 capacity. ===
+ok("aristocrat_home present (houseTier aristocrat, capacity 1)",
+  CONFIG.buildings.aristocrat_home && CONFIG.buildings.aristocrat_home.kind === "house"
+  && CONFIG.buildings.aristocrat_home.houseTier === "aristocrat" && CONFIG.buildings.aristocrat_home.houseCapacity === 1);
+ok("aristocrat_home ladder has 2 levels (+1 capacity each)",
+  Buildings.upgradeLadder("aristocrat_home").length === 2
+  && Buildings.upgradeAt("aristocrat_home", 2).effect.capacityPlus === 1
+  && Buildings.upgradeAt("aristocrat_home", 3).effect.capacityPlus === 1);
+// === CC: housingCapacity reports the aristocrats bucket. ===
+{
+  const t = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 1 }] });
+  ok("housingCapacity returns aristocrats bucket (cap 1)", Buildings.housingCapacity(t).aristocrats === 1);
+  const t3 = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 3 }] });
+  ok("housingCapacity: L3 aristocrat_home shelters 3 (1 + 2 capacityPlus)", Buildings.housingCapacity(t3).aristocrats === 3);
+}
 
 // ---- BAL: per-building research unlock ----
 // === TV2: farm dropped from starters (now unlock_farm); potato_farm is a starter ===

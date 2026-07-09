@@ -496,6 +496,7 @@
   .tt-band-peasant { background: rgba(45,120,120,0.10); }
   .tt-band-worker  { background: rgba(190,140,50,0.10); }
   .tt-band-citizen { background: rgba(40,130,90,0.12); }
+  .tt-band-aristocrat { background: rgba(200,90,200,0.10); }  /* === CC === */
   .tt-band-kingdom { background: rgba(120,120,140,0.08); }
   .tt-band-label { position: absolute; writing-mode: vertical-rl; transform: rotate(180deg);
     display: flex; align-items: center; justify-content: center;
@@ -1570,20 +1571,27 @@ Object.assign(CONFIG, {
     potato: { id: "potato", tier: 1, basePrice: 4 },   // EV3: tier-1 basic food (the peasant staple)
     fish:   { id: "fish",   tier: 1, basePrice: 5 },
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
+    // === CC: content chains v2 — 4-tier needs matrix + aristocrat luxuries. ===
     // --- tier 2 (processed / mined) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
-    planks: { id: "planks", tier: 2, basePrice: 14, inputs: { wood: 2 } },    // wood 5×2=10
-    tools:  { id: "tools",  tier: 2, basePrice: 22, inputs: { iron: 1, coal: 1 } }, // === TV2: iron+coal (Smelter) ===
-    flour:  { id: "flour",  tier: 2, basePrice: 12, inputs: { grain: 2 } },   // grain 4×2=8
-    beer:   { id: "beer",   tier: 2, basePrice: 14, inputs: { grain: 2 } },   // grain 4×2=8
-    cloth:  { id: "cloth",  tier: 2, basePrice: 20, inputs: { wool: 2 } },    // wool 7×2=14
-    coal:   { id: "coal",   tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
-    gold:   { id: "gold",   tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
-    bricks: { id: "bricks", tier: 2, basePrice: 16, inputs: { clay: 2 } },    // === TV2: clay 6×2=12 (Brickworks) ===
+    planks:      { id: "planks",      tier: 2, basePrice: 14, inputs: { wood: 2 } },              // wood 5×2=10
+    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22, inputs: { wood: 1, iron: 1 } },     // === CC: Forge; migrates old "tools" ===
+    flour:       { id: "flour",       tier: 2, basePrice: 12, inputs: { grain: 2 } },             // grain 4×2=8
+    mead:        { id: "mead",        tier: 2, basePrice: 14, inputs: { grain: 2 } },             // === CC: Brewery; migrates old "beer" ===
+    clothes:     { id: "clothes",     tier: 2, basePrice: 22, inputs: { wool: 2 } },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
+    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28, inputs: { planks: 1, stone: 1 } },  // === CC: StoneTools Maker ===
+    oil:         { id: "oil",         tier: 2, basePrice: 18, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) ===
+    coal:        { id: "coal",        tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
+    gold:        { id: "gold",        tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
+    bricks:      { id: "bricks",      tier: 2, basePrice: 16, inputs: { clay: 2 } },              // === TV2: clay 6×2=12 (Brickworks) ===
     // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
-    bread:     { id: "bread",     tier: 3, basePrice: 30, inputs: { flour: 2 } },              // flour 12×2=24
-    clothes:   { id: "clothes",   tier: 3, basePrice: 50, inputs: { cloth: 2 } },              // cloth 20×2=40
-    jewelry:   { id: "jewelry",   tier: 3, basePrice: 54, inputs: { gold: 2 } },               // === TV2: gold 42×... (inert: no producer yet) ===
-    furniture: { id: "furniture", tier: 3, basePrice: 64, inputs: { planks: 2, tools: 1 } },   // planks14×2+tools22=50
+    bread:          { id: "bread",          tier: 3, basePrice: 30,  inputs: { flour: 2 } },                 // flour 12×2=24
+    pottery:        { id: "pottery",        tier: 3, basePrice: 22,  inputs: { clay: 2 } },                  // === CC: Pottery (clay 6×2=12) ===
+    lamp:           { id: "lamp",           tier: 3, basePrice: 40,  inputs: { oil: 2 } },                   // === CC: Lamp Maker (oil 18×2=36) ===
+    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70,  inputs: { coal: 2, iron: 2 } },         // === CC: Armory (coal10×2+iron8×2=36) ===
+    chairs:         { id: "chairs",         tier: 3, basePrice: 64,  inputs: { planks: 2, oil: 1 } },        // === CC: Carpentry; migrates old "furniture" ===
+    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120, inputs: { gold: 1, iron_tool: 1 } },    // === CC: Goldsmith; migrates old "jewelry" ===
+    brandy:         { id: "brandy",         tier: 3, basePrice: 60,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) ===
+    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 200, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) ===
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -1713,24 +1721,12 @@ Object.assign(CONFIG, {
     brewery: {
       id: "brewery", name: "Brewery", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { grain: 2 }, output: { goodId: "beer", ratePerWorker: 1 },
+      inputs: { grain: 2 }, output: { goodId: "mead", ratePerWorker: 1 },   // === CC: beer → mead ===
       unlockedBy: "unlock_brewery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 100 },
     },
-    smelter: {
-      id: "smelter", name: "Smelter", kind: "processor",
-      terrain: null, workerTier: "worker",
-      inputs: { iron: 1, coal: 1 }, output: { goodId: "tools", ratePerWorker: 1 },   // === TV2: iron + coal ===
-      unlockedBy: "unlock_smelter",   // RT-A: per-building unlock node
-      workerSlots: 2, cost: { wood: 30, stone: 25, gold: 130 },
-    },
-    weaver: {
-      id: "weaver", name: "Weaver", kind: "processor",
-      terrain: null, workerTier: "worker",
-      inputs: { wool: 2 }, output: { goodId: "cloth", ratePerWorker: 1 },
-      unlockedBy: "unlock_weaver",   // RT-A: per-building unlock node
-      workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
-    },
+    // === CC: Smelter + Weaver RETIRED. Forge (wood+iron→iron_tool) replaces the
+    // Smelter (citizen tier); Tailoring (wool→clothes) replaces the Weaver. ===
     // === TV2: new T2 processor — clay → bricks ===
     brickworks: {
       id: "brickworks", name: "Brickworks", kind: "processor",
@@ -1738,6 +1734,92 @@ Object.assign(CONFIG, {
       inputs: { clay: 2 }, output: { goodId: "bricks", ratePerWorker: 1 },
       unlockedBy: "unlock_brickworks",
       workerSlots: 2, cost: { wood: 25, stone: 20, gold: 110 },
+    },
+    // === CC: new WORKER-tier processors (any buildable town hex) ===
+    tailoring: {
+      id: "tailoring", name: "Tailoring", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { wool: 2 }, output: { goodId: "clothes", ratePerWorker: 1 },
+      unlockedBy: "unlock_tailoring",
+      workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
+    },
+    charcoal_burner: {
+      id: "charcoal_burner", name: "Charcoal Burning", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { wood: 2 }, output: { goodId: "coal", ratePerWorker: 1 },
+      unlockedBy: "unlock_charcoal_burner",
+      workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
+    },
+    stonetool_maker: {
+      id: "stonetool_maker", name: "StoneTools Maker", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { planks: 1, stone: 1 }, output: { goodId: "stone_tools", ratePerWorker: 1 },
+      unlockedBy: "unlock_stonetool_maker",
+      workerSlots: 2, cost: { wood: 30, stone: 15, gold: 110 },
+    },
+    oil_maker: {
+      id: "oil_maker", name: "Oil Maker", kind: "processor",
+      terrain: null, workerTier: "worker",
+      inputs: { fish: 2 }, output: { goodId: "oil", ratePerWorker: 1 },
+      unlockedBy: "unlock_oil_maker",
+      workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
+    },
+    // === CC: new CITIZEN-tier (burgher) processors ===
+    forge: {
+      id: "forge", name: "Forge", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { wood: 1, iron: 1 }, output: { goodId: "iron_tool", ratePerWorker: 1 },
+      unlockedBy: "unlock_forge",
+      workerSlots: 2, cost: { wood: 30, stone: 25, gold: 160 },
+    },
+    armory: {
+      id: "armory", name: "Armory", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { coal: 2, iron: 2 }, output: { goodId: "iron_armor", ratePerWorker: 1 },
+      unlockedBy: "unlock_armory",
+      workerSlots: 2, cost: { wood: 35, stone: 30, bricks: 10, gold: 220 },
+    },
+    pottery_workshop: {
+      id: "pottery_workshop", name: "Pottery", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { clay: 2 }, output: { goodId: "pottery", ratePerWorker: 1 },
+      unlockedBy: "unlock_pottery_workshop",
+      workerSlots: 2, cost: { wood: 30, stone: 20, bricks: 5, gold: 140 },
+    },
+    distillery: {
+      id: "distillery", name: "Distillery", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { mead: 2, pottery: 1 }, output: { goodId: "brandy", ratePerWorker: 1 },
+      unlockedBy: "unlock_distillery",
+      workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 180 },
+    },
+    goldsmith: {
+      id: "goldsmith", name: "Goldsmith", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { gold: 1, iron_tool: 1 }, output: { goodId: "gold_ring", ratePerWorker: 1 },
+      unlockedBy: "unlock_goldsmith",
+      workerSlots: 2, cost: { wood: 30, stone: 25, bricks: 10, gold: 200 },
+    },
+    lamp_maker: {
+      id: "lamp_maker", name: "Lamp Maker", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { oil: 2 }, output: { goodId: "lamp", ratePerWorker: 1 },
+      unlockedBy: "unlock_lamp_maker",
+      workerSlots: 2, cost: { wood: 30, stone: 20, gold: 150 },
+    },
+    carpentry: {
+      id: "carpentry", name: "Carpentry", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { planks: 2, oil: 1 }, output: { goodId: "chairs", ratePerWorker: 1 },
+      unlockedBy: "unlock_carpentry",
+      workerSlots: 2, cost: { wood: 35, stone: 20, planks: 10, gold: 180 },
+    },
+    luxury_tailor: {
+      id: "luxury_tailor", name: "Luxury Tailor", kind: "processor",
+      terrain: null, workerTier: "burgher",
+      inputs: { clothes: 2, gold_ring: 1 }, output: { goodId: "luxury_clothes", ratePerWorker: 1 },
+      unlockedBy: "unlock_luxury_tailor",
+      workerSlots: 2, cost: { wood: 35, stone: 25, bricks: 10, gold: 240 },
     },
     // --- houses (no workers; add population capacity by tier) ---
     hut: {
@@ -1759,6 +1841,13 @@ Object.assign(CONFIG, {
       terrain: null, houseTier: "burgher", houseCapacity: 4,
       unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
       cost: { wood: 40, stone: 30, planks: 10, bricks: 10, gold: 220 },   // === TV2: bricks component ===
+    },
+    // === CC: aristocrat house — 1 slot (author), upgradable via the ladder. ===
+    aristocrat_home: {
+      id: "aristocrat_home", name: "Aristocrats Home", kind: "house",
+      terrain: null, houseTier: "aristocrat", houseCapacity: 1,
+      unlockedBy: "unlock_aristocrat_home",
+      cost: { wood: 40, stone: 30, bricks: 20, chairs: 2, gold_ring: 1, gold: 400 },
     },
   },
 
@@ -1862,25 +1951,32 @@ Sim.priceFor = function (town, goodId) {
 // composes with the Phase-1 CONFIG and the T5 goods/prices merge.
 Object.assign(CONFIG, {
   needs: {
-    // EV3 needs / happiness model. Every resident burns two classes of goods:
-    //   BASIC needs  = Wood + Potato (tier-1 food) — meeting them ALONE floors
-    //                  happiness at ~basicHappy (70%). Missing basics drops below 70.
-    //   EXTRA needs  = Fish + Wool (all tiers) + Beer (workers+) + Clothes (burghers) —
-    //                  meeting them adds the remaining extraHappy (+30% ⇒ ~100%).
-    basicNeeds: ["wood", "potato"],
-    extraNeeds: ["fish", "wool", "beer", "clothes"],
-    // Per-resident consumption per tick, by tier. Higher tiers add their own
-    // extra needs (beer for workers, +clothes for burghers) on top of the shared
-    // basic (wood+potato) + peasant-extra (fish+wool) baseline.
-    perCapita: {
-      peasants: { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03 },
-      workers:  { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03, beer: 0.05 },
-      burghers: { wood: 0.05, potato: 0.10, fish: 0.05, wool: 0.03, beer: 0.05, clothes: 0.03 },
+    // === CC: PER-TIER needs model (supersedes the old global basicNeeds/extraNeeds
+    // + flat perCapita). A good's CLASS (basic vs luxury) is now tier-specific — the
+    // same good can be a BASIC need for one tier and a LUXURY for another (e.g. mead
+    // is a worker LUXURY but a citizen+aristocrat BASIC). Each tier declares its own
+    // basic[] / extra[] lists + perCapita rates. Author's DEFINITIVE NEEDS MATRIX. ===
+    //   BASIC needs floor happiness at ~basicHappy (70) when met; missing drops below.
+    //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
+    //   tier's population GROWTH (all luxuries must be available to grow).
+    tiers: {
+      peasants:    { basic: ["potato", "wood"], extra: ["fish", "wool"],
+                     perCapita: { potato: 0.10, wood: 0.05, fish: 0.05, wool: 0.03 } },
+      workers:     { basic: ["fish", "coal"], extra: ["clothes", "bread", "mead"],
+                     perCapita: { fish: 0.05, coal: 0.05, clothes: 0.03, bread: 0.03, mead: 0.05 } },
+      burghers:    { basic: ["lamp", "bread", "mead", "clothes"], extra: ["chairs", "pottery", "gold_ring"],
+                     perCapita: { lamp: 0.03, bread: 0.04, mead: 0.04, clothes: 0.03, chairs: 0.02, pottery: 0.02, gold_ring: 0.01 } },
+      aristocrats: { basic: ["lamp", "mead", "iron_armor", "chairs", "pottery"], extra: ["brandy", "luxury_clothes", "gold_ring"],
+                     perCapita: { lamp: 0.03, mead: 0.04, iron_armor: 0.02, chairs: 0.02, pottery: 0.02, brandy: 0.02, luxury_clothes: 0.01, gold_ring: 0.01 } },
     },
     // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
     //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.
     basicHappy: 70,
     extraHappy: 30,
+    // === CC: 70% happiness = FULL housing/worker capacity. Below 70 scales the
+    // population target DOWN (target = round(cap × min(1, happiness/capacityFullAt)));
+    // at/above 70 = full capacity, and the surplus happiness pays extra people-tax. ===
+    capacityFullAt: 70,
     growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
@@ -1889,15 +1985,33 @@ Object.assign(CONFIG, {
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
     happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
-    // EV3 people-tax: each tick the population pays gold into town.gold (its TRADE
-    // budget), scaled by happiness. At happyBase the multiplier is 1; every point
+    // === CC: people-tax — every tier produces ONLY gold (tax); higher tiers pay
+    // MORE per capita (ratePerTier). At happyBase the multiplier is 1; every point
     // above happyBase adds bonusPerPoint (so happier cities fund trade faster).
-    peopleTax: { goldPerPop: 0.10, happyBase: 70, bonusPerPoint: 0.02 },
+    // goldPerPop is the legacy fallback (peasant rate; keeps single-tier tests exact).
+    peopleTax: { ratePerTier: { peasants: 0.10, workers: 0.15, burghers: 0.22, aristocrats: 0.40 },
+                 goldPerPop: 0.10, happyBase: 70, bonusPerPoint: 0.02 },
   },
 });
 
+// === CC: pure Needs helpers over CONFIG.needs.tiers. Consumers that CLASSIFY a
+// good per tier read tier(k).basic/.extra; consumers that only test union
+// membership ("is this good a need at all") use allBasic()/allExtra(). Never use
+// the union for per-tier classification (mead/clothes are dual-role). ===
+var Needs = {
+  tierKeys() { return ["peasants", "workers", "burghers", "aristocrats"]; },
+  tier(k) { return (CONFIG.needs.tiers && CONFIG.needs.tiers[k]) || { basic: [], extra: [], perCapita: {} }; },
+  allBasic() { const s = new Set(); for (const k of Needs.tierKeys()) for (const g of Needs.tier(k).basic) s.add(g); return [...s]; },
+  allExtra() { const s = new Set(); for (const k of Needs.tierKeys()) for (const g of Needs.tier(k).extra) s.add(g); return [...s]; },
+  classOf(k, gid) { const t = Needs.tier(k); if (t.basic.indexOf(gid) >= 0) return "basic"; if (t.extra.indexOf(gid) >= 0) return "extra"; return "none"; },
+};
+// Back-compat UNION aliases (union-membership tests ONLY — cart tooltip / speech
+// bubbles / kingdom stats). These are deduped unions; NEVER use for classification.
+CONFIG.needs.basicNeeds = Needs.allBasic();
+CONFIG.needs.extraNeeds = Needs.allExtra();
+
 // singular workerTier/houseTier -> plural pop bucket key (mirrors BUILDINGS_TIER_KEY).
-const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
 
 // Advance the whole economy by one tick. Mutates every town in State.towns:
 //   worker assignment → production → consumption → happiness → population → prices.
@@ -1924,7 +2038,7 @@ Sim.tick = function (State) {
   for (const town of State.towns) {
     if (!town) continue;
     if (!town.stock) town.stock = {};
-    if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0 };
+    if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;
     const pop = town.pop;
     // === PP-A === city ledger: snapshot the flows accumulated since the last tick
@@ -1948,6 +2062,7 @@ Sim.tick = function (State) {
       peasant: pop.peasants || 0,
       worker:  pop.workers  || 0,
       burgher: pop.burghers || 0,
+      aristocrat: pop.aristocrats || 0,   // === CC: aristocrats staff nothing (no aristocrat producers) — harmless ===
     };
     // === CB-A: unbuilt buildings get no workers; effective slots subtract
     // closedSlots; PRIORITY-true buildings are staffed first (two passes, in
@@ -2072,27 +2187,29 @@ Sim.tick = function (State) {
     // for workers, +clothes for burghers) goods per its tier's perCapita rates.
     // We tally required + consumed per good (recording demand for the price model
     // AND for Trade shortfalls), then roll them into basicSat/extraSat.
-    const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0) + (pop.aristocrats || 0);  // === CC ===
 
     const required = {};                 // goodId -> units the population wants this tick
-    const tierReq = { peasants: {}, workers: {}, burghers: {} };  // === PP-A === per-tier required
+    const tierReq = { peasants: {}, workers: {}, burghers: {}, aristocrats: {} };  // === PP-A / CC === per-tier required
     // === RU-A: capacity-weighted basic-consumption reduction from house upgrades.
-    // Only BASIC-need goods (N.basicNeeds) are scaled; extra-need goods are not.
+    // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
     const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
-      ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1 };
-    for (const tierKey in N.perCapita) {
+      ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+    // === CC: iterate per-tier lists (tiers[k].perCapita + per-tier basic classification) ===
+    for (const tierKey in N.tiers) {
       const n = pop[tierKey] || 0;
       if (n <= 0) continue;
-      const rates = N.perCapita[tierKey];
+      const spec = N.tiers[tierKey];
+      const rates = spec.perCapita;
       const tierBcm = bcm[tierKey] || 1;
       for (const gid in rates) {
-        const isBasic = N.basicNeeds.indexOf(gid) >= 0;
+        const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
         const amt = rates[gid] * n * (isBasic ? tierBcm : 1);
         required[gid] = (required[gid] || 0) + amt;
         tierReq[tierKey][gid] = (tierReq[tierKey][gid] || 0) + amt;  // === PP-A ===
       }
     }
-    // === /RU-A ===
+    // === /RU-A + /CC ===
     const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
     for (const gid in required) {
       const req = required[gid];
@@ -2132,15 +2249,31 @@ Sim.tick = function (State) {
       let present = 0; for (const g of list) if ((stock[g] || 0) > 0) present++;
       return list.length ? present / list.length : 0;
     };
-    let basicSat = classSat(N.basicNeeds);
-    let extraSat = classSat(N.extraNeeds);
-    if (basicSat === null) basicSat = totalPop > 0 ? 1 : availFrac(N.basicNeeds);
-    if (extraSat === null) extraSat = totalPop > 0 ? 1 : availFrac(N.extraNeeds);
+    // === CC: an EMPTY town's seed-happiness is based on the PEASANTS' lists (the
+    // entry tier that attracts the first settlers) — higher-tier luxuries must not
+    // spuriously seed peasant attraction. For a populated town these town-wide
+    // sats are unused (per-tier happiness below drives everything). ===
+    const repBasic = N.tiers.peasants.basic, repExtra = N.tiers.peasants.extra;
+    let basicSat = classSat(repBasic);
+    let extraSat = classSat(repExtra);
+    if (basicSat === null) basicSat = totalPop > 0 ? 1 : availFrac(repBasic);
+    if (extraSat === null) extraSat = totalPop > 0 ? 1 : availFrac(repExtra);
 
-    // Extra-need availability per secondary good — gates worker/burgher GROWTH even
-    // when that tier is still empty (req=0 → read pure availability).
-    const beerSat    = ("beer"    in gsat) ? gsat.beer    : ((stock.beer    || 0) > 0 ? 1 : 0);
-    const clothesSat = ("clothes" in gsat) ? gsat.clothes : ((stock.clothes || 0) > 0 ? 1 : 0);
+    // === CC: per-tier extra (luxury) availability — gates that tier's GROWTH even
+    // when the tier is still empty (req=0 → read pure shelf availability). ALL of a
+    // tier's luxuries must be available (min) for it to grow. Peasants are ungated
+    // (their extras drive happiness, not a hard growth gate) so a fresh food-only
+    // town can still bootstrap its first settlers. ===
+    const extraAvail = (tierKey) => {
+      const list = N.tiers[tierKey].extra;
+      if (!list.length) return 1;
+      let m = 1;
+      for (const g of list) {
+        const s = (g in gsat) ? gsat[g] : ((stock[g] || 0) > 0 ? 1 : 0);
+        if (s < m) m = s;
+      }
+      return m;
+    };
 
     // --- 3. Happiness = basicHappy·basicSat + extraHappy·extraSat -------
     // EV3: basics (wood+potato) fully met floor happiness at ~70; extras (fish+wool
@@ -2171,11 +2304,11 @@ Sim.tick = function (State) {
     if (!town.tierHappiness || typeof town.tierHappiness !== "object") town.tierHappiness = {};
     if (totalPop > 0) {
       let wsum = 0, hsum = 0;
-      for (const tk of ["peasants", "workers", "burghers"]) {
+      for (const tk of ["peasants", "workers", "burghers", "aristocrats"]) {   // === CC: 4 tiers ===
         const n = pop[tk] || 0;
         if (n <= 0) { town.tierHappiness[tk] = null; continue; }
-        let bs = classSatTier(tk, N.basicNeeds); if (bs === null) bs = 1;
-        let es = classSatTier(tk, N.extraNeeds); if (es === null) es = 1;
+        let bs = classSatTier(tk, N.tiers[tk].basic); if (bs === null) bs = 1;   // === CC: per-tier basic list ===
+        let es = classSatTier(tk, N.tiers[tk].extra); if (es === null) es = 1;   // === CC: per-tier extra list ===
         const ht = Math.max(0, Math.min(100, N.basicHappy * bs + N.extraHappy * es + tempMod));
         const prevT = (typeof town.tierHappiness[tk] === "number") ? town.tierHappiness[tk]
                     : (prevAgg != null ? prevAgg : ht);
@@ -2185,7 +2318,7 @@ Sim.tick = function (State) {
       }
       town.happiness = wsum > 0 ? hsum / wsum : (prevAgg != null ? prevAgg : 0);
     } else {
-      town.tierHappiness = { peasants: null, workers: null, burghers: null };
+      town.tierHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };  // === CC ===
       const hTarget = Math.max(0, Math.min(100,
         N.basicHappy * basicSat + N.extraHappy * extraSat + tempMod));
       const hPrev = (prevAgg != null) ? prevAgg : hTarget;
@@ -2201,23 +2334,30 @@ Sim.tick = function (State) {
     // need missing, the tier declines after a sustained low streak.
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
       ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
-      : { peasants: 0, workers: 0, burghers: 0 };
+      : { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===
     const capacity = {
       peasants: (base.peasants || 0) + (housing.peasants || 0),
       workers:  (housing.workers  || 0),
       burghers: (housing.burghers || 0),
+      aristocrats: (housing.aristocrats || 0),   // === CC: aristocrat housing ===
     };
-    // Secondary-need availability gate per tier (food excluded on purpose).
+    // === CC: luxury-need availability gate per tier (basic food/goods excluded —
+    // they drive happiness, which already scales the target). Peasants ungated. ===
     const growGate = {
       peasants: 1,
-      workers:  beerSat,
-      burghers: Math.min(beerSat, clothesSat),
+      workers:  extraAvail("workers"),
+      burghers: extraAvail("burghers"),
+      aristocrats: extraAvail("aristocrats"),
     };
-    const h01 = Math.max(0, Math.min(100, town.happiness)) / 100;
-    if (!town._lowSat) town._lowSat = { peasants: 0, workers: 0, burghers: 0 };
+    if (!town._lowSat) town._lowSat = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };
     for (const tier in capacity) {
       const cap = capacity[tier];
-      const target = Math.round(cap * h01);      // happiness-scaled target
+      // === CC: 70% happiness = full capacity. Use this tier's OWN happiness (empty
+      // tier → town.happiness). target = round(cap × min(1, happiness/capacityFullAt)). ===
+      const th = (town.tierHappiness && town.tierHappiness[tier] != null)
+        ? town.tierHappiness[tier] : town.happiness;
+      const capFrac = Math.min(1, Math.max(0, Math.min(100, th)) / N.capacityFullAt);
+      const target = Math.round(cap * capFrac);
       let n = pop[tier] || 0;
       const canGrow = growGate[tier] >= N.growthThreshold;
       if (canGrow && n < target) {
@@ -2244,16 +2384,18 @@ Sim.tick = function (State) {
     // (Sim.houseIncome later splits it across that tier's houses by capacity).
     // Single-tier equivalence is bit-exact (h_t == town.happiness, n == popNow).
     const pt = N.peopleTax;
-    town.tierIncome = { peasants: 0, workers: 0, burghers: 0 };
+    town.tierIncome = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC ===
     if (pt) {
       let total = 0;
-      for (const tk of ["peasants", "workers", "burghers"]) {
+      for (const tk of ["peasants", "workers", "burghers", "aristocrats"]) {   // === CC: 4 tiers ===
         const n = pop[tk] || 0;
         if (n <= 0) continue;
         const h_t = (town.tierHappiness && town.tierHappiness[tk] != null)
           ? town.tierHappiness[tk] : town.happiness;
         const mult = 1 + Math.max(0, h_t - pt.happyBase) * pt.bonusPerPoint;
-        const inc = n * pt.goldPerPop * mult;
+        // === CC: higher tiers pay more per capita (ratePerTier); goldPerPop fallback. ===
+        const rate = (pt.ratePerTier && pt.ratePerTier[tk] != null) ? pt.ratePerTier[tk] : pt.goldPerPop;
+        const inc = n * rate * mult;
         town.tierIncome[tk] = inc; total += inc;
       }
       if (total > 0) {
@@ -2308,6 +2450,51 @@ Sim.houseIncome = function (town, building) {
   return totalCap > 0 ? tierInc * (thisCap / totalCap) : 0;
 };
 // === /PP-A ===
+
+// === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can
+// drive it). Renames retired/renamed good ids across every good-keyed map in a
+// loaded save, summing collisions, and remaps the retired weaver building. The
+// smelter is intentionally left INERT (its typeId is simply absent from
+// CONFIG.buildings now, so every Sim/Buildings guard skips it — remapping it to
+// the Forge is rejected because the Forge is citizen-tier and would silently
+// re-tier the building). The app's loadGame calls this after TV2_migrateData. ===
+Sim.CC_GOOD_RENAMES = { beer: "mead", tools: "iron_tool", jewelry: "gold_ring", furniture: "chairs", cloth: "clothes" };
+Sim.CC_BUILDING_RENAMES = { weaver: "tailoring" };   // both wool → clothes; graceful. smelter left inert.
+Sim.ccRenameGoodMap = function (obj, map) {
+  if (!obj || typeof obj !== "object") return;
+  for (const from in map) {
+    if (!(from in obj)) continue;
+    const to = map[from];
+    obj[to] = (typeof obj[to] === "number" ? obj[to] : 0) + obj[from];
+    delete obj[from];
+  }
+};
+Sim.CC_migrateGoods = function (state) {
+  if (!state || typeof state !== "object") return state;
+  const GM = Sim.CC_GOOD_RENAMES, BM = Sim.CC_BUILDING_RENAMES;
+  const GOODMAPS = ["stock", "prices", "demand", "reserved", "produced", "consumed", "delivered", "need"];
+  for (const t of (state.towns || [])) {
+    if (!t) continue;
+    for (const key of GOODMAPS) Sim.ccRenameGoodMap(t[key], GM);
+    for (const b of (t.buildings || [])) {
+      if (!b) continue;
+      if (BM[b.typeId]) b.typeId = BM[b.typeId];
+      Sim.ccRenameGoodMap(b.delivered, GM);
+      if (b.pendingUpgrade) Sim.ccRenameGoodMap(b.pendingUpgrade.delivered, GM);
+    }
+  }
+  for (const c of (state.carts || [])) {
+    if (!c) continue;
+    if (c.goodId && GM[c.goodId]) c.goodId = GM[c.goodId];
+    if (Array.isArray(c.cargo)) for (const it of c.cargo) if (it && it.goodId && GM[it.goodId]) it.goodId = GM[it.goodId];
+  }
+  Sim.ccRenameGoodMap(state.warehouse, GM);
+  Sim.ccRenameGoodMap(state.castleStock, GM);
+  Sim.ccRenameGoodMap(state.castleReserved, GM);
+  Sim.ccRenameGoodMap(state.castleTrade, GM);
+  return state;
+};
+// === /CC ===
 // === SIM-CORE END ===
 
 // === BUILDINGS-CORE START ===  (TI-A / slot #2 — placement rules + housing)
@@ -2318,7 +2505,7 @@ Sim.houseIncome = function (town, building) {
 var Buildings = (typeof Buildings !== "undefined" && Buildings) || {};
 
 // tier singular (workerTier/houseTier) -> plural pop bucket key.
-const BUILDINGS_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+const BUILDINGS_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };  // === CC ===
 
 // Player-placeable building slots by town-center level (GDD §4.1: 3/5/7/9).
 // Index 0 is unused; unknown levels fall back to 3. Optional `state`: when passed,
@@ -2355,7 +2542,7 @@ Buildings.transporterCount = function (town) {
 // shelter more). Callers without research (e.g. buildings.test.js) omit it and
 // get the base capacity.
 Buildings.housingCapacity = function (town, state) {
-  const cap = { peasants: 0, workers: 0, burghers: 0 };
+  const cap = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC: 4th tier ===
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
     const def = CONFIG.buildings[b.typeId];
@@ -2368,7 +2555,7 @@ Buildings.housingCapacity = function (town, state) {
   }
   if (state && typeof Research !== "undefined" && Research.effect) {
     const hb = Research.effect(state, "housingBonus", 1);   // multiplier (1x default)
-    if (hb !== 1) { cap.peasants *= hb; cap.workers *= hb; cap.burghers *= hb; }
+    if (hb !== 1) { cap.peasants *= hb; cap.workers *= hb; cap.burghers *= hb; cap.aristocrats *= hb; }  // === CC ===
   }
   return cap;
 };
@@ -2442,6 +2629,11 @@ Object.assign(CONFIG, {
       { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
     ],
     // === /RT-A ===
+    // === CC: aristocrat_home capacity ladder (each level +1 slot) ===
+    aristocrat_home: [
+      { level: 2, name: "Grand Estate",    unlockedBy: "upg_aristocrat_home_l2", cost: { gold: 800,  bricks: 20, chairs: 2 },         effect: { capacityPlus: 1 } },
+      { level: 3, name: "Palatial Estate", unlockedBy: "upg_aristocrat_home_l3", cost: { gold: 1500, bricks: 30, luxury_clothes: 2 }, effect: { capacityPlus: 1 } },
+    ],
   },
 });
 
@@ -2548,8 +2740,8 @@ Buildings.upgradeEffect = function (b) {
 // upgrades. For each tier: Σ(cap_i × bcm_i) / Σ(cap_i) over that tier's houses
 // (cap includes capacityPlus). Defaults to 1 when a tier has no houses.
 Buildings.basicConsumptionMult = function (town) {
-  const res = { peasants: 1, workers: 1, burghers: 1 };
-  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 } };
+  const res = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };   // === CC ===
+  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
     const def = CONFIG.buildings[b.typeId];
@@ -3313,8 +3505,6 @@ Object.assign(CONFIG, {
     { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 6, row: 0 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
     { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Sheep Farm", desc: "Unlocks the Sheep Farm.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },   // === TV2-FIX: root node — wool is a core peasant need, not gated behind fish ===
     { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
-    { id: "unlock_smelter",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "smelter",  pos: { col: 1, row: 0 }, name: "Smelter",  desc: "Unlocks the Smelter.",  cost: 400,  timeTicks: 24, prereqs: ["unlock_iron_mine"], effect: {} },
-    { id: "unlock_weaver",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "weaver",   pos: { col: 2, row: 0 }, name: "Weaver",   desc: "Unlocks the Weaver.",   cost: 350,  timeTicks: 22, prereqs: ["unlock_shepherd"], effect: {} },
     { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 3, row: 0 }, name: "Cottage",  desc: "Unlocks the Cottage.",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
     { id: "unlock_brewery",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "brewery",  pos: { col: 0, row: 1 }, name: "Brewery",  desc: "Unlocks the Brewery.",  cost: 350,  timeTicks: 22, prereqs: ["unlock_mill"],     effect: {} },
     { id: "unlock_bakery",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "bakery",   pos: { col: 1, row: 1 }, name: "Bakery",   desc: "Unlocks the Bakery.",   cost: 500,  timeTicks: 28, prereqs: ["unlock_mill"],     effect: {} },
@@ -3325,7 +3515,23 @@ Object.assign(CONFIG, {
     { id: "unlock_clay_pit",   branch: "worker", band: "worker", kind: "unlock", buildingId: "clay_pit",   pos: { col: 1, row: 2 }, name: "Clay Pit",   desc: "Unlocks the Clay Pit.",   cost: 220, timeTicks: 16, prereqs: ["unlock_quarry"],     effect: {} },
     { id: "unlock_brickworks", branch: "worker", band: "worker", kind: "unlock", buildingId: "brickworks", pos: { col: 2, row: 2 }, name: "Brickworks", desc: "Unlocks the Brickworks.", cost: 300, timeTicks: 20, prereqs: ["unlock_clay_pit"],    effect: {} },
     { id: "unlock_farm",       branch: "peasant", band: "peasant", kind: "unlock", buildingId: "farm",       pos: { col: 5, row: 1 }, name: "Wheat Farm", desc: "Unlocks the Wheat Farm.", cost: 250, timeTicks: 16, prereqs: ["unlock_quarry"],   effect: {} },
+    // === CC: new WORKER-band processor unlock nodes (row 3) ===
+    { id: "unlock_tailoring",       branch: "worker", band: "worker", kind: "unlock", buildingId: "tailoring",       pos: { col: 0, row: 3 }, name: "Tailoring",        desc: "Unlocks Tailoring (wool → clothes).",       cost: 350, timeTicks: 22, prereqs: ["unlock_shepherd"],   effect: {} },
+    { id: "unlock_charcoal_burner", branch: "worker", band: "worker", kind: "unlock", buildingId: "charcoal_burner", pos: { col: 1, row: 3 }, name: "Charcoal Burning",  desc: "Unlocks Charcoal Burning (wood → coal).",   cost: 300, timeTicks: 20, prereqs: [],                    effect: {} },
+    { id: "unlock_stonetool_maker", branch: "worker", band: "worker", kind: "unlock", buildingId: "stonetool_maker", pos: { col: 2, row: 3 }, name: "StoneTools Maker",  desc: "Unlocks the StoneTools Maker.",             cost: 380, timeTicks: 24, prereqs: ["unlock_quarry"],     effect: {} },
+    { id: "unlock_oil_maker",       branch: "worker", band: "worker", kind: "unlock", buildingId: "oil_maker",       pos: { col: 3, row: 3 }, name: "Oil Maker",        desc: "Unlocks the Oil Maker (fish → oil).",       cost: 360, timeTicks: 22, prereqs: ["unlock_fishery"],    effect: {} },
     { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
+    // === CC: CITIZEN-band processor unlock nodes ===
+    { id: "unlock_forge",            branch: "burgher", band: "burgher", kind: "unlock", buildingId: "forge",            pos: { col: 1, row: 0 }, name: "Forge",         desc: "Unlocks the Forge (wood + iron → iron tool).",     cost: 500,  timeTicks: 28, prereqs: ["unlock_iron_mine"],                    effect: {} },
+    { id: "unlock_armory",           branch: "burgher", band: "burgher", kind: "unlock", buildingId: "armory",           pos: { col: 2, row: 0 }, name: "Armory",        desc: "Unlocks the Armory (coal + iron → iron armor).",   cost: 700,  timeTicks: 34, prereqs: ["unlock_forge", "unlock_coal_mine"],       effect: {} },
+    { id: "unlock_pottery_workshop", branch: "burgher", band: "burgher", kind: "unlock", buildingId: "pottery_workshop", pos: { col: 3, row: 0 }, name: "Pottery",       desc: "Unlocks the Pottery (clay → pottery).",            cost: 500,  timeTicks: 28, prereqs: ["unlock_clay_pit"],                     effect: {} },
+    { id: "unlock_distillery",       branch: "burgher", band: "burgher", kind: "unlock", buildingId: "distillery",       pos: { col: 1, row: 1 }, name: "Distillery",    desc: "Unlocks the Distillery (mead + pottery → brandy).",cost: 800,  timeTicks: 40, prereqs: ["unlock_brewery", "unlock_pottery_workshop"], effect: {} },
+    { id: "unlock_goldsmith",        branch: "burgher", band: "burgher", kind: "unlock", buildingId: "goldsmith",        pos: { col: 2, row: 1 }, name: "Goldsmith",     desc: "Unlocks the Goldsmith (gold + iron tool → ring).", cost: 900,  timeTicks: 44, prereqs: ["unlock_gold_mine", "unlock_forge"],        effect: {} },
+    { id: "unlock_lamp_maker",       branch: "burgher", band: "burgher", kind: "unlock", buildingId: "lamp_maker",       pos: { col: 3, row: 1 }, name: "Lamp Maker",    desc: "Unlocks the Lamp Maker (oil → lamp).",             cost: 600,  timeTicks: 32, prereqs: ["unlock_oil_maker"],                    effect: {} },
+    { id: "unlock_carpentry",        branch: "burgher", band: "burgher", kind: "unlock", buildingId: "carpentry",        pos: { col: 1, row: 2 }, name: "Carpentry",     desc: "Unlocks Carpentry (planks + oil → chairs).",       cost: 700,  timeTicks: 36, prereqs: ["unlock_oil_maker"],                    effect: {} },
+    { id: "unlock_luxury_tailor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "luxury_tailor",    pos: { col: 2, row: 2 }, name: "Luxury Tailor", desc: "Unlocks the Luxury Tailor (clothes + ring → finery).", cost: 1100, timeTicks: 50, prereqs: ["unlock_tailoring", "unlock_goldsmith"],  effect: {} },
+    // === CC: ARISTOCRAT band — home unlock + capacity ladder ===
+    { id: "unlock_aristocrat_home", branch: "aristocrat", band: "aristocrat", kind: "unlock", buildingId: "aristocrat_home", pos: { col: 0, row: 0 }, name: "Aristocrats Home", desc: "Unlocks the Aristocrats Home.", cost: 1500, timeTicks: 60, prereqs: ["unlock_manor", "unlock_luxury_tailor"], effect: {} },
 
     // ---- Upgrade nodes: one per ladder level (replaces the 4 dev nodes). l2
     // prereq = [] for these startUnlocked buildings; l3/l4 chain from l2/l3. ----
@@ -3338,7 +3544,10 @@ Object.assign(CONFIG, {
     { id: "upg_farm_l3",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 3, pos: { col: 2, row: 0 }, name: "Great Estate",   desc: "Unlocks the Farm level 3 upgrade.",       cost: 400, timeTicks: 22, prereqs: ["upg_farm_l2"],           effect: {} },
     { id: "upg_sawmill_l2",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 2, pos: { col: 4, row: 0 }, name: "Water Wheel",    desc: "Unlocks the Sawmill level 2 upgrade.",    cost: 250, timeTicks: 16, prereqs: [],                        effect: {} },
     { id: "upg_sawmill_l3",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 3, pos: { col: 4, row: 0 }, name: "Great Sawmill",  desc: "Unlocks the Sawmill level 3 upgrade.",    cost: 500, timeTicks: 26, prereqs: ["upg_sawmill_l2"],        effect: {} },
-    // === /RT-A =============================================================
+    // === CC: aristocrat_home ladder upgrade nodes ===
+    { id: "upg_aristocrat_home_l2", branch: "aristocrat", band: "aristocrat", kind: "upgrade", buildingId: "aristocrat_home", level: 2, pos: { col: 0, row: 0 }, name: "Grand Estate",    desc: "Unlocks the Aristocrats Home level 2 upgrade.", cost: 800,  timeTicks: 40, prereqs: ["unlock_aristocrat_home"],   effect: {} },
+    { id: "upg_aristocrat_home_l3", branch: "aristocrat", band: "aristocrat", kind: "upgrade", buildingId: "aristocrat_home", level: 3, pos: { col: 0, row: 0 }, name: "Palatial Estate", desc: "Unlocks the Aristocrats Home level 3 upgrade.", cost: 1500, timeTicks: 60, prereqs: ["upg_aristocrat_home_l2"],   effect: {} },
+    // === /RT-A + /CC =======================================================
   ],
 });
 
@@ -3359,6 +3568,11 @@ const Research = {
       farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
       sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],
       unlock_miner:        ["unlock_iron_mine"],   // === TV2: renamed node ===
+      // === CC: retired building unlock nodes → their functional replacements.
+      // Forge (citizen) replaces the Smelter (iron_tool); Tailoring (worker)
+      // replaces the Weaver (clothes). Old saves keep an equivalent unlock. ===
+      unlock_smelter:      ["unlock_forge"],
+      unlock_weaver:       ["unlock_tailoring"],
     };
     const rawUnlocked = Array.isArray(r.unlocked) ? r.unlocked : [];
     const expanded = [];
@@ -3394,7 +3608,7 @@ const Research = {
   branches() { return ["production", "logistics", "administration"]; },   // RT-A: kingdom side-column branches (dropped development)
   nodesIn(branch) { return Research.all().filter(n => n.branch === branch); },
   // === RT-A: bands API — RT-B renders the tiered tree by band. ===
-  bands() { return ["peasant", "worker", "burgher", "kingdom"]; },
+  bands() { return ["peasant", "worker", "burgher", "aristocrat", "kingdom"]; },   // === CC: 4th pop band ===
   nodesInBand(band) { return Research.all().filter(n => n.band === band); },
   // === /RT-A ===
 
@@ -3584,31 +3798,29 @@ const RESEARCH_MATERIALS = {
   crop_rotation: { wood: 20, stone: 10 },
   deep_veins:    { stone: 25, iron: 15 },   // === TV2: ore → iron ===
   guild_halls:   { planks: 20, stone: 25 },
-  master_crafts: { planks: 30, tools: 20 },
-  industrialize: { tools: 30, furniture: 15 },
+  master_crafts: { planks: 30, iron_tool: 20 },   // === CC: tools → iron_tool ===
+  industrialize: { iron_tool: 30, chairs: 15 },   // === CC: tools/furniture → iron_tool/chairs ===
   // -- logistics branch --
   paved_roads:   { stone: 30, wood: 15 },
   larger_carts:  { planks: 25, wood: 20 },
-  extra_caravan: { planks: 30, tools: 15 },
+  extra_caravan: { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
   warehousing:   { planks: 40, stone: 30 },
-  trade_network: { tools: 30, furniture: 20 },
+  trade_network: { iron_tool: 30, chairs: 20 },   // === CC: tools/furniture → iron_tool/chairs ===
   // -- administration branch --
   tax_ledgers:   { grain: 20, wood: 15 },
-  tariff_office: { cloth: 15, planks: 20 },
-  royal_census:  { bread: 20, cloth: 20 },
-  town_charters: { tools: 20, furniture: 15 },
-  bureaucracy:   { jewelry: 15, furniture: 25 },
+  tariff_office: { clothes: 15, planks: 20 },      // === CC: cloth → clothes ===
+  royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
+  town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
+  bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
   // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },
   unlock_shepherd: { wood: 20, stone: 5 },
   unlock_mill:     { planks: 15, stone: 10 },
-  unlock_smelter:  { planks: 20, stone: 15 },
-  unlock_weaver:   { planks: 15, stone: 10 },
   unlock_cottage:  { planks: 15, stone: 15 },
   unlock_brewery:  { planks: 15, stone: 10 },
-  unlock_bakery:   { planks: 20, tools: 10 },
-  unlock_manor:    { planks: 30, tools: 15 },
+  unlock_bakery:   { planks: 20, iron_tool: 10 },   // === CC: tools → iron_tool ===
+  unlock_manor:    { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
   // === TV2: new worker-band unlock nodes ===
   unlock_iron_mine:  { wood: 20, stone: 10 },
   unlock_clay_pit:   { wood: 15, stone: 10 },
@@ -3627,6 +3839,23 @@ const RESEARCH_MATERIALS = {
   upg_sawmill_l2:    { planks: 10, wood: 15 },
   upg_sawmill_l3:    { planks: 20, stone: 15 },
   // === /RT-A ===============================================
+  // === CC: new worker/citizen/aristocrat unlock + upgrade node materials ===
+  unlock_tailoring:        { planks: 15, stone: 10 },
+  unlock_charcoal_burner:  { wood: 20, stone: 5 },
+  unlock_stonetool_maker:  { planks: 15, stone: 15 },
+  unlock_oil_maker:        { planks: 15, stone: 10 },
+  unlock_forge:            { planks: 20, iron: 15 },
+  unlock_armory:           { iron: 20, coal: 20 },
+  unlock_pottery_workshop: { planks: 20, bricks: 10 },
+  unlock_distillery:       { pottery: 10, planks: 20 },
+  unlock_goldsmith:        { gold: 10, iron_tool: 10 },
+  unlock_lamp_maker:       { oil: 15, planks: 15 },
+  unlock_carpentry:        { planks: 25, oil: 10 },
+  unlock_luxury_tailor:    { clothes: 15, gold_ring: 5 },
+  unlock_aristocrat_home:  { bricks: 30, chairs: 10, gold_ring: 5 },
+  upg_aristocrat_home_l2:  { bricks: 20, chairs: 5 },
+  upg_aristocrat_home_l3:  { bricks: 30, luxury_clothes: 5 },
+  // === /CC ================================================
 };
 for (const _rn of (CONFIG.research || [])) {
   if (!_rn.materials) _rn.materials = RESEARCH_MATERIALS[_rn.id] || {};
@@ -3857,9 +4086,9 @@ Object.assign(CONFIG, {
   quests: [
     { id: "deliver-bread", kind: "deliver", good: "bread", target: 20, reward: { gold: 120, prestige: 1 }, desc: "Deliver 20 Bread to the castle warehouse." },
     { id: "treasury-500",  kind: "treasury", target: 500,               reward: { gold: 0,   prestige: 2 }, desc: "Grow the royal treasury to 500 g." },
-    { id: "deliver-tools", kind: "deliver", good: "tools", target: 15, reward: { gold: 180, prestige: 2 }, desc: "Deliver 15 Tools to the castle warehouse." },
+    { id: "deliver-tools", kind: "deliver", good: "iron_tool", target: 15, reward: { gold: 180, prestige: 2 }, desc: "Deliver 15 Iron Tools to the castle warehouse." },  // === CC: tools→iron_tool ===
     { id: "happy-3",       kind: "happiness", count: 3, target: 80,      reward: { gold: 150, prestige: 2 }, desc: "Keep 3 towns at 80%+ happiness." },
-    { id: "deliver-cloth", kind: "deliver", good: "cloth", target: 18, reward: { gold: 200, prestige: 2 }, desc: "Deliver 18 Cloth to the castle warehouse." },
+    { id: "deliver-cloth", kind: "deliver", good: "clothes", target: 18, reward: { gold: 200, prestige: 2 }, desc: "Deliver 18 Clothes to the castle warehouse." },  // === CC: cloth→clothes ===
     { id: "treasury-1500", kind: "treasury", target: 1500,             reward: { gold: 0,   prestige: 3 }, desc: "Grow the royal treasury to 1500 g." },
   ],
 });
@@ -3885,7 +4114,7 @@ Object.assign(CONFIG.castle, {
 var Town = (typeof Town !== "undefined" && Town) || {};
 Town.popTotal = function (town) {
   const p = (town && town.pop) || {};
-  return (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0);
+  return (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);   // === CC ===
 };
 Town.upgradeReq = function (town) {
   const next = ((town && town.level) || 1) + 1;
@@ -5599,6 +5828,10 @@ var CastleMarket = (function () {
     //   building typeId "miner" → "iron_mine";  good id "ore" → "iron".
     // Runs last, once every collection (towns/carts/warehouse/castle*) is restored.
     TV2_migrateData(state);
+    // === CC: rename retired/renamed goods (beer→mead, tools→iron_tool, jewelry→
+    // gold_ring, furniture→chairs, cloth→clothes) + weaver→tailoring across the
+    // loaded save. Pure helper (PURE_CORE) so migration tests can drive it. ===
+    Sim.CC_migrateGoods(state);
     terrainDirty = true;
     return true;
   }
@@ -5773,7 +6006,7 @@ var CastleMarket = (function () {
       gold: 1000,
       // EC-A/EC-B: a city starts with ZERO population — houses + happiness grow it
       // (Sim.tick, owned by EC-B). No auto-seeded buildings: center only.
-      pop: { peasants: 0, workers: 0, burghers: 0 },
+      pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 },   // === CC: 4th tier ===
       stock: { ...CONFIG.town.startStock },
       prices: {},
       buildings: [],
@@ -5793,7 +6026,7 @@ var CastleMarket = (function () {
     if (t.id == null) t.id = nextTownId();
     if (t.level == null) t.level = 1;
     if (t.gold == null) t.gold = 1000;   // EC-A: trade budget
-    if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0 };
+    if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===
     if (!t.stock) t.stock = { ...CONFIG.town.startStock };
     if (!t.prices) t.prices = {};
     // TI-C: no more auto-seed. A bare {q,r} marker (old Phase-1 save) starts with
@@ -5824,9 +6057,11 @@ var CastleMarket = (function () {
   // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
   const GOOD_ICON = {
     wood: "🪵", stone: "🪨", iron: "🔩", clay: "🟫", grain: "🌾", potato: "🥔",
-    fish: "🐟", wool: "🧶", planks: "🪚", tools: "🔨", flour: "🌸",
-    beer: "🍺", cloth: "🧵", coal: "⬛", gold: "🪙", bricks: "🧱",
-    bread: "🍞", clothes: "👕", jewelry: "💍", furniture: "🪑",
+    fish: "🐟", wool: "🧶", planks: "🪚", flour: "🌸", coal: "⬛", gold: "🪙", bricks: "🧱",
+    // === CC: content chains v2 icons ===
+    iron_tool: "🔨", mead: "🍺", clothes: "👕", stone_tools: "⚒️", oil: "🛢️",
+    bread: "🍞", pottery: "🏺", lamp: "🪔", iron_armor: "🛡️", chairs: "🪑",
+    gold_ring: "💍", brandy: "🥃", luxury_clothes: "👗",
   };
   const goodIcon = id => GOOD_ICON[id] || "📦";
   // === /ICONS ===
@@ -5851,18 +6086,23 @@ var CastleMarket = (function () {
 
   const escAttr = s => esc(s).replace(/"/g, "&quot;");
   const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1);
-  const PP_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+  const PP_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };  // === CC ===
   // Burgher DISPLAYS as "Citizen" everywhere (RT-B rename).
   const PP_TIERS = [
-    { key: "peasants", tier: "peasant", label: "Peasant", glyph: "🧑‍🌾", color: "#8bc34a" },
-    { key: "workers",  tier: "worker",  label: "Worker",  glyph: "🔨",   color: "#ff9800" },
-    { key: "burghers", tier: "burgher", label: "Citizen", glyph: "🎩",   color: "#9c88ff" },
+    { key: "peasants",    tier: "peasant",    label: "Peasant",    glyph: "🧑‍🌾", color: "#8bc34a" },
+    { key: "workers",     tier: "worker",     label: "Worker",     glyph: "🔨",   color: "#ff9800" },
+    { key: "burghers",    tier: "burgher",    label: "Citizen",    glyph: "🎩",   color: "#9c88ff" },
+    { key: "aristocrats", tier: "aristocrat", label: "Aristocrat", glyph: "👑",   color: "#d16bd1" },  // === CC ===
   ];
   // Per-building glyphs (same set the RT-B tech tree uses — that map lives in a
   // later closure, so keep a local copy).
   const PP_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
-    quarry: "⛏️", fishery: "🎣", miner: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥",
-    weaver: "🧵", cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️" };
+    quarry: "⛏️", fishery: "🎣", miner: "⚒️", shepherd: "🐑", mill: "🌀",
+    cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️", brickworks: "🧱",
+    // === CC ===
+    tailoring: "🧵", charcoal_burner: "🪮", stonetool_maker: "⚒️", oil_maker: "🛢️",
+    forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
+    lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
   const ppGlyph = id => PP_GLYPH[id] || "🏚";
 
   // Live external traders this city owns (buyer-side carts on the road).
@@ -5876,7 +6116,7 @@ var CastleMarket = (function () {
   // Per-tier jobs: filled / total EFFECTIVE slots (workerSlots + upgrade slotPlus
   // − closedSlots) over BUILT producer buildings — mirrors Sim's staffing rule.
   function ppTierJobs(t) {
-    const out = { peasants: { filled: 0, total: 0 }, workers: { filled: 0, total: 0 }, burghers: { filled: 0, total: 0 } };
+    const out = { peasants: { filled: 0, total: 0 }, workers: { filled: 0, total: 0 }, burghers: { filled: 0, total: 0 }, aristocrats: { filled: 0, total: 0 } };  // === CC ===
     for (const b of (t.buildings || [])) {
       if (!b || b.built === false) continue;
       const def = CONFIG.buildings[b.typeId];
@@ -5961,7 +6201,7 @@ var CastleMarket = (function () {
   // ---- Tab 1: Overview --------------------------------------------------------
   function renderPPOverview(t) {
     const housing = (Buildings.housingCapacity ? Buildings.housingCapacity(t, state)
-                                               : { peasants: 0, workers: 0, burghers: 0 });
+                                               : { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 });
     const jobs = ppTierJobs(t);
     let html = `<div class="tp-sec">Population</div>`;
     for (const ti of PP_TIERS) {
@@ -6171,7 +6411,7 @@ var CastleMarket = (function () {
     if (!bs.length)
       return `<div class="tp-empty">No buildings yet — place some from the build bar at the bottom of the screen.</div>`;
     const housing = (Buildings.housingCapacity ? Buildings.housingCapacity(t, state)
-                                               : { peasants: 0, workers: 0, burghers: 0 });
+                                               : { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 });
     let html = "";
     for (const ti of PP_TIERS) {
       const houses = [], works = [];
@@ -6318,10 +6558,11 @@ var CastleMarket = (function () {
   // BAL: categories are ALWAYS open — availability is now per-building (startUnlocked
   // / unlockedBy), shown as a locked item inside the flyout, not a whole-category gate.
   const BUILD_CATEGORIES = [
-    { id: "build",   icon: "🏗", label: "Build",   kind: "special" },
-    { id: "peasant", icon: "🌾", label: "Peasant", kind: "tier", tier: "peasant" },
-    { id: "worker",  icon: "🔨", label: "Worker",  kind: "tier", tier: "worker"  },
-    { id: "burgher", icon: "👑", label: "Citizen", kind: "tier", tier: "burgher" },
+    { id: "build",      icon: "🏗", label: "Build",      kind: "special" },
+    { id: "peasant",    icon: "🌾", label: "Peasant",    kind: "tier", tier: "peasant" },
+    { id: "worker",     icon: "🔨", label: "Worker",     kind: "tier", tier: "worker"  },
+    { id: "burgher",    icon: "🎩", label: "Citizen",    kind: "tier", tier: "burgher" },
+    { id: "aristocrat", icon: "👑", label: "Aristocrat", kind: "tier", tier: "aristocrat" },  // === CC: shown once aristocrat_home unlocks ===
   ];
   // BAL: per-building availability. A building is available iff it is a starter
   // (startUnlocked) or its unlockedBy research node has been unlocked.
@@ -6877,9 +7118,9 @@ var CastleMarket = (function () {
   // === PP-D === house-view helpers (UI only — reads Sim/Buildings, mutates nothing).
   // Everything is guarded: legacy states without tierHappiness/tierIncome/pop, or
   // missing Sim/Buildings helpers, fall back to sensible defaults and never throw.
-  const PPD_TIER_LABEL = { peasant: "Peasant", worker: "Worker", burgher: "Citizen" };
-  const PPD_TIER_GLYPH = { peasant: "🧑‍🌾", worker: "👷", burgher: "🎩" };
-  const PPD_TIER_KEY   = { peasant: "peasants", worker: "workers", burgher: "burghers" };
+  const PPD_TIER_LABEL = { peasant: "Peasant", worker: "Worker", burgher: "Citizen", aristocrat: "Aristocrat" };  // === CC ===
+  const PPD_TIER_GLYPH = { peasant: "🧑‍🌾", worker: "👷", burgher: "🎩", aristocrat: "👑" };
+  const PPD_TIER_KEY   = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
 
   // Effective capacity = base houseCapacity + upgrade capacityPlus (RU-A ladder).
   function ppdHouseCapacity(b, def) {
@@ -6944,7 +7185,9 @@ var CastleMarket = (function () {
   function renderHouseBody(town, b, def) {
     const N = CONFIG.needs || {};
     const key = PPD_TIER_KEY[def.houseTier];
-    const rates = (key && N.perCapita && N.perCapita[key]) || {};
+    // === CC: per-tier needs — rates + basic/extra lists come from N.tiers[key]. ===
+    const spec = (key && N.tiers && N.tiers[key]) || { basic: [], extra: [], perCapita: {} };
+    const rates = spec.perCapita || {};
     const tierPop = (key && town.pop && town.pop[key]) || 0;
     const cap = ppdHouseCapacity(b, def);
     const occN = Math.max(0, Math.min(cap, Math.round(ppdOccupants(town, b, def))));
@@ -6960,9 +7203,9 @@ var CastleMarket = (function () {
     if (occN <= 0)
       out += `<div class="tp-hint2">No residents yet — meet basic needs to attract settlers.</div>`;
 
-    // 2. needs rings (only goods this tier actually consumes).
-    out += ppdNeedsRow("Basic Needs", N.basicNeeds, rates, town, tierPop);
-    out += ppdNeedsRow("Luxury Needs", N.extraNeeds, rates, town, tierPop);
+    // 2. needs rings (per-tier basic/luxury lists — only goods this tier consumes).
+    out += ppdNeedsRow("Basic Needs", spec.basic, rates, town, tierPop);
+    out += ppdNeedsRow("Luxury Needs", spec.extra, rates, town, tierPop);
 
     // 3. income: this house's capacity share of the tier's people-tax (PP-A).
     let inc = 0;
@@ -7062,8 +7305,11 @@ var CastleMarket = (function () {
     wood: "#8a5a2b", planks: "#b07a3c", stone: "#9aa0a6", iron: "#6b7078",
     clay: "#c07b4a", bricks: "#b5542f", coal: "#2f2e30", gold: "#e6c93f",
     grain: "#d9b44a", flour: "#e8d59a", fish: "#5aa6c9", wool: "#e2ddce",
-    bread: "#c8863c", beer: "#c9902c", cloth: "#7a9bd4", clothes: "#5566c0",
-    tools: "#aab0b6", jewelry: "#f0d97a", furniture: "#a56a38",
+    bread: "#c8863c", clothes: "#5566c0",
+    // === CC: content chains v2 token colours ===
+    mead: "#c9902c", iron_tool: "#aab0b6", stone_tools: "#8f969c", oil: "#3a3a2a",
+    pottery: "#b5713e", lamp: "#f0c24a", iron_armor: "#8a9099", chairs: "#a56a38",
+    gold_ring: "#f0d97a", brandy: "#8a4b2a", luxury_clothes: "#b06cc0",
   };
   function goodColor(id) {
     if (GOOD_COLORS[id]) return GOOD_COLORS[id];
@@ -7840,7 +8086,7 @@ var CastleMarket = (function () {
       if (isNeed) {
         for (const t of towns) {
           const p = t.pop || {};
-          if (((p.peasants || 0) + (p.workers || 0) + (p.burghers || 0)) > 0) consumers++;
+          if (((p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0)) > 0) consumers++;  // === CC ===
         }
       }
       return { producers, consumers };
@@ -8124,9 +8370,9 @@ var CastleMarket = (function () {
   const TT_KINGDOM_END     = TT_KINGDOM_X0 + TT_KINGDOM_COLS * TT.CELL_W;
   const TT_POP_LABEL_X     = TT_KINGDOM_END + TT.GAP;
   const TT_POP_X0          = TT_POP_LABEL_X + TT.BAND_LABEL_W;
-  const TT_POP_BANDS       = ["peasant", "worker", "burgher"];         // bottom → top
-  const TT_BAND_TINT       = { peasant: "tt-band-peasant", worker: "tt-band-worker", burgher: "tt-band-citizen", kingdom: "tt-band-kingdom" };
-  const TT_BAND_LABEL      = { peasant: "Peasants", worker: "Workers", burgher: "Citizens", kingdom: "Kingdom" };
+  const TT_POP_BANDS       = ["peasant", "worker", "burgher", "aristocrat"];   // === CC: bottom → top (aristocrat on top) ===
+  const TT_BAND_TINT       = { peasant: "tt-band-peasant", worker: "tt-band-worker", burgher: "tt-band-citizen", aristocrat: "tt-band-aristocrat", kingdom: "tt-band-kingdom" };
+  const TT_BAND_LABEL      = { peasant: "Peasants", worker: "Workers", burgher: "Citizens", aristocrat: "Aristocrats", kingdom: "Kingdom" };
   // The 5 startUnlocked buildings have no unlock node — synthesize anchor cards so
   // their upgrade pips have a home and the full starter row shows (like the ref).
   // === TV2: farm dropped from starters — it now has a real unlock_farm node ===
@@ -8137,9 +8383,13 @@ var CastleMarket = (function () {
     { id: "anchor_sawmill",     buildingId: "sawmill",     band: "peasant", pos: { col: 4, row: 0 }, name: "Sawmill" },
   ];
   const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
-    quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀", smelter: "🔥", weaver: "🧵",
+    quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀",
     clay_pit: "🟫", coal_mine: "⬛", gold_mine: "🪙", brickworks: "🧱",
-    cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️" };
+    cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️",
+    // === CC ===
+    tailoring: "🧵", charcoal_burner: "🪮", stonetool_maker: "⚒️", oil_maker: "🛢️",
+    forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
+    lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
   const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
   const TT_ROMAN = { 2: "II", 3: "III", 4: "IV" };
 
@@ -8580,12 +8830,14 @@ var CastleMarket = (function () {
     const out = [];
     if (!t || !t.pop) return out;
     const pop = t.pop;
-    const total = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0);
+    const total = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0) + (pop.aristocrats || 0);  // === CC ===
     const stock = t.stock || {};
-    // 1. food shortage — less than ~4 ticks of BASIC-food (potato) buffer
-    if (total > 0 && N && N.perCapita && N.perCapita.peasants) {
+    // 1. food shortage — less than ~4 ticks of the peasant staple (potato) buffer.
+    // === CC: peasant per-capita lives under N.tiers.peasants.perCapita now. ===
+    const peaRates = N && N.tiers && N.tiers.peasants && N.tiers.peasants.perCapita;
+    if (total > 0 && peaRates) {
       const potato = stock.potato || 0;
-      const perTick = (N.perCapita.peasants.potato || 0) * total;
+      const perTick = (peaRates.potato || 0) * total;
       if (perTick > 0 && potato < perTick * 4) out.push("🍽");
     }
     // 2. idle producer — a building with worker slots but no assigned labour
@@ -8652,16 +8904,17 @@ var CastleMarket = (function () {
     const peasants = Math.round(pop.peasants || 0);
     const workers = Math.round(pop.workers || 0);
     const burghers = Math.round(pop.burghers || 0);
+    const aristocrats = Math.round(pop.aristocrats || 0);   // === CC ===
     const ex = biggestExtremes(t);
     return { name: "Town #" + t.id, id: t.id, level: t.level || 1,
-      peasants, workers, burghers, total: peasants + workers + burghers,
+      peasants, workers, burghers, aristocrats, total: peasants + workers + burghers + aristocrats,
       happiness: Math.round(t.happiness || 0), gold: Math.round(t.gold || 0),
       surplus: ex.surplus, shortage: ex.shortage };
   }
 
   const KW_COLS = [
     ["name", "Town"], ["level", "Lv"], ["peasants", "Peas."], ["workers", "Work."],
-    ["burghers", "Citiz."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
+    ["burghers", "Citiz."], ["aristocrats", "Arist."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
     ["surplus", "Top surplus"], ["shortage", "Top shortage"],
   ];
 
@@ -8681,7 +8934,7 @@ var CastleMarket = (function () {
       `<th data-sort="${c[0]}">${c[1]}${kwSort.key === c[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
     const trs = rows.map(r => `<tr>
       <td>${esc(r.name)}</td><td>${r.level}</td>
-      <td>${Math.round(r.peasants)}</td><td>${Math.round(r.workers)}</td><td>${Math.round(r.burghers)}</td><td>${Math.round(r.total)}</td>
+      <td>${Math.round(r.peasants)}</td><td>${Math.round(r.workers)}</td><td>${Math.round(r.burghers)}</td><td>${Math.round(r.aristocrats)}</td><td>${Math.round(r.total)}</td>
       <td>${r.happiness}%</td><td>${fmt(r.gold)}g</td>
       <td class="kw-good up">${esc(goodLabel(r.surplus))}</td>
       <td class="kw-good down">${esc(goodLabel(r.shortage))}</td></tr>`).join("");
@@ -9136,7 +9389,7 @@ var CastleMarket = (function () {
     const rmq = window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
     const reduced = () => !!(rmq && rmq.matches);
-    const TIER_LABEL = { peasants: "Peasants", workers: "Workers", burghers: "Citizens" };
+    const TIER_LABEL = { peasants: "Peasants", workers: "Workers", burghers: "Citizens", aristocrats: "Aristocrats" };  // === CC ===
 
     // ---- feel constants (render-only; not economy balance) ----
     const BUBBLE_LIFE = 4000;      // ms a bubble stays up
