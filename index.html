@@ -3848,7 +3848,14 @@ const RESEARCH_MATERIALS = {
   unlock_cottage:  { planks: 15, stone: 15 },
   unlock_brewery:  { planks: 15, stone: 10 },
   unlock_bakery:   { planks: 20, stone: 10 },   // === BALPW: was {planks:20, iron_tool:10} — bread is a WORKER luxury but iron_tool is a BURGHER-tier good, so the worker food chain was gated behind burgher production and bread was NEVER produced. Re-tier the materials to the worker band (planks+stone, matching unlock_mill/brewery). ===
-  unlock_manor:    { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
+  // === BALCA: was {planks:30, iron_tool:15}. iron_tool is a BURGHER-produced good
+  // (forge is burgher-staffed), but the MANOR is the sole gateway to burgher HOUSING
+  // — with no manor there are no burghers, so nobody can staff a forge to make the
+  // iron_tool this node demands: a hard citizen-tier bootstrap deadlock (the bakery
+  // bug, one tier up). Burghers never appeared in 60k-tick playthroughs. Re-tier the
+  // materials to the WORKER band (bricks, made by the worker-staffed brickworks),
+  // matching the manor's own build cost which already lists bricks. ===
+  unlock_manor:    { planks: 30, bricks: 15 },   // === BALCA: iron_tool → bricks (un-deadlock burgher housing) ===
   // === TV2: new worker-band unlock nodes ===
   unlock_iron_mine:  { wood: 20, stone: 10 },
   unlock_clay_pit:   { wood: 15, stone: 10 },

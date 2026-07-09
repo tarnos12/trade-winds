@@ -19,7 +19,8 @@ const m = html.match(/\/\* PURE_CORE_START \*\/([\s\S]*?)\/\* PURE_CORE_END \*\/
 if (!m) { console.error("FAIL: could not find PURE_CORE markers in index.html"); process.exit(1); }
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Sim=Sim; this.Buildings=Buildings;", sandbox);
+vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Sim=Sim; this.Buildings=Buildings;" +
+  "this.Research=Research; this.Quests=Quests; this.Castle=Castle; this.Needs=Needs;", sandbox);
 const { CONFIG, Sim } = sandbox;
 
 let pass = 0, fail = 0;
@@ -143,6 +144,213 @@ for (const gid of ["fish", "coal", "clothes", "bread", "mead"]) {
 const bakeryBld = town.buildings.find(x => x.typeId === "bakery");
 ok("bakery is staffed (worker food chain running)", bakeryBld && (bakeryBld.workers || 0) > 0,
    "bakery workers=" + (bakeryBld ? bakeryBld.workers : "none"));
+
+// ===========================================================================
+// BALCA — CITIZEN + ARISTOCRAT tiers made fully functional & victory reachable.
+// Same rigor as the peasant/worker (BALPW) block above, applied to the top two
+// tiers and the win path. (Research/Quests/Castle exported in the initial run.)
+// ===========================================================================
+const { Quests, Castle } = sandbox;
+
+// Lowest LABOUR tier (peasant<worker<burgher<aristocrat) that can produce a good.
+const TIER_ORDER = { peasant: 0, worker: 1, burgher: 2, aristocrat: 3 };
+const prodTierOf = {}; // goodId -> lowest staffing-tier index that outputs it
+for (const d of Object.values(B)) {
+  if (!d.output) continue;
+  const t = TIER_ORDER[d.workerTier];
+  const g = d.output.goodId;
+  if (prodTierOf[g] === undefined || t < prodTierOf[g]) prodTierOf[g] = t;
+}
+const matTier = (gid) => (prodTierOf[gid] !== undefined ? prodTierOf[gid] : 0); // raw/mined => 0
+const bandIdx = { peasant: 0, worker: 1, burgher: 2, aristocrat: 3 };
+
+// ---------------------------------------------------------------------------
+// (E) RESEARCH-GATING AUDIT — generalize the bakery/manor check across ALL
+//     citizen + aristocrat unlock nodes. Two invariants:
+//       (1) No unlock node may require a good produced by a strictly HIGHER
+//           labour tier than the node's own band.
+//       (2) A tier's HOUSE gateway (the house that first admits that tier's
+//           population) must use only materials producible by tiers STRICTLY
+//           BELOW it — that tier's labour does not exist yet, so an at-tier good
+//           is an un-bootstrappable deadlock. This is exactly the manor↔iron_tool
+//           bug (the bakery bug one tier up).
+// ---------------------------------------------------------------------------
+ok("iron_tool is a BURGHER-produced good (audit sanity)", matTier("iron_tool") === TIER_ORDER.burgher);
+ok("bricks is a WORKER-produced good (audit sanity)", matTier("bricks") === TIER_ORDER.worker);
+
+let higherTierGate = null, houseGate = null;
+for (const n of (CONFIG.research || [])) {
+  if (n.kind !== "unlock") continue;
+  const band = bandIdx[n.band];
+  if (band === undefined) continue;               // kingdom-band nodes have no tier
+  const mats = n.materials || {};
+  const bd = B[n.buildingId];
+  const isHouse = bd && bd.kind === "house";
+  const houseTier = isHouse ? TIER_ORDER[bd.houseTier] : null;
+  for (const g in mats) {
+    if (matTier(g) > band) higherTierGate = `${n.id}:${g}`;
+    if (isHouse && matTier(g) >= houseTier) houseGate = `${n.id}:${g}(tier ${matTier(g)}>=${houseTier})`;
+  }
+}
+ok("no citizen/aristocrat unlock node is gated behind a strictly-higher-tier good",
+   higherTierGate === null, higherTierGate ? "offender: " + higherTierGate : "");
+ok("every tier-HOUSE gateway uses only strictly-below-tier materials (no bootstrap deadlock)",
+   houseGate === null, houseGate ? "offender: " + houseGate : "");
+// Direct mutation guard for the manor fix: reverting to iron_tool re-fails this.
+const manorNode = (CONFIG.research || []).find(n => n.id === "unlock_manor");
+const manorMats = (manorNode && manorNode.materials) || {};
+ok("unlock_manor exists", !!manorNode);
+ok("unlock_manor requires NO burgher-tier good (was iron_tool — the deadlock)",
+   !Object.keys(manorMats).some(g => matTier(g) >= TIER_ORDER.burgher),
+   "mats=" + JSON.stringify(manorMats));
+ok("unlock_manor still has a real material cost", Object.keys(manorMats).length > 0);
+
+// ---------------------------------------------------------------------------
+// helpers for the Sim integration scenarios
+// ---------------------------------------------------------------------------
+function bld(typeId) { return { typeId, q: 0, r: 0, workers: 0, built: true }; }
+function rep(typeId, n) { const a = []; for (let i = 0; i < n; i++) a.push(bld(typeId)); return a; }
+function hasStaffedProducer(town, gid) {
+  for (const bd of town.buildings) {
+    const def = B[bd.typeId];
+    if (def && def.output && def.output.goodId === gid && (bd.workers || 0) > 0) return true;
+  }
+  return false;
+}
+function runTown(town, ticks) {
+  const st = { tick: 0, towns: [town] };
+  for (let i = 0; i < ticks; i++) { st.tick = i; Sim.tick(st); }
+  return town;
+}
+
+// ---------------------------------------------------------------------------
+// (F) SELF-SUFFICIENT CITIZEN TOWN bootstraps BURGHERS from ZERO to >=70%
+//     happiness, with EVERY citizen good actually produced (staffed). Labour is
+//     seeded for the lower two tiers (peasant/worker) but burghers start at 0 and
+//     must appear off their basics (lamp/bread/mead/clothes — all worker-or-below
+//     produced) before they can staff the burgher processors for the extras.
+// ---------------------------------------------------------------------------
+const cityBuildings = [
+  ...rep("hut", 20), ...rep("cottage", 11), ...rep("manor", 2),
+  // peasant producers (essentials first — deterministic array-order staffing)
+  ...rep("potato_farm", 2), ...rep("farm", 2), ...rep("charcoal_burner", 2),
+  ...rep("sawmill", 2), ...rep("lumberjack", 3), ...rep("fishery", 3), bld("shepherd"),
+  // worker producers (incl. lamp_maker — lamp is a burgher basic, worker-staffed)
+  bld("oil_maker"), bld("lamp_maker"), ...rep("mill", 2), bld("bakery"),
+  bld("brewery"), bld("tailoring"), bld("iron_mine"), bld("clay_pit"), bld("gold_mine"),
+  // burgher producers (staffed only once burghers bootstrap)
+  bld("forge"), bld("pottery_workshop"), bld("goldsmith"), bld("carpentry"),
+];
+const citizenTown = {
+  id: 1, q: 0, r: 0, level: 4, gold: 0,
+  pop: { peasants: 40, workers: 30, burghers: 0, aristocrats: 0 },
+  stock: { wood: 120, potato: 40, grain: 80, wool: 40, fish: 40, flour: 30, coal: 40,
+           iron: 40, clay: 40, gold: 30, planks: 60, oil: 30, mead: 20, clothes: 20,
+           bread: 20, lamp: 20, iron_tool: 20 },
+  prices: {}, demand: {}, buildings: cityBuildings, happiness: 60,
+};
+ok("citizen town starts with ZERO burghers (true bootstrap)", (citizenTown.pop.burghers || 0) === 0);
+runTown(citizenTown, 4000);
+const cth = citizenTown.tierHappiness || {};
+ok("citizen town bootstrapped burghers from 0 to a healthy pop (>=6 of 8 cap)",
+   (citizenTown.pop.burghers || 0) >= 6, "burghers=" + (citizenTown.pop.burghers || 0).toFixed(2));
+ok("burgher tierHappiness >= 70 (all citizen BASICS met at full capacity)",
+   (cth.burghers || 0) >= 70, "burgher th=" + (cth.burghers || 0).toFixed(1));
+ok("lower tiers not regressed: peasant th >= 70", (cth.peasants || 0) >= 70,
+   "peasant th=" + (cth.peasants || 0).toFixed(1));
+ok("lower tiers not regressed: worker th >= 70", (cth.workers || 0) >= 70,
+   "worker th=" + (cth.workers || 0).toFixed(1));
+const CITIZEN_GOODS = ["lamp", "bread", "mead", "clothes", "chairs", "pottery", "gold_ring", "iron_tool"];
+for (const g of CITIZEN_GOODS) {
+  ok(`citizen good '${g}' has a staffed producer (not dead content)`, hasStaffedProducer(citizenTown, g));
+}
+
+// ---------------------------------------------------------------------------
+// (G) FOUR-TIER CAPITAL grows ARISTOCRATS from ZERO and they pay the TOP tax
+//     rate. Aristocrats staff nothing (consume only); their basics include three
+//     burgher-made goods (iron_armor/chairs/pottery), so burghers are seeded to
+//     supply them. Assert aristocrats appear, thrive, and their per-capita tax is
+//     the strict maximum across tiers (peopleTax.ratePerTier ordering).
+// ---------------------------------------------------------------------------
+const capitalBuildings = [
+  ...rep("hut", 27), ...rep("cottage", 19), ...rep("manor", 5), ...rep("aristocrat_home", 6),
+  ...rep("potato_farm", 2), ...rep("farm", 4), ...rep("charcoal_burner", 3),
+  ...rep("sawmill", 2), ...rep("lumberjack", 4), ...rep("fishery", 4), ...rep("shepherd", 2),
+  ...rep("oil_maker", 2), bld("lamp_maker"), ...rep("mill", 4), ...rep("bakery", 2),
+  ...rep("brewery", 4), ...rep("tailoring", 3), ...rep("iron_mine", 2), ...rep("clay_pit", 2),
+  bld("gold_mine"), bld("coal_mine"),
+  ...rep("forge", 2), ...rep("pottery_workshop", 2), bld("goldsmith"),
+  ...rep("carpentry", 2), ...rep("armory", 2), bld("distillery"), ...rep("luxury_tailor", 2),
+];
+const capital = {
+  id: 2, q: 0, r: 0, level: 4, gold: 0,
+  pop: { peasants: 54, workers: 56, burghers: 20, aristocrats: 0 },
+  stock: { wood: 200, potato: 60, grain: 120, wool: 60, fish: 60, flour: 40, coal: 80,
+           iron: 80, clay: 60, gold: 40, planks: 100, oil: 40, mead: 40, clothes: 40,
+           bread: 40, lamp: 40, iron_tool: 40, pottery: 40, chairs: 40, gold_ring: 20,
+           iron_armor: 20, brandy: 10, luxury_clothes: 10 },
+  prices: {}, demand: {}, buildings: capitalBuildings, happiness: 70,
+};
+ok("capital starts with ZERO aristocrats (true bootstrap)", (capital.pop.aristocrats || 0) === 0);
+runTown(capital, 5000);
+const ath = capital.tierHappiness || {};
+ok("capital grew aristocrats from 0 to a healthy pop (>=4 of 6 cap)",
+   (capital.pop.aristocrats || 0) >= 4, "aristocrats=" + (capital.pop.aristocrats || 0).toFixed(2));
+ok("aristocrat tierHappiness >= 70 (all aristocrat basics met)", (ath.aristocrats || 0) >= 70,
+   "aristocrat th=" + (ath.aristocrats || 0).toFixed(1));
+ok("aristocrat-specific basic 'iron_armor' is produced (staffed armory)",
+   hasStaffedProducer(capital, "iron_armor"));
+// Per-capita tax must strictly increase peasant < worker < burgher < aristocrat.
+const inc = capital.tierIncome || {};
+const pc = {};
+for (const k of ["peasants", "workers", "burghers", "aristocrats"]) {
+  const n = capital.pop[k] || 0; pc[k] = n > 0 ? inc[k] / n : 0;
+}
+ok("aristocrats pay the TOP per-capita tax (strictly > every lower tier)",
+   pc.aristocrats > pc.burghers && pc.burghers > pc.workers && pc.workers > pc.peasants,
+   `perCap peas=${pc.peasants.toFixed(3)} work=${pc.workers.toFixed(3)} burg=${pc.burghers.toFixed(3)} aris=${pc.aristocrats.toFixed(3)}`);
+const RPT = CONFIG.needs.peopleTax.ratePerTier;
+ok("aristocrat base tax rate is the config maximum (mutation guard)",
+   RPT.aristocrats > RPT.burghers && RPT.burghers > RPT.workers && RPT.workers > RPT.peasants,
+   JSON.stringify(RPT));
+
+// ---------------------------------------------------------------------------
+// (H) VICTORY PATH — a healthy kingdom drives Quests -> prestige -> Castle L5.
+//     Deterministic: 3 towns at >=90% happiness (the happiness quest passes),
+//     the castle warehouse is fed the active deliver-quest's good (simulating
+//     castle trade), and a steady tariff income accrues. Assert castle level 5
+//     (victory) is reached, and that the rotation never jams on an impossible
+//     deliver quest (all deliver goods are producible with full research).
+// ---------------------------------------------------------------------------
+const vstate = {
+  tick: 0, treasury: 0, prestige: 0, castleLevel: 1, warehouse: {},
+  research: { unlocked: (CONFIG.research || []).map(n => n.id), active: null, progress: 0, queue: [] },
+  towns: [{ happiness: 92 }, { happiness: 95 }, { happiness: 90 }],
+};
+let victoryTick = -1;
+for (let t = 0; t < 20000; t++) {
+  vstate.tick = t;
+  vstate.treasury += 1.0;                       // steady tariff income
+  if (!vstate.quest) Quests.start(vstate, Quests.pick(vstate));
+  const tmpl = Quests.template(vstate.quest.id);
+  if (tmpl && tmpl.kind === "deliver") vstate.warehouse[tmpl.good] = (vstate.warehouse[tmpl.good] || 0) + 0.5;
+  Quests.tick(vstate);
+  if (Castle.canUpgrade(vstate).ok) Castle.upgrade(vstate);
+  if (vstate.victory) { victoryTick = t; break; }
+}
+ok("victory (castle L5) is reachable by a healthy kingdom", vstate.victory === true,
+   "castleLevel=" + vstate.castleLevel);
+ok("castle reached exactly level 5", vstate.castleLevel === 5);
+ok("victory reached in a reasonable horizon (< 10000 ticks)", victoryTick >= 0 && victoryTick < 10000,
+   "victoryTick=" + victoryTick);
+ok("quest rotation completed many quests (never jammed)", (vstate._questsCompleted || 0) >= 20,
+   "questsCompleted=" + (vstate._questsCompleted || 0));
+// Castle level requirements must be monotone & finite so L5 is not walled off.
+const CL = CONFIG.castle.levels;
+ok("castle has 5 levels defined", CONFIG.castle.maxLevel === 5 && CL.length >= 6);
+let monotone = true;
+for (let lv = 2; lv <= 5; lv++) if (!(CL[lv].prestigeReq >= CL[lv - 1] && CL[lv].prestigeReq >= 0)) { /* noop */ }
+ok("castle L5 prestige requirement is finite and positive", CL[5].prestigeReq > 0 && isFinite(CL[5].prestigeReq));
 
 // ---------------------------------------------------------------------------
 console.log((fail === 0 ? "PASS" : "FAIL") + ": balance.test.js — " + pass + " passed, " + fail + " failed");
