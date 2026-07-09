@@ -8717,6 +8717,9 @@ var CastleMarket = (function () {
     techTreeEl.setAttribute("aria-hidden", "true");
     btnResearch.classList.remove("active");
     ttHideTip();
+    // Research completed in-tree may have unlocked build categories/buildings —
+    // refresh the bar now rather than on the next bar interaction.
+    if (window.TownUI && TownUI.refreshCatButtons) TownUI.refreshCatButtons();
   }
   function toggleTechTree() { techOpen ? closeTechTree() : openTechTree(); }
 
@@ -10025,8 +10028,16 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.16.0";
+  const GAME_VERSION = "0.17.0";
   const PATCH_NOTES = [
+    { v: "0.17.0", notes: [
+      "12 new buildings: Tailoring, Charcoal Burning, StoneTools & Oil Makers, Pottery, Distillery, Goldsmith, Lamp Maker, Forge, Armory, Carpentry, Luxury Tailor",
+      "New goods & chains up to T3: mead, oil, pottery, brandy, iron tools, gold rings, lamps, iron armor, chairs, luxury clothes",
+      "Every class now has its own needs: Workers want fish+coal, Citizens want lamps+bread+mead+clothing, and…",
+      "ARISTOCRATS arrive: the end-game class — they make nothing, consume the finest goods, and pay the most tax",
+      "Happiness rework: 70% fills your homes; every point above pays extra gold. Higher classes pay more",
+      "Old saves migrate automatically (beer→mead, tools→iron tools, jewelry→gold rings, furniture→chairs)",
+    ] },
     { v: "0.16.0", notes: [
       "NEW WORLD: Barren/Desert/Fertile ground, resource deposits (stone, clay, iron, gold, coal), fish shoals, snow & mountain ridges",
       "Map PRESETS at game start: Oasis / Fertile Land / Big World — terrain clumps, rarer resources further out",

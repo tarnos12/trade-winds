@@ -148,7 +148,7 @@ parallel with PP-B..E after PP-A merges (TV2 = pure core on live tree, PP UI in
 worktrees). Slices: TV2-A terrain+goods+buildings+placement (pure) → TV2-B
 MapGen presets + start screen → TV2-C research-tree & balance wiring.
 
-## Milestone: Content chains v2 (CC) — 🟡 IN PROGRESS (workflow, worktree; launched after TV2/v0.16.0)
+## Milestone: Content chains v2 ✅ DONE (v0.17.0 — 13 test files, 1,121 assertions green; both reviewers passed; chains verified producible end-to-end; aristocrats live)
 **Definitive WORKER building list (author):**
 - **Tailoring** — wool → **clothes**; clothes = LUXURY for Workers (moves down
   from citizen tier). **Weaver + cloth good RETIRED** (no intermediate; assume
@@ -197,12 +197,7 @@ luxury clothes. Citizen unlock nodes in the CITIZEN research band.
 (+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
 consumption good (reserved for future military/quests).
 
-## Milestone: Aristocrats tier — FUTURE (author-deferred)
-4th band above Citizen (end-game): Aristocrats **consume only, produce nothing**
-(luxury sinks; think LTT's magenta top band: Aristocrats Home + Party Pavilion).
-Author: "we can leave aristocrats for the future." Requires: citizen-tier content
-chains first (goods for aristocrats to consume), then a 4th houseTier + needs +
-research band. Do not start without author steer.
+## Milestone: Aristocrats tier ✅ DONE (shipped with CC/v0.17.0 — author un-deferred it with the full T4 needs spec)
 
 Manager's board for the **in-session agent team** ([PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)).
 Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
