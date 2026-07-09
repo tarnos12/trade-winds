@@ -587,5 +587,90 @@ function mkCity(over) {
 })();
 // === /RSF =====================================================================
 
+// === TREELAYOUT: prereq-edge geometry (author fix — kill the long diagonals) ==
+// Node pos:{col,row} fully determines edge geometry in the RT-B tree. These guard
+// the layout invariants that keep edges SHORT + LOCAL: within-band edges span
+// exactly 1 column (col = topological layer per band), cross-band edges stay
+// near-vertical (≤2), band roots sit at col 0, columns are contiguous 0..N, and
+// no two placed cards collide. Upgrade nodes are PIPS (mirror their building card,
+// not placed by their own pos), so the card-level checks exclude them.
+(function () {
+  const POP = ["peasant", "worker", "burgher", "aristocrat"];
+  const byId = Object.fromEntries(CONFIG.research.map(n => [n.id, n]));
+  const cards = CONFIG.research.filter(n => n.kind !== "upgrade");   // placed by pos
+
+  // Largest same-band prereq-edge column span over a node list (builds its own
+  // index so a mutated clone can be measured independently).
+  function maxSameSpan(list) {
+    const idx = {}; list.forEach(n => idx[n.id] = n);
+    let mx = 0;
+    for (const n of list) for (const pid of (n.prereqs || [])) {
+      const p = idx[pid]; if (!p || p.band !== n.band) continue;
+      mx = Math.max(mx, Math.abs(n.pos.col - p.pos.col));
+    }
+    return mx;
+  }
+
+  // (1) EVERY same-band prereq edge (any kind — upgrade pips mirror, so span 0)
+  // spans at most ONE column. This is the core "no long diagonal" guarantee.
+  ok("within-band prereq edges span ≤1 column", maxSameSpan(CONFIG.research) <= 1);
+
+  // mutation-check: pushing one gated node's col far away MUST turn the test red.
+  (function () {
+    const clone = CONFIG.research.map(n => Object.assign({}, n, { pos: { col: n.pos.col, row: n.pos.row } }));
+    const idx = {}; clone.forEach(n => idx[n.id] = n);
+    const victim = clone.find(n => (n.prereqs || []).some(pid => idx[pid] && idx[pid].band === n.band));
+    ok("mutation-check found a within-band gated node to perturb", !!victim);
+    if (victim) { victim.pos.col += 5; ok("mutation-check: a far-away col makes the span test go red", maxSameSpan(clone) > 1); }
+  })();
+
+  // (2) cross-band prereq edges stay near-vertical (small horizontal offset).
+  let maxCross = 0;
+  for (const n of cards) for (const pid of (n.prereqs || [])) {
+    const p = byId[pid]; if (!p || p.band === n.band) continue;
+    maxCross = Math.max(maxCross, Math.abs(n.pos.col - p.pos.col));
+  }
+  ok("cross-band prereq edges stay near-vertical (col span ≤2)", maxCross <= 2);
+
+  // (3) per POP band: columns contiguous 0..N, roots (no same-band prereq) at col 0.
+  for (const band of POP) {
+    const bc = cards.filter(n => n.band === band);
+    ok(band + " band has cards", bc.length > 0);
+    const cols = new Set(bc.map(n => n.pos.col));
+    const maxCol = Math.max.apply(null, bc.map(n => n.pos.col));
+    let contig = cols.has(0);
+    for (let c = 0; c <= maxCol; c++) if (!cols.has(c)) contig = false;
+    ok(band + " band columns are contiguous 0.." + maxCol, contig);
+    const roots = bc.filter(n => !(n.prereqs || []).some(pid => byId[pid] && byId[pid].band === band));
+    ok(band + " band has ≥1 root", roots.length > 0);
+    ok(band + " band roots all sit at col 0", roots.every(n => n.pos.col === 0));
+  }
+
+  // (4) no two placed cards in a band share the same (col,row) — incl. kingdom.
+  for (const band of Research.bands()) {
+    const bc = cards.filter(n => n.band === band);
+    const seen = new Set(); let clash = false;
+    for (const n of bc) { const k = n.pos.col + "," + n.pos.row; if (seen.has(k)) clash = true; seen.add(k); }
+    ok(band + " band has no two cards sharing (col,row)", !clash);
+  }
+
+  // (5) upgrade pips mirror their building's unlock card exactly (when one exists;
+  // startUnlocked buildings anchor in RT-B, outside CONFIG, so those are skipped).
+  ok("upgrade nodes mirror their building card's pos", CONFIG.research
+    .filter(n => n.kind === "upgrade")
+    .every(u => {
+      const card = byId["unlock_" + u.buildingId];
+      return !card || (u.pos.col === card.pos.col && u.pos.row === card.pos.row);
+    }));
+
+  // (6) kingdom stays a tidy side column — each of its 3 branches is a vertical
+  // chain (constant col, so its within-band edges are perfectly vertical).
+  ok("each kingdom branch is a single vertical column", Research.branches().every(br => {
+    const ns = Research.nodesInBand("kingdom").filter(n => n.branch === br);
+    return ns.length > 0 && new Set(ns.map(n => n.pos.col)).size === 1;
+  }));
+})();
+// === /TREELAYOUT ==============================================================
+
 console.log(`research: ${pass}/${pass + fail} passed` + (fail ? ` (${fail} FAILED)` : ""));
 process.exit(fail ? 1 : 0);
