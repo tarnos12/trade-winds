@@ -43,10 +43,10 @@ function mkTown(over) {
 }
 // EV3 3-city cycle, each SHORT on what a neighbour has in SURPLUS. Basic peasant
 // needs are now WOOD + POTATO (food); extras are fish + wool (+beer for workers):
-//   FARM(0,0)  — floods GRAIN + POTATO; its workers want beer.
-//   MINE(6,0)  — floods ORE; makes no potato, so it must BUY POTATO (food).
-//   MILL(3,1)  — brewery(grain→beer)+smelter(iron+wood→tools): must BUY GRAIN
-//                (brew input) and ORE (smelt input).
+//   FARM(0,0)  — floods GRAIN + POTATO.
+//   MINE(6,0)  — floods IRON; makes no potato, so it must BUY POTATO (food).
+//   MILL(3,1)  — brewery(grain→mead)+forge(wood+iron→iron_tool): must BUY GRAIN
+//                (brew input) and IRON (forge input).  === CC: smelter→forge ===
 // So potato flows FARM→MINE, grain flows FARM→MILL, iron flows MINE→MILL.
 // Huts+cottages give each city housing so workers persist (Sim caps pop at housing).
 function homes() {
@@ -61,7 +61,7 @@ function homes() {
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
   buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
-  stock: { grain: 80, potato: 80, wood: 80, beer: 20 } }); }
+  stock: { grain: 80, potato: 80, wood: 80, mead: 20 } }); }   // === CC: beer→mead ===
 // === TV2: the mine floods IRON (80 stock, 0 self-demand → a permanent surplus
 // the neighbours buy). Peasant-only housing, so its happiness (and pop) tracks
 // the POTATO food flow: connected ⇒ fed & happy, road-less ⇒ food-starved. ===
@@ -70,12 +70,17 @@ function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
   pop: { peasants: 12, workers: 0, burghers: 0 },
   buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(6)],
   stock: { iron: 80, wood: 80 } }); }
-// === TV2: smelter now needs IRON + COAL; the mill keeps a local COAL stock so
-// the FLOWING input (iron, bought from the mine) is the limiter the test probes. ===
+// === CC: the mill's FORGE (wood + iron → iron_tool) is CITIZEN(burgher)-tier, so
+// the mill houses burghers (manors) and keeps their needs stocked so they persist
+// and staff the forge; the FLOWING input (iron, bought from the mine) is the
+// limiter the test probes. wood is produced locally by the lumberjack. ===
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
-  pop: { peasants: 8, workers: 8, burghers: 0 },
-  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "smelter", workers: 2 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
-  stock: { grain: 15, iron: 12, coal: 200, wood: 80, potato: 80, beer: 12 } }); }
+  pop: { peasants: 8, workers: 8, burghers: 8 },
+  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "forge", workers: 2 }, { typeId: "lumberjack", workers: 3 },
+              ...homes(), { typeId: "manor" }, { typeId: "manor" }],
+  stock: { grain: 15, iron: 12, wood: 80, potato: 80,
+           // keep worker + burgher needs on the shelf so those tiers stay alive
+           fish: 80, coal: 80, mead: 80, bread: 80, clothes: 80, lamp: 80, chairs: 80, pottery: 80, gold_ring: 80 } }); }
 
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];  // FARM(0,0)↔MINE(6,0); MILL(3,1)→(3,0)
 
@@ -197,9 +202,9 @@ ok("potato is delivered INTO the mine via trade (road-connected only)",
 ok("the road-connected mine is no worse off than the road-less one",
   connected.towns[1].happiness >= isolated.towns[1].happiness &&
   popTotal(connected.towns[1]) >= popTotal(isolated.towns[1]));
-// Ore flow lets the MILL's smelter keep making tools; the road-less mill stalls.
-ok("iron flow lets the mill out-produce tools vs the road-less baseline",
-  stockOf(connected, 3, "tools") > stockOf(isolated, 3, "tools"));
+// Iron flow lets the MILL's forge keep making iron_tool; the road-less mill stalls.
+ok("iron flow lets the mill out-produce iron_tool vs the road-less baseline",
+  stockOf(connected, 3, "iron_tool") > stockOf(isolated, 3, "iron_tool"));
 
 // Prices converge: the farm↔mine POTATO-price gap is smaller WITH trade than without.
 ok("potato prices converge (connected gap < isolated gap)",

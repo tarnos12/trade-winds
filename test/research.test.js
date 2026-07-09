@@ -43,22 +43,42 @@ function fillMats(st, id) {
 const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
 const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
 const KINGDOM_COUNT = 15;
-const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // TV2: 15 + 16 + 9 = 40
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // CC: 15 + 27 + 11 = 53
 ok("expected node count derived from CONFIG (15 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
-ok("EXPECT resolves to 40", EXPECT === 40);
+ok("EXPECT resolves to 53", EXPECT === 53);
 // The 3 kingdom branches remain 5 nodes each.
 ok("kingdom branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
 ok("branches() is the 3 kingdom branches, development dropped",
   Research.branches().length === 3 && Research.branches().indexOf("development") < 0);
-// bands() API for RT-B.
-ok("bands() lists all four bands", (() => {
+// === CC: bands() API — 5 bands (aristocrat added above burgher). ===
+ok("bands() lists all five bands (incl. aristocrat)", (() => {
   const b = Research.bands();
-  return b.length === 4 && ["peasant", "worker", "burgher", "kingdom"].every(x => b.indexOf(x) >= 0);
+  return b.length === 5 && ["peasant", "worker", "burgher", "aristocrat", "kingdom"].every(x => b.indexOf(x) >= 0);
+})());
+ok("aristocrat band sits above burgher, below kingdom", (() => {
+  const b = Research.bands();
+  return b.indexOf("aristocrat") > b.indexOf("burgher") && b.indexOf("aristocrat") < b.indexOf("kingdom");
 })());
 ok("kingdom band has 15 nodes", Research.nodesInBand("kingdom").length === KINGDOM_COUNT);
-ok("peasant+worker+burgher bands hold every unlock + upgrade node",
-  Research.nodesInBand("peasant").length + Research.nodesInBand("worker").length + Research.nodesInBand("burgher").length
+ok("peasant+worker+burgher+aristocrat bands hold every unlock + upgrade node",
+  Research.nodesInBand("peasant").length + Research.nodesInBand("worker").length
+    + Research.nodesInBand("burgher").length + Research.nodesInBand("aristocrat").length
     === NON_STARTERS.length + LADDER_LEVELS);
+// === CC: retired unlock nodes are gone; every new building has a node. ===
+ok("unlock_smelter + unlock_weaver removed from tree", !Research.get("unlock_smelter") && !Research.get("unlock_weaver"));
+ok("new building unlock nodes all present", ["unlock_tailoring", "unlock_charcoal_burner", "unlock_stonetool_maker", "unlock_oil_maker", "unlock_forge", "unlock_armory", "unlock_pottery_workshop", "unlock_distillery", "unlock_goldsmith", "unlock_lamp_maker", "unlock_carpentry", "unlock_luxury_tailor", "unlock_aristocrat_home"].every(id => { const n = Research.get(id); return n && n.kind === "unlock"; }));
+ok("aristocrat_home ladder nodes present + chained", (() => {
+  const l2 = Research.get("upg_aristocrat_home_l2"), l3 = Research.get("upg_aristocrat_home_l3");
+  return l2 && l3 && l2.kind === "upgrade" && l3.kind === "upgrade"
+    && l2.prereqs.indexOf("unlock_aristocrat_home") >= 0 && l3.prereqs.indexOf("upg_aristocrat_home_l2") >= 0;
+})());
+// === CC: retired research-node id migration (old saves normalize forward). ===
+ok("Research.normalize migrates unlock_smelter/unlock_weaver → forge/tailoring", (() => {
+  const r = Research.normalize({ unlocked: ["unlock_smelter", "unlock_weaver", "unlock_miner", "crop_rotation"] });
+  return r.unlocked.indexOf("unlock_forge") >= 0 && r.unlocked.indexOf("unlock_tailoring") >= 0
+    && r.unlocked.indexOf("unlock_iron_mine") >= 0 && r.unlocked.indexOf("crop_rotation") >= 0
+    && r.unlocked.indexOf("unlock_smelter") < 0 && r.unlocked.indexOf("unlock_weaver") < 0;
+})());
 ok("every node assigned to a real band", CONFIG.research.every(n => Research.bands().indexOf(n.band) >= 0));
 ok("every node has required fields (incl. band, kind, pos)", CONFIG.research.every(n =>
   n.id && n.branch && n.name && n.desc && typeof n.cost === "number" &&

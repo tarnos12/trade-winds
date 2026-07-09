@@ -119,8 +119,9 @@ ok("MAX_SAMPLES is 600", Market.MAX_SAMPLES === 600);
   ok("summary capacity = #towns * storageCap",
      s.wood.capacity === towns.length * CONFIG.town.storageCap);
   // a good with no history yet -> total 0, avg basePrice, trend/netRate 0.
-  ok("summary defaults to basePrice with no history", approx(s.jewelry.avg, CONFIG.goods.jewelry.basePrice));
-  ok("summary trend 0 with <2 samples", s.jewelry.trend === 0 && s.jewelry.netRate === 0);
+  // === CC: jewelry retired → gold_ring. ===
+  ok("summary defaults to basePrice with no history", approx(s.gold_ring.avg, CONFIG.goods.gold_ring.basePrice));
+  ok("summary trend 0 with <2 samples", s.gold_ring.trend === 0 && s.gold_ring.netRate === 0);
 })();
 
 // ---- trend sign (deadband-aware) ----

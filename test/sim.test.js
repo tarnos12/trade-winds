@@ -49,10 +49,18 @@ function totalPop(t) { return t.pop.peasants + t.pop.workers + t.pop.burghers; }
 ok("Sim.tick is a function", typeof Sim.tick === "function");
 ok("Sim.priceFor still present (not clobbered)", typeof Sim.priceFor === "function");
 ok("Buildings.housingCapacity present (TI-A merged)", typeof Buildings.housingCapacity === "function");
-ok("CONFIG.needs merged in (EV3 basic/extra model)",
-   !!CONFIG.needs && !!CONFIG.needs.perCapita && Array.isArray(CONFIG.needs.basicNeeds) && Array.isArray(CONFIG.needs.extraNeeds));
-ok("EV3: basic needs are wood + potato", JSON.stringify(CONFIG.needs.basicNeeds) === JSON.stringify(["wood", "potato"]));
-ok("EV3: extra needs include fish + wool", CONFIG.needs.extraNeeds.includes("fish") && CONFIG.needs.extraNeeds.includes("wool"));
+// === CC: per-tier needs model (CONFIG.needs.tiers[k] = {basic, extra, perCapita}).
+ok("CONFIG.needs merged in (CC per-tier model)",
+   !!CONFIG.needs && !!CONFIG.needs.tiers && !!CONFIG.needs.tiers.peasants && !!CONFIG.needs.tiers.aristocrats
+   && Array.isArray(CONFIG.needs.tiers.peasants.basic) && !!CONFIG.needs.tiers.peasants.perCapita);
+ok("CC: peasant basic needs are potato + wood", JSON.stringify(CONFIG.needs.tiers.peasants.basic) === JSON.stringify(["potato", "wood"]));
+ok("CC: peasant extra needs are fish + wool", CONFIG.needs.tiers.peasants.extra.includes("fish") && CONFIG.needs.tiers.peasants.extra.includes("wool"));
+// CC: mead is a WORKER luxury but a CITIZEN + ARISTOCRAT basic (dual-role good).
+ok("CC: mead is worker luxury, citizen basic (per-tier classes differ)",
+   CONFIG.needs.tiers.workers.extra.includes("mead") && CONFIG.needs.tiers.burghers.basic.includes("mead")
+   && CONFIG.needs.tiers.aristocrats.basic.includes("mead"));
+// CC: back-compat union aliases still present (membership tests only).
+ok("CC: basicNeeds/extraNeeds union aliases present", Array.isArray(CONFIG.needs.basicNeeds) && Array.isArray(CONFIG.needs.extraNeeds));
 ok("EV3: happiness mapping basic 70 / extra 30", CONFIG.needs.basicHappy === 70 && CONFIG.needs.extraHappy === 30);
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof BASE_PEASANTS === "number" && BASE_PEASANTS >= 0);
@@ -71,8 +79,8 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 
 // ========================================================================
 // 1) potato_farm + wood + PEASANT HOUSING: Sim assigns workers, produces potato,
-//    basics (wood+potato) are met ⇒ happiness ~70, and pop grows toward the
-//    happiness-scaled target round(cap × 0.70) — NOT full cap (no extras yet).
+//    basics (potato+wood) are met ⇒ happiness ~70. === CC: 70% happiness = FULL
+//    capacity, so a basics-only town (happiness ~70) fills housing to full cap. ===
 // ========================================================================
 {
   const PEA_CAP = 3 * HUT_CAP; // 3 huts → cap 6
@@ -85,11 +93,10 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("Sim assigns workers to the potato_farm (workerSlots cap)",
      t.buildings[0].workers === CONFIG.buildings.potato_farm.workerSlots);
   ok("potato_farm produces potato (stock > 0)", potato[0] > 0);
-  ok("basics met (wood+potato) ⇒ happiness settles near ~70",
+  ok("basics met (potato+wood) ⇒ happiness settles near ~70",
      Math.abs(t.happiness - 70) < 2.5);
-  ok("basics-only town grows to the ~70% housing target (partial, not full)", (() => {
-    const target = Math.round(PEA_CAP * 0.70);       // round(6 × 0.7) = 4
-    return t.pop.peasants > 3 && Math.abs(t.pop.peasants - target) <= 1;
+  ok("CC: basics-only town (happiness ~70) fills housing to FULL cap", (() => {
+    return t.pop.peasants > 3 && Math.abs(t.pop.peasants - PEA_CAP) <= 0.5;   // 70% happy = full cap
   })());
   ok("no worker/burgher housing ⇒ those tiers stay 0", t.pop.workers === 0 && t.pop.burghers === 0);
 }
@@ -154,26 +161,30 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
 }
 
 // ========================================================================
-// 5) Workers appear only with a worker house AND their EXTRA need (beer) available;
-//    (basics feed happiness; the extra good gates that tier's growth.)
+// 5) CC: Workers appear only with a worker house AND ALL their LUXURY needs
+//    (clothes + bread + mead) available. Worker BASIC needs are fish + coal;
+//    seed happiness of an empty town is peasant-based, so peasant food is stocked
+//    too (potato + wood). Missing ANY luxury gates that tier's growth to 0.
 // ========================================================================
 {
-  // cottage + basics + beer ⇒ workers appear.
+  // cottage + full worker needs ⇒ workers appear.
   const fed = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
-                     stock: { wood: 100000, potato: 100000, fish: 100000, wool: 100000, beer: 100000 },
+                     stock: { wood: 100000, potato: 100000, fish: 100000, wool: 100000,
+                              coal: 100000, clothes: 100000, bread: 100000, mead: 100000 },
                      buildings: [b("cottage", 0, 1)] });
   for (let i = 0; i < 60; i++) Sim.tick({ towns: [fed] });
-  ok("cottage + basics + beer ⇒ workers appear", fed.pop.workers > 0);
+  ok("CC: cottage + worker basics(fish,coal) + luxuries(clothes,bread,mead) ⇒ workers appear", fed.pop.workers > 0);
   ok("workers never exceed cottage housing capacity",
      fed.pop.workers <= CONFIG.buildings.cottage.houseCapacity + 1e-9);
   ok("cottage (a house) is never assigned workers", fed.buildings[0].workers === 0);
 
-  // Same, but NO beer: workers must NOT appear (their extra need is unmet).
+  // Same, but NO mead (one luxury missing): workers must NOT appear.
   const dry = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
-                     stock: { wood: 100000, potato: 100000, fish: 100000, wool: 100000 }, // no beer
+                     stock: { wood: 100000, potato: 100000, fish: 100000, wool: 100000,
+                              coal: 100000, clothes: 100000, bread: 100000 }, // no mead
                      buildings: [b("cottage", 0, 1)] });
   for (let i = 0; i < 60; i++) Sim.tick({ towns: [dry] });
-  ok("cottage + basics but NO beer ⇒ workers stay 0", dry.pop.workers === 0);
+  ok("CC: cottage but a luxury (mead) missing ⇒ workers stay 0", dry.pop.workers === 0);
 }
 
 // ========================================================================
@@ -281,7 +292,7 @@ withCap2House(() => {
                    stock: { wood: 100000, potato: 100000 }, buildings: [b("hut", 0, 1)] });
   for (let i = 0; i < 400; i++) Sim.tick({ towns: [t] });
   ok("EV3: basics met ⇒ happiness ~70", Math.abs(t.happiness - 70) < 1.5);
-  ok("EV3: basics met ⇒ ~1 peasant from a cap-2 house (round(2×0.7)=1)", Math.round(t.pop.peasants) === 1);
+  ok("CC: basics met (happiness ~70) ⇒ FULL cap-2 house (70% = full capacity)", Math.round(t.pop.peasants) === 2);
 });
 
 // B) Basics + extras (fish+wool) ⇒ happiness ~100 and the house fills to full cap (2).
@@ -649,6 +660,119 @@ function place(typeId, q, r, over) {
   }
 }
 // === /PP-A ====================================================================
+
+// === CC: content chains v2 — per-tier needs matrix, 70% capacity, aristocrats ===
+{
+  const near = (a, b, eps) => Math.abs(a - b) < (eps || 1e-9);
+
+  // -- (a) mead DUAL-ROLE: a workers-only town treats mead as a LUXURY (feeds
+  //    extraSat/growth), while a citizens-only town treats mead as a BASIC (feeds
+  //    basicSat/happiness). Same good, different class per tier. --
+  {
+    // Workers: basics fish+coal fully met; luxuries clothes+bread present, mead
+    // ABSENT ⇒ extraSat < 1 ⇒ tierHappiness < 100 (mead counted as luxury).
+    const noMead = town({ level: 3, pop: { peasants: 0, workers: 4, burghers: 0 },
+      stock: { fish: 500, coal: 500, clothes: 500, bread: 500 /* no mead */ },
+      buildings: [place("cottage", 0, 1), place("cottage", 1, 1)] });
+    const withMead = town({ level: 3, pop: { peasants: 0, workers: 4, burghers: 0 },
+      stock: { fish: 500, coal: 500, clothes: 500, bread: 500, mead: 500 },
+      buildings: [place("cottage", 0, 1), place("cottage", 1, 1)] });
+    Sim.tick({ towns: [noMead] }); Sim.tick({ towns: [withMead] });
+    ok("CC: mead is a WORKER luxury (missing mead lowers worker happiness, basics still met)",
+       withMead.tierHappiness.workers > noMead.tierHappiness.workers && noMead.tierHappiness.workers >= 70 - 1e-9);
+
+    // Citizens: mead is a BASIC. With ALL citizen basics (lamp+bread+mead+clothes)
+    // met but no luxuries, happiness floors at ~70; drop mead and it falls BELOW 70
+    // (a basic is now missing) — proving mead is classified basic for burghers.
+    const cBasics = { lamp: 500, bread: 500, mead: 500, clothes: 500 };
+    const cFull = town({ level: 3, pop: { peasants: 0, workers: 0, burghers: 4 },
+      stock: { ...cBasics }, buildings: [place("manor", 0, 1)] });
+    const cNoMead = town({ level: 3, pop: { peasants: 0, workers: 0, burghers: 4 },
+      stock: { lamp: 500, bread: 500, clothes: 500 /* no mead */ }, buildings: [place("manor", 0, 1)] });
+    Sim.tick({ towns: [cFull] }); Sim.tick({ towns: [cNoMead] });
+    ok("CC: mead is a CITIZEN basic (all basics met ⇒ ~70)", Math.abs(cFull.tierHappiness.burghers - 70) < 1.5);
+    ok("CC: missing mead drops citizen happiness BELOW 70 (a basic is unmet)", cNoMead.tierHappiness.burghers < 70 - 1);
+  }
+
+  // -- (b) 70% capacity model: at happiness ~70 a tier fills to FULL cap; below 70
+  //    scales DOWN; never over cap. Self-sufficient in basics (potato_farm +
+  //    lumberjack) so happiness holds steady over the run. --
+  {
+    // basics produced locally, no fish/wool ⇒ happiness ~70 ⇒ FULL cap (4).
+    const full = town({ pop: { peasants: 4, workers: 0, burghers: 0 },
+      stock: { wood: 1e5, potato: 1e5 },
+      buildings: [place("potato_farm", 0, 1, { built: true }), place("lumberjack", 1, 1, { built: true }),
+                  place("hut", 0, 2), place("hut", 1, 2)] }); // cap 4
+    for (let i = 0; i < 300; i++) Sim.tick({ towns: [full] });
+    ok("CC: happiness ~70 ⇒ population at FULL housing cap", Math.abs(full.happiness - 70) < 2.5 && Math.abs(full.pop.peasants - 4) < 0.5);
+
+    // Only wood produced (no potato) ⇒ basicSat = wood third ⇒ happiness ~23 ⇒
+    // capFrac ~ 0.33 ⇒ target ~1, strictly below the full-cap town.
+    const partial = town({ pop: { peasants: 4, workers: 0, burghers: 0 },
+      stock: { wood: 1e5 /* no potato source */ },
+      buildings: [place("lumberjack", 1, 1, { built: true }), place("hut", 0, 2), place("hut", 1, 2)] });
+    for (let i = 0; i < 200; i++) Sim.tick({ towns: [partial] });
+    ok("CC: below 70 scales capacity DOWN (partial-basics town < full-cap town)", partial.pop.peasants < full.pop.peasants - 1);
+    ok("CC: population never exceeds housing cap", full.pop.peasants <= 4 + 1e-9 && partial.pop.peasants <= 4 + 1e-9);
+  }
+
+  // -- (c) ARISTOCRATS: a 4th tier that grows from aristocrat_home, produces only
+  //    tax gold, and STAFFS NOTHING (no aristocrat-tier producers). Aristocrat
+  //    goods can't be produced locally here, so the shelf is refilled each tick;
+  //    pop is seeded at 1 (past the peasant-based empty-town bootstrap seed). --
+  {
+    const A = CONFIG.needs.tiers.aristocrats;
+    const refill = (t) => { for (const g of A.basic) t.stock[g] = 80; for (const g of A.extra) t.stock[g] = 80; };
+    const t = town({ level: 4, gold: 0, pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 1 },
+      stock: {}, buildings: [place("aristocrat_home", 0, 1, { upgradeLevel: 3 })] });   // cap 3
+    for (let i = 0; i < 400; i++) { refill(t); Sim.tick({ towns: [t] }); }
+    ok("CC: aristocrats grow from aristocrat_home when all their needs are met", t.pop.aristocrats > 1.5);
+    ok("CC: aristocrat pop respects house capacity (L3 → 3)", t.pop.aristocrats <= 3 + 1e-9 && t.pop.aristocrats > 2.5);
+    ok("CC: aristocrats fund tax income", t.tierIncome.aristocrats > 0 && t.gold > 0);
+    ok("CC: the aristocrat_home (a house) is never staffed", t.buildings[0].workers === 0);
+    ok("CC: happy aristocrats reach ~100 (all basics + luxuries met)", t.tierHappiness.aristocrats > 95);
+  }
+
+  // -- (d) per-tier tax rate ordering: equal pop & equal (full) happiness ⇒ income
+  //    strictly increases peasant < worker < citizen < aristocrat. One tick each. --
+  {
+    const mk = (tierKey, houseId, cap) => {
+      const spec = CONFIG.needs.tiers[tierKey];
+      const stock = {};
+      for (const g of spec.basic) stock[g] = 1e6;
+      for (const g of spec.extra) stock[g] = 1e6;
+      const pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };
+      pop[tierKey] = 4;
+      // enough houses of this tier to hold 4 at full happiness
+      const buildings = [];
+      const per = CONFIG.buildings[houseId].houseCapacity;
+      for (let i = 0; i < Math.ceil(4 / per); i++) buildings.push(place(houseId, i, 7));
+      return town({ level: 4, gold: 0, pop, stock, buildings });
+    };
+    const tp = mk("peasants", "hut", 2), tw = mk("workers", "cottage", 3),
+          tb = mk("burghers", "manor", 4), ta = mk("aristocrats", "aristocrat_home", 1);
+    Sim.tick({ towns: [tp] }); Sim.tick({ towns: [tw] }); Sim.tick({ towns: [tb] }); Sim.tick({ towns: [ta] });
+    // all four start at pop 4 with full happiness ⇒ compare per-capita tax income.
+    const ip = tp.tierIncome.peasants, iw = tw.tierIncome.workers, ib = tb.tierIncome.burghers, ia = ta.tierIncome.aristocrats;
+    ok("CC: per-tier tax rises peasant < worker < citizen < aristocrat", ip < iw && iw < ib && ib < ia);
+    ok("CC: peopleTax.ratePerTier ordering matches the config", (() => {
+      const r = CONFIG.needs.peopleTax.ratePerTier;
+      return r.peasants < r.workers && r.workers < r.burghers && r.burghers < r.aristocrats;
+    })());
+  }
+
+  // -- MUTATION-SANITY 1: Sim.tick must NOT mutate the shared CONFIG.needs.tiers. --
+  {
+    const before = JSON.stringify(CONFIG.needs.tiers);
+    const t = town({ level: 4, pop: { peasants: 3, workers: 2, burghers: 1, aristocrats: 1 },
+      stock: { potato: 100, wood: 100, fish: 100, wool: 100, coal: 100, clothes: 100, bread: 100, mead: 100,
+               lamp: 100, chairs: 100, pottery: 100, gold_ring: 100, iron_armor: 100, brandy: 100, luxury_clothes: 100 },
+      buildings: [place("hut", 0, 1), place("cottage", 1, 1), place("manor", 2, 1), place("aristocrat_home", 3, 1)] });
+    for (let i = 0; i < 20; i++) Sim.tick({ towns: [t] });
+    ok("CC/mutation: Sim.tick does not mutate CONFIG.needs.tiers", JSON.stringify(CONFIG.needs.tiers) === before);
+  }
+}
+// === /CC ======================================================================
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

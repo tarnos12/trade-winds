@@ -30,14 +30,26 @@ function town(goodId, stock, demand) {
 
 // ---- catalog: goods ----
 const EXPECTED = {
-  // === TV2: ore→iron; +clay (t1); +coal,+gold,+bricks (t2) → 20 goods ===
+  // === CC: content chains v2 → 26 goods. T1 unchanged (8). T2 (10): planks/flour/
+  // coal/gold/bricks + mead (was beer) + iron_tool (was tools) + clothes (moved
+  // down from T3) + stone_tools + oil. T3 (8): bread + pottery/brandy/lamp/
+  // iron_armor/luxury_clothes (new) + gold_ring (was jewelry) + chairs (was furniture).
+  // Retired: cloth (+ weaver). ===
   1: ["wood", "stone", "iron", "clay", "grain", "potato", "fish", "wool"],
-  2: ["planks", "tools", "flour", "beer", "cloth", "coal", "gold", "bricks"],
-  3: ["bread", "clothes", "jewelry", "furniture"],
+  2: ["planks", "iron_tool", "flour", "mead", "clothes", "stone_tools", "oil", "coal", "gold", "bricks"],
+  3: ["bread", "pottery", "lamp", "iron_armor", "chairs", "gold_ring", "brandy", "luxury_clothes"],
 };
-// TV2 → 20 goods (tier1=8, tier2=8, tier3=4).
+// CC → 26 goods (tier1=8, tier2=10, tier3=8).
 const enumeratedCount = EXPECTED[1].length + EXPECTED[2].length + EXPECTED[3].length;
-ok("goods count matches enumerated list (20)", Object.keys(CONFIG.goods).length === enumeratedCount);
+ok("goods count matches enumerated list (26)", Object.keys(CONFIG.goods).length === enumeratedCount);
+// === CC: a processed good's basePrice sits above the summed price of its inputs
+// (positive labour margin) — a sanity floor on the new chains.
+ok("processed goods priced above their input cost", Object.values(CONFIG.goods).every(g => {
+  if (!g.inputs) return true;
+  let inCost = 0;
+  for (const inId in g.inputs) inCost += (CONFIG.goods[inId].basePrice || 0) * g.inputs[inId];
+  return g.basePrice > inCost;
+}));
 for (const tier of [1, 2, 3]) {
   for (const id of EXPECTED[tier]) {
     ok(`good ${id} exists in tier ${tier}`, CONFIG.goods[id] && CONFIG.goods[id].tier === tier);
