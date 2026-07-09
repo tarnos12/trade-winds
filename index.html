@@ -1622,7 +1622,7 @@ Object.assign(CONFIG, {
       // === TV2: wheat is a T2 resource unlocked by research (worker band of the
       // tree) yet still worked by peasants. researchBand overrides the tree lane
       // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
-      unlockedBy: "unlock_farm", researchBand: "worker",
+      unlockedBy: "unlock_farm",
       workerSlots: 3, cost: { gold: 250 },
     },
     potato_farm: {
@@ -1658,7 +1658,7 @@ Object.assign(CONFIG, {
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
-      id: "shepherd", name: "Shepherd", kind: "extractor",
+      id: "shepherd", name: "Sheep Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",   // === TV2: meadow → fertile ===
       output: { goodId: "wool", ratePerWorker: 1 },
       unlockedBy: "unlock_shepherd",   // RT-A: per-building unlock node
@@ -3311,7 +3311,7 @@ Object.assign(CONFIG, {
     // only). band = building's tier; branch mirrors band for legacy grouping. ----
     { id: "unlock_quarry",   branch: "peasant", band: "peasant", kind: "unlock", buildingId: "quarry",   pos: { col: 5, row: 0 }, name: "Quarry",   desc: "Unlocks the Quarry.",   cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
     { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 6, row: 0 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
-    { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Shepherd", desc: "Unlocks the Shepherd.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },   // === TV2-FIX: root node — wool is a core peasant need, not gated behind fish ===
+    { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 6, row: 1 }, name: "Sheep Farm", desc: "Unlocks the Sheep Farm.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },   // === TV2-FIX: root node — wool is a core peasant need, not gated behind fish ===
     { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
     { id: "unlock_smelter",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "smelter",  pos: { col: 1, row: 0 }, name: "Smelter",  desc: "Unlocks the Smelter.",  cost: 400,  timeTicks: 24, prereqs: ["unlock_iron_mine"], effect: {} },
     { id: "unlock_weaver",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "weaver",   pos: { col: 2, row: 0 }, name: "Weaver",   desc: "Unlocks the Weaver.",   cost: 350,  timeTicks: 22, prereqs: ["unlock_shepherd"], effect: {} },
@@ -3324,7 +3324,7 @@ Object.assign(CONFIG, {
     { id: "unlock_gold_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "gold_mine",  pos: { col: 0, row: 2 }, name: "Gold Mine",  desc: "Unlocks the Gold Mine.",  cost: 400, timeTicks: 24, prereqs: ["unlock_iron_mine"],  effect: {} },
     { id: "unlock_clay_pit",   branch: "worker", band: "worker", kind: "unlock", buildingId: "clay_pit",   pos: { col: 1, row: 2 }, name: "Clay Pit",   desc: "Unlocks the Clay Pit.",   cost: 220, timeTicks: 16, prereqs: ["unlock_quarry"],     effect: {} },
     { id: "unlock_brickworks", branch: "worker", band: "worker", kind: "unlock", buildingId: "brickworks", pos: { col: 2, row: 2 }, name: "Brickworks", desc: "Unlocks the Brickworks.", cost: 300, timeTicks: 20, prereqs: ["unlock_clay_pit"],    effect: {} },
-    { id: "unlock_farm",       branch: "worker", band: "worker", kind: "unlock", buildingId: "farm",       pos: { col: 3, row: 2 }, name: "Wheat Farm", desc: "Unlocks the Farm (wheat).", cost: 250, timeTicks: 16, prereqs: ["unlock_quarry"],   effect: {} },
+    { id: "unlock_farm",       branch: "peasant", band: "peasant", kind: "unlock", buildingId: "farm",       pos: { col: 5, row: 1 }, name: "Wheat Farm", desc: "Unlocks the Wheat Farm.", cost: 250, timeTicks: 16, prereqs: ["unlock_quarry"],   effect: {} },
     { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
 
     // ---- Upgrade nodes: one per ladder level (replaces the 4 dev nodes). l2
@@ -9772,8 +9772,15 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.15.0";
+  const GAME_VERSION = "0.16.0";
   const PATCH_NOTES = [
+    { v: "0.16.0", notes: [
+      "NEW WORLD: Barren/Desert/Fertile ground, resource deposits (stone, clay, iron, gold, coal), fish shoals, snow & mountain ridges",
+      "Map PRESETS at game start: Oasis / Fertile Land / Big World — terrain clumps, rarer resources further out",
+      "Fisheries build ON fish tiles; farms need Fertile Soil; snow allows houses only; mountains block roads",
+      "New chains: clay→bricks (T2 building material), iron+coal→tools, gold→jewelry; ore is now Iron",
+      "Wheat Farm is research-unlocked (T1 tree); Shepherd is now the Sheep Farm",
+    ] },
     { v: "0.15.0", notes: [
       "Cities run TRADER FLEETS: more external traders & internal transporters as the city levels up",
       "Traders haul multiple goods per trip; hover a city's trader bar for the live trade list",

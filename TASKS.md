@@ -94,7 +94,7 @@ multi-good cargo chips**; small gold floaters on tax ticks. City cards: show
 happiness %.
 Order executed: PP-A (workflow, dual review) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (parallel worktrees) → merged B→C→D→E clean → verified → v0.15.0.
 
-## Milestone: Terrain & resources v2 (TV2) — 🟡 IN PROGRESS (workflow, worktree)
+## Milestone: Terrain & resources v2 ✅ DONE (v0.16.0 — fix round closed the fish-generation blocker; 1,050 tests green; both amendments applied at integration)
 Author directives (2026-07-08, after the PP batch). Replaces the current terrain
 enum (`water, meadow, forest, hills, mountains, fertile, wasteland`).
 **Generic buildable tiles** (ANY building unless it requires a resource tile):
