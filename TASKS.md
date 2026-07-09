@@ -213,12 +213,19 @@ wood input 2→1 (burners out-ate peasant heating wood, crashing happiness);
 Suite 1,164 green. Playthrough after fixes: peasants 72–100% happy, workers
 sustained in all cities, worker chains produce (mead/clothes/oil), research
 37/53 in 60k ticks.
-**REMAINING (resume when agent budget allows — tuner can reuse the diagnosis):**
-burgher→aristocrat pacing (cities exhaust slots before the citizen build path;
-options: deeper slot ladder, hut-upgrade density, plan-aware slot budget),
-castle L5 victory pacing, quest rotation jams on not-yet-producible deliver
-goods (filter templates via Market.producible), worker fish/coal happiness
-plateau (~50–65%), 2nd-seed + oasis/big_world playthrough verification.
+**PHASE 2 SHIPPED (v0.18.1):** quest rotation now SKIPS deliver-quests for
+goods no unlocked building outputs (prestige can't jam; progress.test 31);
+L4 town gate 30→26 (30 exceeded a maxed L3 city's housing).
+**REMAINING (needs the resumed tuner agent or manual playtest — the greedy
+scripted player is chaos-sensitive; inline iteration hit diminishing returns):**
+autonomous full-run proof of burgher→aristocrat pacing + castle L5 victory
+(sim-level tests DO prove both tiers grow when their goods are stocked, and all
+their goods are producible by lower tiers — the open question is pacing, not
+reachability); worker fish/coal happiness plateau (~35–75% across cities;
+candidate: fishery output or worker perCapita); harness gaps: 4th-city road
+link collapses the deterministic run (artifact), city#4 import bootstrapping,
+2nd-seed + oasis/big_world runs. Tools: manager scratchpad bal2-tools/
+(TW_HTML=<index.html> node playthrough.js 120000).
 
 ## Milestone: Aristocrats tier ✅ DONE (shipped with CC/v0.17.0 — author un-deferred it with the full T4 needs spec)
 

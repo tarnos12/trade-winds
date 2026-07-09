@@ -4105,7 +4105,7 @@ Object.assign(CONFIG.town, {
   upgrade: {
     2: { pop: 8,  gold: 150 },   // BAL2: reachable on peasant housing (hut cap 2)
     3: { pop: 16, gold: 400 },
-    4: { pop: 30, gold: 900 },
+    4: { pop: 26, gold: 900 },  // BAL2b: 30 was 1 above a maxed L3 city's housing (29) — unreachable
   },
 });
 
@@ -4211,7 +4211,24 @@ Quests.template = function (id) {
 Quests.pick = function (state) {
   const list = CONFIG.quests;
   const n = (state._questSeq = (state._questSeq || 0) + 1);
-  return list[n % list.length];
+  // === BAL2: skip deliver-quests for goods the kingdom cannot PRODUCE yet
+  // (no unlocked building outputs them) — otherwise the deterministic rotation
+  // jams on an impossible quest and prestige freezes (castle stuck at L1).
+  const producible = (gid) => {
+    for (const id in CONFIG.buildings) {
+      const def = CONFIG.buildings[id];
+      if (!def.output || def.output.goodId !== gid) continue;
+      if (def.startUnlocked || !def.unlockedBy) return true;
+      if (typeof Research !== "undefined" && Research.has && Research.has(state, def.unlockedBy)) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < list.length; i++) {
+    const t = list[(n + i) % list.length];
+    if (t.kind !== "deliver" || producible(t.good)) return t;
+  }
+  return list[n % list.length];   // all deliver goods unproducible → keep old behavior
+  // === /BAL2 ===
 };
 Quests.start = function (state, tmpl) {
   state.quest = { id: tmpl.id, progress: 0, ticks: 0 };
@@ -10077,8 +10094,12 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.18.0";
+  const GAME_VERSION = "0.18.1";
   const PATCH_NOTES = [
+    { v: "0.18.1", notes: [
+      "The King no longer requests goods your kingdom can't produce yet — quests rotate past them",
+      "Town level 4 needs 26 population (30 was unreachable on a maxed level-3 city)",
+    ] },
     { v: "0.18.0", notes: [
       "POPULATION REWORK: higher classes actually arrive now — stock a tier's basic needs and settlers move in",
       "The old luxury requirement deadlocked Workers/Citizens (they needed goods only they could make) — gone",

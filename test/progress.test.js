@@ -130,4 +130,25 @@ function mkTown(over) {
 
 // -----------------------------------------------------------------------------
 if (fail) { console.error(`progress: ${pass} passed, ${fail} FAILED`); process.exit(1); }
+
+// === BAL2: quest rotation skips deliver-quests for unproducible goods =========
+(function () {
+  // Fresh state: bread/iron_tool/clothes producers are all research-locked, so the
+  // rotation must land only on non-deliver quests (treasury/happiness) until then.
+  const st = { research: { unlocked: [], active: null, progress: 0, spent: 0, queue: [] },
+               towns: [], warehouse: {}, treasury: 0, _questSeq: 0 };
+  let sawLockedDeliver = false;
+  for (let i = 0; i < 12; i++) {
+    const t = Quests.pick(st);
+    if (t.kind === "deliver") sawLockedDeliver = true;
+  }
+  ok("no deliver-quest offered while its good is unproducible", !sawLockedDeliver);
+  // Unlock the bakery chain -> deliver-bread becomes offerable again.
+  st.research.unlocked.push("unlock_bakery");
+  let sawBread = false;
+  for (let i = 0; i < 12; i++) if (Quests.pick(st).id === "deliver-bread") sawBread = true;
+  ok("deliver-bread returns once the bakery is unlocked", sawBread);
+})();
+// === /BAL2 ====================================================================
+
 console.log(`progress: ${pass} passed`);
