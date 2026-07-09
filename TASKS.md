@@ -34,7 +34,7 @@ non-Sim or explicitly bounded). Slices when started: KR-A price/production
 history + aggregation (pure, tested) → KR-B sidebar UI + chart (canvas 2D DOM
 panel). Sequence AFTER RT-B so unlock-awareness reads the new research model.
 
-## Milestone: LTT panel parity + trade fleets (PP) — QUEUED (after RT-B + KR land; author: "I want it all implemented")
+## Milestone: LTT panel parity + trade fleets ✅ DONE (v0.15.0, PP-A..E — 650 tests green, cross-slice smoke clean)
 Author design (12 screenshots, 2026-07-08). **Author Q&A:** Provisioner/scouting
 section SKIPPED until a knights/combat milestone exists. Cities trade FULLY
 AUTOMATICALLY (buy by needs, sell surplus — keep current model; NO player
@@ -92,8 +92,7 @@ our city more." — throttled, one at a time per city); **wanted-goods icon row*
 above each city (yellow highlight = shortage); cart/boat **owner-name labels +
 multi-good cargo chips**; small gold floaters on tax ticks. City cards: show
 happiness %.
-Order: PP-A (workflow, reviews) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (worktrees) → merge
-B→C→D→E → verify → version bump.
+Order executed: PP-A (workflow, dual review) → PP-B ∥ PP-C ∥ PP-D ∥ PP-E (parallel worktrees) → merged B→C→D→E clean → verified → v0.15.0.
 
 ## Milestone: Terrain & resources v2 (TV2) — 🟡 IN PROGRESS (workflow, worktree)
 Author directives (2026-07-08, after the PP batch). Replaces the current terrain
