@@ -197,6 +197,18 @@ luxury clothes. Citizen unlock nodes in the CITIZEN research band.
 (+wood); luxuries = alcohol + lamps + chairs + luxury clothes; iron armor NOT a
 consumption good (reserved for future military/quests).
 
+## Milestone: Peasant+Worker functional + research-tree layout ✅ DONE (v0.19.0)
+Author directive (2026-07-09). (1) Peasant+Worker fully functional: two Opus
+worktree agents — balance found `unlock_bakery` was gated behind `iron_tool`
+(a BURGHER-made good) so worker Bread never unlocked (materials re-tiered to
+planks+stone), and fishery `ratePerWorker` 1→2 (fish is peasant-luxury + worker-
+basic + oil input). Result: peasants+workers hit 100% happiness in full-chain
+cities; `test/balance.test.js` (22 asserts). (2) Research-tree layout: node
+`pos.col` re-derived as topological layer per band so every within-band prereq
+edge spans exactly 1 column (was up to 2) and cross-band edges ≤2 (was up to 6)
+— no more long diagonals; research.test.js 130→157. Both merged, 1,188 tests
+green. Models: Opus ×2 (balance + layout), Haiku (release chores).
+
 ## Milestone: 4-tier balance pass (BAL2) — PHASE 1 SHIPPED (v0.18.0), pacing grind REMAINING
 Diagnosed via a scripted 120k-tick headless playthrough (tools preserved at the
 manager scratchpad `bal2-tools/`; run: `TW_HTML=<index.html> node playthrough.js
