@@ -13,8 +13,8 @@ if (!m) { console.error("FAIL: could not find PURE_CORE markers in index.html");
 
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Research=Research; this.ResearchEconomy=ResearchEconomy;", sandbox);
-const { CONFIG, Research, ResearchEconomy } = sandbox;
+vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Research=Research;this.Sim=Sim; this.ResearchEconomy=ResearchEconomy;", sandbox);
+const { CONFIG, Research, ResearchEconomy, Sim } = sandbox;
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -545,6 +545,47 @@ function mkCity(over) {
   ok("auto-started node removed from queue", !Research.isQueued(st, "deep_veins"));
 })();
 // === /RT-A2 ==================================================================
+
+
+// === RSF: research-stall regression (author bug report 2026-07-09) ============
+// "Research stuck at 100% and nothing happens." Root cause: materials-gated
+// completion + no city surplus => royal buyers never dispatch. Guards:
+(function () {
+  // (a) starterStock exists and single-handedly covers ANY peasant-band root
+  // unlock node's materials (first researches can never hard-stall).
+  const ss = (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {};
+  ok("starterStock defined with wood", (ss.wood || 0) >= 15);
+  const roots = (CONFIG.research || []).filter(n =>
+    n.band === "peasant" && n.kind === "unlock" && (n.prereqs || []).length === 0);
+  ok("peasant root unlock nodes exist", roots.length >= 1);
+  for (const n of roots) {
+    const covered = Object.keys(n.materials || {}).every(g => (ss[g] || 0) >= n.materials[g]);
+    ok("starterStock covers root node " + n.id, covered);
+  }
+  // (b) active node's remaining materials feed town demand via ResearchEconomy.tick.
+  const st = { towns: [{ id: 1, level: 1, q: 3, r: 0, pop: { peasants: 0, workers: 0, burghers: 0 },
+                gold: 0, stock: {}, demand: {}, prices: {}, buildings: [] }],
+               roads: new Set(), carts: [], treasury: 100000, castleStock: {},
+               research: Research.fresh(), researchSeed: 5, tick: 0 };
+  ok("start fishery research", Research.start(st, "unlock_fishery"));
+  Sim.tick(st);   // RSF: the demand feed lives in Sim's demand pipeline
+  const wantWood = (Research.get("unlock_fishery").materials || {}).wood || 0;
+  ok("castle need feeds town demand (via Sim)", wantWood > 0 && (st.towns[0].demand.wood || 0) > 0);
+  ok("dispatch hold-back excludes the castle echo",
+     ResearchEconomy.townShare(st, "wood") > 0);
+  // (c) end-to-end: fresh-style state WITH starterStock completes the node even
+  // though the town never has a surplus.
+  const st2 = { towns: [{ id: 1, level: 1, q: 3, r: 0, pop: { peasants: 0, workers: 0, burghers: 0 },
+                 gold: 0, stock: {}, demand: {}, prices: {}, buildings: [] }],
+                roads: new Set(), carts: [], treasury: 100000,
+                castleStock: Object.assign({}, CONFIG.researchEconomy.starterStock),
+                research: Research.fresh(), researchSeed: 5, tick: 0 };
+  Research.start(st2, "unlock_fishery");
+  let done = false;
+  for (let i = 0; i < 200 && !done; i++) { ResearchEconomy.tick(st2, false); Research.tick(st2); done = Research.has(st2, "unlock_fishery"); }
+  ok("root research completes from starterStock alone (no city surplus)", done);
+})();
+// === /RSF =====================================================================
 
 console.log(`research: ${pass}/${pass + fail} passed` + (fail ? ` (${fail} FAILED)` : ""));
 process.exit(fail ? 1 : 0);

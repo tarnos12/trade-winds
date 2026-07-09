@@ -2182,6 +2182,18 @@ Sim.tick = function (State) {
     }
     // === /CB-A + /RU-A ================================================
 
+    // === RSF: the ACTIVE research node's still-needed castle materials feed
+    // town demand (per-town share) — prices rise and town traders import the
+    // goods, giving the royal buyers a surplus to purchase. ResearchEconomy's
+    // own dispatch excludes this echo from the seller hold-back.
+    if (typeof ResearchEconomy !== "undefined" && ResearchEconomy.townShare &&
+        State.research && State.research.active) {
+      const node = (typeof Research !== "undefined") ? Research.get(State.research.active) : null;
+      const mats = (node && node.materials) || {};
+      for (const gid in mats) addDemand(gid, ResearchEconomy.townShare(State, gid));
+    }
+    // === /RSF ===
+
     // --- 2. Consumption + basic/extra need satisfaction ----------------
     // EV3: every resident consumes BASIC (wood+potato) + EXTRA (fish+wool, +beer
     // for workers, +clothes for burghers) goods per its tier's perCapita rates.
@@ -3786,6 +3798,10 @@ Object.assign(CONFIG, {
     transferRate: 5,    // items/sec (game time) a parked royal buyer loads/unloads — not instant
     buyThreshold: 0,    // min still-needed qty before a buyer is sent (0 = any)
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
+    // === RSF: the castle opens with a small material stock so the FIRST research
+    // nodes never hard-stall while young cities have no surplus to sell. Covers
+    // any single peasant-band root node's materials.
+    starterStock: { wood: 40, stone: 20 },
   },
 });
 
@@ -3894,6 +3910,20 @@ var ResearchEconomy = (function () {
     const m = need(node), s = stock(state);
     for (const gid in m) s[gid] = Math.max(0, (s[gid] || 0) - m[gid]);
   }
+  // === RSF: per-town share of the ACTIVE node's still-needed materials. Sim
+  // adds this into each town's demand (so prices rise and town traders import
+  // the goods), and the dispatch surplus check below EXCLUDES it from the
+  // seller hold-back (the castle must not be blocked by its own demand echo).
+  function townShare(state, gid) {
+    const R = state && state.research;
+    const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
+    if (!node) return 0;
+    const rem = remaining(state, node, gid);
+    if (!(rem > 0)) return 0;
+    const n = (state.towns || []).length;
+    return n > 0 ? rem / n : 0;
+  }
+  // === /RSF ===
   function activeCastleCarts(state) {
     let n = 0;
     for (const c of (state.carts || [])) if (!c.done && c.kind === "castle") n++;
@@ -3932,7 +3962,8 @@ var ResearchEconomy = (function () {
     state.researchSeed = (Math.imul(state.researchSeed | 0, 1664525) + 1013904223) | 0;
 
     const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+    // RSF: subtract the castle's own demand echo (townShare) before the hold-back.
+    const needOf = (t, gid) => Math.max(0, ((t.demand && t.demand[gid]) || 0) - townShare(state, gid)) * buffer;
     const cartCapacity = C.cartCapacity;
     const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
     const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
@@ -4053,7 +4084,7 @@ var ResearchEconomy = (function () {
   }
 
   return {
-    tick, materialsSatisfied, consumeMaterials, remaining, need,
+    tick, materialsSatisfied, consumeMaterials, remaining, need, townShare,
     activeCastleCarts, stock, castleHex, CASTLE_ID,
   };
 })();
@@ -5670,7 +5701,7 @@ var CastleMarket = (function () {
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.market = (typeof Market !== "undefined" && Market.fresh) ? Market.fresh() : { hist: {}, head: 0, len: 0 };  // KR-A: fresh market history
     state.warehouse = {};        // CASTLE-UI (T9): reset player warehouse on new map
-    state.castleStock = {};      // CRE: castle research-material stockpile
+    state.castleStock = Object.assign({}, (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {});   // CRE + RSF: starter materials so first researches never stall
     state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
     state.castleTrade = {};      // PP-A: castle market — all goods off by default
     state.castleReserved = {};   // PP-A: castle stock reservations
@@ -8403,6 +8434,16 @@ var CastleMarket = (function () {
     if (node.kind === "kingdom") return TT_KINGDOM_GLYPH[node.branch] || "📜";
     return TT_BUILDING_GLYPH[node.buildingId] || "🏭";
   }
+  // === RSF: active node with a full labour clock but missing castle materials
+  // is WAITING — surfaced distinctly so "stuck at 100%" explains itself.
+  function ttWaitingOnMaterials(id) {
+    if (!Research.isActive(state, id)) return false;
+    const node = Research.get(id); if (!node) return false;
+    const total = Math.max(1, node.timeTicks | 0);
+    if ((state.research.progress || 0) < total) return false;
+    return !(typeof ResearchEconomy === "undefined" || ResearchEconomy.materialsSatisfied(state, node));
+  }
+  // === /RSF ===
   function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
     if (Research.isActive(state, id)) return "researching";
@@ -8412,7 +8453,7 @@ var CastleMarket = (function () {
   }
   function ttBadge(id, s) {
     if (s === "done") return "✓";
-    if (s === "researching") return Math.round(Research.activeFraction(state) * 100) + "%";
+    if (s === "researching") return ttWaitingOnMaterials(id) ? "⏳" : Math.round(Research.activeFraction(state) * 100) + "%";
     if (s === "queued") { const i = (state.research.queue || []).indexOf(id); return "#" + (i + 1); }
     if (s === "available") { const n = Research.get(id); return n ? fmt(n.cost) + " 🪙" : ""; }
     return "🔒";
@@ -8561,8 +8602,10 @@ var CastleMarket = (function () {
     if (R.active) {
       const node = Research.get(R.active);
       const frac = Research.activeFraction(state);
+      const qWaiting = ttWaitingOnMaterials(R.active);
       html += `<div class="tt-qactive" data-node="${R.active}">` +
-        `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${Math.round(frac * 100)}%</span></div>` +
+        `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${qWaiting ? "⏳" : Math.round(frac * 100) + "%"}</span></div>` +
+        (qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
         `<div style="font-size:11px;opacity:.75;margin-top:5px">${fmt(R.spent || 0)}/${fmt(node.cost)} 🪙</div></div>`;
     }
@@ -8595,9 +8638,12 @@ var CastleMarket = (function () {
       const sum = (entry && typeof bpEffectSummary === "function") ? bpEffectSummary(entry.effect) : "";
       eff = (b ? b.name : node.buildingId) + " Lv" + node.level + (sum ? ": " + sum : "");
     } else eff = node.desc || "";
-    const curTxt = { done: "Finished", researching: "In Progress",
+    const waiting = ttWaitingOnMaterials(id);
+    const curTxt = waiting ? "Waiting for materials — the King's buyers purchase them from cities" :
+      { done: "Finished", researching: "In Progress",
       queued: "Queued (#" + (((state.research.queue || []).indexOf(id)) + 1) + ")",
       available: "Available", locked: "Locked" }[s] || s;
+    void 0;
     let html = `<div class="tt-tip-name">${esc(node.name)}</div><div>${esc(eff)}</div>`;
     if (Research.isActive(state, id)) html += `<div>Progress: ${Math.round(Research.activeFraction(state) * 100)}%</div>`;
     html += `<div>Currently: ${curTxt}</div>`;
@@ -8606,7 +8652,10 @@ var CastleMarket = (function () {
     for (const gid in mats) {
       const qty = mats[gid];
       const val = qty * ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
-      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qty} = ${fmt(val)} 🪙</div>`;
+      // RSF: while active, show live delivery progress (have/required) per material
+      const have = Research.isActive(state, id) ? Math.min(qty, Math.floor((state.castleStock && state.castleStock[gid]) || 0)) : null;
+      const qtyTxt = have === null ? String(qty) : (have + "/" + qty);
+      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt} = ${fmt(val)} 🪙</div>`;
     }
     return html;
   }
@@ -10028,8 +10077,13 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.17.0";
+  const GAME_VERSION = "0.17.1";
   const PATCH_NOTES = [
+    { v: "0.17.1", notes: [
+      "FIX: research no longer gets stuck at 100% — the castle starts with materials for early research",
+      "Cities now sense what the active research needs and produce/import it for the royal buyers",
+      "Research waiting on materials says so: ⏳ badge + live have/needed counts in tooltips and the queue",
+    ] },
     { v: "0.17.0", notes: [
       "12 new buildings: Tailoring, Charcoal Burning, StoneTools & Oil Makers, Pottery, Distillery, Goldsmith, Lamp Maker, Forge, Armory, Carpentry, Luxury Tailor",
       "New goods & chains up to T3: mead, oil, pottery, brandy, iron tools, gold rings, lamps, iron armor, chairs, luxury clothes",
