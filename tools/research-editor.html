@@ -5,22 +5,21 @@
 <title>Trade Winds — Research Tree Editor</title>
 <style>
   :root {
-    --parchment: #e9d9ae;
-    --parchment-dark: #d8c491;
-    --wood: #5b3d24;
-    --wood-dark: #3d2814;
-    --ink: #2c1c0f;
-    --accent: #b5591f;
-    --ok: #3c7a3c;
-    --warn: #b5591f;
+    --paper: #f2e6cf;
+    --ink: #3b2f22;
+    --panel: rgba(28, 22, 15, 0.86);
+    --panel-edge: #6b5636;
+    --accent: #c98a3c;
+    --ok: #4f9d5a;
+    --warn: #c98a3c;
     --err: #a3271f;
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; height: 100%;
-    font-family: Georgia, "Times New Roman", serif;
-    background: var(--wood-dark);
-    color: var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    background: #14110c;
+    color: var(--paper);
     overflow: hidden;
   }
   #app {
@@ -30,14 +29,14 @@
     height: 100vh;
   }
   header {
-    background: linear-gradient(#6b4a2b, #4a3218);
-    color: #f4e6c2;
+    background: linear-gradient(180deg, #3a2f1e, #2a2114);
+    color: var(--paper);
     padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    border-bottom: 3px solid var(--wood-dark);
+    border-bottom: 2px solid var(--panel-edge);
     z-index: 5;
   }
   header h1 {
@@ -46,64 +45,71 @@
     font-weight: bold;
     letter-spacing: .5px;
     white-space: nowrap;
+    color: var(--accent);
   }
-  header .sep { width: 1px; height: 22px; background: rgba(255,255,255,.25); margin: 0 4px; }
+  header .sep { width: 1px; height: 22px; background: rgba(255,255,255,.2); margin: 0 4px; }
   button {
     font-family: inherit;
-    background: var(--parchment);
-    border: 1px solid var(--wood-dark);
-    border-radius: 4px;
+    background: #3a2e1d;
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
     padding: 5px 10px;
     cursor: pointer;
     font-size: 12.5px;
-    color: var(--ink);
+    color: var(--paper);
+    transition: background .12s, border-color .12s;
   }
-  button:hover { background: #fff2d0; }
-  button:active { background: var(--parchment-dark); }
-  button.primary { background: var(--accent); color: #fff2d0; border-color: #7a3a10; }
-  button.primary:hover { background: #c9661f; }
-  button.danger { background: var(--err); color: #fff; border-color: #6e1815; }
-  button.danger:hover { background: #c23029; }
-  header .status { margin-left: auto; font-size: 12px; color: #f4e6c2; opacity: .9; white-space: nowrap; }
+  button:hover { background: #4d3c24; }
+  button:active { background: #2a2114; }
+  button.primary { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  button.primary:hover { background: #dba054; }
+  button.danger { background: #6e1815; color: #fce9c0; border-color: var(--err); }
+  button.danger:hover { background: #8a231e; }
+  button:disabled { opacity: .45; cursor: default; }
+  header .status { margin-left: auto; font-size: 12px; color: var(--paper); opacity: .85; white-space: nowrap; }
 
   #main {
     display: grid;
-    grid-template-columns: 1fr 360px;
+    grid-template-columns: 1fr 380px;
     min-height: 0;
   }
-  #boardWrap { position: relative; overflow: hidden; background: var(--wood-dark); }
+  #boardWrap { position: relative; overflow: hidden; background: #14110c; }
   #board { position: absolute; top: 0; left: 0; cursor: grab; }
   #board.grabbing { cursor: grabbing; }
   #board.linking { cursor: crosshair; }
 
   #boardHint {
     position: absolute; left: 10px; bottom: 10px;
-    background: rgba(20,12,4,.72); color: #f4e6c2; font-size: 11.5px;
+    background: var(--panel); color: var(--paper); font-size: 11.5px;
+    border: 1px solid var(--panel-edge);
     padding: 8px 10px; border-radius: 6px; max-width: 380px; line-height: 1.5;
     pointer-events: none;
   }
 
   #sidebar {
-    background: var(--parchment);
-    border-left: 3px solid var(--wood-dark);
+    background: var(--panel);
+    border-left: 2px solid var(--panel-edge);
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
-  .tabs { display: flex; border-bottom: 2px solid var(--wood-dark); background: var(--parchment-dark); }
-  .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; font-weight: bold; padding: 8px 4px; }
-  .tabs button.active { background: var(--parchment); border-bottom: 3px solid var(--accent); }
+  .tabs { display: flex; border-bottom: 2px solid var(--panel-edge); background: #241c11; }
+  .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; font-weight: bold; padding: 8px 4px; color: var(--paper); opacity: .75; }
+  .tabs button.active { background: rgba(201,138,60,0.14); border-bottom: 3px solid var(--accent); opacity: 1; }
   .tabpanel { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; display: none; }
   .tabpanel.active { display: block; }
+  .tabpanel::-webkit-scrollbar-thumb { background: var(--panel-edge); border-radius: 4px; }
+  .tabpanel { scrollbar-width: thin; scrollbar-color: var(--panel-edge) transparent; }
 
-  fieldset { border: 1px solid var(--wood); border-radius: 5px; margin: 0 0 10px 0; padding: 8px; }
-  legend { font-weight: bold; font-size: 12px; padding: 0 4px; }
-  label { display: block; font-size: 11.5px; font-weight: bold; margin: 6px 0 2px; }
+  fieldset { border: 1px solid var(--panel-edge); border-radius: 6px; margin: 0 0 10px 0; padding: 8px; }
+  legend { font-weight: bold; font-size: 12px; padding: 0 4px; color: var(--accent); }
+  label { display: block; font-size: 11.5px; font-weight: bold; margin: 6px 0 2px; color: var(--paper); }
   input[type=text], input[type=number], select, textarea {
     width: 100%; font-family: inherit; font-size: 12.5px;
-    border: 1px solid var(--wood); border-radius: 3px; padding: 4px 6px;
-    background: #fbf3dd; color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 4px; padding: 4px 6px;
+    background: #1c160f; color: var(--paper);
   }
+  input[type=checkbox] { width: auto; accent-color: var(--accent); }
   textarea { resize: vertical; font-family: "Courier New", monospace; font-size: 11.5px; }
   .row { display: flex; gap: 6px; }
   .row > * { flex: 1; }
@@ -111,27 +117,31 @@
   .matRow select, .costRow input[type=text] { flex: 2; }
   .matRow input, .costRow input[type=number] { flex: 1; }
   .miniBtn { padding: 2px 7px; font-size: 11px; }
-  .hint { font-size: 10.5px; color: #5b4a30; margin: 2px 0 6px; line-height: 1.35; }
-  .emptyMsg { font-size: 12.5px; color: #5b4a30; padding: 20px 6px; text-align: center; }
+  .hint { font-size: 10.5px; color: var(--paper); opacity: .65; margin: 2px 0 6px; line-height: 1.35; }
+  .emptyMsg { font-size: 12.5px; color: var(--paper); opacity: .65; padding: 20px 6px; text-align: center; }
+  .ladderRow { display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin-bottom: 4px;
+    border: 1px solid var(--panel-edge); border-radius: 5px; background: #1c160f; cursor: pointer; font-size: 12px; }
+  .ladderRow:hover { border-color: var(--accent); }
+  .ladderRow .rn { font-weight: bold; color: var(--accent); width: 22px; }
 
   #validationList { list-style: none; margin: 0; padding: 0; font-size: 12px; }
-  #validationList li { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; border-left: 4px solid; }
-  #validationList li.error { background: #fbe1de; border-color: var(--err); }
-  #validationList li.warn { background: #fbeecb; border-color: var(--warn); }
-  #validationList li.ok { background: #e2efd8; border-color: var(--ok); }
+  #validationList li { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; border-left: 4px solid; background: #1c160f; }
+  #validationList li.error { border-color: var(--err); }
+  #validationList li.warn { border-color: var(--warn); }
+  #validationList li.ok { border-color: var(--ok); }
 
   #exportArea, #importArea { width: 100%; height: 220px; }
   .palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .palette .chip {
-    font-size: 10.5px; background: var(--parchment-dark); border: 1px solid var(--wood);
-    border-radius: 10px; padding: 2px 8px; cursor: default; user-select: text;
+    font-size: 10.5px; background: #1c160f; border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 2px 8px; cursor: default; user-select: text; color: var(--paper);
   }
   .legendRow { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 3px 0; }
-  .legendSwatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--wood-dark); flex-shrink: 0; }
-  .ladderEntry { border: 1px dashed var(--wood); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+  .legendSwatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--panel-edge); flex-shrink: 0; }
   #toast {
     position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    background: rgba(30,18,8,.92); color: #fce9c0; padding: 7px 16px; border-radius: 6px;
+    background: var(--panel); color: var(--paper); padding: 7px 16px; border-radius: 6px;
+    border: 1px solid var(--accent);
     font-size: 12.5px; z-index: 20; opacity: 0; transition: opacity .25s; pointer-events: none;
   }
   #toast.show { opacity: 1; }
@@ -156,7 +166,8 @@
         <b>Drag</b> a card body to move it into another slot.<br>
         <b>Drag from the small ◎ handle</b> (top-right of a card) onto another card to add a
         prerequisite (source → target; target gains source as a prereq).<br>
-        <b>Click</b> a connector line to select it, then press <b>Delete</b> to remove it.<br>
+        <b>Click</b> a connector line or a card, then press <b>Delete</b> to remove it.<br>
+        Upgrade pips sit above a building's card — select one to edit its ladder level.<br>
         Scroll to zoom, drag empty space to pan.
       </div>
       <div id="toast"></div>
@@ -184,6 +195,13 @@
    as of this tool's build). Kept verbatim so the editor opens showing
    the REAL tree, not a blank slate. Shapes match CONFIG.research,
    RESEARCH_MATERIALS and CONFIG.upgrades exactly.
+
+   Node "kind" values: "unlock" (research-gated building), "anchor"
+   (start-unlocked building — no research needed, mirrors the game's
+   CONFIG.buildings[id].startUnlocked flag), "kingdom" (kingdom-side
+   node), "upgrade" (a per-building upgrade LEVEL — never an independent
+   card; it always renders as a pip attached to its building's card,
+   picked by buildingId, exactly like the game's RT-B tech tree).
    ===================================================================== */
 
 const GOODS_IDS = [
@@ -200,6 +218,22 @@ const BUILDING_IDS = [
   "goldsmith","lamp_maker","carpentry","luxury_tailor",
   "hut","cottage","manor","aristocrat_home",
 ];
+
+// Same glyph maps the game's RT-B tech tree uses (grep TT_BUILDING_GLYPH /
+// TT_KINGDOM_GLYPH in index.html) — copied verbatim so the editor shows the
+// exact same icons.
+const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
+  quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀",
+  clay_pit: "🟫", coal_mine: "⬛", gold_mine: "🪙", brickworks: "🧱",
+  cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️",
+  tailoring: "🧵", charcoal_burner: "🪮", stonetool_maker: "⚒️", oil_maker: "🛢️",
+  forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
+  lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
+const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
+// Editor pips are numbered by POSITION in a building's own ladder (I, II, III,
+// IV, V — up to 5 per card), not by the game's absolute "level" field.
+const ROMAN_BY_POS = ["I", "II", "III", "IV", "V"];
+const MAX_UPGRADES_PER_BUILDING = 5;
 
 const DEFAULT_RESEARCH = [
   // ---- Production (kingdom) ----
@@ -220,6 +254,15 @@ const DEFAULT_RESEARCH = [
   { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
   { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
   { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+
+  // ---- Starter (always-unlocked) building cards — mirrors the game's
+  // TT_STARTERS anchors. These carry startUnlocked:true, kind:"anchor",
+  // no cost/prereqs/materials, but ARE real cards (movable/inspectable)
+  // so their upgrade pips have a home. ----
+  { id: "anchor_hut",         branch: "peasant", band: "peasant", kind: "anchor", startUnlocked: true, buildingId: "hut",         pos: { col: 0, row: 0 }, name: "Hut",         desc: "Starter housing — always available.", cost: 0, timeTicks: 0, prereqs: [], effect: {} },
+  { id: "anchor_lumberjack",  branch: "peasant", band: "peasant", kind: "anchor", startUnlocked: true, buildingId: "lumberjack",  pos: { col: 1, row: 0 }, name: "Lumberjack",  desc: "Starter extractor — always available.", cost: 0, timeTicks: 0, prereqs: [], effect: {} },
+  { id: "anchor_potato_farm", branch: "peasant", band: "peasant", kind: "anchor", startUnlocked: true, buildingId: "potato_farm", pos: { col: 2, row: 0 }, name: "Potato Farm", desc: "Starter extractor — always available.", cost: 0, timeTicks: 0, prereqs: [], effect: {} },
+  { id: "anchor_sawmill",     branch: "peasant", band: "peasant", kind: "anchor", startUnlocked: true, buildingId: "sawmill",     pos: { col: 3, row: 0 }, name: "Sawmill",     desc: "Starter processor — always available.", cost: 0, timeTicks: 0, prereqs: [], effect: {} },
 
   // ---- Peasant / worker / burgher / aristocrat unlock nodes ----
   { id: "unlock_quarry",   branch: "peasant", band: "peasant", kind: "unlock", buildingId: "quarry",   pos: { col: 0, row: 1 }, name: "Quarry",   desc: "Unlocks the Quarry.",   cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
@@ -250,7 +293,8 @@ const DEFAULT_RESEARCH = [
   { id: "unlock_luxury_tailor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "luxury_tailor",    pos: { col: 2, row: 1 }, name: "Luxury Tailor", desc: "Unlocks the Luxury Tailor (clothes + ring → finery).", cost: 1100, timeTicks: 50, prereqs: ["unlock_tailoring", "unlock_goldsmith"],  effect: {} },
   { id: "unlock_aristocrat_home", branch: "aristocrat", band: "aristocrat", kind: "unlock", buildingId: "aristocrat_home", pos: { col: 0, row: 0 }, name: "Aristocrats Home", desc: "Unlocks the Aristocrats Home.", cost: 1500, timeTicks: 60, prereqs: ["unlock_manor", "unlock_luxury_tailor"], effect: {} },
 
-  // ---- Upgrade-ladder unlock nodes (one per level; pips over the building's slot) ----
+  // ---- Upgrade LEVELS (never independent cards — always pips attached to
+  // their buildingId's card by buildingId, rendered above the card). ----
   { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
   { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
   { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
@@ -339,21 +383,35 @@ const DEFAULT_UPGRADES = {
 /* ===================================================================== */
 
 const BAND_LIST = ["peasant", "worker", "burgher", "aristocrat", "kingdom"];
-const BAND_LABEL = { peasant: "Peasant", worker: "Worker", burgher: "Citizen (burgher)", aristocrat: "Aristocrat", kingdom: "Kingdom" };
-const BAND_COLOR = {
-  peasant:    { fill: "#f4e2b8", edge: "#8a6a2e" },
-  worker:     { fill: "#e7e2c6", edge: "#5c6b2e" },
-  burgher:    { fill: "#dfe3ea", edge: "#3a5578" },
-  aristocrat: { fill: "#ecdcea", edge: "#6a3a78" },
-  kingdom:    { fill: "#f0d6c6", edge: "#8a3a1f" },
+const BAND_LABEL = { peasant: "Peasants", worker: "Workers", burgher: "Citizens (burgher)", aristocrat: "Aristocrats", kingdom: "Kingdom" };
+// Exact rgba tints from index.html's .tt-band-* classes.
+const BAND_TINT = {
+  peasant:    "rgba(45,120,120,0.16)",
+  worker:     "rgba(190,140,50,0.16)",
+  burgher:    "rgba(40,130,90,0.18)",
+  aristocrat: "rgba(200,90,200,0.16)",
+  kingdom:    "rgba(120,120,140,0.14)",
 };
-const KIND_LABEL = { unlock: "Unlock", upgrade: "Upgrade", kingdom: "Kingdom" };
+const KIND_LABEL = { unlock: "Unlock", anchor: "Starter", upgrade: "Upgrade", kingdom: "Kingdom" };
 
-const CARD_W = 152, CARD_H = 62;
-const COL_STEP = CARD_W + 44;
-const ROW_STEP = CARD_H + 40;
-const LANE_TOP_PAD = 40, LANE_BOT_PAD = 18, LANE_GAP = 22, LEFT_PAD = 34;
+// Layout constants (px) — sized so an upgrade-pip row fits above every card,
+// mirroring the game's RT-B tech tree (pips sit above the building card).
+const CARD_W = 148, CARD_H = 64;
+const PIP_W = 30, PIP_H = 22, PIP_GAP = 4;
+const PIP_ROW_H = PIP_H + 8;               // headroom reserved above each card
+const COL_STEP = CARD_W + 30;
+const ROW_STEP = CARD_H + PIP_ROW_H + 30;
+const LANE_TOP_PAD = 36 + PIP_ROW_H, LANE_BOT_PAD = 20, LANE_GAP = 24, LEFT_PAD = 34;
 const HANDLE_R = 8;
+// Colors copied verbatim from index.html's :root / .tt-* rules.
+const C_BG = "#14110c";
+const C_CARD_BG = "#1c160f";
+const C_EDGE = "#6b5636";     // var(--panel-edge)
+const C_ACCENT = "#c98a3c";   // var(--accent)
+const C_PAPER = "#f2e6cf";    // var(--paper)
+const C_DONE = "#4f9d5a";
+const C_ERR = "#a3271f";
+const C_EDGELINE = "#2a2216"; // .tt-edges path stroke
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -384,13 +442,26 @@ function resizeCanvas() {
 }
 window.addEventListener("resize", resizeCanvas);
 
+/* --------------------------- building-card helpers -------------------- */
+// "primary" cards are every node that occupies its own grid slot: kind
+// unlock / anchor / kingdom. "upgrade" nodes never do — they render as pips
+// picked up by buildingId from whichever primary card owns that building.
+function isPrimary(node) { return node.kind !== "upgrade"; }
+function primaryCards() { return doc.research.filter(isPrimary); }
+function ladderFor(buildingId) { return doc.upgrades[buildingId] || []; }
+function pipsForBuilding(buildingId) {
+  return doc.research.filter(n => n.kind === "upgrade" && n.buildingId === buildingId)
+    .sort((a, b) => (a.level || 0) - (b.level || 0));
+}
+function romanAt(pos1based) { return ROMAN_BY_POS[pos1based - 1] || String(pos1based); }
+
 /* --------------------------- layout -------------------------------- */
 
 function computeLayout() {
   const bandInfo = {};
   let y0 = 20;
   for (const band of BAND_LIST) {
-    const nodes = doc.research.filter(n => n.band === band);
+    const nodes = doc.research.filter(n => n.band === band && isPrimary(n));
     let maxCol = 5, maxRow = 7;
     for (const n of nodes) {
       maxCol = Math.max(maxCol, (n.pos && n.pos.col || 0) + 2);
@@ -417,7 +488,6 @@ function bandAtWorldY(y) {
     const info = layout[band];
     if (y >= info.y0 && y < info.y0 + info.laneH) return band;
   }
-  // clamp to nearest
   if (y < layout[BAND_LIST[0]].y0) return BAND_LIST[0];
   return BAND_LIST[BAND_LIST.length - 1];
 }
@@ -431,11 +501,9 @@ function slotFromWorldPos(band, wx, wy) {
   return { col, row };
 }
 
-function isPrimary(node) { return node.kind !== "upgrade"; }
-
 function slotOccupantsPrimary(band, col, row, excludeId) {
-  return doc.research.filter(n => n !== undefined && n.id !== excludeId && n.band === band &&
-    n.pos && n.pos.col === col && n.pos.row === row && isPrimary(n));
+  return primaryCards().filter(n => n.id !== excludeId && n.band === band &&
+    n.pos && n.pos.col === col && n.pos.row === row);
 }
 
 function findFreeSlot(band) {
@@ -472,34 +540,70 @@ function nodePixelRect(node) {
   return { x: p.x, y: p.y, w: CARD_W, h: CARD_H };
 }
 
+function cardRectFor(node) {
+  if (dragMode === "move" && dragNode === node && dragPreview) {
+    return { x: dragPreview.x, y: dragPreview.y, w: CARD_W, h: CARD_H };
+  }
+  return nodePixelRect(node);
+}
+
 function nodeAtWorld(wx, wy) {
-  // iterate reverse so later-drawn (selected) cards win ties
-  for (let i = doc.research.length - 1; i >= 0; i--) {
-    const n = doc.research[i];
-    const r = nodePixelRect(n);
+  const cards = primaryCards();
+  for (let i = cards.length - 1; i >= 0; i--) {
+    const n = cards[i];
+    const r = cardRectFor(n);
     if (wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h) return n;
   }
   return null;
 }
 
 function handleWorldPos(node) {
-  const r = nodePixelRect(node);
+  const r = cardRectFor(node);
   return { x: r.x + r.w - 2, y: r.y + 2 };
 }
 
-function pointNearHandle(node, wx, wy) {
-  const h = handleWorldPos(node);
-  const d = Math.hypot(wx - h.x, wy - h.y);
-  return d <= (HANDLE_R + 4) / camera.zoom * camera.zoom ? d <= HANDLE_R + 6 : false;
+/* --------------------------- pips: layout + hit-test ------------------ */
+// Single source of truth for pip rects, shared by drawing AND hit-testing so
+// they can never drift apart. Pips sit in a row ABOVE their building's card.
+function pipRectsFor(card) {
+  if (!card.buildingId) return [];
+  const ladder = pipsForBuilding(card.buildingId);
+  if (!ladder.length) return [];
+  const rect = cardRectFor(card);
+  const y = rect.y - PIP_H - 6;
+  let x = rect.x;
+  const out = [];
+  for (const p of ladder) {
+    out.push({ node: p, rect: { x, y, w: PIP_W, h: PIP_H } });
+    x += PIP_W + PIP_GAP;
+  }
+  return out;
+}
+
+function pipAtWorld(wx, wy) {
+  for (const card of primaryCards()) {
+    for (const { node, rect } of pipRectsFor(card)) {
+      if (wx >= rect.x && wx <= rect.x + rect.w && wy >= rect.y && wy <= rect.y + rect.h) return node;
+    }
+  }
+  return null;
+}
+
+function anyNodeAtWorld(wx, wy) {
+  return nodeAtWorld(wx, wy) || pipAtWorld(wx, wy);
 }
 
 /* --------------------------- edges ----------------------------------- */
+// Edges only ever connect PRIMARY cards — upgrade pips' ordering is managed
+// automatically (each level's prereq is the level below it), not by manual
+// drag-to-link, so they're excluded here (matches the game: RT-B only draws
+// card-level prerequisite edges).
 
 function allEdges() {
   const edges = [];
-  for (const child of doc.research) {
+  for (const child of primaryCards()) {
     for (const pid of (child.prereqs || [])) {
-      const parent = doc.research.find(n => n.id === pid);
+      const parent = doc.research.find(n => n.id === pid && isPrimary(n));
       if (parent) edges.push({ parentId: pid, childId: child.id, parent, child });
     }
   }
@@ -515,7 +619,7 @@ function edgeFlags(parent, child) {
 }
 
 function edgeAnchor(node, side) {
-  const r = nodePixelRect(node);
+  const r = cardRectFor(node);
   if (side === "out") return { x: r.x + r.w, y: r.y + r.h / 2 };
   return { x: r.x, y: r.y + r.h / 2 };
 }
@@ -547,7 +651,7 @@ function draw() {
   const w = canvas.width, h = canvas.height;
   ctx.save();
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-  ctx.fillStyle = "#3d2814";
+  ctx.fillStyle = C_BG;
   ctx.fillRect(0, 0, w / devicePixelRatio, h / devicePixelRatio);
   ctx.translate(camera.x, camera.y);
   ctx.scale(camera.zoom, camera.zoom);
@@ -563,18 +667,13 @@ function draw() {
 function drawLanes() {
   for (const band of BAND_LIST) {
     const info = layout[band];
-    const c = BAND_COLOR[band];
-    ctx.fillStyle = hexAlpha(c.fill, 0.9);
-    ctx.fillRect(4, info.y0, LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20, info.laneH);
-    ctx.strokeStyle = c.edge;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(4, info.y0, LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20, info.laneH);
-    ctx.fillStyle = c.edge;
-    ctx.font = "bold 16px Georgia, serif";
-    ctx.fillText(BAND_LABEL[band] + " band", 14, info.y0 + 24);
+    const w = LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20;
+    ctx.fillStyle = BAND_TINT[band];
+    roundRect(4, info.y0, w, info.laneH, 10);
+    ctx.fill();
 
-    // grid dots for slots
-    ctx.fillStyle = hexAlpha(c.edge, 0.35);
+    // grid dots for empty slots
+    ctx.fillStyle = hexAlpha(C_EDGE, 0.35);
     for (let row = 0; row <= info.maxRow; row++) {
       for (let col = 0; col <= info.maxCol; col++) {
         const p = slotWorldPos(band, col, row);
@@ -583,6 +682,19 @@ function drawLanes() {
         ctx.fill();
       }
     }
+
+    // vertical band label, mirroring .tt-band-label (writing-mode vertical-rl)
+    ctx.save();
+    ctx.fillStyle = hexAlpha(C_PAPER, 0.5);
+    ctx.font = "bold 22px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.translate(24, info.y0 + info.laneH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(BAND_LABEL[band].toUpperCase(), 0, 0);
+    ctx.restore();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
 }
 
@@ -593,6 +705,8 @@ function hexAlpha(hex, a) {
 }
 
 function drawEdges() {
+  // Straight thick rounded lines, matching .tt-edges path (stroke #2a2216,
+  // width 5, round caps) — the game does not use bezier curves.
   for (const e of allEdges()) {
     const a = edgeAnchor(e.parent, "out");
     const b = edgeAnchor(e.child, "in");
@@ -600,21 +714,20 @@ function drawEdges() {
     const isSel = selectedEdge && selectedEdge.parentId === e.parentId && selectedEdge.childId === e.childId;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
-    const midx = (a.x + b.x) / 2;
-    ctx.bezierCurveTo(midx, a.y, midx, b.y, b.x, b.y);
-    ctx.lineWidth = isSel ? 3.5 : 2;
-    ctx.setLineDash(flags.flagged ? [6, 4] : []);
-    ctx.strokeStyle = isSel ? "#1a5fb4" : (flags.flagged ? "#a3271f" : "#4a3218");
+    ctx.lineTo(b.x, b.y);
+    ctx.lineCap = "round";
+    ctx.lineWidth = isSel ? 6 : 5;
+    ctx.setLineDash(flags.flagged ? [8, 5] : []);
+    ctx.strokeStyle = isSel ? C_ACCENT : (flags.flagged ? C_ERR : C_EDGELINE);
     ctx.stroke();
     ctx.setLineDash([]);
-    // arrowhead
-    const ang = Math.atan2(b.y - (b.y), b.x - midx);
+    // small arrowhead so direction stays legible while editing
     ctx.save();
     ctx.translate(b.x, b.y);
-    ctx.rotate(Math.atan2(b.y - a.y, 40));
+    ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
     ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(-8, -4); ctx.lineTo(-8, 4); ctx.closePath();
-    ctx.fillStyle = isSel ? "#1a5fb4" : (flags.flagged ? "#a3271f" : "#4a3218");
+    ctx.moveTo(0, 0); ctx.lineTo(-9, -5); ctx.lineTo(-9, 5); ctx.closePath();
+    ctx.fillStyle = isSel ? C_ACCENT : (flags.flagged ? C_ERR : C_EDGELINE);
     ctx.fill();
     ctx.restore();
   }
@@ -626,136 +739,112 @@ function drawLinkPreview() {
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(linkCursor.x, linkCursor.y);
-    ctx.strokeStyle = "#1a5fb4";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = C_ACCENT;
+    ctx.lineWidth = 3;
     ctx.setLineDash([4, 4]);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 }
 
+function glyphFor(node) {
+  if (node.kind === "kingdom") return TT_KINGDOM_GLYPH[node.branch] || "📜";
+  return TT_BUILDING_GLYPH[node.buildingId] || "🏭";
+}
+
 function drawNodes() {
-  // group by slot to render pips
-  const slotMap = new Map();
-  for (const n of doc.research) {
-    const key = n.band + "|" + n.pos.col + "|" + n.pos.row;
-    if (!slotMap.has(key)) slotMap.set(key, []);
-    slotMap.get(key).push(n);
-  }
-  for (const [key, group] of slotMap) {
-    const primary = group.find(isPrimary);
-    const pips = group.filter(n => !isPrimary(n));
-    const anyForRect = primary || pips[0];
-    let rect;
-    if (dragMode === "move" && dragNode && group.includes(dragNode) && dragPreview) {
-      rect = { x: dragPreview.x, y: dragPreview.y, w: CARD_W, h: CARD_H };
-    } else {
-      rect = nodePixelRect(anyForRect);
-    }
-    if (primary) drawCard(primary, rect, dragMode === "move" && dragNode === primary ? dragPreview : null);
-    if (pips.length) drawPips(pips, rect, primary, dragMode === "move" ? dragNode : null, dragPreview);
+  for (const card of primaryCards()) {
+    const rect = cardRectFor(card);
+    drawCard(card, rect);
+    for (const { node, rect: prect } of pipRectsFor(card)) drawPip(node, prect);
   }
 }
 
-function cardRectFor(node, overridePreview) {
-  if (overridePreview && dragNode === node) return { x: overridePreview.x, y: overridePreview.y, w: CARD_W, h: CARD_H };
-  return nodePixelRect(node);
-}
-
-function drawCard(node, rect, movingOverride) {
-  const r = movingOverride ? { x: movingOverride.x, y: movingOverride.y, w: CARD_W, h: CARD_H } : rect;
-  const c = BAND_COLOR[node.band] || BAND_COLOR.peasant;
+function drawCard(node, r) {
   const isSel = node.id === selectedId;
+  const isAnchor = node.kind === "anchor";
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,.35)";
-  ctx.shadowBlur = isSel ? 10 : 4;
-  ctx.fillStyle = node.kind === "kingdom" ? "#fbeed8" : "#fffaf0";
-  roundRect(r.x, r.y, r.w, r.h, 7);
+  roundRect(r.x, r.y, r.w, r.h, 9);
+  ctx.fillStyle = C_CARD_BG;
   ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.lineWidth = isSel ? 3 : 1.6;
-  ctx.strokeStyle = isSel ? "#1a5fb4" : c.edge;
-  roundRect(r.x, r.y, r.w, r.h, 7);
+  if (isAnchor) { ctx.fillStyle = "rgba(79,157,90,0.22)"; ctx.fill(); }
+  ctx.lineWidth = isSel ? 3 : 2;
+  ctx.strokeStyle = isSel ? C_ACCENT : (isAnchor ? C_DONE : C_EDGE);
+  if (isSel) { ctx.shadowColor = "rgba(201,138,60,.55)"; ctx.shadowBlur = 10; }
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
-  // kind badge strip
-  ctx.fillStyle = c.edge;
-  ctx.fillRect(r.x, r.y, 6, r.h);
-
-  ctx.fillStyle = "#2c1c0f";
-  ctx.font = "bold 12px Georgia, serif";
-  ctx.textBaseline = "top";
-  wrapText(node.name || node.id, r.x + 12, r.y + 6, r.w - 20, 14, 2);
-
-  ctx.font = "10px Georgia, serif";
-  ctx.fillStyle = "#5b4a30";
-  ctx.fillText(node.id, r.x + 12, r.y + r.h - 26);
-  ctx.fillText((KIND_LABEL[node.kind] || node.kind) + (node.buildingId ? " · " + node.buildingId : ""), r.x + 12, r.y + r.h - 14);
+  // shield glyph, top-right
+  ctx.font = "16px 'Segoe UI Emoji', Georgia, serif";
   ctx.textAlign = "right";
-  ctx.fillText("g" + (node.cost || 0), r.x + r.w - 10, r.y + r.h - 14);
+  ctx.textBaseline = "top";
+  ctx.globalAlpha = 0.9;
+  ctx.fillText(glyphFor(node), r.x + r.w - 8, r.y + 6);
+  ctx.globalAlpha = 1;
   ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 
-  const mats = doc.materials[node.id];
-  if (mats && Object.keys(mats).length) {
-    ctx.fillStyle = "#3c7a3c";
+  // name plate
+  ctx.fillStyle = C_PAPER;
+  ctx.font = "bold 12.5px Georgia, serif";
+  ctx.textBaseline = "top";
+  wrapText(node.name || node.id, r.x + 9, r.y + 8, r.w - 26, 14, 2);
+
+  // badge line
+  ctx.font = "10.5px Georgia, serif";
+  ctx.globalAlpha = 0.85;
+  const badge = isAnchor ? "✓ start unlocked" : ((node.cost || 0) + " 🪙");
+  ctx.fillText(badge, r.x + 9, r.y + r.h - 19);
+  ctx.globalAlpha = 1;
+
+  // id caption
+  ctx.font = "9px Georgia, serif";
+  ctx.fillStyle = hexAlpha(C_PAPER, 0.55);
+  ctx.fillText(node.id, r.x + 9, r.y + r.h - 9);
+
+  // materials-present indicator dot (n/a for anchors — no research cost)
+  if (!isAnchor) {
+    const mats = doc.materials[node.id];
     ctx.beginPath();
-    ctx.arc(r.x + r.w - 10, r.y + 10, 4, 0, 7);
-    ctx.fill();
-  } else {
-    ctx.fillStyle = "#a3271f";
-    ctx.beginPath();
-    ctx.arc(r.x + r.w - 10, r.y + 10, 4, 0, 7);
+    ctx.arc(r.x + r.w - 10, r.y + r.h - 10, 4, 0, 7);
+    ctx.fillStyle = (mats && Object.keys(mats).length) ? C_DONE : C_ERR;
     ctx.fill();
   }
 
-  // link handle
-  const hp = { x: r.x + r.w - 2, y: r.y + 2 };
+  // link handle (top-right) — drag onto another card to add a prereq
+  const hp = handleWorldPos(node);
   ctx.beginPath();
   ctx.arc(hp.x, hp.y, HANDLE_R, 0, 7);
-  ctx.fillStyle = "#b5591f";
+  ctx.fillStyle = C_ACCENT;
   ctx.fill();
-  ctx.strokeStyle = "#3d2814";
+  ctx.strokeStyle = C_EDGE;
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.restore();
+  ctx.textBaseline = "alphabetic";
 }
 
-function drawPips(pips, anchorRect, primary, movingNode, movingPreview) {
-  pips.sort((a, b) => (a.level || 0) - (b.level || 0));
-  const baseY = primary ? anchorRect.y + anchorRect.h + 4 : anchorRect.y;
-  const baseX = primary ? anchorRect.x : anchorRect.x;
-  let x = baseX;
-  const pw = 44, ph = primary ? 20 : CARD_H;
-  for (const p of pips) {
-    let rect;
-    if (movingNode === p && movingPreview) rect = { x: movingPreview.x, y: movingPreview.y, w: pw, h: ph };
-    else rect = { x, y: primary ? baseY : anchorRect.y, w: pw, h: ph };
-    const isSel = p.id === selectedId;
-    ctx.save();
-    ctx.fillStyle = isSel ? "#ffe6b8" : "#f4e6c2";
-    ctx.strokeStyle = isSel ? "#1a5fb4" : "#8a6a2e";
-    ctx.lineWidth = isSel ? 2.5 : 1.2;
-    roundRect(rect.x, rect.y, rect.w, rect.h, 5);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#3d2814";
-    ctx.font = "bold 10px Georgia, serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("L" + (p.level != null ? p.level : "?"), rect.x + rect.w / 2, rect.y + rect.h / 2 - (primary ? 0 : 6));
-    if (!primary) {
-      ctx.font = "8px Georgia, serif";
-      ctx.fillText((p.buildingId || "?").slice(0, 8), rect.x + rect.w / 2, rect.y + rect.h / 2 + 8);
-    }
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    // handle for pip too (small)
-    ctx.beginPath();
-    ctx.arc(rect.x + rect.w - 2, rect.y + 2, 5, 0, 7);
-    ctx.fillStyle = "#b5591f";
-    ctx.fill();
-    ctx.restore();
-    x += pw + 4;
-  }
+function drawPip(node, rect) {
+  const isSel = node.id === selectedId;
+  const ladder = pipsForBuilding(node.buildingId);
+  const pos1 = ladder.findIndex(n => n.id === node.id) + 1;
+  ctx.save();
+  roundRect(rect.x, rect.y, rect.w, rect.h, 5);
+  ctx.fillStyle = C_CARD_BG;
+  ctx.fill();
+  ctx.lineWidth = isSel ? 2.5 : 2;
+  ctx.strokeStyle = isSel ? C_ACCENT : C_EDGE;
+  if (isSel) { ctx.shadowColor = "rgba(201,138,60,.5)"; ctx.shadowBlur = 6; }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = isSel ? C_ACCENT : C_PAPER;
+  ctx.font = "bold 10.5px Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(romanAt(pos1), rect.x + rect.w / 2, rect.y + rect.h / 2);
+  ctx.restore();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 }
 
 function roundRect(x, y, w, h, r) {
@@ -781,39 +870,6 @@ function wrapText(text, x, y, maxW, lh, maxLines) {
   for (let i = 0; i < Math.min(lines.length, maxLines); i++) ctx.fillText(lines[i], x, y + i * lh);
 }
 
-/* --------------------------- pip hit-test ----------------------------- */
-// Recompute pip rects the same way drawPips lays them out, for hit testing.
-function pipRectsForSlot(band, col, row) {
-  const group = doc.research.filter(n => n.band === band && n.pos.col === col && n.pos.row === row);
-  const primary = group.find(isPrimary);
-  const pips = group.filter(n => !isPrimary(n)).sort((a, b) => (a.level || 0) - (b.level || 0));
-  const anchorRect = nodePixelRect(primary || pips[0] || { band, pos: { col, row } });
-  const baseY = primary ? anchorRect.y + anchorRect.h + 4 : anchorRect.y;
-  const pw = 44, ph = primary ? 20 : CARD_H;
-  let x = anchorRect.x;
-  const out = [];
-  for (const p of pips) {
-    out.push({ node: p, rect: { x, y: baseY, w: pw, h: ph } });
-    x += pw + 4;
-  }
-  return out;
-}
-
-function pipAtWorld(wx, wy) {
-  const slots = new Set(doc.research.map(n => n.band + "|" + n.pos.col + "|" + n.pos.row));
-  for (const key of slots) {
-    const [band, col, row] = [key.split("|")[0], +key.split("|")[1], +key.split("|")[2]];
-    for (const { node, rect } of pipRectsForSlot(band, col, row)) {
-      if (wx >= rect.x && wx <= rect.x + rect.w && wy >= rect.y && wy <= rect.y + rect.h) return node;
-    }
-  }
-  return null;
-}
-
-function anyNodeAtWorld(wx, wy) {
-  return nodeAtWorld(wx, wy) || pipAtWorld(wx, wy);
-}
-
 /* --------------------------- mouse / interaction ------------------------ */
 
 function canvasMousePos(ev) {
@@ -824,9 +880,14 @@ function canvasMousePos(ev) {
 canvas.addEventListener("mousedown", (ev) => {
   const { sx, sy } = canvasMousePos(ev);
   const w = screenToWorld(sx, sy);
-  const node = anyNodeAtWorld(w.x, w.y);
   dragStart = { sx, sy };
   dragMoved = false;
+
+  // Pips are never dragged/linked — click just selects them.
+  const pip = pipAtWorld(w.x, w.y);
+  if (pip) { selectNode(pip.id); return; }
+
+  const node = nodeAtWorld(w.x, w.y);
   if (node) {
     const h = handleWorldPos(node);
     const distH = Math.hypot(w.x - h.x, w.y - h.y);
@@ -879,6 +940,20 @@ window.addEventListener("mousemove", (ev) => {
 });
 
 window.addEventListener("mouseup", (ev) => {
+  // IMPORTANT: only react when a board drag/click sequence actually started
+  // on the canvas (dragMode set in the canvas "mousedown" handler above).
+  // Without this guard this handler used to fire on EVERY mouseup anywhere
+  // in the document — including inside the sidebar — and unconditionally
+  // called renderInspector(), which does `root.innerHTML = ""` and rebuilds
+  // the whole inspector DOM. That tore down/replaced form elements out from
+  // under the very click that was still in flight, which (a) silently
+  // swallowed the "click" event on any button whose DOM node got replaced
+  // between mousedown and click — including "Delete this card" — since
+  // browsers don't dispatch click on a target removed from the document
+  // mid-gesture, (b) closed native <select> dropdowns the instant they were
+  // opened, and (c) blurred any input/textarea being focused. Guarding on
+  // dragMode confines this handler to genuine board interactions.
+  if (!dragMode) return;
   canvas.classList.remove("grabbing", "linking");
   const { sx, sy } = canvasMousePos(ev);
   const w = screenToWorld(sx, sy);
@@ -887,22 +962,15 @@ window.addEventListener("mouseup", (ev) => {
     if (!dragMoved) {
       selectNode(dragNode.id);
     } else {
-      const targetBand = bandAtWorldY(w.y - CARD_H / 2 + dragPreview.offY - (dragPreview.offY));
       const centerX = dragPreview.x + CARD_W / 2, centerY = dragPreview.y + CARD_H / 2;
       const band = bandAtWorldY(centerY);
       const slot = slotFromWorldPos(band, centerX - CARD_W / 2, centerY - CARD_H / 2);
-      if (isPrimary(dragNode)) {
-        const occ = slotOccupantsPrimary(band, slot.col, slot.row, dragNode.id);
-        if (occ.length > 0) {
-          toast("Slot occupied — move cancelled.");
-        } else {
-          dragNode.band = band;
-          if (BAND_LIST.includes(band)) dragNode.branch = (dragNode.kind === "kingdom") ? dragNode.branch : band;
-          dragNode.pos = { col: slot.col, row: slot.row };
-          layout = computeLayout();
-        }
+      const occ = slotOccupantsPrimary(band, slot.col, slot.row, dragNode.id);
+      if (occ.length > 0) {
+        toast("Slot occupied — move cancelled.");
       } else {
         dragNode.band = band;
+        if (dragNode.kind !== "kingdom") dragNode.branch = band;
         dragNode.pos = { col: slot.col, row: slot.row };
         layout = computeLayout();
       }
@@ -910,7 +978,9 @@ window.addEventListener("mouseup", (ev) => {
     }
   } else if (dragMode === "link" && dragNode) {
     const target = anyNodeAtWorld(w.x, w.y);
-    if (target && target.id !== dragNode.id) {
+    if (target && target.kind === "upgrade") {
+      toast("Upgrade pips chain automatically — drag prereqs between building cards instead.");
+    } else if (target && target.id !== dragNode.id) {
       target.prereqs = target.prereqs || [];
       if (!target.prereqs.includes(dragNode.id)) {
         target.prereqs.push(dragNode.id);
@@ -940,12 +1010,25 @@ canvas.addEventListener("wheel", (ev) => {
 }, { passive: false });
 
 window.addEventListener("keydown", (ev) => {
-  if ((ev.key === "Delete" || ev.key === "Backspace") && selectedEdge) {
-    if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+  if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (selectedEdge) {
     const child = doc.research.find(n => n.id === selectedEdge.childId);
     if (child) child.prereqs = (child.prereqs || []).filter(p => p !== selectedEdge.parentId);
     selectedEdge = null;
     draw(); renderValidation();
+    return;
+  }
+  if (selectedId) {
+    const node = findNode(selectedId);
+    if (!node) return;
+    if (node.kind === "upgrade") {
+      const ladder = ladderFor(node.buildingId);
+      const topLevel = ladder.length ? Math.max(...ladder.map(e => e.level)) : null;
+      if (node.level === topLevel && confirm(`Remove upgrade level "${node.name || node.id}"?`)) removeUpgrade(node.buildingId);
+    } else if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites.`)) {
+      deleteCard(node.id);
+    }
   }
 });
 
@@ -990,11 +1073,22 @@ function addCard() {
   const id = "new_node_" + n;
   const band = "peasant";
   const slot = findFreeSlot(band);
-  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Node", desc: "", cost: 100, timeTicks: 10, prereqs: [], effect: {} };
+  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Building", desc: "", cost: 100, timeTicks: 10, prereqs: [], effect: {} };
   doc.research.push(node);
   doc.materials[id] = {};
   layout = computeLayout();
   selectNode(id);
+}
+
+function pruneDanglingPrereqs() {
+  const ids = new Set(doc.research.map(n => n.id));
+  for (const n of doc.research) n.prereqs = (n.prereqs || []).filter(p => ids.has(p));
+}
+
+function removeLadderPip(nodeId) {
+  const idx = doc.research.findIndex(n => n.id === nodeId);
+  if (idx >= 0) doc.research.splice(idx, 1);
+  delete doc.materials[nodeId];
 }
 
 function deleteCard(id) {
@@ -1003,12 +1097,58 @@ function deleteCard(id) {
   const node = doc.research[idx];
   doc.research.splice(idx, 1);
   delete doc.materials[id];
-  for (const n of doc.research) n.prereqs = (n.prereqs || []).filter(p => p !== id);
+
   if (node.kind === "upgrade" && node.buildingId && doc.upgrades[node.buildingId]) {
     doc.upgrades[node.buildingId] = doc.upgrades[node.buildingId].filter(e => e.unlockedBy !== id);
     if (doc.upgrades[node.buildingId].length === 0) delete doc.upgrades[node.buildingId];
+  } else if (node.buildingId && doc.upgrades[node.buildingId]) {
+    // Deleting a building's primary card leaves its upgrade pips with
+    // nowhere to attach — cascade-delete the whole ladder with it so no
+    // orphaned upgrade cards/pips are ever left behind.
+    for (const entry of doc.upgrades[node.buildingId].slice()) removeLadderPip(entry.unlockedBy);
+    delete doc.upgrades[node.buildingId];
   }
-  selectedId = null;
+
+  pruneDanglingPrereqs();
+  if (selectedId === id) selectedId = null;
+  layout = computeLayout();
+  draw();
+  renderInspector();
+  renderValidation();
+}
+
+function addUpgrade(node) {
+  const buildingId = node.buildingId;
+  if (!buildingId) return;
+  const ladder = doc.upgrades[buildingId] = doc.upgrades[buildingId] || [];
+  if (ladder.length >= MAX_UPGRADES_PER_BUILDING) { toast(`Max ${MAX_UPGRADES_PER_BUILDING} upgrades per building.`); return; }
+  const level = ladder.length ? Math.max(...ladder.map(e => e.level)) + 1 : 2;
+  const id = "upg_" + buildingId + "_l" + level;
+  const roman = romanAt(ladder.length + 1);
+  const newNode = {
+    id, branch: node.kind === "kingdom" ? node.branch : node.band, band: node.band, kind: "upgrade",
+    buildingId, level, pos: { col: node.pos.col, row: node.pos.row },
+    name: roman + " Upgrade", desc: "", cost: 100, timeTicks: 10,
+    prereqs: ladder.length ? [ladder[ladder.length - 1].unlockedBy] : [],
+    effect: {},
+  };
+  doc.research.push(newNode);
+  doc.materials[id] = {};
+  ladder.push({ level, name: newNode.name, unlockedBy: id, cost: { gold: 100 }, effect: {} });
+  layout = computeLayout();
+  selectNode(id);
+  renderValidation();
+}
+
+function removeUpgrade(buildingId) {
+  const ladder = doc.upgrades[buildingId];
+  if (!ladder || !ladder.length) return;
+  const top = ladder[ladder.length - 1];
+  ladder.pop();
+  if (!ladder.length) delete doc.upgrades[buildingId];
+  removeLadderPip(top.unlockedBy);
+  pruneDanglingPrereqs();
+  if (selectedId === top.unlockedBy) selectedId = null;
   layout = computeLayout();
   draw();
   renderInspector();
@@ -1038,7 +1178,15 @@ function el(tag, attrs, children) {
     if (k === "class") e.className = attrs[k];
     else if (k === "text") e.textContent = attrs[k];
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
-    else e.setAttribute(k, attrs[k]);
+    else if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+    // NOTE: attrs[k] === undefined must NOT call setAttribute at all — for
+    // <option selected="...">, setAttribute("selected", undefined) still adds
+    // the attribute (coerced to the string "undefined"), and HTML treats an
+    // option's mere presence of `selected` as selected regardless of value.
+    // Passing selected:undefined on every non-matching <option> (see
+    // optionsFor()) meant EVERY option carried a selected attribute, so the
+    // browser fell back to "last one wins" — every <select> in the inspector
+    // visually snapped to its LAST option instead of the node's real value.
   }
   (children || []).forEach(c => e.appendChild(c));
   return e;
@@ -1069,12 +1217,149 @@ function renderInspector() {
     return;
   }
   if (!selectedId) {
-    root.appendChild(el("div", { class: "emptyMsg", text: "Select a card on the board to edit it, or click “+ Add Card” above." }));
+    root.appendChild(el("div", { class: "emptyMsg", text: "Select a card or upgrade pip on the board to edit it, or click “+ Add Card” above." }));
     return;
   }
   const node = findNode(selectedId);
   if (!node) { root.appendChild(el("div", { class: "emptyMsg", text: "Node not found (deleted?)." })); return; }
 
+  if (node.kind === "upgrade") { renderPipInspector(root, node); return; }
+  renderCardInspector(root, node);
+}
+
+function renderPipInspector(root, node) {
+  const ladder = ladderFor(node.buildingId);
+  const pos1 = ladder.findIndex(e => e.unlockedBy === node.id) + 1;
+  const topLevel = ladder.length ? Math.max(...ladder.map(e => e.level)) : null;
+  const isTop = node.level === topLevel;
+  const entry = ensureLadderEntry(node);
+
+  const form = el("div", {});
+  const fsId = el("fieldset", {});
+  fsId.appendChild(el("legend", { text: `Upgrade pip ${romanAt(pos1)} — ${node.buildingId}` }));
+  fsId.appendChild(el("div", { class: "hint", text: `id: ${node.id}  ·  level ${node.level}  ·  pip position ${pos1} of ${ladder.length}` }));
+  fsId.appendChild(el("label", { text: "name" }));
+  const nameInput = el("input", { type: "text", value: node.name || "" });
+  nameInput.addEventListener("input", () => { node.name = nameInput.value; entry.name = nameInput.value; draw(); });
+  fsId.appendChild(nameInput);
+  fsId.appendChild(el("label", { text: "desc" }));
+  const descInput = el("textarea", { rows: "2" });
+  descInput.value = node.desc || "";
+  descInput.addEventListener("input", () => { node.desc = descInput.value; });
+  fsId.appendChild(descInput);
+  form.appendChild(fsId);
+
+  // research cost/time (kept so this pip's own research entry stays valid)
+  const fsCost = el("fieldset", {});
+  fsCost.appendChild(el("legend", { text: "Research cost (to unlock this level)" }));
+  const row4 = el("div", { class: "row" });
+  const goldWrap = el("div", {});
+  goldWrap.appendChild(el("label", { text: "cost (gold)" }));
+  const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
+  goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
+  goldWrap.appendChild(goldInput);
+  row4.appendChild(goldWrap);
+  const timeWrap = el("div", {});
+  timeWrap.appendChild(el("label", { text: "timeTicks" }));
+  const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
+  timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
+  timeWrap.appendChild(timeInput);
+  row4.appendChild(timeWrap);
+  fsCost.appendChild(row4);
+  form.appendChild(fsCost);
+
+  // materials (research-side cost)
+  const fsMat = el("fieldset", {});
+  fsMat.appendChild(el("legend", { text: "materials (research cost, goodId → qty)" }));
+  if (!doc.materials[node.id]) doc.materials[node.id] = {};
+  const mats = doc.materials[node.id];
+  const matList = el("div", {});
+  function renderMatRows() {
+    matList.innerHTML = "";
+    const keys = Object.keys(mats);
+    if (keys.length === 0) matList.appendChild(el("div", { class: "hint", text: "(no materials — gold + time alone)" }));
+    for (const gid of keys) {
+      const rowM = el("div", { class: "matRow" });
+      const sel = el("select", {});
+      sel.appendChild(optionsFor(GOODS_IDS, gid));
+      sel.addEventListener("change", () => { const qty = mats[gid]; delete mats[gid]; mats[sel.value] = qty; renderMatRows(); draw(); });
+      rowM.appendChild(sel);
+      const qtyInput = el("input", { type: "number", value: mats[gid], min: "0" });
+      qtyInput.addEventListener("input", () => { mats[gid] = parseFloat(qtyInput.value) || 0; });
+      rowM.appendChild(qtyInput);
+      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete mats[gid]; renderMatRows(); draw(); renderValidation(); } });
+      rowM.appendChild(rm);
+      matList.appendChild(rowM);
+    }
+  }
+  renderMatRows();
+  fsMat.appendChild(matList);
+  fsMat.appendChild(el("button", { class: "miniBtn", text: "+ add material", onclick: () => {
+    const free = GOODS_IDS.find(g => !(g in mats)) || GOODS_IDS[0];
+    mats[free] = 10; renderMatRows(); draw(); renderValidation();
+  } }));
+  form.appendChild(fsMat);
+
+  // building-upgrade ladder entry (paid from town stock in-game)
+  const fsLad = el("fieldset", {});
+  fsLad.appendChild(el("legend", { text: `Building upgrade — ${node.buildingId} L${entry.level}` }));
+  fsLad.appendChild(el("div", { class: "hint", text: "Paid from town stock once the research above is unlocked (CONFIG.upgrades)." }));
+  fsLad.appendChild(el("label", { text: "cost.gold" }));
+  const lgold = el("input", { type: "number", value: (entry.cost && entry.cost.gold) || 0, min: "0" });
+  lgold.addEventListener("input", () => { entry.cost = entry.cost || {}; entry.cost.gold = parseFloat(lgold.value) || 0; });
+  fsLad.appendChild(lgold);
+  fsLad.appendChild(el("label", { text: "cost (goods, goodId → qty)" }));
+  const costList = el("div", {});
+  function renderCostRows() {
+    costList.innerHTML = "";
+    entry.cost = entry.cost || {};
+    const gkeys = Object.keys(entry.cost).filter(k => k !== "gold");
+    for (const gid of gkeys) {
+      const rowC = el("div", { class: "matRow" });
+      const sel = el("select", {});
+      sel.appendChild(optionsFor(GOODS_IDS, gid));
+      sel.addEventListener("change", () => { const q = entry.cost[gid]; delete entry.cost[gid]; entry.cost[sel.value] = q; renderCostRows(); });
+      rowC.appendChild(sel);
+      const qtyInput = el("input", { type: "number", value: entry.cost[gid], min: "0" });
+      qtyInput.addEventListener("input", () => { entry.cost[gid] = parseFloat(qtyInput.value) || 0; });
+      rowC.appendChild(qtyInput);
+      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete entry.cost[gid]; renderCostRows(); } });
+      rowC.appendChild(rm);
+      costList.appendChild(rowC);
+    }
+  }
+  renderCostRows();
+  fsLad.appendChild(costList);
+  fsLad.appendChild(el("button", { class: "miniBtn", text: "+ add good cost", onclick: () => {
+    entry.cost = entry.cost || {};
+    const free = GOODS_IDS.find(g => !(g in entry.cost)) || GOODS_IDS[0];
+    entry.cost[free] = 10; renderCostRows();
+  } }));
+  fsLad.appendChild(el("label", { text: "effect (JSON — capacityPlus / slotPlus / outputMult / basicConsumptionMult)" }));
+  const leff = el("textarea", { rows: "2" });
+  leff.value = JSON.stringify(entry.effect || {}, null, 0);
+  leff.addEventListener("change", () => {
+    try { entry.effect = JSON.parse(leff.value || "{}"); leff.style.borderColor = ""; }
+    catch (e) { leff.style.borderColor = "var(--err)"; toast("Invalid JSON in ladder effect."); }
+  });
+  fsLad.appendChild(leff);
+  form.appendChild(fsLad);
+
+  // actions
+  const fsAct = el("fieldset", {});
+  fsAct.appendChild(el("legend", { text: "Actions" }));
+  if (!isTop) fsAct.appendChild(el("div", { class: "hint", text: "Only the topmost upgrade level can be removed, to keep levels sequential — remove higher levels first (from the building card's Upgrades panel)." }));
+  const rmBtn = el("button", { class: "danger", text: "Remove this upgrade (top level)", onclick: () => {
+    if (confirm(`Remove upgrade level "${node.name || node.id}" from "${node.buildingId}"?`)) removeUpgrade(node.buildingId);
+  } });
+  if (!isTop) rmBtn.disabled = true;
+  fsAct.appendChild(rmBtn);
+  form.appendChild(fsAct);
+
+  root.appendChild(form);
+}
+
+function renderCardInspector(root, node) {
   const form = el("div", {});
 
   // --- identity ---
@@ -1114,11 +1399,31 @@ function renderInspector() {
   const kindWrap = el("div", {});
   kindWrap.appendChild(el("label", { text: "kind" }));
   const kindSel = el("select", {});
-  kindSel.appendChild(optionsFor(["unlock", "upgrade", "kingdom"], node.kind));
-  kindSel.addEventListener("change", () => { node.kind = kindSel.value; draw(); renderInspector(); renderValidation(); });
+  kindSel.appendChild(optionsFor(["unlock", "anchor", "kingdom"], node.kind));
+  kindSel.addEventListener("change", () => {
+    node.kind = kindSel.value;
+    if (node.kind === "anchor") { node.startUnlocked = true; node.cost = 0; node.timeTicks = 0; node.prereqs = []; delete doc.materials[node.id]; }
+    else { delete node.startUnlocked; if (node.kind === "unlock" && !node.cost) node.cost = 100; }
+    draw(); renderInspector(); renderValidation();
+  });
   kindWrap.appendChild(kindSel);
   row1.appendChild(kindWrap);
   fsId.appendChild(row1);
+
+  if (node.kind !== "kingdom") {
+    const suLabel = el("label", { style: "display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:8px;" });
+    const suCheck = el("input", { type: "checkbox" });
+    suCheck.checked = node.kind === "anchor";
+    suCheck.addEventListener("change", () => {
+      node.kind = suCheck.checked ? "anchor" : "unlock";
+      if (node.kind === "anchor") { node.startUnlocked = true; node.cost = 0; node.timeTicks = 0; node.prereqs = []; delete doc.materials[node.id]; }
+      else { delete node.startUnlocked; if (!node.cost) node.cost = 100; }
+      draw(); renderInspector(); renderValidation();
+    });
+    suLabel.appendChild(suCheck);
+    suLabel.appendChild(document.createTextNode(" startUnlocked — no research needed (starter building)"));
+    fsId.appendChild(suLabel);
+  }
 
   const row2 = el("div", { class: "row" });
   const branchWrap = el("div", {});
@@ -1137,20 +1442,13 @@ function renderInspector() {
   row2.appendChild(bidWrap);
   fsId.appendChild(row2);
 
-  if (node.kind === "upgrade") {
-    fsId.appendChild(el("label", { text: "level" }));
-    const lvlInput = el("input", { type: "number", value: node.level != null ? node.level : 2, min: "2" });
-    lvlInput.addEventListener("change", () => { node.level = parseInt(lvlInput.value, 10) || 2; const ent = ensureLadderEntry(node); if (ent) ent.level = node.level; renderValidation(); });
-    fsId.appendChild(lvlInput);
-  }
-
   const row3 = el("div", { class: "row" });
   const colWrap = el("div", {});
   colWrap.appendChild(el("label", { text: "pos.col" }));
   const colInput = el("input", { type: "number", value: node.pos.col, min: "0" });
   colInput.addEventListener("change", () => {
     const c = Math.max(0, parseInt(colInput.value, 10) || 0);
-    if (isPrimary(node) && slotOccupantsPrimary(node.band, c, node.pos.row, node.id).length) { toast("Slot occupied."); colInput.value = node.pos.col; return; }
+    if (slotOccupantsPrimary(node.band, c, node.pos.row, node.id).length) { toast("Slot occupied."); colInput.value = node.pos.col; return; }
     node.pos.col = c; layout = computeLayout(); draw();
   });
   colWrap.appendChild(colInput);
@@ -1160,7 +1458,7 @@ function renderInspector() {
   const rowInput = el("input", { type: "number", value: node.pos.row, min: "0" });
   rowInput.addEventListener("change", () => {
     const rr = Math.max(0, parseInt(rowInput.value, 10) || 0);
-    if (isPrimary(node) && slotOccupantsPrimary(node.band, node.pos.col, rr, node.id).length) { toast("Slot occupied."); rowInput.value = node.pos.row; return; }
+    if (slotOccupantsPrimary(node.band, node.pos.col, rr, node.id).length) { toast("Slot occupied."); rowInput.value = node.pos.row; return; }
     node.pos.row = rr; layout = computeLayout(); draw();
   });
   rowWrap.appendChild(rowInput);
@@ -1169,149 +1467,130 @@ function renderInspector() {
 
   form.appendChild(fsId);
 
-  // --- cost / time ---
-  const fsCost = el("fieldset", {});
-  fsCost.appendChild(el("legend", { text: "Research cost" }));
-  const row4 = el("div", { class: "row" });
-  const goldWrap = el("div", {});
-  goldWrap.appendChild(el("label", { text: "cost (gold)" }));
-  const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
-  goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
-  goldWrap.appendChild(goldInput);
-  row4.appendChild(goldWrap);
-  const timeWrap = el("div", {});
-  timeWrap.appendChild(el("label", { text: "timeTicks" }));
-  const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
-  timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
-  timeWrap.appendChild(timeInput);
-  row4.appendChild(timeWrap);
-  fsCost.appendChild(row4);
-  form.appendChild(fsCost);
-
-  // --- prereqs (read-only list + remove) ---
-  const fsPre = el("fieldset", {});
-  fsPre.appendChild(el("legend", { text: "Prerequisites" }));
-  fsPre.appendChild(el("div", { class: "hint", text: "Drag from another card's ◎ handle onto this card to add one." }));
-  if ((node.prereqs || []).length === 0) {
-    fsPre.appendChild(el("div", { class: "hint", text: "(none — root node)" }));
+  if (node.kind === "anchor") {
+    form.appendChild(el("fieldset", {}, [
+      el("legend", { text: "Research cost / prerequisites / materials" }),
+      el("div", { class: "hint", text: "This building is startUnlocked — no research is needed, so it has no cost, time, prerequisites or materials." }),
+    ]));
   } else {
-    for (const pid of node.prereqs) {
-      const rowP = el("div", { class: "matRow" });
-      rowP.appendChild(el("div", { text: pid, style: "flex:2" }));
-      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { node.prereqs = node.prereqs.filter(x => x !== pid); draw(); renderInspector(); renderValidation(); } });
-      rowP.appendChild(rm);
-      fsPre.appendChild(rowP);
-    }
-  }
-  form.appendChild(fsPre);
+    // --- cost / time ---
+    const fsCost = el("fieldset", {});
+    fsCost.appendChild(el("legend", { text: "Research cost" }));
+    const row4 = el("div", { class: "row" });
+    const goldWrap = el("div", {});
+    goldWrap.appendChild(el("label", { text: "cost (gold)" }));
+    const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
+    goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
+    goldWrap.appendChild(goldInput);
+    row4.appendChild(goldWrap);
+    const timeWrap = el("div", {});
+    timeWrap.appendChild(el("label", { text: "timeTicks" }));
+    const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
+    timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
+    timeWrap.appendChild(timeInput);
+    row4.appendChild(timeWrap);
+    fsCost.appendChild(row4);
+    form.appendChild(fsCost);
 
-  // --- effect JSON ---
-  const fsEff = el("fieldset", {});
-  fsEff.appendChild(el("legend", { text: "effect (JSON)" }));
-  const effArea = el("textarea", { rows: "3" });
-  effArea.value = JSON.stringify(node.effect || {}, null, 0);
-  effArea.addEventListener("change", () => {
-    try { node.effect = JSON.parse(effArea.value || "{}"); effArea.style.borderColor = ""; }
-    catch (e) { effArea.style.borderColor = "var(--err)"; toast("Invalid JSON in effect."); }
-  });
-  fsEff.appendChild(effArea);
-  form.appendChild(fsEff);
-
-  // --- materials ---
-  const fsMat = el("fieldset", {});
-  fsMat.appendChild(el("legend", { text: "materials (research cost, goodId → qty)" }));
-  if (!doc.materials[node.id]) doc.materials[node.id] = {};
-  const mats = doc.materials[node.id];
-  const matList = el("div", {});
-  function renderMatRows() {
-    matList.innerHTML = "";
-    const keys = Object.keys(mats);
-    if (keys.length === 0) matList.appendChild(el("div", { class: "hint", text: "(no materials — the node completes on gold + time alone)" }));
-    for (const gid of keys) {
-      const rowM = el("div", { class: "matRow" });
-      const sel = el("select", {});
-      sel.appendChild(optionsFor(GOODS_IDS, gid));
-      sel.addEventListener("change", () => {
-        const qty = mats[gid]; delete mats[gid]; mats[sel.value] = qty; renderMatRows(); draw();
-      });
-      rowM.appendChild(sel);
-      const qtyInput = el("input", { type: "number", value: mats[gid], min: "0" });
-      qtyInput.addEventListener("input", () => { mats[gid] = parseFloat(qtyInput.value) || 0; });
-      rowM.appendChild(qtyInput);
-      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete mats[gid]; renderMatRows(); draw(); renderValidation(); } });
-      rowM.appendChild(rm);
-      matList.appendChild(rowM);
-    }
-  }
-  renderMatRows();
-  fsMat.appendChild(matList);
-  const addMatBtn = el("button", { class: "miniBtn", text: "+ add material", onclick: () => {
-    const free = GOODS_IDS.find(g => !(g in mats)) || GOODS_IDS[0];
-    mats[free] = 10; renderMatRows(); draw(); renderValidation();
-  } });
-  fsMat.appendChild(addMatBtn);
-  form.appendChild(fsMat);
-
-  // --- upgrade ladder entry ---
-  if (node.kind === "upgrade" && node.buildingId) {
-    const entry = ensureLadderEntry(node);
-    const fsLad = el("fieldset", {});
-    fsLad.appendChild(el("legend", { text: `Upgrade ladder entry — ${node.buildingId} L${entry.level}` }));
-    fsLad.appendChild(el("div", { class: "hint", text: "This is the actual building-upgrade paid from town stock once the research above is unlocked (CONFIG.upgrades)." }));
-    fsLad.appendChild(el("label", { text: "name" }));
-    const lname = el("input", { type: "text", value: entry.name || "" });
-    lname.addEventListener("input", () => { entry.name = lname.value; });
-    fsLad.appendChild(lname);
-
-    fsLad.appendChild(el("label", { text: "cost.gold" }));
-    const lgold = el("input", { type: "number", value: (entry.cost && entry.cost.gold) || 0, min: "0" });
-    lgold.addEventListener("input", () => { entry.cost = entry.cost || {}; entry.cost.gold = parseFloat(lgold.value) || 0; });
-    fsLad.appendChild(lgold);
-
-    fsLad.appendChild(el("label", { text: "cost (goods, goodId → qty)" }));
-    const costList = el("div", {});
-    function renderCostRows() {
-      costList.innerHTML = "";
-      entry.cost = entry.cost || {};
-      const gkeys = Object.keys(entry.cost).filter(k => k !== "gold");
-      for (const gid of gkeys) {
-        const rowC = el("div", { class: "matRow" });
-        const sel = el("select", {});
-        sel.appendChild(optionsFor(GOODS_IDS, gid));
-        sel.addEventListener("change", () => { const q = entry.cost[gid]; delete entry.cost[gid]; entry.cost[sel.value] = q; renderCostRows(); });
-        rowC.appendChild(sel);
-        const qtyInput = el("input", { type: "number", value: entry.cost[gid], min: "0" });
-        qtyInput.addEventListener("input", () => { entry.cost[gid] = parseFloat(qtyInput.value) || 0; });
-        rowC.appendChild(qtyInput);
-        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete entry.cost[gid]; renderCostRows(); } });
-        rowC.appendChild(rm);
-        costList.appendChild(rowC);
+    // --- prereqs (read-only list + remove) ---
+    const fsPre = el("fieldset", {});
+    fsPre.appendChild(el("legend", { text: "Prerequisites" }));
+    fsPre.appendChild(el("div", { class: "hint", text: "Drag from another card's ◎ handle onto this card to add one." }));
+    if ((node.prereqs || []).length === 0) {
+      fsPre.appendChild(el("div", { class: "hint", text: "(none — root node)" }));
+    } else {
+      for (const pid of node.prereqs) {
+        const rowP = el("div", { class: "matRow" });
+        rowP.appendChild(el("div", { text: pid, style: "flex:2" }));
+        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { node.prereqs = node.prereqs.filter(x => x !== pid); draw(); renderInspector(); renderValidation(); } });
+        rowP.appendChild(rm);
+        fsPre.appendChild(rowP);
       }
     }
-    renderCostRows();
-    fsLad.appendChild(costList);
-    fsLad.appendChild(el("button", { class: "miniBtn", text: "+ add good cost", onclick: () => {
-      entry.cost = entry.cost || {};
-      const free = GOODS_IDS.find(g => !(g in entry.cost)) || GOODS_IDS[0];
-      entry.cost[free] = 10; renderCostRows();
-    } }));
+    form.appendChild(fsPre);
 
-    fsLad.appendChild(el("label", { text: "effect (JSON — capacityPlus / slotPlus / outputMult / basicConsumptionMult)" }));
-    const leff = el("textarea", { rows: "2" });
-    leff.value = JSON.stringify(entry.effect || {}, null, 0);
-    leff.addEventListener("change", () => {
-      try { entry.effect = JSON.parse(leff.value || "{}"); leff.style.borderColor = ""; }
-      catch (e) { leff.style.borderColor = "var(--err)"; toast("Invalid JSON in ladder effect."); }
+    // --- effect JSON ---
+    const fsEff = el("fieldset", {});
+    fsEff.appendChild(el("legend", { text: "effect (JSON)" }));
+    const effArea = el("textarea", { rows: "3" });
+    effArea.value = JSON.stringify(node.effect || {}, null, 0);
+    effArea.addEventListener("change", () => {
+      try { node.effect = JSON.parse(effArea.value || "{}"); effArea.style.borderColor = ""; }
+      catch (e) { effArea.style.borderColor = "var(--err)"; toast("Invalid JSON in effect."); }
     });
-    fsLad.appendChild(leff);
-    form.appendChild(fsLad);
+    fsEff.appendChild(effArea);
+    form.appendChild(fsEff);
+
+    // --- materials ---
+    const fsMat = el("fieldset", {});
+    fsMat.appendChild(el("legend", { text: "materials (research cost, goodId → qty)" }));
+    if (!doc.materials[node.id]) doc.materials[node.id] = {};
+    const mats = doc.materials[node.id];
+    const matList = el("div", {});
+    function renderMatRows() {
+      matList.innerHTML = "";
+      const keys = Object.keys(mats);
+      if (keys.length === 0) matList.appendChild(el("div", { class: "hint", text: "(no materials — the node completes on gold + time alone)" }));
+      for (const gid of keys) {
+        const rowM = el("div", { class: "matRow" });
+        const sel = el("select", {});
+        sel.appendChild(optionsFor(GOODS_IDS, gid));
+        sel.addEventListener("change", () => {
+          const qty = mats[gid]; delete mats[gid]; mats[sel.value] = qty; renderMatRows(); draw();
+        });
+        rowM.appendChild(sel);
+        const qtyInput = el("input", { type: "number", value: mats[gid], min: "0" });
+        qtyInput.addEventListener("input", () => { mats[gid] = parseFloat(qtyInput.value) || 0; });
+        rowM.appendChild(qtyInput);
+        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete mats[gid]; renderMatRows(); draw(); renderValidation(); } });
+        rowM.appendChild(rm);
+        matList.appendChild(rowM);
+      }
+    }
+    renderMatRows();
+    fsMat.appendChild(matList);
+    const addMatBtn = el("button", { class: "miniBtn", text: "+ add material", onclick: () => {
+      const free = GOODS_IDS.find(g => !(g in mats)) || GOODS_IDS[0];
+      mats[free] = 10; renderMatRows(); draw(); renderValidation();
+    } });
+    fsMat.appendChild(addMatBtn);
+    form.appendChild(fsMat);
+  }
+
+  // --- upgrades (pips) management ---
+  if (node.kind !== "kingdom" && node.buildingId) {
+    const ladder = ladderFor(node.buildingId).slice().sort((a, b) => a.level - b.level);
+    const fsUpg = el("fieldset", {});
+    fsUpg.appendChild(el("legend", { text: `Upgrades (pips shown above the card) — ${ladder.length}/${MAX_UPGRADES_PER_BUILDING}` }));
+    if (!ladder.length) {
+      fsUpg.appendChild(el("div", { class: "hint", text: "No upgrade levels yet." }));
+    } else {
+      ladder.forEach((entry, i) => {
+        const row = el("div", { class: "ladderRow", onclick: () => selectNode(entry.unlockedBy) });
+        row.appendChild(el("span", { class: "rn", text: romanAt(i + 1) }));
+        row.appendChild(el("span", { text: entry.name || entry.unlockedBy, style: "flex:1" }));
+        fsUpg.appendChild(row);
+      });
+    }
+    const btnRow = el("div", { class: "row" });
+    const addBtn = el("button", { class: "miniBtn", text: "+ Add upgrade", onclick: () => addUpgrade(node) });
+    if (ladder.length >= MAX_UPGRADES_PER_BUILDING) addBtn.disabled = true;
+    btnRow.appendChild(addBtn);
+    const rmBtn = el("button", { class: "miniBtn danger", text: "Remove top upgrade", onclick: () => {
+      const top = ladder[ladder.length - 1];
+      if (top && confirm(`Remove upgrade level "${top.name || top.unlockedBy}"?`)) removeUpgrade(node.buildingId);
+    } });
+    if (!ladder.length) rmBtn.disabled = true;
+    btnRow.appendChild(rmBtn);
+    fsUpg.appendChild(btnRow);
+    form.appendChild(fsUpg);
   }
 
   // --- actions ---
   const fsAct = el("fieldset", {});
   fsAct.appendChild(el("legend", { text: "Actions" }));
   fsAct.appendChild(el("button", { class: "danger", text: "Delete this card", onclick: () => {
-    if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites.`)) deleteCard(node.id);
+    if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites${doc.upgrades[node.buildingId] ? " and deletes its upgrade ladder" : ""}.`)) deleteCard(node.id);
   } }));
   form.appendChild(fsAct);
 
@@ -1326,7 +1605,7 @@ function renderPalette() {
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: "Bands (from Research.bands())" }),
     ...BAND_LIST.map(b => el("div", { class: "legendRow" }, [
-      el("div", { class: "legendSwatch", style: `background:${BAND_COLOR[b].fill};border-color:${BAND_COLOR[b].edge}` }),
+      el("div", { class: "legendSwatch", style: `background:${BAND_TINT[b]};border-color:${C_EDGE}` }),
       el("span", { text: BAND_LABEL[b] + "  (" + b + ")" }),
     ])),
   ]));
@@ -1349,18 +1628,35 @@ function computeValidation() {
   for (const id of ids) idCount[id] = (idCount[id] || 0) + 1;
   for (const id in idCount) if (idCount[id] > 1) issues.push({ level: "error", msg: `Duplicate id "${id}" (${idCount[id]}×).` });
 
+  const primaryByBuilding = {};
   for (const n of doc.research) {
     for (const p of (n.prereqs || [])) {
       if (!ids.includes(p)) issues.push({ level: "error", msg: `"${n.id}" has a prereq "${p}" that doesn't exist.` });
     }
-    if (n.kind === "unlock" && !n.buildingId) issues.push({ level: "error", msg: `"${n.id}" is kind:unlock but has no buildingId.` });
+    if ((n.kind === "unlock" || n.kind === "anchor") && !n.buildingId) issues.push({ level: "error", msg: `"${n.id}" is kind:${n.kind} but has no buildingId.` });
     if (n.kind === "upgrade" && (!n.buildingId || n.level == null)) issues.push({ level: "error", msg: `"${n.id}" is kind:upgrade but missing buildingId/level.` });
     if (n.kind === "kingdom" && n.band !== "kingdom") issues.push({ level: "warn", msg: `"${n.id}" is kind:kingdom but band is "${n.band}" (usually band should be "kingdom").` });
     if (n.kind !== "kingdom" && n.band === "kingdom") issues.push({ level: "warn", msg: `"${n.id}" has band:kingdom but kind is "${n.kind}" (usually kingdom band = kind:kingdom).` });
     if (n.buildingId && !BUILDING_IDS.includes(n.buildingId)) issues.push({ level: "warn", msg: `"${n.id}" references unknown buildingId "${n.buildingId}".` });
-    const mats = doc.materials[n.id];
-    if (!mats || Object.keys(mats).length === 0) issues.push({ level: "warn", msg: `"${n.id}" has no materials — it will complete on gold+time alone.` });
-    else for (const gid in mats) if (!GOODS_IDS.includes(gid)) issues.push({ level: "warn", msg: `"${n.id}" materials reference unknown good "${gid}".` });
+    if (n.kind === "anchor") {
+      if ((n.cost || 0) > 0) issues.push({ level: "warn", msg: `"${n.id}" is startUnlocked but has a nonzero cost (ignored — starter buildings need no research).` });
+      if ((n.prereqs || []).length) issues.push({ level: "warn", msg: `"${n.id}" is startUnlocked but has prerequisites (ignored).` });
+    } else if (isPrimary(n)) {
+      const mats = doc.materials[n.id];
+      if (!mats || Object.keys(mats).length === 0) issues.push({ level: "warn", msg: `"${n.id}" has no materials — it will complete on gold+time alone.` });
+      else for (const gid in mats) if (!GOODS_IDS.includes(gid)) issues.push({ level: "warn", msg: `"${n.id}" materials reference unknown good "${gid}".` });
+    }
+    if ((n.kind === "unlock" || n.kind === "anchor") && n.buildingId) {
+      (primaryByBuilding[n.buildingId] = primaryByBuilding[n.buildingId] || []).push(n.id);
+    }
+  }
+  for (const bid in primaryByBuilding) if (primaryByBuilding[bid].length > 1) {
+    issues.push({ level: "error", msg: `Building "${bid}" has ${primaryByBuilding[bid].length} cards (${primaryByBuilding[bid].join(", ")}) — only one card per building is allowed.` });
+  }
+  for (const n of doc.research) {
+    if (n.kind === "upgrade" && n.buildingId && !primaryByBuilding[n.buildingId]) {
+      issues.push({ level: "error", msg: `Upgrade "${n.id}" has no building card for "${n.buildingId}" — add a card for that building first.` });
+    }
   }
 
   // slot collisions (primary vs primary only)
@@ -1371,11 +1667,11 @@ function computeValidation() {
   }
   for (const key in slotMap) if (slotMap[key].length > 1) issues.push({ level: "error", msg: `Slot collision at ${key.replace(/\|/g, " col ").replace(/ col /, " ")}: ${slotMap[key].join(", ")}.` });
 
-  // cycle detection
+  // cycle detection (primary cards only — upgrade pips are chained automatically)
   const graph = {};
-  for (const n of doc.research) graph[n.id] = n.prereqs || [];
+  for (const n of primaryCards()) graph[n.id] = n.prereqs || [];
   const WHITE = 0, GRAY = 1, BLACK = 2;
-  const color = {}; for (const id of ids) color[id] = WHITE;
+  const color = {}; for (const id of Object.keys(graph)) color[id] = WHITE;
   let cyc = null;
   function dfs(u, stack) {
     color[u] = GRAY; stack.push(u);
@@ -1386,7 +1682,7 @@ function computeValidation() {
     }
     stack.pop(); color[u] = BLACK; return false;
   }
-  for (const id of ids) { if (color[id] === WHITE && dfs(id, [])) break; }
+  for (const id of Object.keys(graph)) { if (color[id] === WHITE && dfs(id, [])) break; }
   if (cyc) issues.push({ level: "error", msg: `Cycle detected: ${cyc.join(" → ")}.` });
 
   // upgrade ladder cross-check
@@ -1396,6 +1692,7 @@ function computeValidation() {
       if (!match) issues.push({ level: "warn", msg: `upgrades.${bid} L${entry.level} has no matching research node.` });
       else if (entry.unlockedBy !== match.id) issues.push({ level: "warn", msg: `upgrades.${bid} L${entry.level}.unlockedBy ("${entry.unlockedBy}") doesn't match its research node id ("${match.id}").` });
     }
+    if (doc.upgrades[bid].length > MAX_UPGRADES_PER_BUILDING) issues.push({ level: "warn", msg: `upgrades.${bid} has ${doc.upgrades[bid].length} levels (more than the editor's ${MAX_UPGRADES_PER_BUILDING}-pip max).` });
   }
 
   const flaggedEdges = allEdges().filter(e => edgeFlags(e.parent, e.child).flagged).length;
@@ -1428,11 +1725,12 @@ function cloneNodeForExport(n) {
   const out = { id: n.id, branch: n.branch, band: n.band, kind: n.kind };
   if (n.buildingId) out.buildingId = n.buildingId;
   if (n.level != null) out.level = n.level;
+  if (n.startUnlocked) out.startUnlocked = true;
   out.pos = { col: n.pos.col, row: n.pos.row };
   out.name = n.name || "";
   out.desc = n.desc || "";
   out.cost = n.cost || 0;
-  out.timeTicks = n.timeTicks || 1;
+  out.timeTicks = n.timeTicks != null ? n.timeTicks : 1;
   out.prereqs = (n.prereqs || []).slice();
   out.effect = deepClone(n.effect || {});
   return out;
@@ -1451,7 +1749,7 @@ function renderIo() {
   root.innerHTML = "";
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: "Export" }),
-    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly." }),
+    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly. Start-unlocked (anchor) building cards are included as kind:\"anchor\" entries (startUnlocked:true, no cost/prereqs) rather than kind:\"unlock\" — filter those out (or treat as always-unlocked) in a research loader that only wants gated nodes." }),
     el("button", { class: "primary", text: "Refresh preview", onclick: () => { area.value = JSON.stringify(buildExport(), null, 2); } }),
     el("button", { text: "Download research-tree.json", onclick: downloadExport }),
   ]));
@@ -1489,6 +1787,7 @@ function normalizeImported(parsed) {
     kind: n.kind || "unlock",
     buildingId: n.buildingId || undefined,
     level: n.level != null ? n.level : undefined,
+    startUnlocked: !!n.startUnlocked || n.kind === "anchor" || undefined,
     pos: { col: (n.pos && n.pos.col) || 0, row: (n.pos && n.pos.row) || 0 },
     name: n.name || n.id,
     desc: n.desc || "",
