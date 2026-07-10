@@ -734,10 +734,10 @@ function place(typeId, q, r, over) {
     const A = CONFIG.needs.tiers.aristocrats;
     const refill = (t) => { for (const g of A.basic) t.stock[g] = 80; for (const g of A.extra) t.stock[g] = 80; };
     const t = town({ level: 4, gold: 0, pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 1 },
-      stock: {}, buildings: [place("aristocrat_home", 0, 1, { upgradeLevel: 3, built: true })] });   // cap 3 (BAL2: completed home — scaffolds house nobody)
+      stock: {}, buildings: [place("aristocrat_home", 0, 1, { built: true })] });   // ARISTOFIX: cap 1 (non-upgradable, completed home)
     for (let i = 0; i < 400; i++) { refill(t); Sim.tick({ towns: [t] }); }
-    ok("CC: aristocrats grow from aristocrat_home when all their needs are met", t.pop.aristocrats > 1.5);
-    ok("CC: aristocrat pop respects house capacity (L3 → 3)", t.pop.aristocrats <= 3 + 1e-9 && t.pop.aristocrats > 2.5);
+    ok("CC: aristocrats grow from aristocrat_home when all their needs are met", t.pop.aristocrats > 0.9);
+    ok("CC: aristocrat pop respects house capacity (cap 1)", t.pop.aristocrats <= 1 + 1e-9 && t.pop.aristocrats > 0.9);
     ok("CC: aristocrats fund tax income", t.tierIncome.aristocrats > 0 && t.gold > 0);
     ok("CC: the aristocrat_home (a house) is never staffed", t.buildings[0].workers === 0);
     ok("CC: happy aristocrats reach ~100 (all basics + luxuries met)", t.tierHappiness.aristocrats > 95);

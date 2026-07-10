@@ -516,5 +516,35 @@ function detState() {
      a.carts.filter(c => c.fromId === 1).length >= 1);
 }
 
+
+// === TRADEFIX: a SMALL-population city with a real shortfall trades =============
+// Regression for the "cities complain but never trade" bug: the trade target was
+// demand/tick × price-buffer (2), so a 4-peasant city wanted only ~0.4 wood —
+// below buyThreshold(1) — and NEVER dispatched a trader. Now it uses a real
+// inventory horizon (CONFIG.trade.stockHorizon).
+(function () {
+  ok("CONFIG.trade.minStock is a sensible inventory floor (>= 3)",
+     (CONFIG.trade.minStock || 0) >= 3);
+  Pathing.invalidate && Pathing.invalidate();
+  const hexes = new Map();
+  for (const c of HexMath.range(0, 0, 12)) hexes.set(HexMath.key(c.q, c.r), { q: c.q, r: c.r, terrain: "barren", revealed: true });
+  const roads = new Set();
+  for (let q = 1; q <= 5; q++) roads.add(HexMath.key(q, 0));   // road between the two centers, skip centers
+  // buyer: 4 peasants, no wood (wood is a basic need); seller: floods wood.
+  const buyer  = mkTown({ id: 1, q: 0, r: 0, level: 2, gold: 5000, pop: { peasants: 4, workers: 0, burghers: 0 }, stock: {}, demand: { wood: 0.2 } });
+  const seller = mkTown({ id: 2, q: 6, r: 0, level: 2, gold: 5000, pop: { peasants: 0, workers: 0, burghers: 0 }, stock: { wood: 80 }, demand: {} });
+  const state = { map: { hexes }, towns: [buyer, seller], roads, carts: [], treasury: 0, tariffRate: 0.25, tick: 0, tradeSeed: 1 };
+  let dispatched = false;
+  for (let i = 0; i < 30 && !dispatched; i++) {
+    Trade.tick(state);
+    if (state.carts.some(c => c.fromId === 1 && (c.goodId === "wood" || (c.cargo || []).some(x => x.goodId === "wood")))) dispatched = true;
+  }
+  ok("a 4-peasant city with a wood shortfall dispatches a trader to a road-connected seller", dispatched);
+  // and it buys a worthwhile load, not a fractional dribble.
+  const cart = state.carts.find(c => c.fromId === 1);
+  ok("the dispatched trade hauls a meaningful quantity (>= 2)", !!cart && (cart.qty || (cart.cargo || []).reduce((n, x) => n + x.qty, 0)) >= 2);
+})();
+// === /TRADEFIX =================================================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

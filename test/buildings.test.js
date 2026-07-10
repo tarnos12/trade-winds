@@ -116,16 +116,16 @@ ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.
 ok("aristocrat_home present (houseTier aristocrat, capacity 1)",
   CONFIG.buildings.aristocrat_home && CONFIG.buildings.aristocrat_home.kind === "house"
   && CONFIG.buildings.aristocrat_home.houseTier === "aristocrat" && CONFIG.buildings.aristocrat_home.houseCapacity === 1);
-ok("aristocrat_home ladder has 2 levels (+1 capacity each)",
-  Buildings.upgradeLadder("aristocrat_home").length === 2
-  && Buildings.upgradeAt("aristocrat_home", 2).effect.capacityPlus === 1
-  && Buildings.upgradeAt("aristocrat_home", 3).effect.capacityPlus === 1);
+ok("aristocrat_home has NO upgrade ladder (1 slot, non-upgradable — author)",
+  Buildings.upgradeLadder("aristocrat_home").length === 0
+  && !Buildings.upgradeAt("aristocrat_home", 2));
 // === CC: housingCapacity reports the aristocrats bucket. ===
 {
   const t = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 1 }] });
   ok("housingCapacity returns aristocrats bucket (cap 1)", Buildings.housingCapacity(t).aristocrats === 1);
+  // ARISTOFIX: no ladder — an aristocrat_home always shelters exactly 1, whatever the (spurious) level.
   const t3 = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 3 }] });
-  ok("housingCapacity: L3 aristocrat_home shelters 3 (1 + 2 capacityPlus)", Buildings.housingCapacity(t3).aristocrats === 3);
+  ok("aristocrat_home always shelters 1 (non-upgradable)", Buildings.housingCapacity(t3).aristocrats === 1);
 }
 
 // ---- BAL: per-building research unlock ----

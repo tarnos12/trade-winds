@@ -43,9 +43,9 @@ function fillMats(st, id) {
 const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
 const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
 const KINGDOM_COUNT = 15;
-const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // CC: 15 + 27 + 11 = 53
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // ARISTOFIX: 15 + 27 + 9 = 51 (aristocrat ladder removed)
 ok("expected node count derived from CONFIG (15 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
-ok("EXPECT resolves to 53", EXPECT === 53);
+ok("EXPECT resolves to 51", EXPECT === 51);
 // The 3 kingdom branches remain 5 nodes each.
 ok("kingdom branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
 ok("branches() is the 3 kingdom branches, development dropped",
@@ -67,11 +67,8 @@ ok("peasant+worker+burgher+aristocrat bands hold every unlock + upgrade node",
 // === CC: retired unlock nodes are gone; every new building has a node. ===
 ok("unlock_smelter + unlock_weaver removed from tree", !Research.get("unlock_smelter") && !Research.get("unlock_weaver"));
 ok("new building unlock nodes all present", ["unlock_tailoring", "unlock_charcoal_burner", "unlock_stonetool_maker", "unlock_oil_maker", "unlock_forge", "unlock_armory", "unlock_pottery_workshop", "unlock_distillery", "unlock_goldsmith", "unlock_lamp_maker", "unlock_carpentry", "unlock_luxury_tailor", "unlock_aristocrat_home"].every(id => { const n = Research.get(id); return n && n.kind === "unlock"; }));
-ok("aristocrat_home ladder nodes present + chained", (() => {
-  const l2 = Research.get("upg_aristocrat_home_l2"), l3 = Research.get("upg_aristocrat_home_l3");
-  return l2 && l3 && l2.kind === "upgrade" && l3.kind === "upgrade"
-    && l2.prereqs.indexOf("unlock_aristocrat_home") >= 0 && l3.prereqs.indexOf("upg_aristocrat_home_l2") >= 0;
-})());
+ok("aristocrat_home has NO upgrade nodes (1 slot, non-upgradable — author)",
+  !Research.get("upg_aristocrat_home_l2") && !Research.get("upg_aristocrat_home_l3"));
 // === CC: retired research-node id migration (old saves normalize forward). ===
 ok("Research.normalize migrates unlock_smelter/unlock_weaver → forge/tailoring", (() => {
   const r = Research.normalize({ unlocked: ["unlock_smelter", "unlock_weaver", "unlock_miner", "crop_rotation"] });

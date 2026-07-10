@@ -2701,11 +2701,8 @@ Object.assign(CONFIG, {
       { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
     ],
     // === /RT-A ===
-    // === CC: aristocrat_home capacity ladder (each level +1 slot) ===
-    aristocrat_home: [
-      { level: 2, name: "Grand Estate",    unlockedBy: "upg_aristocrat_home_l2", cost: { gold: 800,  bricks: 20, chairs: 2 },         effect: { capacityPlus: 1 } },
-      { level: 3, name: "Palatial Estate", unlockedBy: "upg_aristocrat_home_l3", cost: { gold: 1500, bricks: 30, luxury_clothes: 2 }, effect: { capacityPlus: 1 } },
-    ],
+    // === ARISTOFIX: aristocrat_home has NO upgrade ladder (author: Aristocrats have
+    // exactly 1 slot and cannot be upgraded). Ladder + its research nodes removed. ===
   },
 });
 
@@ -3144,6 +3141,14 @@ Object.assign(CONFIG, {
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
     buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader
+    // === TRADEFIX: a city provisions at least `minStock` of ANY good it consumes,
+    // on top of the price-buffer target (demand × econ.bufferTarget). Without this
+    // floor, a small city's per-tick demand (e.g. 0.2 wood) × buffer(2) = 0.4 stayed
+    // BELOW buyThreshold(1), so it NEVER dispatched a trader and slowly starved. The
+    // floor only applies to goods with demand > 0 (a city doesn't hoard what it does
+    // not use), so large-demand trades (cart-capped) and multi-good cargo are
+    // unchanged, and the price model (separate bufferTarget) is untouched. ===
+    minStock: 6,               // floor inventory a city keeps of each good it consumes
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
     castleSellMargin: 1.0,     // PP-A: castle-as-seller unit price = basePrice × this (tunable)
@@ -3267,13 +3272,16 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       baseTariff + rEffect("tariffBonus", 0)));                          // tax ledgers / bureaucracy
     // === /TARIFF-SLIDER ===
 
-    // "Comfortable" stock for a good in a town = demand × bufferTarget — the SAME
-    // denominator the price model uses (Sim.priceFor: ratio = stock/(demand·buffer)),
-    // so a city "wants" a good until its price ratio reaches ~1 and a seller only
-    // parts with what it holds ABOVE that line. demand covers processor inputs +
-    // pop food/beer/clothes (Sim publishes them all onto town.demand).
+    // TRADEFIX: target stock = demand × price-buffer, floored at CONFIG.trade.minStock
+    // for any good the city actually consumes (demand > 0). The floor makes small
+    // cities' shortfalls clear buyThreshold so they trade; goods a city doesn't use
+    // stay at 0 (no hoarding), so seller hold-back + multi-good behavior are unchanged.
     const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+    const minStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
+    const needOf = (t, gid) => {
+      const d = (t.demand && t.demand[gid]) || 0;
+      return d > 0 ? Math.max(d * buffer, minStock) : 0;
+    };
 
     // --- 1. Dispatch: each city's ONE external trader BUYS its biggest shortfall
     //        from a road-connected city with a real surplus (available at L1). ---
@@ -3316,26 +3324,36 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
       if (!gaps.length) continue;
       gaps.sort((a, b) => b.shortfall - a.shortfall || (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
-      // Seeded pick among the top-N near-tied shortfalls (anti-herding). One draw.
-      const gapSlate = gaps.slice(0, cfg.topRandom);
-      const want = gapSlate[Math.min(gapSlate.length - 1, Math.floor(rng() * gapSlate.length))];
 
-      // (b) Best seller: a reachable city holding a genuine surplus of want.gid.
-      //     Rank by larger surplus, then cheaper price, then shorter route, id.
-      const offers = [];
-      for (const seller of towns) {
-        if (seller === home || !seller || !seller.stock) continue;
-        // Available surplus = stock − what's already reserved for other traders − need.
-        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - needOf(seller, want.gid);
-        if (surplus <= 0) continue;
-        const route = Pathing.route(state, fromKey, townKey(seller));
-        if (!route) continue;
-        offers.push({ seller, surplus, route, price: priceOf(seller, want.gid) });
+      // (b) Offers for a good = reachable cities (+ the castle) holding a real surplus.
+      const offersFor = (gid) => {
+        const out = [];
+        for (const seller of towns) {
+          if (seller === home || !seller || !seller.stock) continue;
+          const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+          if (surplus <= 0) continue;
+          const route = Pathing.route(state, fromKey, townKey(seller));
+          if (!route) continue;
+          out.push({ seller, surplus, route, price: priceOf(seller, gid) });
+        }
+        addCastleOffer(state, out, fromKey, gid);   // PP-A: castle sells enabled goods
+        return out;
+      };
+      // === TRADEFIX: only dispatch a trader with a PURPOSE. Walk the shortfalls in
+      // priority order and keep the ones a reachable seller can actually FILL — a
+      // city must not waste its trip (or give up for the tick) on its single biggest
+      // shortfall when that good is unsellable (e.g. an extra nobody produces) while
+      // a good it CAN buy waits. Then seeded-pick among the top-N tradeable gaps. ===
+      const tradeable = [];
+      for (const g of gaps) {
+        const o = offersFor(g.gid);
+        if (o.length) { tradeable.push({ gap: g, offers: o }); if (tradeable.length >= cfg.topRandom) break; }
       }
-      // === PP-A === the CASTLE is a candidate seller of an ENABLED good it stocks.
-      addCastleOffer(state, offers, fromKey, want.gid);
-      // === /PP-A ===
-      if (!offers.length) continue;                           // shortfall persists (no reachable seller)
+      if (!tradeable.length) continue;   // nothing this city needs is for sale anywhere reachable
+      const chosen = tradeable[Math.min(tradeable.length - 1, Math.floor(rng() * tradeable.length))];
+      const want = chosen.gap;
+      const offers = chosen.offers;
+      // === /TRADEFIX ===
       offers.sort((a, b) =>
         b.surplus - a.surplus ||
         a.price - b.price ||
@@ -3623,9 +3641,7 @@ Object.assign(CONFIG, {
     { id: "upg_farm_l3",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 3, pos: { col: 1, row: 1 }, name: "Great Estate",   desc: "Unlocks the Farm level 3 upgrade.",       cost: 400, timeTicks: 22, prereqs: ["upg_farm_l2"],           effect: {} },
     { id: "upg_sawmill_l2",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 2, pos: { col: 3, row: 0 }, name: "Water Wheel",    desc: "Unlocks the Sawmill level 2 upgrade.",    cost: 250, timeTicks: 16, prereqs: [],                        effect: {} },
     { id: "upg_sawmill_l3",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 3, pos: { col: 3, row: 0 }, name: "Great Sawmill",  desc: "Unlocks the Sawmill level 3 upgrade.",    cost: 500, timeTicks: 26, prereqs: ["upg_sawmill_l2"],        effect: {} },
-    // === CC: aristocrat_home ladder upgrade nodes ===
-    { id: "upg_aristocrat_home_l2", branch: "aristocrat", band: "aristocrat", kind: "upgrade", buildingId: "aristocrat_home", level: 2, pos: { col: 0, row: 0 }, name: "Grand Estate",    desc: "Unlocks the Aristocrats Home level 2 upgrade.", cost: 800,  timeTicks: 40, prereqs: ["unlock_aristocrat_home"],   effect: {} },
-    { id: "upg_aristocrat_home_l3", branch: "aristocrat", band: "aristocrat", kind: "upgrade", buildingId: "aristocrat_home", level: 3, pos: { col: 0, row: 0 }, name: "Palatial Estate", desc: "Unlocks the Aristocrats Home level 3 upgrade.", cost: 1500, timeTicks: 60, prereqs: ["upg_aristocrat_home_l2"],   effect: {} },
+    // === ARISTOFIX: no aristocrat_home upgrade nodes (1 slot, non-upgradable). ===
     // === /RT-A + /CC =======================================================
   ],
 });
@@ -3943,8 +3959,6 @@ const RESEARCH_MATERIALS = {
   unlock_carpentry:        { planks: 25, oil: 10 },
   unlock_luxury_tailor:    { clothes: 15, gold_ring: 5 },
   unlock_aristocrat_home:  { bricks: 30, chairs: 10, gold_ring: 5 },
-  upg_aristocrat_home_l2:  { bricks: 20, chairs: 5 },
-  upg_aristocrat_home_l3:  { bricks: 30, luxury_clothes: 5 },
   // === /CC ================================================
 };
 for (const _rn of (CONFIG.research || [])) {
@@ -10218,8 +10232,13 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.20.1";
+  const GAME_VERSION = "0.20.2";
   const PATCH_NOTES = [
+    { v: "0.20.2", notes: [
+      "FIX: cities now actually trade — small towns were never dispatching traders and slowly starved",
+      "Traders only set out when there's a real purpose: a needed good a reachable city can actually sell",
+      "Aristocrat Homes are 1 slot and can no longer be upgraded (removed the stray upgrade levels)",
+    ] },
     { v: "0.20.1", notes: [
       "Winning now feels like winning — a celebratory victory screen with confetti and a run recap",
       "Fixed a placement hint that wrongly said fogged tiles were valid city sites",
