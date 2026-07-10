@@ -383,6 +383,11 @@ const DEFAULT_UPGRADES = {
 /* ===================================================================== */
 
 const BAND_LIST = ["peasant", "worker", "burgher", "aristocrat", "kingdom"];
+// FLIP: BAND_LIST keeps the SEMANTIC tier order (peasant<worker<…, used for edge/
+// index checks + dropdowns). VERTICAL_ORDER is the on-screen stacking, TOP→BOTTOM,
+// so the tree reads BOTTOM-UP like the in-game tech tree: Peasants at the bottom,
+// Aristocrats at the top (Kingdom sits above, pending its move to a left column).
+const VERTICAL_ORDER = ["kingdom", "aristocrat", "burgher", "worker", "peasant"];
 const BAND_LABEL = { peasant: "Peasants", worker: "Workers", burgher: "Citizens (burgher)", aristocrat: "Aristocrats", kingdom: "Kingdom" };
 // Exact rgba tints from index.html's .tt-band-* classes.
 const BAND_TINT = {
@@ -460,7 +465,7 @@ function romanAt(pos1based) { return ROMAN_BY_POS[pos1based - 1] || String(pos1b
 function computeLayout() {
   const bandInfo = {};
   let y0 = 20;
-  for (const band of BAND_LIST) {
+  for (const band of VERTICAL_ORDER) {   // FLIP: stack top→bottom in this order
     const nodes = doc.research.filter(n => n.band === band && isPrimary(n));
     let maxCol = 5, maxRow = 7;
     for (const n of nodes) {
@@ -484,12 +489,13 @@ function slotWorldPos(band, col, row) {
 }
 
 function bandAtWorldY(y) {
-  for (const band of BAND_LIST) {
+  for (const band of VERTICAL_ORDER) {
     const info = layout[band];
     if (y >= info.y0 && y < info.y0 + info.laneH) return band;
   }
-  if (y < layout[BAND_LIST[0]].y0) return BAND_LIST[0];
-  return BAND_LIST[BAND_LIST.length - 1];
+  // FLIP: clamp to the topmost / bottommost lane in VERTICAL_ORDER.
+  if (y < layout[VERTICAL_ORDER[0]].y0) return VERTICAL_ORDER[0];
+  return VERTICAL_ORDER[VERTICAL_ORDER.length - 1];
 }
 
 function slotFromWorldPos(band, wx, wy) {
