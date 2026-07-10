@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trade Winds — Research Tree Editor</title>
+<style>
+  :root {
+    --parchment: #e9d9ae;
+    --parchment-dark: #d8c491;
+    --wood: #5b3d24;
+    --wood-dark: #3d2814;
+    --ink: #2c1c0f;
+    --accent: #b5591f;
+    --ok: #3c7a3c;
+    --warn: #b5591f;
+    --err: #a3271f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: Georgia, "Times New Roman", serif;
+    background: var(--wood-dark);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  #app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr;
+    height: 100vh;
+  }
+  header {
+    background: linear-gradient(#6b4a2b, #4a3218);
+    color: #f4e6c2;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-bottom: 3px solid var(--wood-dark);
+    z-index: 5;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0 12px 0 0;
+    font-weight: bold;
+    letter-spacing: .5px;
+    white-space: nowrap;
+  }
+  header .sep { width: 1px; height: 22px; background: rgba(255,255,255,.25); margin: 0 4px; }
+  button {
+    font-family: inherit;
+    background: var(--parchment);
+    border: 1px solid var(--wood-dark);
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  button:hover { background: #fff2d0; }
+  button:active { background: var(--parchment-dark); }
+  button.primary { background: var(--accent); color: #fff2d0; border-color: #7a3a10; }
+  button.primary:hover { background: #c9661f; }
+  button.danger { background: var(--err); color: #fff; border-color: #6e1815; }
+  button.danger:hover { background: #c23029; }
+  header .status { margin-left: auto; font-size: 12px; color: #f4e6c2; opacity: .9; white-space: nowrap; }
+
+  #main {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    min-height: 0;
+  }
+  #boardWrap { position: relative; overflow: hidden; background: var(--wood-dark); }
+  #board { position: absolute; top: 0; left: 0; cursor: grab; }
+  #board.grabbing { cursor: grabbing; }
+  #board.linking { cursor: crosshair; }
+
+  #boardHint {
+    position: absolute; left: 10px; bottom: 10px;
+    background: rgba(20,12,4,.72); color: #f4e6c2; font-size: 11.5px;
+    padding: 8px 10px; border-radius: 6px; max-width: 380px; line-height: 1.5;
+    pointer-events: none;
+  }
+
+  #sidebar {
+    background: var(--parchment);
+    border-left: 3px solid var(--wood-dark);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tabs { display: flex; border-bottom: 2px solid var(--wood-dark); background: var(--parchment-dark); }
+  .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; font-weight: bold; padding: 8px 4px; }
+  .tabs button.active { background: var(--parchment); border-bottom: 3px solid var(--accent); }
+  .tabpanel { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; display: none; }
+  .tabpanel.active { display: block; }
+
+  fieldset { border: 1px solid var(--wood); border-radius: 5px; margin: 0 0 10px 0; padding: 8px; }
+  legend { font-weight: bold; font-size: 12px; padding: 0 4px; }
+  label { display: block; font-size: 11.5px; font-weight: bold; margin: 6px 0 2px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; font-family: inherit; font-size: 12.5px;
+    border: 1px solid var(--wood); border-radius: 3px; padding: 4px 6px;
+    background: #fbf3dd; color: var(--ink);
+  }
+  textarea { resize: vertical; font-family: "Courier New", monospace; font-size: 11.5px; }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; }
+  .matRow, .costRow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+  .matRow select, .costRow input[type=text] { flex: 2; }
+  .matRow input, .costRow input[type=number] { flex: 1; }
+  .miniBtn { padding: 2px 7px; font-size: 11px; }
+  .hint { font-size: 10.5px; color: #5b4a30; margin: 2px 0 6px; line-height: 1.35; }
+  .emptyMsg { font-size: 12.5px; color: #5b4a30; padding: 20px 6px; text-align: center; }
+
+  #validationList { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  #validationList li { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; border-left: 4px solid; }
+  #validationList li.error { background: #fbe1de; border-color: var(--err); }
+  #validationList li.warn { background: #fbeecb; border-color: var(--warn); }
+  #validationList li.ok { background: #e2efd8; border-color: var(--ok); }
+
+  #exportArea, #importArea { width: 100%; height: 220px; }
+  .palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .palette .chip {
+    font-size: 10.5px; background: var(--parchment-dark); border: 1px solid var(--wood);
+    border-radius: 10px; padding: 2px 8px; cursor: default; user-select: text;
+  }
+  .legendRow { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 3px 0; }
+  .legendSwatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--wood-dark); flex-shrink: 0; }
+  .ladderEntry { border: 1px dashed var(--wood); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+  #toast {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(30,18,8,.92); color: #fce9c0; padding: 7px 16px; border-radius: 6px;
+    font-size: 12.5px; z-index: 20; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Research Tree Editor — Trade Winds</h1>
+    <button id="btnAdd">+ Add Card</button>
+    <button id="btnZoomReset">Reset View</button>
+    <div class="sep"></div>
+    <button id="btnExport" class="primary">Export JSON</button>
+    <button id="btnImport">Import JSON…</button>
+    <button id="btnReloadDefault">Reload game tree</button>
+    <div class="status" id="statusLine"></div>
+  </header>
+  <div id="main">
+    <div id="boardWrap">
+      <canvas id="board"></canvas>
+      <div id="boardHint">
+        <b>Drag</b> a card body to move it into another slot.<br>
+        <b>Drag from the small ◎ handle</b> (top-right of a card) onto another card to add a
+        prerequisite (source → target; target gains source as a prereq).<br>
+        <b>Click</b> a connector line to select it, then press <b>Delete</b> to remove it.<br>
+        Scroll to zoom, drag empty space to pan.
+      </div>
+      <div id="toast"></div>
+    </div>
+    <div id="sidebar">
+      <div class="tabs">
+        <button class="tabbtn active" data-tab="inspector">Inspector</button>
+        <button class="tabbtn" data-tab="palette">Palette</button>
+        <button class="tabbtn" data-tab="validate">Validate</button>
+        <button class="tabbtn" data-tab="io">Import / Export</button>
+      </div>
+      <div class="tabpanel active" id="tab-inspector"></div>
+      <div class="tabpanel" id="tab-palette"></div>
+      <div class="tabpanel" id="tab-validate"></div>
+      <div class="tabpanel" id="tab-io"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   EMBEDDED SNAPSHOT of the game's CURRENT research schema (index.html,
+   as of this tool's build). Kept verbatim so the editor opens showing
+   the REAL tree, not a blank slate. Shapes match CONFIG.research,
+   RESEARCH_MATERIALS and CONFIG.upgrades exactly.
+   ===================================================================== */
+
+const GOODS_IDS = [
+  "wood","stone","iron","clay","grain","potato","fish","wool",
+  "planks","iron_tool","flour","mead","clothes","stone_tools","oil","coal","gold","bricks",
+  "bread","pottery","lamp","iron_armor","chairs","gold_ring","brandy","luxury_clothes",
+];
+
+const BUILDING_IDS = [
+  "lumberjack","farm","potato_farm","iron_mine","quarry","fishery","shepherd",
+  "clay_pit","coal_mine","gold_mine",
+  "sawmill","mill","bakery","brewery","brickworks","tailoring","charcoal_burner",
+  "stonetool_maker","oil_maker","forge","armory","pottery_workshop","distillery",
+  "goldsmith","lamp_maker","carpentry","luxury_tailor",
+  "hut","cottage","manor","aristocrat_home",
+];
+
+const DEFAULT_RESEARCH = [
+  // ---- Production (kingdom) ----
+  { id: "crop_rotation",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 0 }, name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
+  { id: "deep_veins",      branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 1 }, name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
+  { id: "guild_halls",     branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 2 }, name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
+  { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
+  { id: "industrialize",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 4 }, name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
+  // ---- Logistics (kingdom) ----
+  { id: "paved_roads",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 0 }, name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
+  { id: "larger_carts",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 1 }, name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 400,  timeTicks: 30, prereqs: ["paved_roads"],    effect: { cartCapacity: 1.5 } },
+  { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
+  { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
+  { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+  // ---- Administration (kingdom) ----
+  { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
+  { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
+  { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
+  { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
+  { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+
+  // ---- Peasant / worker / burgher / aristocrat unlock nodes ----
+  { id: "unlock_quarry",   branch: "peasant", band: "peasant", kind: "unlock", buildingId: "quarry",   pos: { col: 0, row: 1 }, name: "Quarry",   desc: "Unlocks the Quarry.",   cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
+  { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 0, row: 2 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
+  { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 0, row: 3 }, name: "Sheep Farm", desc: "Unlocks the Sheep Farm.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },
+  { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
+  { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 0, row: 3 }, name: "Cottage",  desc: "Unlocks the Cottage.",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
+  { id: "unlock_brewery",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "brewery",  pos: { col: 1, row: 0 }, name: "Brewery",  desc: "Unlocks the Brewery.",  cost: 350,  timeTicks: 22, prereqs: ["unlock_mill"],     effect: {} },
+  { id: "unlock_bakery",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "bakery",   pos: { col: 1, row: 1 }, name: "Bakery",   desc: "Unlocks the Bakery.",   cost: 500,  timeTicks: 28, prereqs: ["unlock_mill"],     effect: {} },
+  { id: "unlock_iron_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "iron_mine",  pos: { col: 0, row: 1 }, name: "Iron Mine",  desc: "Unlocks the Iron Mine.",  cost: 200, timeTicks: 15, prereqs: ["unlock_quarry"],     effect: {} },
+  { id: "unlock_coal_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "coal_mine",  pos: { col: 1, row: 2 }, name: "Coal Mine",  desc: "Unlocks the Coal Mine.",  cost: 260, timeTicks: 18, prereqs: ["unlock_iron_mine"],  effect: {} },
+  { id: "unlock_gold_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "gold_mine",  pos: { col: 1, row: 3 }, name: "Gold Mine",  desc: "Unlocks the Gold Mine.",  cost: 400, timeTicks: 24, prereqs: ["unlock_iron_mine"],  effect: {} },
+  { id: "unlock_clay_pit",   branch: "worker", band: "worker", kind: "unlock", buildingId: "clay_pit",   pos: { col: 0, row: 2 }, name: "Clay Pit",   desc: "Unlocks the Clay Pit.",   cost: 220, timeTicks: 16, prereqs: ["unlock_quarry"],     effect: {} },
+  { id: "unlock_brickworks", branch: "worker", band: "worker", kind: "unlock", buildingId: "brickworks", pos: { col: 1, row: 4 }, name: "Brickworks", desc: "Unlocks the Brickworks.", cost: 300, timeTicks: 20, prereqs: ["unlock_clay_pit"],    effect: {} },
+  { id: "unlock_farm",       branch: "peasant", band: "peasant", kind: "unlock", buildingId: "farm",       pos: { col: 1, row: 1 }, name: "Wheat Farm", desc: "Unlocks the Wheat Farm.", cost: 250, timeTicks: 16, prereqs: ["unlock_quarry"],   effect: {} },
+  { id: "unlock_tailoring",       branch: "worker", band: "worker", kind: "unlock", buildingId: "tailoring",       pos: { col: 0, row: 5 }, name: "Tailoring",        desc: "Unlocks Tailoring (wool → clothes).",       cost: 350, timeTicks: 22, prereqs: ["unlock_shepherd"],   effect: {} },
+  { id: "unlock_charcoal_burner", branch: "worker", band: "worker", kind: "unlock", buildingId: "charcoal_burner", pos: { col: 0, row: 6 }, name: "Charcoal Burning",  desc: "Unlocks Charcoal Burning (wood → coal).",   cost: 300, timeTicks: 20, prereqs: [],                    effect: {} },
+  { id: "unlock_stonetool_maker", branch: "worker", band: "worker", kind: "unlock", buildingId: "stonetool_maker", pos: { col: 0, row: 4 }, name: "StoneTools Maker",  desc: "Unlocks the StoneTools Maker.",             cost: 380, timeTicks: 24, prereqs: ["unlock_quarry"],     effect: {} },
+  { id: "unlock_oil_maker",       branch: "worker", band: "worker", kind: "unlock", buildingId: "oil_maker",       pos: { col: 0, row: 7 }, name: "Oil Maker",        desc: "Unlocks the Oil Maker (fish → oil).",       cost: 360, timeTicks: 22, prereqs: ["unlock_fishery"],    effect: {} },
+  { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
+  { id: "unlock_forge",            branch: "burgher", band: "burgher", kind: "unlock", buildingId: "forge",            pos: { col: 0, row: 1 }, name: "Forge",         desc: "Unlocks the Forge (wood + iron → iron tool).",     cost: 500,  timeTicks: 28, prereqs: ["unlock_iron_mine"],                    effect: {} },
+  { id: "unlock_armory",           branch: "burgher", band: "burgher", kind: "unlock", buildingId: "armory",           pos: { col: 1, row: 0 }, name: "Armory",        desc: "Unlocks the Armory (coal + iron → iron armor).",   cost: 700,  timeTicks: 34, prereqs: ["unlock_forge", "unlock_coal_mine"],       effect: {} },
+  { id: "unlock_pottery_workshop", branch: "burgher", band: "burgher", kind: "unlock", buildingId: "pottery_workshop", pos: { col: 0, row: 2 }, name: "Pottery",       desc: "Unlocks the Pottery (clay → pottery).",            cost: 500,  timeTicks: 28, prereqs: ["unlock_clay_pit"],                     effect: {} },
+  { id: "unlock_distillery",       branch: "burgher", band: "burgher", kind: "unlock", buildingId: "distillery",       pos: { col: 1, row: 2 }, name: "Distillery",    desc: "Unlocks the Distillery (mead + pottery → brandy).",cost: 800,  timeTicks: 40, prereqs: ["unlock_brewery", "unlock_pottery_workshop"], effect: {} },
+  { id: "unlock_goldsmith",        branch: "burgher", band: "burgher", kind: "unlock", buildingId: "goldsmith",        pos: { col: 1, row: 1 }, name: "Goldsmith",     desc: "Unlocks the Goldsmith (gold + iron tool → ring).", cost: 900,  timeTicks: 44, prereqs: ["unlock_gold_mine", "unlock_forge"],        effect: {} },
+  { id: "unlock_lamp_maker",       branch: "burgher", band: "burgher", kind: "unlock", buildingId: "lamp_maker",       pos: { col: 0, row: 3 }, name: "Lamp Maker",    desc: "Unlocks the Lamp Maker (oil → lamp).",             cost: 600,  timeTicks: 32, prereqs: ["unlock_oil_maker"],                    effect: {} },
+  { id: "unlock_carpentry",        branch: "burgher", band: "burgher", kind: "unlock", buildingId: "carpentry",        pos: { col: 0, row: 4 }, name: "Carpentry",     desc: "Unlocks Carpentry (planks + oil → chairs).",       cost: 700,  timeTicks: 36, prereqs: ["unlock_oil_maker"],                    effect: {} },
+  { id: "unlock_luxury_tailor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "luxury_tailor",    pos: { col: 2, row: 1 }, name: "Luxury Tailor", desc: "Unlocks the Luxury Tailor (clothes + ring → finery).", cost: 1100, timeTicks: 50, prereqs: ["unlock_tailoring", "unlock_goldsmith"],  effect: {} },
+  { id: "unlock_aristocrat_home", branch: "aristocrat", band: "aristocrat", kind: "unlock", buildingId: "aristocrat_home", pos: { col: 0, row: 0 }, name: "Aristocrats Home", desc: "Unlocks the Aristocrats Home.", cost: 1500, timeTicks: 60, prereqs: ["unlock_manor", "unlock_luxury_tailor"], effect: {} },
+
+  // ---- Upgrade-ladder unlock nodes (one per level; pips over the building's slot) ----
+  { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
+  { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
+  { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
+  { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
+  { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
+  { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 1, row: 1 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: ["unlock_farm"],           effect: {} },
+  { id: "upg_farm_l3",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 3, pos: { col: 1, row: 1 }, name: "Great Estate",   desc: "Unlocks the Farm level 3 upgrade.",       cost: 400, timeTicks: 22, prereqs: ["upg_farm_l2"],           effect: {} },
+  { id: "upg_sawmill_l2",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 2, pos: { col: 3, row: 0 }, name: "Water Wheel",    desc: "Unlocks the Sawmill level 2 upgrade.",    cost: 250, timeTicks: 16, prereqs: [],                        effect: {} },
+  { id: "upg_sawmill_l3",    branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "sawmill",    level: 3, pos: { col: 3, row: 0 }, name: "Great Sawmill",  desc: "Unlocks the Sawmill level 3 upgrade.",    cost: 500, timeTicks: 26, prereqs: ["upg_sawmill_l2"],        effect: {} },
+];
+
+const DEFAULT_MATERIALS = {
+  crop_rotation: { wood: 20, stone: 10 },
+  deep_veins:    { stone: 25, iron: 15 },
+  guild_halls:   { planks: 20, stone: 25 },
+  master_crafts: { planks: 30, iron_tool: 20 },
+  industrialize: { iron_tool: 30, chairs: 15 },
+  paved_roads:   { stone: 30, wood: 15 },
+  larger_carts:  { planks: 25, wood: 20 },
+  extra_caravan: { planks: 30, iron_tool: 15 },
+  warehousing:   { planks: 40, stone: 30 },
+  trade_network: { iron_tool: 30, chairs: 20 },
+  tax_ledgers:   { grain: 20, wood: 15 },
+  tariff_office: { clothes: 15, planks: 20 },
+  royal_census:  { bread: 20, clothes: 20 },
+  town_charters: { iron_tool: 20, chairs: 15 },
+  bureaucracy:   { gold_ring: 15, chairs: 25 },
+  unlock_quarry:   { wood: 15 },
+  unlock_fishery:  { wood: 15 },
+  unlock_shepherd: { wood: 20, stone: 5 },
+  unlock_mill:     { planks: 15, stone: 10 },
+  unlock_cottage:  { planks: 15, stone: 15 },
+  unlock_brewery:  { planks: 15, stone: 10 },
+  unlock_bakery:   { planks: 20, stone: 10 },
+  unlock_manor:    { planks: 30, bricks: 15 },
+  unlock_iron_mine:  { wood: 20, stone: 10 },
+  unlock_clay_pit:   { wood: 15, stone: 10 },
+  unlock_coal_mine:  { wood: 20, stone: 15 },
+  unlock_gold_mine:  { stone: 20, planks: 10 },
+  unlock_brickworks: { planks: 15, stone: 15 },
+  unlock_farm:       { wood: 20, stone: 5 },
+  upg_hut_l2:        { wood: 15 },
+  upg_hut_l3:        { wood: 20, stone: 10 },
+  upg_hut_l4:        { wood: 30, stone: 15 },
+  upg_lumberjack_l2: { wood: 20 },
+  upg_lumberjack_l3: { wood: 25, stone: 15 },
+  upg_farm_l2:       { wood: 20 },
+  upg_farm_l3:       { wood: 25, stone: 15 },
+  upg_sawmill_l2:    { planks: 10, wood: 15 },
+  upg_sawmill_l3:    { planks: 20, stone: 15 },
+  unlock_tailoring:        { planks: 15, stone: 10 },
+  unlock_charcoal_burner:  { wood: 20, stone: 5 },
+  unlock_stonetool_maker:  { planks: 15, stone: 15 },
+  unlock_oil_maker:        { planks: 15, stone: 10 },
+  unlock_forge:            { planks: 20, iron: 15 },
+  unlock_armory:           { iron: 20, coal: 20 },
+  unlock_pottery_workshop: { planks: 20, bricks: 10 },
+  unlock_distillery:       { pottery: 10, planks: 20 },
+  unlock_goldsmith:        { gold: 10, iron_tool: 10 },
+  unlock_lamp_maker:       { oil: 15, planks: 15 },
+  unlock_carpentry:        { planks: 25, oil: 10 },
+  unlock_luxury_tailor:    { clothes: 15, gold_ring: 5 },
+  unlock_aristocrat_home:  { bricks: 30, chairs: 10, gold_ring: 5 },
+};
+
+const DEFAULT_UPGRADES = {
+  hut: [
+    { level: 2, name: "Sturdy Hut",   unlockedBy: "upg_hut_l2", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
+    { level: 3, name: "Fine Hut",     unlockedBy: "upg_hut_l3", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
+    { level: 4, name: "Grand Hut",    unlockedBy: "upg_hut_l4", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+  ],
+  lumberjack: [
+    { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+    { level: 3, name: "Logging Camp",   unlockedBy: "upg_lumberjack_l3", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+  ],
+  farm: [
+    { level: 2, name: "Better Plows",  unlockedBy: "upg_farm_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
+    { level: 3, name: "Great Estate",  unlockedBy: "upg_farm_l3", cost: { gold: 450, wood: 30, stone: 15 }, effect: { outputMult: 1.5 } },
+  ],
+  sawmill: [
+    { level: 2, name: "Water Wheel",   unlockedBy: "upg_sawmill_l2", cost: { gold: 220, wood: 25 },           effect: { outputMult: 1.25 } },
+    { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
+  ],
+};
+
+/* ===================================================================== */
+
+const BAND_LIST = ["peasant", "worker", "burgher", "aristocrat", "kingdom"];
+const BAND_LABEL = { peasant: "Peasant", worker: "Worker", burgher: "Citizen (burgher)", aristocrat: "Aristocrat", kingdom: "Kingdom" };
+const BAND_COLOR = {
+  peasant:    { fill: "#f4e2b8", edge: "#8a6a2e" },
+  worker:     { fill: "#e7e2c6", edge: "#5c6b2e" },
+  burgher:    { fill: "#dfe3ea", edge: "#3a5578" },
+  aristocrat: { fill: "#ecdcea", edge: "#6a3a78" },
+  kingdom:    { fill: "#f0d6c6", edge: "#8a3a1f" },
+};
+const KIND_LABEL = { unlock: "Unlock", upgrade: "Upgrade", kingdom: "Kingdom" };
+
+const CARD_W = 152, CARD_H = 62;
+const COL_STEP = CARD_W + 44;
+const ROW_STEP = CARD_H + 40;
+const LANE_TOP_PAD = 40, LANE_BOT_PAD = 18, LANE_GAP = 22, LEFT_PAD = 34;
+const HANDLE_R = 8;
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+function freshDoc() {
+  return {
+    research: deepClone(DEFAULT_RESEARCH),
+    materials: deepClone(DEFAULT_MATERIALS),
+    upgrades: deepClone(DEFAULT_UPGRADES),
+  };
+}
+
+let doc = freshDoc();
+let selectedId = null;
+let selectedEdge = null; // { parentId, childId }
+let camera = { x: 40, y: 40, zoom: 1 };
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+const boardWrap = document.getElementById("boardWrap");
+
+function resizeCanvas() {
+  const r = boardWrap.getBoundingClientRect();
+  canvas.width = Math.max(200, r.width) * devicePixelRatio;
+  canvas.height = Math.max(200, r.height) * devicePixelRatio;
+  canvas.style.width = r.width + "px";
+  canvas.style.height = r.height + "px";
+  draw();
+}
+window.addEventListener("resize", resizeCanvas);
+
+/* --------------------------- layout -------------------------------- */
+
+function computeLayout() {
+  const bandInfo = {};
+  let y0 = 20;
+  for (const band of BAND_LIST) {
+    const nodes = doc.research.filter(n => n.band === band);
+    let maxCol = 5, maxRow = 7;
+    for (const n of nodes) {
+      maxCol = Math.max(maxCol, (n.pos && n.pos.col || 0) + 2);
+      maxRow = Math.max(maxRow, (n.pos && n.pos.row || 0) + 2);
+    }
+    const laneH = LANE_TOP_PAD + (maxRow + 1) * ROW_STEP + LANE_BOT_PAD;
+    bandInfo[band] = { y0, maxCol, maxRow, laneH };
+    y0 += laneH + LANE_GAP;
+  }
+  bandInfo.__totalH = y0;
+  return bandInfo;
+}
+let layout = computeLayout();
+
+function slotWorldPos(band, col, row) {
+  const info = layout[band];
+  const x = LEFT_PAD + col * COL_STEP;
+  const y = info.y0 + LANE_TOP_PAD + row * ROW_STEP;
+  return { x, y };
+}
+
+function bandAtWorldY(y) {
+  for (const band of BAND_LIST) {
+    const info = layout[band];
+    if (y >= info.y0 && y < info.y0 + info.laneH) return band;
+  }
+  // clamp to nearest
+  if (y < layout[BAND_LIST[0]].y0) return BAND_LIST[0];
+  return BAND_LIST[BAND_LIST.length - 1];
+}
+
+function slotFromWorldPos(band, wx, wy) {
+  const info = layout[band];
+  let col = Math.round((wx - LEFT_PAD) / COL_STEP);
+  let row = Math.round((wy - info.y0 - LANE_TOP_PAD) / ROW_STEP);
+  col = Math.max(0, Math.min(info.maxCol, col));
+  row = Math.max(0, Math.min(info.maxRow, row));
+  return { col, row };
+}
+
+function isPrimary(node) { return node.kind !== "upgrade"; }
+
+function slotOccupantsPrimary(band, col, row, excludeId) {
+  return doc.research.filter(n => n !== undefined && n.id !== excludeId && n.band === band &&
+    n.pos && n.pos.col === col && n.pos.row === row && isPrimary(n));
+}
+
+function findFreeSlot(band) {
+  const info = layout[band];
+  for (let row = 0; row <= info.maxRow; row++) {
+    for (let col = 0; col <= info.maxCol; col++) {
+      if (slotOccupantsPrimary(band, col, row, null).length === 0) return { col, row };
+    }
+  }
+  return { col: info.maxCol + 1, row: 0 };
+}
+
+/* --------------------------- camera / coords ------------------------ */
+
+function screenToWorld(sx, sy) {
+  return { x: (sx - camera.x) / camera.zoom, y: (sy - camera.y) / camera.zoom };
+}
+function worldToScreen(wx, wy) {
+  return { x: wx * camera.zoom + camera.x, y: wy * camera.zoom + camera.y };
+}
+
+/* --------------------------- drag / link state ----------------------- */
+
+let dragMode = null; // 'pan' | 'move' | 'link'
+let dragStart = null; // {sx,sy}
+let dragNode = null;  // node being moved/linked
+let dragMoved = false;
+let dragPreview = null; // {x,y} world, while moving
+let linkCursor = null; // world pos while linking
+let camStart = null;
+
+function nodePixelRect(node) {
+  const p = slotWorldPos(node.band, node.pos.col, node.pos.row);
+  return { x: p.x, y: p.y, w: CARD_W, h: CARD_H };
+}
+
+function nodeAtWorld(wx, wy) {
+  // iterate reverse so later-drawn (selected) cards win ties
+  for (let i = doc.research.length - 1; i >= 0; i--) {
+    const n = doc.research[i];
+    const r = nodePixelRect(n);
+    if (wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h) return n;
+  }
+  return null;
+}
+
+function handleWorldPos(node) {
+  const r = nodePixelRect(node);
+  return { x: r.x + r.w - 2, y: r.y + 2 };
+}
+
+function pointNearHandle(node, wx, wy) {
+  const h = handleWorldPos(node);
+  const d = Math.hypot(wx - h.x, wy - h.y);
+  return d <= (HANDLE_R + 4) / camera.zoom * camera.zoom ? d <= HANDLE_R + 6 : false;
+}
+
+/* --------------------------- edges ----------------------------------- */
+
+function allEdges() {
+  const edges = [];
+  for (const child of doc.research) {
+    for (const pid of (child.prereqs || [])) {
+      const parent = doc.research.find(n => n.id === pid);
+      if (parent) edges.push({ parentId: pid, childId: child.id, parent, child });
+    }
+  }
+  return edges;
+}
+
+function edgeFlags(parent, child) {
+  const bi = BAND_LIST.indexOf(parent.band), ci = BAND_LIST.indexOf(child.band);
+  const backward = ci < bi || (ci === bi && (child.pos.col < parent.pos.col ||
+    (child.pos.col === parent.pos.col && child.pos.row < parent.pos.row)));
+  const long = ci === bi && Math.abs(child.pos.col - parent.pos.col) > 2;
+  return { backward, long, flagged: backward || long };
+}
+
+function edgeAnchor(node, side) {
+  const r = nodePixelRect(node);
+  if (side === "out") return { x: r.x + r.w, y: r.y + r.h / 2 };
+  return { x: r.x, y: r.y + r.h / 2 };
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const abx = bx - ax, aby = by - ay;
+  const apx = px - ax, apy = py - ay;
+  const ab2 = abx * abx + aby * aby;
+  let t = ab2 > 0 ? (apx * abx + apy * aby) / ab2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + abx * t, cy = ay + aby * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function edgeAtWorld(wx, wy) {
+  const edges = allEdges();
+  const thresh = 7 / camera.zoom;
+  for (const e of edges) {
+    const a = edgeAnchor(e.parent, "out");
+    const b = edgeAnchor(e.child, "in");
+    if (distToSegment(wx, wy, a.x, a.y, b.x, b.y) <= thresh) return e;
+  }
+  return null;
+}
+
+/* --------------------------- drawing ---------------------------------- */
+
+function draw() {
+  const w = canvas.width, h = canvas.height;
+  ctx.save();
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.fillStyle = "#3d2814";
+  ctx.fillRect(0, 0, w / devicePixelRatio, h / devicePixelRatio);
+  ctx.translate(camera.x, camera.y);
+  ctx.scale(camera.zoom, camera.zoom);
+
+  drawLanes();
+  drawEdges();
+  drawNodes();
+  drawLinkPreview();
+
+  ctx.restore();
+}
+
+function drawLanes() {
+  for (const band of BAND_LIST) {
+    const info = layout[band];
+    const c = BAND_COLOR[band];
+    ctx.fillStyle = hexAlpha(c.fill, 0.9);
+    ctx.fillRect(4, info.y0, LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20, info.laneH);
+    ctx.strokeStyle = c.edge;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(4, info.y0, LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20, info.laneH);
+    ctx.fillStyle = c.edge;
+    ctx.font = "bold 16px Georgia, serif";
+    ctx.fillText(BAND_LABEL[band] + " band", 14, info.y0 + 24);
+
+    // grid dots for slots
+    ctx.fillStyle = hexAlpha(c.edge, 0.35);
+    for (let row = 0; row <= info.maxRow; row++) {
+      for (let col = 0; col <= info.maxCol; col++) {
+        const p = slotWorldPos(band, col, row);
+        ctx.beginPath();
+        ctx.arc(p.x + CARD_W / 2, p.y + CARD_H / 2, 2, 0, 7);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function hexAlpha(hex, a) {
+  const v = hex.replace("#", "");
+  const r = parseInt(v.substring(0, 2), 16), g = parseInt(v.substring(2, 4), 16), b = parseInt(v.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function drawEdges() {
+  for (const e of allEdges()) {
+    const a = edgeAnchor(e.parent, "out");
+    const b = edgeAnchor(e.child, "in");
+    const flags = edgeFlags(e.parent, e.child);
+    const isSel = selectedEdge && selectedEdge.parentId === e.parentId && selectedEdge.childId === e.childId;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    const midx = (a.x + b.x) / 2;
+    ctx.bezierCurveTo(midx, a.y, midx, b.y, b.x, b.y);
+    ctx.lineWidth = isSel ? 3.5 : 2;
+    ctx.setLineDash(flags.flagged ? [6, 4] : []);
+    ctx.strokeStyle = isSel ? "#1a5fb4" : (flags.flagged ? "#a3271f" : "#4a3218");
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead
+    const ang = Math.atan2(b.y - (b.y), b.x - midx);
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.atan2(b.y - a.y, 40));
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-8, -4); ctx.lineTo(-8, 4); ctx.closePath();
+    ctx.fillStyle = isSel ? "#1a5fb4" : (flags.flagged ? "#a3271f" : "#4a3218");
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawLinkPreview() {
+  if (dragMode === "link" && dragNode && linkCursor) {
+    const a = edgeAnchor(dragNode, "out");
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(linkCursor.x, linkCursor.y);
+    ctx.strokeStyle = "#1a5fb4";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawNodes() {
+  // group by slot to render pips
+  const slotMap = new Map();
+  for (const n of doc.research) {
+    const key = n.band + "|" + n.pos.col + "|" + n.pos.row;
+    if (!slotMap.has(key)) slotMap.set(key, []);
+    slotMap.get(key).push(n);
+  }
+  for (const [key, group] of slotMap) {
+    const primary = group.find(isPrimary);
+    const pips = group.filter(n => !isPrimary(n));
+    const anyForRect = primary || pips[0];
+    let rect;
+    if (dragMode === "move" && dragNode && group.includes(dragNode) && dragPreview) {
+      rect = { x: dragPreview.x, y: dragPreview.y, w: CARD_W, h: CARD_H };
+    } else {
+      rect = nodePixelRect(anyForRect);
+    }
+    if (primary) drawCard(primary, rect, dragMode === "move" && dragNode === primary ? dragPreview : null);
+    if (pips.length) drawPips(pips, rect, primary, dragMode === "move" ? dragNode : null, dragPreview);
+  }
+}
+
+function cardRectFor(node, overridePreview) {
+  if (overridePreview && dragNode === node) return { x: overridePreview.x, y: overridePreview.y, w: CARD_W, h: CARD_H };
+  return nodePixelRect(node);
+}
+
+function drawCard(node, rect, movingOverride) {
+  const r = movingOverride ? { x: movingOverride.x, y: movingOverride.y, w: CARD_W, h: CARD_H } : rect;
+  const c = BAND_COLOR[node.band] || BAND_COLOR.peasant;
+  const isSel = node.id === selectedId;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.35)";
+  ctx.shadowBlur = isSel ? 10 : 4;
+  ctx.fillStyle = node.kind === "kingdom" ? "#fbeed8" : "#fffaf0";
+  roundRect(r.x, r.y, r.w, r.h, 7);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = isSel ? 3 : 1.6;
+  ctx.strokeStyle = isSel ? "#1a5fb4" : c.edge;
+  roundRect(r.x, r.y, r.w, r.h, 7);
+  ctx.stroke();
+
+  // kind badge strip
+  ctx.fillStyle = c.edge;
+  ctx.fillRect(r.x, r.y, 6, r.h);
+
+  ctx.fillStyle = "#2c1c0f";
+  ctx.font = "bold 12px Georgia, serif";
+  ctx.textBaseline = "top";
+  wrapText(node.name || node.id, r.x + 12, r.y + 6, r.w - 20, 14, 2);
+
+  ctx.font = "10px Georgia, serif";
+  ctx.fillStyle = "#5b4a30";
+  ctx.fillText(node.id, r.x + 12, r.y + r.h - 26);
+  ctx.fillText((KIND_LABEL[node.kind] || node.kind) + (node.buildingId ? " · " + node.buildingId : ""), r.x + 12, r.y + r.h - 14);
+  ctx.textAlign = "right";
+  ctx.fillText("g" + (node.cost || 0), r.x + r.w - 10, r.y + r.h - 14);
+  ctx.textAlign = "left";
+
+  const mats = doc.materials[node.id];
+  if (mats && Object.keys(mats).length) {
+    ctx.fillStyle = "#3c7a3c";
+    ctx.beginPath();
+    ctx.arc(r.x + r.w - 10, r.y + 10, 4, 0, 7);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#a3271f";
+    ctx.beginPath();
+    ctx.arc(r.x + r.w - 10, r.y + 10, 4, 0, 7);
+    ctx.fill();
+  }
+
+  // link handle
+  const hp = { x: r.x + r.w - 2, y: r.y + 2 };
+  ctx.beginPath();
+  ctx.arc(hp.x, hp.y, HANDLE_R, 0, 7);
+  ctx.fillStyle = "#b5591f";
+  ctx.fill();
+  ctx.strokeStyle = "#3d2814";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPips(pips, anchorRect, primary, movingNode, movingPreview) {
+  pips.sort((a, b) => (a.level || 0) - (b.level || 0));
+  const baseY = primary ? anchorRect.y + anchorRect.h + 4 : anchorRect.y;
+  const baseX = primary ? anchorRect.x : anchorRect.x;
+  let x = baseX;
+  const pw = 44, ph = primary ? 20 : CARD_H;
+  for (const p of pips) {
+    let rect;
+    if (movingNode === p && movingPreview) rect = { x: movingPreview.x, y: movingPreview.y, w: pw, h: ph };
+    else rect = { x, y: primary ? baseY : anchorRect.y, w: pw, h: ph };
+    const isSel = p.id === selectedId;
+    ctx.save();
+    ctx.fillStyle = isSel ? "#ffe6b8" : "#f4e6c2";
+    ctx.strokeStyle = isSel ? "#1a5fb4" : "#8a6a2e";
+    ctx.lineWidth = isSel ? 2.5 : 1.2;
+    roundRect(rect.x, rect.y, rect.w, rect.h, 5);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#3d2814";
+    ctx.font = "bold 10px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("L" + (p.level != null ? p.level : "?"), rect.x + rect.w / 2, rect.y + rect.h / 2 - (primary ? 0 : 6));
+    if (!primary) {
+      ctx.font = "8px Georgia, serif";
+      ctx.fillText((p.buildingId || "?").slice(0, 8), rect.x + rect.w / 2, rect.y + rect.h / 2 + 8);
+    }
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    // handle for pip too (small)
+    ctx.beginPath();
+    ctx.arc(rect.x + rect.w - 2, rect.y + 2, 5, 0, 7);
+    ctx.fillStyle = "#b5591f";
+    ctx.fill();
+    ctx.restore();
+    x += pw + 4;
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function wrapText(text, x, y, maxW, lh, maxLines) {
+  const words = String(text).split(/\s+/);
+  let line = "", lines = [];
+  for (const wd of words) {
+    const test = line ? line + " " + wd : wd;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
+    else line = test;
+    if (lines.length >= maxLines - 1) break;
+  }
+  lines.push(line);
+  for (let i = 0; i < Math.min(lines.length, maxLines); i++) ctx.fillText(lines[i], x, y + i * lh);
+}
+
+/* --------------------------- pip hit-test ----------------------------- */
+// Recompute pip rects the same way drawPips lays them out, for hit testing.
+function pipRectsForSlot(band, col, row) {
+  const group = doc.research.filter(n => n.band === band && n.pos.col === col && n.pos.row === row);
+  const primary = group.find(isPrimary);
+  const pips = group.filter(n => !isPrimary(n)).sort((a, b) => (a.level || 0) - (b.level || 0));
+  const anchorRect = nodePixelRect(primary || pips[0] || { band, pos: { col, row } });
+  const baseY = primary ? anchorRect.y + anchorRect.h + 4 : anchorRect.y;
+  const pw = 44, ph = primary ? 20 : CARD_H;
+  let x = anchorRect.x;
+  const out = [];
+  for (const p of pips) {
+    out.push({ node: p, rect: { x, y: baseY, w: pw, h: ph } });
+    x += pw + 4;
+  }
+  return out;
+}
+
+function pipAtWorld(wx, wy) {
+  const slots = new Set(doc.research.map(n => n.band + "|" + n.pos.col + "|" + n.pos.row));
+  for (const key of slots) {
+    const [band, col, row] = [key.split("|")[0], +key.split("|")[1], +key.split("|")[2]];
+    for (const { node, rect } of pipRectsForSlot(band, col, row)) {
+      if (wx >= rect.x && wx <= rect.x + rect.w && wy >= rect.y && wy <= rect.y + rect.h) return node;
+    }
+  }
+  return null;
+}
+
+function anyNodeAtWorld(wx, wy) {
+  return nodeAtWorld(wx, wy) || pipAtWorld(wx, wy);
+}
+
+/* --------------------------- mouse / interaction ------------------------ */
+
+function canvasMousePos(ev) {
+  const r = canvas.getBoundingClientRect();
+  return { sx: ev.clientX - r.left, sy: ev.clientY - r.top };
+}
+
+canvas.addEventListener("mousedown", (ev) => {
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  const node = anyNodeAtWorld(w.x, w.y);
+  dragStart = { sx, sy };
+  dragMoved = false;
+  if (node) {
+    const h = handleWorldPos(node);
+    const distH = Math.hypot(w.x - h.x, w.y - h.y);
+    if (distH <= HANDLE_R + 5) {
+      dragMode = "link";
+      dragNode = node;
+      linkCursor = w;
+      canvas.classList.add("linking");
+      return;
+    }
+    dragMode = "move";
+    dragNode = node;
+    const rect = cardRectFor(node);
+    dragPreview = { x: rect.x, y: rect.y, offX: w.x - rect.x, offY: w.y - rect.y };
+    return;
+  }
+  // check edge click before panning
+  const e = edgeAtWorld(w.x, w.y);
+  if (e) {
+    selectedEdge = { parentId: e.parentId, childId: e.childId };
+    selectedId = null;
+    renderInspector();
+    draw();
+    return;
+  }
+  selectedEdge = null;
+  dragMode = "pan";
+  camStart = { x: camera.x, y: camera.y };
+  canvas.classList.add("grabbing");
+});
+
+window.addEventListener("mousemove", (ev) => {
+  if (!dragMode) return;
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  if (!dragMoved && dragStart && Math.hypot(sx - dragStart.sx, sy - dragStart.sy) > 3) dragMoved = true;
+
+  if (dragMode === "pan") {
+    camera.x = camStart.x + (sx - dragStart.sx);
+    camera.y = camStart.y + (sy - dragStart.sy);
+    draw();
+  } else if (dragMode === "move" && dragNode) {
+    dragPreview.x = w.x - dragPreview.offX;
+    dragPreview.y = w.y - dragPreview.offY;
+    draw();
+  } else if (dragMode === "link") {
+    linkCursor = w;
+    draw();
+  }
+});
+
+window.addEventListener("mouseup", (ev) => {
+  canvas.classList.remove("grabbing", "linking");
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+
+  if (dragMode === "move" && dragNode) {
+    if (!dragMoved) {
+      selectNode(dragNode.id);
+    } else {
+      const targetBand = bandAtWorldY(w.y - CARD_H / 2 + dragPreview.offY - (dragPreview.offY));
+      const centerX = dragPreview.x + CARD_W / 2, centerY = dragPreview.y + CARD_H / 2;
+      const band = bandAtWorldY(centerY);
+      const slot = slotFromWorldPos(band, centerX - CARD_W / 2, centerY - CARD_H / 2);
+      if (isPrimary(dragNode)) {
+        const occ = slotOccupantsPrimary(band, slot.col, slot.row, dragNode.id);
+        if (occ.length > 0) {
+          toast("Slot occupied — move cancelled.");
+        } else {
+          dragNode.band = band;
+          if (BAND_LIST.includes(band)) dragNode.branch = (dragNode.kind === "kingdom") ? dragNode.branch : band;
+          dragNode.pos = { col: slot.col, row: slot.row };
+          layout = computeLayout();
+        }
+      } else {
+        dragNode.band = band;
+        dragNode.pos = { col: slot.col, row: slot.row };
+        layout = computeLayout();
+      }
+      selectNode(dragNode.id);
+    }
+  } else if (dragMode === "link" && dragNode) {
+    const target = anyNodeAtWorld(w.x, w.y);
+    if (target && target.id !== dragNode.id) {
+      target.prereqs = target.prereqs || [];
+      if (!target.prereqs.includes(dragNode.id)) {
+        target.prereqs.push(dragNode.id);
+        toast(`Added prereq: "${dragNode.id}" → "${target.id}"`);
+      } else {
+        toast("Prerequisite already exists.");
+      }
+      renderValidation();
+    }
+  }
+
+  dragMode = null; dragNode = null; dragPreview = null; linkCursor = null;
+  draw();
+  renderInspector();
+});
+
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const { sx, sy } = canvasMousePos(ev);
+  const w0 = screenToWorld(sx, sy);
+  const factor = ev.deltaY < 0 ? 1.1 : 0.9;
+  camera.zoom = Math.max(0.25, Math.min(2.5, camera.zoom * factor));
+  const w1 = screenToWorld(sx, sy);
+  camera.x += (w1.x - w0.x) * camera.zoom;
+  camera.y += (w1.y - w0.y) * camera.zoom;
+  draw();
+}, { passive: false });
+
+window.addEventListener("keydown", (ev) => {
+  if ((ev.key === "Delete" || ev.key === "Backspace") && selectedEdge) {
+    if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+    const child = doc.research.find(n => n.id === selectedEdge.childId);
+    if (child) child.prereqs = (child.prereqs || []).filter(p => p !== selectedEdge.parentId);
+    selectedEdge = null;
+    draw(); renderValidation();
+  }
+});
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+/* --------------------------- selection / inspector ------------------------ */
+
+function selectNode(id) {
+  selectedId = id;
+  selectedEdge = null;
+  renderInspector();
+  draw();
+}
+
+function findNode(id) { return doc.research.find(n => n.id === id); }
+
+function renameNode(node, newId) {
+  newId = (newId || "").trim();
+  const oldId = node.id;
+  if (!newId) { toast("Id cannot be empty."); return false; }
+  if (newId !== oldId && doc.research.some(n => n.id === newId)) { toast(`Id "${newId}" already exists.`); return false; }
+  if (newId === oldId) return true;
+  node.id = newId;
+  for (const n of doc.research) n.prereqs = (n.prereqs || []).map(p => (p === oldId ? newId : p));
+  if (doc.materials[oldId] !== undefined) { doc.materials[newId] = doc.materials[oldId]; delete doc.materials[oldId]; }
+  if (node.kind === "upgrade" && node.buildingId && doc.upgrades[node.buildingId]) {
+    for (const e of doc.upgrades[node.buildingId]) if (e.unlockedBy === oldId) e.unlockedBy = newId;
+  }
+  if (selectedId === oldId) selectedId = newId;
+  return true;
+}
+
+function addCard() {
+  let n = 1;
+  while (doc.research.some(x => x.id === "new_node_" + n)) n++;
+  const id = "new_node_" + n;
+  const band = "peasant";
+  const slot = findFreeSlot(band);
+  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Node", desc: "", cost: 100, timeTicks: 10, prereqs: [], effect: {} };
+  doc.research.push(node);
+  doc.materials[id] = {};
+  layout = computeLayout();
+  selectNode(id);
+}
+
+function deleteCard(id) {
+  const idx = doc.research.findIndex(n => n.id === id);
+  if (idx < 0) return;
+  const node = doc.research[idx];
+  doc.research.splice(idx, 1);
+  delete doc.materials[id];
+  for (const n of doc.research) n.prereqs = (n.prereqs || []).filter(p => p !== id);
+  if (node.kind === "upgrade" && node.buildingId && doc.upgrades[node.buildingId]) {
+    doc.upgrades[node.buildingId] = doc.upgrades[node.buildingId].filter(e => e.unlockedBy !== id);
+    if (doc.upgrades[node.buildingId].length === 0) delete doc.upgrades[node.buildingId];
+  }
+  selectedId = null;
+  layout = computeLayout();
+  draw();
+  renderInspector();
+  renderValidation();
+}
+
+function findLadderEntry(node) {
+  if (!node.buildingId || !doc.upgrades[node.buildingId]) return null;
+  return doc.upgrades[node.buildingId].find(e => e.unlockedBy === node.id || e.level === node.level) || null;
+}
+
+function ensureLadderEntry(node) {
+  if (!node.buildingId) return null;
+  if (!doc.upgrades[node.buildingId]) doc.upgrades[node.buildingId] = [];
+  let entry = doc.upgrades[node.buildingId].find(e => e.unlockedBy === node.id);
+  if (!entry) {
+    entry = { level: node.level || 2, name: node.name || "Upgrade", unlockedBy: node.id, cost: { gold: node.cost || 100 }, effect: {} };
+    doc.upgrades[node.buildingId].push(entry);
+    doc.upgrades[node.buildingId].sort((a, b) => a.level - b.level);
+  }
+  return entry;
+}
+
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    if (k === "class") e.className = attrs[k];
+    else if (k === "text") e.textContent = attrs[k];
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  (children || []).forEach(c => e.appendChild(c));
+  return e;
+}
+
+function optionsFor(list, current, allowBlank) {
+  const frag = document.createDocumentFragment();
+  if (allowBlank) frag.appendChild(el("option", { value: "", text: "(none)" }));
+  for (const v of list) frag.appendChild(el("option", { value: v, text: v, selected: v === current ? "selected" : undefined }));
+  return frag;
+}
+
+function renderInspector() {
+  const root = document.getElementById("tab-inspector");
+  root.innerHTML = "";
+  if (selectedEdge) {
+    const p = findNode(selectedEdge.parentId), c = findNode(selectedEdge.childId);
+    const box = el("div", {});
+    box.appendChild(el("fieldset", {}, [
+      el("legend", { text: "Selected prerequisite edge" }),
+      el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}".` }),
+      el("button", { class: "danger", text: "Delete edge (or press Delete)", onclick: () => {
+        if (c) c.prereqs = (c.prereqs || []).filter(x => x !== selectedEdge.parentId);
+        selectedEdge = null; draw(); renderInspector(); renderValidation();
+      } }),
+    ]));
+    root.appendChild(box);
+    return;
+  }
+  if (!selectedId) {
+    root.appendChild(el("div", { class: "emptyMsg", text: "Select a card on the board to edit it, or click “+ Add Card” above." }));
+    return;
+  }
+  const node = findNode(selectedId);
+  if (!node) { root.appendChild(el("div", { class: "emptyMsg", text: "Node not found (deleted?)." })); return; }
+
+  const form = el("div", {});
+
+  // --- identity ---
+  const fsId = el("fieldset", {});
+  fsId.appendChild(el("legend", { text: "Identity" }));
+  fsId.appendChild(el("label", { text: "id" }));
+  const idInput = el("input", { type: "text", value: node.id });
+  idInput.addEventListener("change", () => { if (!renameNode(node, idInput.value)) idInput.value = node.id; renderInspector(); draw(); renderValidation(); });
+  fsId.appendChild(idInput);
+
+  fsId.appendChild(el("label", { text: "name" }));
+  const nameInput = el("input", { type: "text", value: node.name || "" });
+  nameInput.addEventListener("input", () => { node.name = nameInput.value; draw(); });
+  fsId.appendChild(nameInput);
+
+  fsId.appendChild(el("label", { text: "desc" }));
+  const descInput = el("textarea", { rows: "2" });
+  descInput.value = node.desc || "";
+  descInput.addEventListener("input", () => { node.desc = descInput.value; });
+  fsId.appendChild(descInput);
+
+  const row1 = el("div", { class: "row" });
+  const bandWrap = el("div", {});
+  bandWrap.appendChild(el("label", { text: "band" }));
+  const bandSel = el("select", {});
+  bandSel.appendChild(optionsFor(BAND_LIST, node.band));
+  bandSel.addEventListener("change", () => {
+    const band = bandSel.value;
+    const slot = findFreeSlot(band);
+    node.band = band; node.pos = slot;
+    if (node.kind !== "kingdom") node.branch = band;
+    layout = computeLayout(); draw(); renderInspector();
+  });
+  bandWrap.appendChild(bandSel);
+  row1.appendChild(bandWrap);
+
+  const kindWrap = el("div", {});
+  kindWrap.appendChild(el("label", { text: "kind" }));
+  const kindSel = el("select", {});
+  kindSel.appendChild(optionsFor(["unlock", "upgrade", "kingdom"], node.kind));
+  kindSel.addEventListener("change", () => { node.kind = kindSel.value; draw(); renderInspector(); renderValidation(); });
+  kindWrap.appendChild(kindSel);
+  row1.appendChild(kindWrap);
+  fsId.appendChild(row1);
+
+  const row2 = el("div", { class: "row" });
+  const branchWrap = el("div", {});
+  branchWrap.appendChild(el("label", { text: "branch" }));
+  const branchInput = el("input", { type: "text", value: node.branch || "" });
+  branchInput.addEventListener("input", () => { node.branch = branchInput.value; });
+  branchWrap.appendChild(branchInput);
+  row2.appendChild(branchWrap);
+
+  const bidWrap = el("div", {});
+  bidWrap.appendChild(el("label", { text: "buildingId" }));
+  const bidSel = el("select", {});
+  bidSel.appendChild(optionsFor(BUILDING_IDS, node.buildingId, true));
+  bidSel.addEventListener("change", () => { node.buildingId = bidSel.value; draw(); renderInspector(); renderValidation(); });
+  bidWrap.appendChild(bidSel);
+  row2.appendChild(bidWrap);
+  fsId.appendChild(row2);
+
+  if (node.kind === "upgrade") {
+    fsId.appendChild(el("label", { text: "level" }));
+    const lvlInput = el("input", { type: "number", value: node.level != null ? node.level : 2, min: "2" });
+    lvlInput.addEventListener("change", () => { node.level = parseInt(lvlInput.value, 10) || 2; const ent = ensureLadderEntry(node); if (ent) ent.level = node.level; renderValidation(); });
+    fsId.appendChild(lvlInput);
+  }
+
+  const row3 = el("div", { class: "row" });
+  const colWrap = el("div", {});
+  colWrap.appendChild(el("label", { text: "pos.col" }));
+  const colInput = el("input", { type: "number", value: node.pos.col, min: "0" });
+  colInput.addEventListener("change", () => {
+    const c = Math.max(0, parseInt(colInput.value, 10) || 0);
+    if (isPrimary(node) && slotOccupantsPrimary(node.band, c, node.pos.row, node.id).length) { toast("Slot occupied."); colInput.value = node.pos.col; return; }
+    node.pos.col = c; layout = computeLayout(); draw();
+  });
+  colWrap.appendChild(colInput);
+  row3.appendChild(colWrap);
+  const rowWrap = el("div", {});
+  rowWrap.appendChild(el("label", { text: "pos.row" }));
+  const rowInput = el("input", { type: "number", value: node.pos.row, min: "0" });
+  rowInput.addEventListener("change", () => {
+    const rr = Math.max(0, parseInt(rowInput.value, 10) || 0);
+    if (isPrimary(node) && slotOccupantsPrimary(node.band, node.pos.col, rr, node.id).length) { toast("Slot occupied."); rowInput.value = node.pos.row; return; }
+    node.pos.row = rr; layout = computeLayout(); draw();
+  });
+  rowWrap.appendChild(rowInput);
+  row3.appendChild(rowWrap);
+  fsId.appendChild(row3);
+
+  form.appendChild(fsId);
+
+  // --- cost / time ---
+  const fsCost = el("fieldset", {});
+  fsCost.appendChild(el("legend", { text: "Research cost" }));
+  const row4 = el("div", { class: "row" });
+  const goldWrap = el("div", {});
+  goldWrap.appendChild(el("label", { text: "cost (gold)" }));
+  const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
+  goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
+  goldWrap.appendChild(goldInput);
+  row4.appendChild(goldWrap);
+  const timeWrap = el("div", {});
+  timeWrap.appendChild(el("label", { text: "timeTicks" }));
+  const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
+  timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
+  timeWrap.appendChild(timeInput);
+  row4.appendChild(timeWrap);
+  fsCost.appendChild(row4);
+  form.appendChild(fsCost);
+
+  // --- prereqs (read-only list + remove) ---
+  const fsPre = el("fieldset", {});
+  fsPre.appendChild(el("legend", { text: "Prerequisites" }));
+  fsPre.appendChild(el("div", { class: "hint", text: "Drag from another card's ◎ handle onto this card to add one." }));
+  if ((node.prereqs || []).length === 0) {
+    fsPre.appendChild(el("div", { class: "hint", text: "(none — root node)" }));
+  } else {
+    for (const pid of node.prereqs) {
+      const rowP = el("div", { class: "matRow" });
+      rowP.appendChild(el("div", { text: pid, style: "flex:2" }));
+      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { node.prereqs = node.prereqs.filter(x => x !== pid); draw(); renderInspector(); renderValidation(); } });
+      rowP.appendChild(rm);
+      fsPre.appendChild(rowP);
+    }
+  }
+  form.appendChild(fsPre);
+
+  // --- effect JSON ---
+  const fsEff = el("fieldset", {});
+  fsEff.appendChild(el("legend", { text: "effect (JSON)" }));
+  const effArea = el("textarea", { rows: "3" });
+  effArea.value = JSON.stringify(node.effect || {}, null, 0);
+  effArea.addEventListener("change", () => {
+    try { node.effect = JSON.parse(effArea.value || "{}"); effArea.style.borderColor = ""; }
+    catch (e) { effArea.style.borderColor = "var(--err)"; toast("Invalid JSON in effect."); }
+  });
+  fsEff.appendChild(effArea);
+  form.appendChild(fsEff);
+
+  // --- materials ---
+  const fsMat = el("fieldset", {});
+  fsMat.appendChild(el("legend", { text: "materials (research cost, goodId → qty)" }));
+  if (!doc.materials[node.id]) doc.materials[node.id] = {};
+  const mats = doc.materials[node.id];
+  const matList = el("div", {});
+  function renderMatRows() {
+    matList.innerHTML = "";
+    const keys = Object.keys(mats);
+    if (keys.length === 0) matList.appendChild(el("div", { class: "hint", text: "(no materials — the node completes on gold + time alone)" }));
+    for (const gid of keys) {
+      const rowM = el("div", { class: "matRow" });
+      const sel = el("select", {});
+      sel.appendChild(optionsFor(GOODS_IDS, gid));
+      sel.addEventListener("change", () => {
+        const qty = mats[gid]; delete mats[gid]; mats[sel.value] = qty; renderMatRows(); draw();
+      });
+      rowM.appendChild(sel);
+      const qtyInput = el("input", { type: "number", value: mats[gid], min: "0" });
+      qtyInput.addEventListener("input", () => { mats[gid] = parseFloat(qtyInput.value) || 0; });
+      rowM.appendChild(qtyInput);
+      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete mats[gid]; renderMatRows(); draw(); renderValidation(); } });
+      rowM.appendChild(rm);
+      matList.appendChild(rowM);
+    }
+  }
+  renderMatRows();
+  fsMat.appendChild(matList);
+  const addMatBtn = el("button", { class: "miniBtn", text: "+ add material", onclick: () => {
+    const free = GOODS_IDS.find(g => !(g in mats)) || GOODS_IDS[0];
+    mats[free] = 10; renderMatRows(); draw(); renderValidation();
+  } });
+  fsMat.appendChild(addMatBtn);
+  form.appendChild(fsMat);
+
+  // --- upgrade ladder entry ---
+  if (node.kind === "upgrade" && node.buildingId) {
+    const entry = ensureLadderEntry(node);
+    const fsLad = el("fieldset", {});
+    fsLad.appendChild(el("legend", { text: `Upgrade ladder entry — ${node.buildingId} L${entry.level}` }));
+    fsLad.appendChild(el("div", { class: "hint", text: "This is the actual building-upgrade paid from town stock once the research above is unlocked (CONFIG.upgrades)." }));
+    fsLad.appendChild(el("label", { text: "name" }));
+    const lname = el("input", { type: "text", value: entry.name || "" });
+    lname.addEventListener("input", () => { entry.name = lname.value; });
+    fsLad.appendChild(lname);
+
+    fsLad.appendChild(el("label", { text: "cost.gold" }));
+    const lgold = el("input", { type: "number", value: (entry.cost && entry.cost.gold) || 0, min: "0" });
+    lgold.addEventListener("input", () => { entry.cost = entry.cost || {}; entry.cost.gold = parseFloat(lgold.value) || 0; });
+    fsLad.appendChild(lgold);
+
+    fsLad.appendChild(el("label", { text: "cost (goods, goodId → qty)" }));
+    const costList = el("div", {});
+    function renderCostRows() {
+      costList.innerHTML = "";
+      entry.cost = entry.cost || {};
+      const gkeys = Object.keys(entry.cost).filter(k => k !== "gold");
+      for (const gid of gkeys) {
+        const rowC = el("div", { class: "matRow" });
+        const sel = el("select", {});
+        sel.appendChild(optionsFor(GOODS_IDS, gid));
+        sel.addEventListener("change", () => { const q = entry.cost[gid]; delete entry.cost[gid]; entry.cost[sel.value] = q; renderCostRows(); });
+        rowC.appendChild(sel);
+        const qtyInput = el("input", { type: "number", value: entry.cost[gid], min: "0" });
+        qtyInput.addEventListener("input", () => { entry.cost[gid] = parseFloat(qtyInput.value) || 0; });
+        rowC.appendChild(qtyInput);
+        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete entry.cost[gid]; renderCostRows(); } });
+        rowC.appendChild(rm);
+        costList.appendChild(rowC);
+      }
+    }
+    renderCostRows();
+    fsLad.appendChild(costList);
+    fsLad.appendChild(el("button", { class: "miniBtn", text: "+ add good cost", onclick: () => {
+      entry.cost = entry.cost || {};
+      const free = GOODS_IDS.find(g => !(g in entry.cost)) || GOODS_IDS[0];
+      entry.cost[free] = 10; renderCostRows();
+    } }));
+
+    fsLad.appendChild(el("label", { text: "effect (JSON — capacityPlus / slotPlus / outputMult / basicConsumptionMult)" }));
+    const leff = el("textarea", { rows: "2" });
+    leff.value = JSON.stringify(entry.effect || {}, null, 0);
+    leff.addEventListener("change", () => {
+      try { entry.effect = JSON.parse(leff.value || "{}"); leff.style.borderColor = ""; }
+      catch (e) { leff.style.borderColor = "var(--err)"; toast("Invalid JSON in ladder effect."); }
+    });
+    fsLad.appendChild(leff);
+    form.appendChild(fsLad);
+  }
+
+  // --- actions ---
+  const fsAct = el("fieldset", {});
+  fsAct.appendChild(el("legend", { text: "Actions" }));
+  fsAct.appendChild(el("button", { class: "danger", text: "Delete this card", onclick: () => {
+    if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites.`)) deleteCard(node.id);
+  } }));
+  form.appendChild(fsAct);
+
+  root.appendChild(form);
+}
+
+/* --------------------------- palette tab ------------------------------ */
+
+function renderPalette() {
+  const root = document.getElementById("tab-palette");
+  root.innerHTML = "";
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Bands (from Research.bands())" }),
+    ...BAND_LIST.map(b => el("div", { class: "legendRow" }, [
+      el("div", { class: "legendSwatch", style: `background:${BAND_COLOR[b].fill};border-color:${BAND_COLOR[b].edge}` }),
+      el("span", { text: BAND_LABEL[b] + "  (" + b + ")" }),
+    ])),
+  ]));
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: `Goods ids (CONFIG.goods) — ${GOODS_IDS.length}` }),
+    el("div", { class: "palette" }, GOODS_IDS.map(g => el("span", { class: "chip", text: g }))),
+  ]));
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: `Building ids (CONFIG.buildings) — ${BUILDING_IDS.length}` }),
+    el("div", { class: "palette" }, BUILDING_IDS.map(b => el("span", { class: "chip", text: b }))),
+  ]));
+}
+
+/* --------------------------- validation -------------------------------- */
+
+function computeValidation() {
+  const issues = [];
+  const ids = doc.research.map(n => n.id);
+  const idCount = {};
+  for (const id of ids) idCount[id] = (idCount[id] || 0) + 1;
+  for (const id in idCount) if (idCount[id] > 1) issues.push({ level: "error", msg: `Duplicate id "${id}" (${idCount[id]}×).` });
+
+  for (const n of doc.research) {
+    for (const p of (n.prereqs || [])) {
+      if (!ids.includes(p)) issues.push({ level: "error", msg: `"${n.id}" has a prereq "${p}" that doesn't exist.` });
+    }
+    if (n.kind === "unlock" && !n.buildingId) issues.push({ level: "error", msg: `"${n.id}" is kind:unlock but has no buildingId.` });
+    if (n.kind === "upgrade" && (!n.buildingId || n.level == null)) issues.push({ level: "error", msg: `"${n.id}" is kind:upgrade but missing buildingId/level.` });
+    if (n.kind === "kingdom" && n.band !== "kingdom") issues.push({ level: "warn", msg: `"${n.id}" is kind:kingdom but band is "${n.band}" (usually band should be "kingdom").` });
+    if (n.kind !== "kingdom" && n.band === "kingdom") issues.push({ level: "warn", msg: `"${n.id}" has band:kingdom but kind is "${n.kind}" (usually kingdom band = kind:kingdom).` });
+    if (n.buildingId && !BUILDING_IDS.includes(n.buildingId)) issues.push({ level: "warn", msg: `"${n.id}" references unknown buildingId "${n.buildingId}".` });
+    const mats = doc.materials[n.id];
+    if (!mats || Object.keys(mats).length === 0) issues.push({ level: "warn", msg: `"${n.id}" has no materials — it will complete on gold+time alone.` });
+    else for (const gid in mats) if (!GOODS_IDS.includes(gid)) issues.push({ level: "warn", msg: `"${n.id}" materials reference unknown good "${gid}".` });
+  }
+
+  // slot collisions (primary vs primary only)
+  const slotMap = {};
+  for (const n of doc.research.filter(isPrimary)) {
+    const key = n.band + "|" + n.pos.col + "|" + n.pos.row;
+    (slotMap[key] = slotMap[key] || []).push(n.id);
+  }
+  for (const key in slotMap) if (slotMap[key].length > 1) issues.push({ level: "error", msg: `Slot collision at ${key.replace(/\|/g, " col ").replace(/ col /, " ")}: ${slotMap[key].join(", ")}.` });
+
+  // cycle detection
+  const graph = {};
+  for (const n of doc.research) graph[n.id] = n.prereqs || [];
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = {}; for (const id of ids) color[id] = WHITE;
+  let cyc = null;
+  function dfs(u, stack) {
+    color[u] = GRAY; stack.push(u);
+    for (const v of (graph[u] || [])) {
+      if (!(v in graph)) continue;
+      if (color[v] === GRAY) { cyc = stack.slice(stack.indexOf(v)).concat(v); return true; }
+      if (color[v] === WHITE && dfs(v, stack)) return true;
+    }
+    stack.pop(); color[u] = BLACK; return false;
+  }
+  for (const id of ids) { if (color[id] === WHITE && dfs(id, [])) break; }
+  if (cyc) issues.push({ level: "error", msg: `Cycle detected: ${cyc.join(" → ")}.` });
+
+  // upgrade ladder cross-check
+  for (const bid in doc.upgrades) {
+    for (const entry of doc.upgrades[bid]) {
+      const match = doc.research.find(n => n.kind === "upgrade" && n.buildingId === bid && n.level === entry.level);
+      if (!match) issues.push({ level: "warn", msg: `upgrades.${bid} L${entry.level} has no matching research node.` });
+      else if (entry.unlockedBy !== match.id) issues.push({ level: "warn", msg: `upgrades.${bid} L${entry.level}.unlockedBy ("${entry.unlockedBy}") doesn't match its research node id ("${match.id}").` });
+    }
+  }
+
+  const flaggedEdges = allEdges().filter(e => edgeFlags(e.parent, e.child).flagged).length;
+  if (flaggedEdges) issues.push({ level: "warn", msg: `${flaggedEdges} long/backward prerequisite edge(s) drawn in red-dashed on the board.` });
+
+  return issues;
+}
+
+function renderValidation() {
+  const root = document.getElementById("tab-validate");
+  root.innerHTML = "";
+  const issues = computeValidation();
+  root.appendChild(el("div", { class: "hint", text: `${doc.research.length} nodes, ${allEdges().length} edges.` }));
+  const errCount = issues.filter(i => i.level === "error").length;
+  const warnCount = issues.filter(i => i.level === "warn").length;
+  const list = el("ul", { id: "validationList" });
+  if (issues.length === 0) {
+    list.appendChild(el("li", { class: "ok", text: "No issues found — this tree is game-valid." }));
+  } else {
+    for (const it of issues) list.appendChild(el("li", { class: it.level === "error" ? "error" : "warn", text: it.msg }));
+  }
+  root.appendChild(list);
+  document.getElementById("statusLine").textContent =
+    `${doc.research.length} nodes · ${errCount} error${errCount === 1 ? "" : "s"} · ${warnCount} warning${warnCount === 1 ? "" : "s"}`;
+}
+
+/* --------------------------- export / import --------------------------- */
+
+function cloneNodeForExport(n) {
+  const out = { id: n.id, branch: n.branch, band: n.band, kind: n.kind };
+  if (n.buildingId) out.buildingId = n.buildingId;
+  if (n.level != null) out.level = n.level;
+  out.pos = { col: n.pos.col, row: n.pos.row };
+  out.name = n.name || "";
+  out.desc = n.desc || "";
+  out.cost = n.cost || 0;
+  out.timeTicks = n.timeTicks || 1;
+  out.prereqs = (n.prereqs || []).slice();
+  out.effect = deepClone(n.effect || {});
+  return out;
+}
+
+function buildExport() {
+  return {
+    research: doc.research.map(cloneNodeForExport),
+    materials: deepClone(doc.materials),
+    upgrades: deepClone(doc.upgrades),
+  };
+}
+
+function renderIo() {
+  const root = document.getElementById("tab-io");
+  root.innerHTML = "";
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Export" }),
+    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly." }),
+    el("button", { class: "primary", text: "Refresh preview", onclick: () => { area.value = JSON.stringify(buildExport(), null, 2); } }),
+    el("button", { text: "Download research-tree.json", onclick: downloadExport }),
+  ]));
+  const area = el("textarea", { id: "exportArea" });
+  area.value = JSON.stringify(buildExport(), null, 2);
+  root.appendChild(area);
+
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Import" }),
+    el("div", { class: "hint", text: "Paste a JSON document with the same shape and click Load. Replaces the current document." }),
+    el("button", { class: "primary", text: "Load JSON below", onclick: () => doImport(document.getElementById("importArea").value) }),
+  ]));
+  const iarea = el("textarea", { id: "importArea", placeholder: "Paste JSON here…" });
+  root.appendChild(iarea);
+}
+
+function downloadExport() {
+  const data = JSON.stringify(buildExport(), null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "research-tree.json";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast("Downloaded research-tree.json");
+}
+
+function normalizeImported(parsed) {
+  if (!parsed || !Array.isArray(parsed.research)) throw new Error("JSON must have a `research` array.");
+  const research = parsed.research.map(n => ({
+    id: String(n.id),
+    branch: n.branch || n.band || "peasant",
+    band: n.band || "peasant",
+    kind: n.kind || "unlock",
+    buildingId: n.buildingId || undefined,
+    level: n.level != null ? n.level : undefined,
+    pos: { col: (n.pos && n.pos.col) || 0, row: (n.pos && n.pos.row) || 0 },
+    name: n.name || n.id,
+    desc: n.desc || "",
+    cost: typeof n.cost === "number" ? n.cost : 0,
+    timeTicks: typeof n.timeTicks === "number" ? n.timeTicks : 1,
+    prereqs: Array.isArray(n.prereqs) ? n.prereqs.slice() : [],
+    effect: (n.effect && typeof n.effect === "object") ? n.effect : {},
+  }));
+  const materials = (parsed.materials && typeof parsed.materials === "object") ? deepClone(parsed.materials) : {};
+  const upgrades = (parsed.upgrades && typeof parsed.upgrades === "object") ? deepClone(parsed.upgrades) : {};
+  return { research, materials, upgrades };
+}
+
+function doImport(text) {
+  try {
+    const parsed = JSON.parse(text);
+    doc = normalizeImported(parsed);
+    selectedId = null; selectedEdge = null;
+    layout = computeLayout();
+    draw();
+    renderInspector();
+    renderValidation();
+    renderIo();
+    toast("Imported document.");
+  } catch (e) {
+    toast("Import failed: " + e.message);
+  }
+}
+
+/* --------------------------- tabs / buttons ----------------------------- */
+
+document.querySelectorAll(".tabbtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tabpanel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "io") renderIo();
+    if (btn.dataset.tab === "validate") renderValidation();
+    if (btn.dataset.tab === "palette") renderPalette();
+  });
+});
+
+document.getElementById("btnAdd").addEventListener("click", addCard);
+document.getElementById("btnZoomReset").addEventListener("click", () => { camera = { x: 40, y: 40, zoom: 1 }; draw(); });
+document.getElementById("btnExport").addEventListener("click", () => {
+  downloadExport();
+  document.querySelector('.tabbtn[data-tab="io"]').click();
+});
+document.getElementById("btnImport").addEventListener("click", () => {
+  document.querySelector('.tabbtn[data-tab="io"]').click();
+  setTimeout(() => document.getElementById("importArea").focus(), 50);
+});
+document.getElementById("btnReloadDefault").addEventListener("click", () => {
+  if (confirm("Reload the tree shipped with the game? This discards unsaved edits.")) {
+    doc = freshDoc();
+    selectedId = null; selectedEdge = null;
+    layout = computeLayout();
+    draw(); renderInspector(); renderValidation();
+  }
+});
+
+/* --------------------------- init --------------------------------------- */
+
+resizeCanvas();
+renderInspector();
+renderValidation();
+renderPalette();
+draw();
+</script>
+</body>
+</html>
