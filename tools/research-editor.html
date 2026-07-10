@@ -250,6 +250,16 @@ const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potat
   forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
   lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
 const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
+// Goods→emoji map, copied verbatim from index.html's GOOD_ICON (grep GOOD_ICON
+// in index.html) — used to render each card's material requirements.
+const GOOD_ICON = {
+  wood: "🪵", stone: "🪨", iron: "🔩", clay: "🟫", grain: "🌾", potato: "🥔",
+  fish: "🐟", wool: "🧶", planks: "🪚", flour: "🌸", coal: "⬛", gold: "🪙", bricks: "🧱",
+  iron_tool: "🔨", mead: "🍺", clothes: "👕", stone_tools: "⚒️", oil: "🛢️",
+  bread: "🍞", pottery: "🏺", lamp: "🪔", iron_armor: "🛡️", chairs: "🪑",
+  gold_ring: "💍", brandy: "🥃", luxury_clothes: "👗",
+};
+const goodIcon = id => GOOD_ICON[id] || "📦";
 // Editor pips are numbered by POSITION in a building's own ladder (I, II, III,
 // IV, V — up to 5 per card), not by the game's absolute "level" field.
 const ROMAN_BY_POS = ["I", "II", "III", "IV", "V"];
@@ -1009,6 +1019,20 @@ function glyphFor(node) {
   return TT_BUILDING_GLYPH[node.buildingId] || "🏭";
 }
 
+// Pure helper: doc.materials[node.id] ({ goodId: qty }) -> ordered
+// [{ icon, qty }] list (object key order == insertion order, stable). A node
+// with no materials entry (anchors always fall in this bucket) yields [].
+function materialChips(node) {
+  const mats = doc.materials[node.id];
+  if (!mats) return [];
+  return Object.keys(mats).map(goodId => ({ icon: goodIcon(goodId), qty: mats[goodId] }));
+}
+
+// Formats materialChips() into a single compact line, e.g. "🪵20 🪨10".
+function materialChipsText(node) {
+  return materialChips(node).map(c => c.icon + c.qty).join(" ");
+}
+
 function drawNodes() {
   for (const card of primaryCards()) {
     const rect = cardRectFor(card);
@@ -1060,13 +1084,25 @@ function drawCard(node, r) {
   ctx.fillStyle = hexAlpha(C_PAPER, 0.55);
   ctx.fillText(node.id, r.x + 9, r.y + r.h - 9);
 
-  // materials-present indicator dot (n/a for anchors — no research cost)
+  // material requirement chips (n/a for anchors — no research cost), drawn as
+  // a single compact line along the bottom of the card body, just above the
+  // badge/id lines. Truncated with a trailing "…" if it can't fit the card.
   if (!isAnchor) {
-    const mats = doc.materials[node.id];
-    ctx.beginPath();
-    ctx.arc(r.x + r.w - 10, r.y + r.h - 10, 4, 0, 7);
-    ctx.fillStyle = (mats && Object.keys(mats).length) ? C_DONE : C_ERR;
-    ctx.fill();
+    const chips = materialChips(node);
+    if (chips.length) {
+      ctx.font = "9.5px 'Segoe UI Emoji', Georgia, serif";
+      ctx.fillStyle = hexAlpha(C_PAPER, 0.7);
+      ctx.textBaseline = "top";
+      const maxW = r.w - 18;
+      let text = chips.map(c => c.icon + c.qty).join(" ");
+      if (ctx.measureText(text).width > maxW) {
+        while (text.length > 1 && ctx.measureText(text + "…").width > maxW) {
+          text = text.slice(0, -1);
+        }
+        text += "…";
+      }
+      ctx.fillText(text, r.x + 9, r.y + r.h - 30);
+    }
   }
 
   // link handle (top-right) — drag onto another card to add a prereq
