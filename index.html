@@ -6358,11 +6358,20 @@ var CastleMarket = (function () {
 
     // Logistics bars: transporters (green = delivery budget in use) + traders
     // (amber-red = live carts / fleet), each with a hover explainer.
+    // === TRADEUX: the per-trader numbered list used to be printed below the bar
+    // permanently; the author wants it hover-only (cleaner panel) — fold the
+    // "#k: Buy 3🐟 from City#2 for 22🪙" / "Not Trading" lines into the bar's
+    // `title` tooltip instead (same pattern as the plain explainer tooltips
+    // below), and drop the always-visible .pp-fleet block entirely. ===
     const tu = ppTransporterUse(t);
     const fleet = (typeof Trade !== "undefined" && Trade.externalFleet) ? Trade.externalFleet(t) : 1;
     const live = ppLiveCarts(t);
     const transTip = `${tu.n} Transporters — Distribute resources inside the city. Upgrade the city to increase their number.`;
-    const tradTip = `${fleet} Traders — Buy resources from other cities. Upgrade the city to increase their number.`;
+    let tradTip = `${fleet} Traders — Buy resources from other cities. Upgrade the city to increase their number.`;
+    for (let k = 0; k < fleet; k++) {
+      const c = live[k];
+      tradTip += "\n" + (c ? `#${k + 1}: ${ppCartLine(c)}` : `#${k + 1}: Not Trading`);
+    }
     html += `<div class="tp-sec">Logistics</div>
       <div class="pp-lbar" title="${escAttr(transTip)}">
         <span class="lbl">🧺 Transporters</span>
@@ -6372,15 +6381,7 @@ var CastleMarket = (function () {
         <span class="lbl">🛒 Traders</span>
         <span class="bar red"><span style="width:${fleet > 0 ? Math.round(live.length / fleet * 100) : 0}%"></span></span>
         <span class="st">${live.length}/${fleet}</span></div>`;
-
-    // One line per fleet slot.
-    html += `<div class="pp-fleet">`;
-    for (let k = 0; k < fleet; k++) {
-      const c = live[k];
-      html += c ? `<div>#${k + 1}: ${ppCartLine(c)}</div>`
-                : `<div class="idle">#${k + 1}: Not Trading</div>`;
-    }
-    html += `</div>`;
+    // === /TRADEUX ===
 
     // Budget chart (line drawn onto #ppBudget after the innerHTML lands).
     html += `<div class="tp-sec">Budget</div>
@@ -6504,6 +6505,27 @@ var CastleMarket = (function () {
       ((t.stock && t.stock[gid]) || 0) > 0.05 || ((t.demand && t.demand[gid]) || 0) > 1e-3 || (inbound[gid] || 0) > 0);
     const priceGet = gid => (t.prices && typeof t.prices[gid] === "number")
       ? t.prices[gid] : ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
+    // === TRADEUX: per-good buy/sell direction, mirroring the pure Trade.tick
+    // needOf/surplus logic (grep TRADEFIX) so the arrow matches what the city's
+    // own trader actually does — ▲ = exportable surplus (stock above need),
+    // ▼ = a demanded shortfall the trader would import, dash = balanced/untraded.
+    const whBuffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const whMinStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
+    const ppWhNeed = gid => {
+      const d = (t.demand && t.demand[gid]) || 0;
+      return d > 0 ? Math.max(d * whBuffer, whMinStock) : 0;
+    };
+    const ppWhArrow = gid => {
+      const demand = (t.demand && t.demand[gid]) || 0;
+      const need = ppWhNeed(gid);
+      const surplus = ((t.stock && t.stock[gid]) || 0) - need;
+      if (demand > 0 && surplus < -0.05)
+        return '<span class="trend down" title="Shortfall — the trader will buy this">▼</span>';
+      if (surplus > 0.05)
+        return '<span class="trend up" title="Surplus — the trader will sell this">▲</span>';
+      return '<span class="trend flat" title="Balanced — not traded">–</span>';
+    };
+    // === /TRADEUX ===
     if (ppWhSort === "stock")
       ids.sort((a, b) => ((t.stock && t.stock[b]) || 0) - ((t.stock && t.stock[a]) || 0) || a.localeCompare(b));
     else if (ppWhSort === "price")
@@ -6533,7 +6555,7 @@ var CastleMarket = (function () {
       const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1((t.demand && t.demand[gid]) || 0)}/t` +
         (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
-        <span class="nm">${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
+        <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
         <span class="num">${fmt(stock)}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
         ${rateCell}${inCell}
         <span class="num">${fmt1(price)}🪙 ${arrow}</span></div>`;
