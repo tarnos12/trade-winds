@@ -1,5 +1,24 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
+## Milestone: Trade hotfix + aristocrat homes ✅ DONE (v0.20.2)
+Author playtest report (2026-07-09): "3 cities, no trading, traders inactive." Root
+cause: trade target stock = demand/tick × price-buffer(2) → a 4-peasant city wanted
+~0.4 wood (< buyThreshold 1) so it NEVER dispatched → slow starvation. Fix #1:
+CONFIG.trade.minStock floor (6) for any consumed good (price model untouched — its
+own buffer). That exposed flaw #2: a city picked its single biggest shortfall and
+gave up for the tick if unsellable (e.g. fish/wool nobody makes), never buying wood
+it could get. Fix #2: dispatch walks shortfalls in priority order and picks the top
+one a reachable seller can FILL — traders only travel with a real purpose (author's
+ask). Regression test added. ALSO (author): aristocrat_home is 1 slot & NON-upgradable
+— removed its upgrade ladder + upg_aristocrat_home_l2/l3 research nodes (tree 53→51
+nodes); tests reconciled. 1,221 green. Models: Fable inline fixes (diagnosed via
+headless repro), Haiku (release chores).
+OPEN (queued author UI asks, not yet done): trader destination on HOVER in the city
+overview (currently written directly); city warehouse arrows (▲green = has surplus to
+sell / ▼red = wants to buy); internal-trader pathfind+purpose visual; a standalone
+research-tree EDITOR tool (drag/drop cards into slots, set prereqs + upgrade levels,
+export JSON) — being built as a separate tools/ file.
+
 ## Milestone: Research tree overhaul (LTT-style) ✅ DONE (v0.14.0, RT-A/RT-A2/RT-B)
 Author design (5 reference screenshots, 2026-07-08): **full-screen tech tree**,
 bands stacked bottom-up by worker tier — **Peasant → Worker → Citizen** (the
