@@ -77,6 +77,7 @@
   #board { position: absolute; top: 0; left: 0; cursor: grab; }
   #board.grabbing { cursor: grabbing; }
   #board.linking { cursor: crosshair; }
+  #board.resizing { cursor: nwse-resize; }
 
   #boardHint {
     position: absolute; left: 10px; bottom: 10px;
@@ -447,6 +448,13 @@ function freshDoc() {
     // line's two endpoints attach to. Keyed by "parentId→childId". Never part
     // of the game's {research,materials,upgrades} shape — see buildExport().
     edgeSides: {},
+    // Editor-only: manual per-band panel size overrides, author-set by
+    // dragging a band's resize handle. Keyed by band name ("peasant", …,
+    // "kingdom"); value is { cols, rows } in CELL COUNTS (not max-indices).
+    // Bands with no entry fall back to the shipped defaults in
+    // computeLayout(). Never part of the game's {research,materials,upgrades}
+    // shape — see buildExport()/normalizeImported(), mirrors edgeSides.
+    bandSize: {},
   };
 }
 
@@ -489,29 +497,53 @@ function romanAt(pos1based) { return ROMAN_BY_POS[pos1based - 1] || String(pos1b
 // the stacked peasant→aristocrat bands, so it reads as "part of the tree, on
 // the left" rather than another horizontal strip. Every other band's pixel
 // x-origin is pushed right by that column's width (+ a gap); kingdom's is not.
+// Default panel sizes in CELL COUNTS (not max-indices — see bandSizeFor()).
+// Tier bands: 5 wide × 4 tall. Kingdom: 2 wide × 12 tall (it runs alongside
+// the whole main stack — see the kLaneH clamp below).
+const TIER_DEFAULT_COLS = 5, TIER_DEFAULT_ROWS = 4;
+const KINGDOM_DEFAULT_COLS = 2, KINGDOM_DEFAULT_ROWS = 12;
+
+// The smallest a band can shrink to without clipping a placed card: the
+// largest (col,row) actually occupied by a primary card in that band.
+function bandMinCells(band) {
+  const nodes = doc.research.filter(n => n.band === band && isPrimary(n));
+  let maxCol = 0, maxRow = 0;
+  for (const n of nodes) {
+    maxCol = Math.max(maxCol, (n.pos && n.pos.col) || 0);
+    maxRow = Math.max(maxRow, (n.pos && n.pos.row) || 0);
+  }
+  return { maxCol, maxRow };
+}
+
+// A band's size is max(userOverrideSize, minSizeToFitCards) — no more
+// automatic "+2 slack" growth. doc.bandSize stores CELL COUNTS (cols/rows);
+// this converts to max-indices (cols-1/rows-1) for the rest of the layout math.
+function bandSizeFor(band) {
+  const isKingdom = band === "kingdom";
+  const defCols = isKingdom ? KINGDOM_DEFAULT_COLS : TIER_DEFAULT_COLS;
+  const defRows = isKingdom ? KINGDOM_DEFAULT_ROWS : TIER_DEFAULT_ROWS;
+  const override = doc.bandSize && doc.bandSize[band];
+  const wantCols = (override && typeof override.cols === "number") ? override.cols : defCols;
+  const wantRows = (override && typeof override.rows === "number") ? override.rows : defRows;
+  const min = bandMinCells(band);
+  const maxCol = Math.max(wantCols - 1, min.maxCol);
+  const maxRow = Math.max(wantRows - 1, min.maxRow);
+  return { maxCol, maxRow };
+}
+
 function computeLayout() {
   const bandInfo = {};
   const mainBands = VERTICAL_ORDER.filter(b => b !== "kingdom");
   let y0 = 20;
   for (const band of mainBands) {   // stack top→bottom in this order
-    const nodes = doc.research.filter(n => n.band === band && isPrimary(n));
-    let maxCol = 5, maxRow = 7;
-    for (const n of nodes) {
-      maxCol = Math.max(maxCol, (n.pos && n.pos.col || 0) + 2);
-      maxRow = Math.max(maxRow, (n.pos && n.pos.row || 0) + 2);
-    }
+    const { maxCol, maxRow } = bandSizeFor(band);
     const laneH = LANE_TOP_PAD + (maxRow + 1) * ROW_STEP + LANE_BOT_PAD;
     bandInfo[band] = { y0, maxCol, maxRow, laneH };
     y0 += laneH + LANE_GAP;
   }
   const mainTotalH = y0 - LANE_GAP;
 
-  const kNodes = doc.research.filter(n => n.band === "kingdom" && isPrimary(n));
-  let kMaxCol = 2, kMaxRow = 4;
-  for (const n of kNodes) {
-    kMaxCol = Math.max(kMaxCol, (n.pos && n.pos.col || 0) + 1);
-    kMaxRow = Math.max(kMaxRow, (n.pos && n.pos.row || 0) + 1);
-  }
+  const { maxCol: kMaxCol, maxRow: kMaxRow } = bandSizeFor("kingdom");
   const kNaturalH = LANE_TOP_PAD + (kMaxRow + 1) * ROW_STEP + LANE_BOT_PAD;
   // Kingdom's column spans the same height as the whole main stack (or its
   // own natural height if that's taller), so it visually runs alongside all
@@ -525,6 +557,25 @@ function computeLayout() {
   return bandInfo;
 }
 let layout = computeLayout();
+
+// Manual band-resize handle: a small square at the bottom-right corner of
+// each band's lane panel (drawLanes draws the lane rect at
+// (4+xOffset, info.y0) sized w×laneH — the handle sits at that rect's
+// bottom-right corner, same formula for kingdom's column as any other band).
+const RESIZE_HANDLE_SIZE = 14;
+function bandHandleWorldPos(band) {
+  const info = layout[band];
+  const xOffset = band === "kingdom" ? 0 : layout.__mainXOffset;
+  const w = LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20;
+  return { x: 4 + xOffset + w, y: info.y0 + info.laneH };
+}
+function bandHandleAtWorld(wx, wy) {
+  for (const band of BAND_LIST) {
+    const hp = bandHandleWorldPos(band);
+    if (wx >= hp.x - RESIZE_HANDLE_SIZE && wx <= hp.x && wy >= hp.y - RESIZE_HANDLE_SIZE && wy <= hp.y) return band;
+  }
+  return null;
+}
 
 function slotWorldPos(band, col, row) {
   const info = layout[band];
@@ -584,13 +635,15 @@ function worldToScreen(wx, wy) {
 
 /* --------------------------- drag / link state ----------------------- */
 
-let dragMode = null; // 'pan' | 'move' | 'link'
+let dragMode = null; // 'pan' | 'move' | 'link' | 'resize'
 let dragStart = null; // {sx,sy}
 let dragNode = null;  // node being moved/linked
 let dragMoved = false;
 let dragPreview = null; // {x,y} world, while moving
 let linkCursor = null; // world pos while linking
 let camStart = null;
+let resizeBand = null;  // band name being resized
+let resizeStart = null; // { wx, wy, cols, rows } — starting pointer pos + starting cell counts
 
 function nodePixelRect(node) {
   const p = slotWorldPos(node.band, node.pos.col, node.pos.row);
@@ -831,6 +884,18 @@ function drawLanes() {
     ctx.restore();
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
+
+    // resize handle — small rounded square tucked into the lane's own
+    // bottom-right corner, drag it to manually resize this band's panel.
+    const hp = bandHandleWorldPos(band);
+    const hs = RESIZE_HANDLE_SIZE;
+    const isResizingThis = dragMode === "resize" && resizeBand === band;
+    ctx.fillStyle = hexAlpha(C_EDGE, isResizingThis ? 0.9 : 0.55);
+    roundRect(hp.x - hs, hp.y - hs, hs, hs, 3);
+    ctx.fill();
+    ctx.strokeStyle = C_ACCENT;
+    ctx.lineWidth = isResizingThis ? 2 : 1;
+    ctx.stroke();
   }
 }
 
@@ -1021,6 +1086,19 @@ canvas.addEventListener("mousedown", (ev) => {
   dragStart = { sx, sy };
   dragMoved = false;
 
+  // Band resize handles take priority over everything else on the board —
+  // a corner drag must resize the panel, never pan the camera or move/select
+  // whatever card happens to sit near that corner.
+  const handleBand = bandHandleAtWorld(w.x, w.y);
+  if (handleBand) {
+    dragMode = "resize";
+    resizeBand = handleBand;
+    const sz = bandSizeFor(handleBand);
+    resizeStart = { wx: w.x, wy: w.y, cols: sz.maxCol + 1, rows: sz.maxRow + 1 };
+    canvas.classList.add("resizing");
+    return;
+  }
+
   // Pips are never dragged/linked — click just selects them.
   const pip = pipAtWorld(w.x, w.y);
   if (pip) { selectNode(pip.id); return; }
@@ -1074,6 +1152,16 @@ window.addEventListener("mousemove", (ev) => {
   } else if (dragMode === "link") {
     linkCursor = w;
     draw();
+  } else if (dragMode === "resize" && resizeBand) {
+    const dCols = Math.round((w.x - resizeStart.wx) / COL_STEP);
+    const dRows = Math.round((w.y - resizeStart.wy) / ROW_STEP);
+    const min = bandMinCells(resizeBand);
+    let cols = Math.max(min.maxCol + 1, Math.min(40, resizeStart.cols + dCols));
+    let rows = Math.max(min.maxRow + 1, Math.min(40, resizeStart.rows + dRows));
+    doc.bandSize = doc.bandSize || {};
+    doc.bandSize[resizeBand] = { cols, rows };
+    layout = computeLayout();
+    draw();
   }
 });
 
@@ -1092,11 +1180,13 @@ window.addEventListener("mouseup", (ev) => {
   // opened, and (c) blurred any input/textarea being focused. Guarding on
   // dragMode confines this handler to genuine board interactions.
   if (!dragMode) return;
-  canvas.classList.remove("grabbing", "linking");
+  canvas.classList.remove("grabbing", "linking", "resizing");
   const { sx, sy } = canvasMousePos(ev);
   const w = screenToWorld(sx, sy);
 
-  if (dragMode === "move" && dragNode) {
+  if (dragMode === "resize") {
+    // Size was already applied live in mousemove — nothing more to do here.
+  } else if (dragMode === "move" && dragNode) {
     if (!dragMoved) {
       selectNode(dragNode.id);
     } else {
@@ -1140,6 +1230,7 @@ window.addEventListener("mouseup", (ev) => {
   }
 
   dragMode = null; dragNode = null; dragPreview = null; linkCursor = null;
+  resizeBand = null; resizeStart = null;
   draw();
   renderInspector();
 });
@@ -1968,7 +2059,11 @@ function buildExport() {
     // the editor with lines anchored the same way; a game loader that reads
     // only research/materials/upgrades (as this tool's shape contract
     // requires) ignores the unknown key entirely.
-    _editorMeta: { edgeSides: deepClone(doc.edgeSides || {}) },
+    _editorMeta: {
+      edgeSides: deepClone(doc.edgeSides || {}),
+      // Editor-only: manual per-band panel-size overrides (see freshDoc()).
+      bandSize: deepClone(doc.bandSize || {}),
+    },
   };
 }
 
@@ -1977,7 +2072,7 @@ function renderIo() {
   root.innerHTML = "";
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: "Export" }),
-    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly — research nodes never carry a gold cost (cost:0; pay in materials+time only) and kingdom nodes always export prereqs:[]. Start-unlocked (anchor) building cards are included as kind:\"anchor\" entries (startUnlocked:true, no cost/prereqs) rather than kind:\"unlock\" — filter those out (or treat as always-unlocked) in a research loader that only wants gated nodes. An extra _editorMeta.edgeSides key rides along for this tool's own round-trip (which card side each prereq line attaches to) — it's not part of the game shape and a game loader should ignore it." }),
+    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly — research nodes never carry a gold cost (cost:0; pay in materials+time only) and kingdom nodes always export prereqs:[]. Start-unlocked (anchor) building cards are included as kind:\"anchor\" entries (startUnlocked:true, no cost/prereqs) rather than kind:\"unlock\" — filter those out (or treat as always-unlocked) in a research loader that only wants gated nodes. An extra _editorMeta key rides along for this tool's own round-trip (edgeSides: which card side each prereq line attaches to; bandSize: manual band panel-size overrides) — it's not part of the game shape and a game loader should ignore it." }),
     el("button", { class: "primary", text: "Refresh preview", onclick: () => { area.value = JSON.stringify(buildExport(), null, 2); } }),
     el("button", { text: "Download research-tree.json", onclick: downloadExport }),
   ]));
@@ -2032,7 +2127,11 @@ function normalizeImported(parsed) {
   // or older exports that don't have them.
   const edgeSides = (parsed._editorMeta && parsed._editorMeta.edgeSides && typeof parsed._editorMeta.edgeSides === "object")
     ? deepClone(parsed._editorMeta.edgeSides) : {};
-  return { research, materials, upgrades, edgeSides };
+  // Editor-only per-band panel-size overrides (see freshDoc()) — restore them
+  // the same way as edgeSides so a resized layout round-trips through export/import.
+  const bandSize = (parsed._editorMeta && parsed._editorMeta.bandSize && typeof parsed._editorMeta.bandSize === "object")
+    ? deepClone(parsed._editorMeta.bandSize) : {};
+  return { research, materials, upgrades, edgeSides, bandSize };
 }
 
 function doImport(text) {
