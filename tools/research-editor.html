@@ -168,6 +168,8 @@
         prerequisite (source → target; target gains source as a prereq).<br>
         <b>Click</b> a connector line or a card, then press <b>Delete</b> to remove it.<br>
         Upgrade pips sit above a building's card — select one to edit its ladder level.<br>
+        Kingdom research lives in the left column and is always prerequisite-free.<br>
+        Select a prerequisite line to choose which side of each card it attaches to (each side hosts at most one line).<br>
         Scroll to zoom, drag empty space to pan.
       </div>
       <div id="toast"></div>
@@ -234,26 +236,31 @@ const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administrat
 // IV, V — up to 5 per card), not by the game's absolute "level" field.
 const ROMAN_BY_POS = ["I", "II", "III", "IV", "V"];
 const MAX_UPGRADES_PER_BUILDING = 5;
+// The game's per-building upgrade effect keys (CONFIG.upgrades[building][i].effect) —
+// authored via a dropdown (item 3) instead of typed JSON.
+const UPGRADE_EFFECT_KEYS = ["capacityPlus", "slotPlus", "outputMult", "basicConsumptionMult"];
+// Connection-line side anchors (item 5). "auto" = old default (right/left midpoint).
+const SIDE_OPTIONS = ["auto", "top", "bottom", "left", "right"];
 
 const DEFAULT_RESEARCH = [
   // ---- Production (kingdom) ----
-  { id: "crop_rotation",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 0 }, name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
-  { id: "deep_veins",      branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 1 }, name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
-  { id: "guild_halls",     branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 2 }, name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
-  { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
-  { id: "industrialize",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 4 }, name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
+  { id: "crop_rotation",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 0 }, name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 0,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
+  { id: "deep_veins",      branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 1 }, name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 0,  timeTicks: 30, prereqs: [],  effect: { mineOutput: 1.25 } },
+  { id: "guild_halls",     branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 2 }, name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 0,  timeTicks: 45, prereqs: [],     effect: { processorOutput: 1.2 } },
+  { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 0, timeTicks: 60, prereqs: [],    effect: { processorOutput: 1.35 } },
+  { id: "industrialize",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 4 }, name: "Industrialization", desc: "A global lift to all production.",                  cost: 0, timeTicks: 80, prereqs: [],  effect: { globalOutput: 1.25 } },
   // ---- Logistics (kingdom) ----
-  { id: "paved_roads",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 0 }, name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
-  { id: "larger_carts",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 1 }, name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 400,  timeTicks: 30, prereqs: ["paved_roads"],    effect: { cartCapacity: 1.5 } },
-  { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
-  { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
-  { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+  { id: "paved_roads",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 0 }, name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 0,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
+  { id: "larger_carts",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 1 }, name: "Larger Carts",      desc: "Each cart hauls a bigger load.",                   cost: 0,  timeTicks: 30, prereqs: [],    effect: { cartCapacity: 1.5 } },
+  { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 0,  timeTicks: 45, prereqs: [],   effect: { extraCarts: 1 } },
+  { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 0, timeTicks: 60, prereqs: [],  effect: { warehouseCap: 200 } },
+  { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 0, timeTicks: 80, prereqs: [],    effect: { extraCarts: 2 } },
   // ---- Administration (kingdom) ----
-  { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
-  { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
-  { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
-  { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
-  { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+  { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 0,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
+  { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 0,  timeTicks: 30, prereqs: [],     effect: { tariff_slider: true } },
+  { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 0,  timeTicks: 45, prereqs: [],   effect: { housingBonus: 1.15 } },
+  { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 0, timeTicks: 60, prereqs: [],   effect: { slotBonus: 1 } },
+  { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 0, timeTicks: 80, prereqs: [],  effect: { tariffBonus: 0.07 } },
 
   // ---- Starter (always-unlocked) building cards — mirrors the game's
   // TT_STARTERS anchors. These carry startUnlocked:true, kind:"anchor",
@@ -269,7 +276,7 @@ const DEFAULT_RESEARCH = [
   { id: "unlock_fishery",  branch: "peasant", band: "peasant", kind: "unlock", buildingId: "fishery",  pos: { col: 0, row: 2 }, name: "Fishery",  desc: "Unlocks the Fishery.",  cost: 120,  timeTicks: 12, prereqs: [],                  effect: {} },
   { id: "unlock_shepherd", branch: "peasant", band: "peasant", kind: "unlock", buildingId: "shepherd", pos: { col: 0, row: 3 }, name: "Sheep Farm", desc: "Unlocks the Sheep Farm.", cost: 180,  timeTicks: 14, prereqs: [],                  effect: {} },
   { id: "unlock_mill",     branch: "worker",  band: "worker",  kind: "unlock", buildingId: "mill",     pos: { col: 0, row: 0 }, name: "Mill",     desc: "Unlocks the Mill.",     cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
-  { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 0, row: 3 }, name: "Cottage",  desc: "Unlocks the Cottage.",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
+  { id: "unlock_cottage",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "cottage",  pos: { col: 0, row: 3 }, name: "Worker Home",  desc: "Unlocks the Worker Home (cottage).",  cost: 300,  timeTicks: 20, prereqs: ["unlock_quarry"],   effect: {} },
   { id: "unlock_brewery",  branch: "worker",  band: "worker",  kind: "unlock", buildingId: "brewery",  pos: { col: 1, row: 0 }, name: "Brewery",  desc: "Unlocks the Brewery.",  cost: 350,  timeTicks: 22, prereqs: ["unlock_mill"],     effect: {} },
   { id: "unlock_bakery",   branch: "worker",  band: "worker",  kind: "unlock", buildingId: "bakery",   pos: { col: 1, row: 1 }, name: "Bakery",   desc: "Unlocks the Bakery.",   cost: 500,  timeTicks: 28, prereqs: ["unlock_mill"],     effect: {} },
   { id: "unlock_iron_mine",  branch: "worker", band: "worker", kind: "unlock", buildingId: "iron_mine",  pos: { col: 0, row: 1 }, name: "Iron Mine",  desc: "Unlocks the Iron Mine.",  cost: 200, timeTicks: 15, prereqs: ["unlock_quarry"],     effect: {} },
@@ -282,7 +289,7 @@ const DEFAULT_RESEARCH = [
   { id: "unlock_charcoal_burner", branch: "worker", band: "worker", kind: "unlock", buildingId: "charcoal_burner", pos: { col: 0, row: 6 }, name: "Charcoal Burning",  desc: "Unlocks Charcoal Burning (wood → coal).",   cost: 300, timeTicks: 20, prereqs: [],                    effect: {} },
   { id: "unlock_stonetool_maker", branch: "worker", band: "worker", kind: "unlock", buildingId: "stonetool_maker", pos: { col: 0, row: 4 }, name: "StoneTools Maker",  desc: "Unlocks the StoneTools Maker.",             cost: 380, timeTicks: 24, prereqs: ["unlock_quarry"],     effect: {} },
   { id: "unlock_oil_maker",       branch: "worker", band: "worker", kind: "unlock", buildingId: "oil_maker",       pos: { col: 0, row: 7 }, name: "Oil Maker",        desc: "Unlocks the Oil Maker (fish → oil).",       cost: 360, timeTicks: 22, prereqs: ["unlock_fishery"],    effect: {} },
-  { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Manor",    desc: "Unlocks the Manor.",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
+  { id: "unlock_manor",    branch: "burgher", band: "burgher", kind: "unlock", buildingId: "manor",    pos: { col: 0, row: 0 }, name: "Citizen Home",    desc: "Unlocks the Citizen Home (manor).",    cost: 800,  timeTicks: 40, prereqs: ["unlock_cottage"],  effect: {} },
   { id: "unlock_forge",            branch: "burgher", band: "burgher", kind: "unlock", buildingId: "forge",            pos: { col: 0, row: 1 }, name: "Forge",         desc: "Unlocks the Forge (wood + iron → iron tool).",     cost: 500,  timeTicks: 28, prereqs: ["unlock_iron_mine"],                    effect: {} },
   { id: "unlock_armory",           branch: "burgher", band: "burgher", kind: "unlock", buildingId: "armory",           pos: { col: 1, row: 0 }, name: "Armory",        desc: "Unlocks the Armory (coal + iron → iron armor).",   cost: 700,  timeTicks: 34, prereqs: ["unlock_forge", "unlock_coal_mine"],       effect: {} },
   { id: "unlock_pottery_workshop", branch: "burgher", band: "burgher", kind: "unlock", buildingId: "pottery_workshop", pos: { col: 0, row: 2 }, name: "Pottery",       desc: "Unlocks the Pottery (clay → pottery).",            cost: 500,  timeTicks: 28, prereqs: ["unlock_clay_pit"],                     effect: {} },
@@ -420,11 +427,26 @@ const C_EDGELINE = "#2a2216"; // .tt-edges path stroke
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
+// Item 1 (kingdom is prereq-free) + item 4 (research has no gold cost) are
+// enforced structurally here so they hold no matter how a document arrived
+// (shipped defaults, hand-edits, or an imported file).
+function normalizeResearchArray(arr) {
+  for (const n of arr) {
+    n.cost = 0;
+    if (n.kind === "kingdom") n.prereqs = [];
+  }
+  return arr;
+}
+
 function freshDoc() {
   return {
-    research: deepClone(DEFAULT_RESEARCH),
+    research: normalizeResearchArray(deepClone(DEFAULT_RESEARCH)),
     materials: deepClone(DEFAULT_MATERIALS),
     upgrades: deepClone(DEFAULT_UPGRADES),
+    // Editor-only: which card SIDE (top/bottom/left/right) each prerequisite
+    // line's two endpoints attach to. Keyed by "parentId→childId". Never part
+    // of the game's {research,materials,upgrades} shape — see buildExport().
+    edgeSides: {},
   };
 }
 
@@ -462,10 +484,16 @@ function romanAt(pos1based) { return ROMAN_BY_POS[pos1based - 1] || String(pos1b
 
 /* --------------------------- layout -------------------------------- */
 
+// Item 1: Kingdom research is no longer one more lane stacked into
+// VERTICAL_ORDER — it's pinned to a LEFT COLUMN that spans the full height of
+// the stacked peasant→aristocrat bands, so it reads as "part of the tree, on
+// the left" rather than another horizontal strip. Every other band's pixel
+// x-origin is pushed right by that column's width (+ a gap); kingdom's is not.
 function computeLayout() {
   const bandInfo = {};
+  const mainBands = VERTICAL_ORDER.filter(b => b !== "kingdom");
   let y0 = 20;
-  for (const band of VERTICAL_ORDER) {   // FLIP: stack top→bottom in this order
+  for (const band of mainBands) {   // stack top→bottom in this order
     const nodes = doc.research.filter(n => n.band === band && isPrimary(n));
     let maxCol = 5, maxRow = 7;
     for (const n of nodes) {
@@ -476,31 +504,54 @@ function computeLayout() {
     bandInfo[band] = { y0, maxCol, maxRow, laneH };
     y0 += laneH + LANE_GAP;
   }
-  bandInfo.__totalH = y0;
+  const mainTotalH = y0 - LANE_GAP;
+
+  const kNodes = doc.research.filter(n => n.band === "kingdom" && isPrimary(n));
+  let kMaxCol = 2, kMaxRow = 4;
+  for (const n of kNodes) {
+    kMaxCol = Math.max(kMaxCol, (n.pos && n.pos.col || 0) + 1);
+    kMaxRow = Math.max(kMaxRow, (n.pos && n.pos.row || 0) + 1);
+  }
+  const kNaturalH = LANE_TOP_PAD + (kMaxRow + 1) * ROW_STEP + LANE_BOT_PAD;
+  // Kingdom's column spans the same height as the whole main stack (or its
+  // own natural height if that's taller), so it visually runs alongside all
+  // of peasant→aristocrat rather than sitting beside just one band.
+  const kLaneH = Math.max(kNaturalH, mainTotalH);
+  bandInfo.kingdom = { y0: 20, maxCol: kMaxCol, maxRow: kMaxRow, laneH: kLaneH };
+
+  bandInfo.__kingdomWidth = LEFT_PAD + (kMaxCol + 1) * COL_STEP + 20;
+  bandInfo.__mainXOffset = bandInfo.__kingdomWidth + LANE_GAP;
+  bandInfo.__totalH = Math.max(mainTotalH, kLaneH) + 20;
   return bandInfo;
 }
 let layout = computeLayout();
 
 function slotWorldPos(band, col, row) {
   const info = layout[band];
-  const x = LEFT_PAD + col * COL_STEP;
+  const xOffset = band === "kingdom" ? 0 : layout.__mainXOffset;
+  const x = xOffset + LEFT_PAD + col * COL_STEP;
   const y = info.y0 + LANE_TOP_PAD + row * ROW_STEP;
   return { x, y };
 }
 
-function bandAtWorldY(y) {
-  for (const band of VERTICAL_ORDER) {
+// Which band's slot grid a world point falls into — now split by X first
+// (kingdom's left column vs. everything else), then Y within the main stack.
+function bandAtWorldPos(wx, wy) {
+  const boundary = layout.__kingdomWidth + LANE_GAP / 2;
+  if (wx < boundary) return "kingdom";
+  const mainBands = VERTICAL_ORDER.filter(b => b !== "kingdom");
+  for (const band of mainBands) {
     const info = layout[band];
-    if (y >= info.y0 && y < info.y0 + info.laneH) return band;
+    if (wy >= info.y0 && wy < info.y0 + info.laneH) return band;
   }
-  // FLIP: clamp to the topmost / bottommost lane in VERTICAL_ORDER.
-  if (y < layout[VERTICAL_ORDER[0]].y0) return VERTICAL_ORDER[0];
-  return VERTICAL_ORDER[VERTICAL_ORDER.length - 1];
+  if (wy < layout[mainBands[0]].y0) return mainBands[0];
+  return mainBands[mainBands.length - 1];
 }
 
 function slotFromWorldPos(band, wx, wy) {
   const info = layout[band];
-  let col = Math.round((wx - LEFT_PAD) / COL_STEP);
+  const xOffset = band === "kingdom" ? 0 : layout.__mainXOffset;
+  let col = Math.round((wx - xOffset - LEFT_PAD) / COL_STEP);
   let row = Math.round((wy - info.y0 - LANE_TOP_PAD) / ROW_STEP);
   col = Math.max(0, Math.min(info.maxCol, col));
   row = Math.max(0, Math.min(info.maxRow, row));
@@ -624,10 +675,71 @@ function edgeFlags(parent, child) {
   return { backward, long, flagged: backward || long };
 }
 
-function edgeAnchor(node, side) {
+// Item 5: prerequisite lines attach to the CENTER of a chosen card SIDE
+// (top/bottom/left/right), author's choice, persisted per-edge in
+// doc.edgeSides (editor-only — see buildExport/normalizeImported). An edge
+// with no explicit choice keeps the original look: right-mid → left-mid.
+function edgeSideKey(parentId, childId) { return parentId + "→" + childId; }
+
+function sideCenterFor(node, side) {
   const r = cardRectFor(node);
-  if (side === "out") return { x: r.x + r.w, y: r.y + r.h / 2 };
-  return { x: r.x, y: r.y + r.h / 2 };
+  if (side === "top") return { x: r.x + r.w / 2, y: r.y };
+  if (side === "bottom") return { x: r.x + r.w / 2, y: r.y + r.h };
+  if (side === "left") return { x: r.x, y: r.y + r.h / 2 };
+  return { x: r.x + r.w, y: r.y + r.h / 2 }; // "right" (default/out side)
+}
+
+function resolvedSides(parentId, childId) {
+  const hint = doc.edgeSides[edgeSideKey(parentId, childId)] || {};
+  return { parentSide: hint.parentSide || "right", childSide: hint.childSide || "left" };
+}
+
+// The 1-per-side rule (item 5) is enforced only among EXPLICIT author choices
+// — a card's default (unset) edges keep landing at right/left like before, so
+// dense fan-outs already in the shipped tree (e.g. unlock_quarry gating 5
+// worker buildings) don't suddenly become "invalid". Explicitly claiming a
+// side via the edge inspector, though, is checked against every other
+// explicit claim on that same card.
+function isSideTakenExplicit(nodeId, side, excludeKey) {
+  for (const key in doc.edgeSides) {
+    if (key === excludeKey) continue;
+    const hint = doc.edgeSides[key];
+    const arrow = key.indexOf("→");
+    const pid = key.slice(0, arrow), cid = key.slice(arrow + 1);
+    if (pid === nodeId && hint.parentSide === side) return true;
+    if (cid === nodeId && hint.childSide === side) return true;
+  }
+  return false;
+}
+
+function setEdgeSide(parentId, childId, endpoint, value, selectEl) {
+  const key = edgeSideKey(parentId, childId);
+  const nodeId = endpoint === "parentSide" ? parentId : childId;
+  if (value === "auto") {
+    if (doc.edgeSides[key]) {
+      delete doc.edgeSides[key][endpoint];
+      if (!Object.keys(doc.edgeSides[key]).length) delete doc.edgeSides[key];
+    }
+    draw();
+    return;
+  }
+  if (isSideTakenExplicit(nodeId, value, key)) {
+    toast(`Side "${value}" on "${nodeId}" is already used by another connection.`);
+    const hint = doc.edgeSides[key] || {};
+    if (selectEl) selectEl.value = hint[endpoint] || "auto";
+    return;
+  }
+  doc.edgeSides[key] = doc.edgeSides[key] || {};
+  doc.edgeSides[key][endpoint] = value;
+  draw();
+}
+
+function purgeEdgeSidesFor(nodeId) {
+  for (const key in doc.edgeSides) {
+    const arrow = key.indexOf("→");
+    const pid = key.slice(0, arrow), cid = key.slice(arrow + 1);
+    if (pid === nodeId || cid === nodeId) delete doc.edgeSides[key];
+  }
 }
 
 function distToSegment(px, py, ax, ay, bx, by) {
@@ -644,8 +756,9 @@ function edgeAtWorld(wx, wy) {
   const edges = allEdges();
   const thresh = 7 / camera.zoom;
   for (const e of edges) {
-    const a = edgeAnchor(e.parent, "out");
-    const b = edgeAnchor(e.child, "in");
+    const sides = resolvedSides(e.parentId, e.childId);
+    const a = sideCenterFor(e.parent, sides.parentSide);
+    const b = sideCenterFor(e.child, sides.childSide);
     if (distToSegment(wx, wy, a.x, a.y, b.x, b.y) <= thresh) return e;
   }
   return null;
@@ -673,9 +786,10 @@ function draw() {
 function drawLanes() {
   for (const band of BAND_LIST) {
     const info = layout[band];
+    const xOffset = band === "kingdom" ? 0 : layout.__mainXOffset;
     const w = LEFT_PAD + (info.maxCol + 1) * COL_STEP + 20;
     ctx.fillStyle = BAND_TINT[band];
-    roundRect(4, info.y0, w, info.laneH, 10);
+    roundRect(4 + xOffset, info.y0, w, info.laneH, 10);
     ctx.fill();
 
     // grid dots for empty slots
@@ -695,7 +809,7 @@ function drawLanes() {
     ctx.font = "bold 22px Georgia, serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.translate(24, info.y0 + info.laneH / 2);
+    ctx.translate(xOffset + 24, info.y0 + info.laneH / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText(BAND_LABEL[band].toUpperCase(), 0, 0);
     ctx.restore();
@@ -714,8 +828,9 @@ function drawEdges() {
   // Straight thick rounded lines, matching .tt-edges path (stroke #2a2216,
   // width 5, round caps) — the game does not use bezier curves.
   for (const e of allEdges()) {
-    const a = edgeAnchor(e.parent, "out");
-    const b = edgeAnchor(e.child, "in");
+    const sides = resolvedSides(e.parentId, e.childId);
+    const a = sideCenterFor(e.parent, sides.parentSide);
+    const b = sideCenterFor(e.child, sides.childSide);
     const flags = edgeFlags(e.parent, e.child);
     const isSel = selectedEdge && selectedEdge.parentId === e.parentId && selectedEdge.childId === e.childId;
     ctx.beginPath();
@@ -741,7 +856,7 @@ function drawEdges() {
 
 function drawLinkPreview() {
   if (dragMode === "link" && dragNode && linkCursor) {
-    const a = edgeAnchor(dragNode, "out");
+    const a = sideCenterFor(dragNode, "right");
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(linkCursor.x, linkCursor.y);
@@ -799,7 +914,8 @@ function drawCard(node, r) {
   // badge line
   ctx.font = "10.5px Georgia, serif";
   ctx.globalAlpha = 0.85;
-  const badge = isAnchor ? "✓ start unlocked" : ((node.cost || 0) + " 🪙");
+  // Item 4: research has no gold cost, so the badge shows time instead.
+  const badge = isAnchor ? "✓ start unlocked" : ("⏱ " + (node.timeTicks || 0) + " ticks");
   ctx.fillText(badge, r.x + 9, r.y + r.h - 19);
   ctx.globalAlpha = 1;
 
@@ -969,16 +1085,22 @@ window.addEventListener("mouseup", (ev) => {
       selectNode(dragNode.id);
     } else {
       const centerX = dragPreview.x + CARD_W / 2, centerY = dragPreview.y + CARD_H / 2;
-      const band = bandAtWorldY(centerY);
-      const slot = slotFromWorldPos(band, centerX - CARD_W / 2, centerY - CARD_H / 2);
-      const occ = slotOccupantsPrimary(band, slot.col, slot.row, dragNode.id);
-      if (occ.length > 0) {
-        toast("Slot occupied — move cancelled.");
+      const band = bandAtWorldPos(centerX, centerY);
+      // Item 1: kingdom cards live only in the kingdom column, and nothing
+      // else is allowed to move into it.
+      if ((dragNode.kind === "kingdom") !== (band === "kingdom")) {
+        toast("Kingdom cards stay in the Kingdom column — other cards can't move into it.");
       } else {
-        dragNode.band = band;
-        if (dragNode.kind !== "kingdom") dragNode.branch = band;
-        dragNode.pos = { col: slot.col, row: slot.row };
-        layout = computeLayout();
+        const slot = slotFromWorldPos(band, centerX - CARD_W / 2, centerY - CARD_H / 2);
+        const occ = slotOccupantsPrimary(band, slot.col, slot.row, dragNode.id);
+        if (occ.length > 0) {
+          toast("Slot occupied — move cancelled.");
+        } else {
+          dragNode.band = band;
+          if (dragNode.kind !== "kingdom") dragNode.branch = band;
+          dragNode.pos = { col: slot.col, row: slot.row };
+          layout = computeLayout();
+        }
       }
       selectNode(dragNode.id);
     }
@@ -986,6 +1108,9 @@ window.addEventListener("mouseup", (ev) => {
     const target = anyNodeAtWorld(w.x, w.y);
     if (target && target.kind === "upgrade") {
       toast("Upgrade pips chain automatically — drag prereqs between building cards instead.");
+    } else if (target && target.kind === "kingdom") {
+      // Item 1: kingdom research is prerequisite-free — reject the drop.
+      toast("Kingdom research is prerequisite-free — it can't take a prerequisite.");
     } else if (target && target.id !== dragNode.id) {
       target.prereqs = target.prereqs || [];
       if (!target.prereqs.includes(dragNode.id)) {
@@ -1021,6 +1146,7 @@ window.addEventListener("keydown", (ev) => {
   if (selectedEdge) {
     const child = doc.research.find(n => n.id === selectedEdge.childId);
     if (child) child.prereqs = (child.prereqs || []).filter(p => p !== selectedEdge.parentId);
+    delete doc.edgeSides[edgeSideKey(selectedEdge.parentId, selectedEdge.childId)];
     selectedEdge = null;
     draw(); renderValidation();
     return;
@@ -1069,6 +1195,16 @@ function renameNode(node, newId) {
   if (node.kind === "upgrade" && node.buildingId && doc.upgrades[node.buildingId]) {
     for (const e of doc.upgrades[node.buildingId]) if (e.unlockedBy === oldId) e.unlockedBy = newId;
   }
+  // Keep edge-side hints (item 5) keyed correctly through an id rename.
+  const renamedEdgeSides = {};
+  for (const key in doc.edgeSides) {
+    const arrow = key.indexOf("→");
+    let pid = key.slice(0, arrow), cid = key.slice(arrow + 1);
+    if (pid === oldId) pid = newId;
+    if (cid === oldId) cid = newId;
+    renamedEdgeSides[edgeSideKey(pid, cid)] = doc.edgeSides[key];
+  }
+  doc.edgeSides = renamedEdgeSides;
   if (selectedId === oldId) selectedId = newId;
   return true;
 }
@@ -1079,7 +1215,7 @@ function addCard() {
   const id = "new_node_" + n;
   const band = "peasant";
   const slot = findFreeSlot(band);
-  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Building", desc: "", cost: 100, timeTicks: 10, prereqs: [], effect: {} };
+  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Building", desc: "", cost: 0, timeTicks: 10, prereqs: [], effect: {} };
   doc.research.push(node);
   doc.materials[id] = {};
   layout = computeLayout();
@@ -1116,6 +1252,7 @@ function deleteCard(id) {
   }
 
   pruneDanglingPrereqs();
+  purgeEdgeSidesFor(id);
   if (selectedId === id) selectedId = null;
   layout = computeLayout();
   draw();
@@ -1134,7 +1271,7 @@ function addUpgrade(node) {
   const newNode = {
     id, branch: node.kind === "kingdom" ? node.branch : node.band, band: node.band, kind: "upgrade",
     buildingId, level, pos: { col: node.pos.col, row: node.pos.row },
-    name: roman + " Upgrade", desc: "", cost: 100, timeTicks: 10,
+    name: roman + " Upgrade", desc: "", cost: 0, timeTicks: 10,
     prereqs: ladder.length ? [ladder[ladder.length - 1].unlockedBy] : [],
     effect: {},
   };
@@ -1210,15 +1347,36 @@ function renderInspector() {
   root.innerHTML = "";
   if (selectedEdge) {
     const p = findNode(selectedEdge.parentId), c = findNode(selectedEdge.childId);
+    const key = edgeSideKey(selectedEdge.parentId, selectedEdge.childId);
+    const hint = doc.edgeSides[key] || {};
     const box = el("div", {});
-    box.appendChild(el("fieldset", {}, [
-      el("legend", { text: "Selected prerequisite edge" }),
-      el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}".` }),
-      el("button", { class: "danger", text: "Delete edge (or press Delete)", onclick: () => {
-        if (c) c.prereqs = (c.prereqs || []).filter(x => x !== selectedEdge.parentId);
-        selectedEdge = null; draw(); renderInspector(); renderValidation();
-      } }),
-    ]));
+    const fs = el("fieldset", {});
+    fs.appendChild(el("legend", { text: "Selected prerequisite edge" }));
+    fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}". Pick which side of each card this line attaches to — each side hosts at most one connection. "auto" keeps the default right/left midpoint.` }));
+
+    const row = el("div", { class: "row" });
+    const pWrap = el("div", {});
+    pWrap.appendChild(el("label", { text: `"${selectedEdge.parentId}" side (source)` }));
+    const pSel = el("select", {});
+    pSel.appendChild(optionsFor(SIDE_OPTIONS, hint.parentSide || "auto"));
+    pSel.addEventListener("change", () => setEdgeSide(selectedEdge.parentId, selectedEdge.childId, "parentSide", pSel.value, pSel));
+    pWrap.appendChild(pSel);
+    row.appendChild(pWrap);
+    const cWrap = el("div", {});
+    cWrap.appendChild(el("label", { text: `"${selectedEdge.childId}" side (target)` }));
+    const cSel = el("select", {});
+    cSel.appendChild(optionsFor(SIDE_OPTIONS, hint.childSide || "auto"));
+    cSel.addEventListener("change", () => setEdgeSide(selectedEdge.parentId, selectedEdge.childId, "childSide", cSel.value, cSel));
+    cWrap.appendChild(cSel);
+    row.appendChild(cWrap);
+    fs.appendChild(row);
+
+    fs.appendChild(el("button", { class: "danger", text: "Delete edge (or press Delete)", onclick: () => {
+      if (c) c.prereqs = (c.prereqs || []).filter(x => x !== selectedEdge.parentId);
+      delete doc.edgeSides[key];
+      selectedEdge = null; draw(); renderInspector(); renderValidation();
+    } }));
+    box.appendChild(fs);
     root.appendChild(box);
     return;
   }
@@ -1255,23 +1413,16 @@ function renderPipInspector(root, node) {
   fsId.appendChild(descInput);
   form.appendChild(fsId);
 
-  // research cost/time (kept so this pip's own research entry stays valid)
+  // research cost/time (kept so this pip's own research entry stays valid).
+  // Item 4: research has NO gold cost — only materials (below) + time.
+  node.cost = 0;
   const fsCost = el("fieldset", {});
   fsCost.appendChild(el("legend", { text: "Research cost (to unlock this level)" }));
-  const row4 = el("div", { class: "row" });
-  const goldWrap = el("div", {});
-  goldWrap.appendChild(el("label", { text: "cost (gold)" }));
-  const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
-  goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
-  goldWrap.appendChild(goldInput);
-  row4.appendChild(goldWrap);
-  const timeWrap = el("div", {});
-  timeWrap.appendChild(el("label", { text: "timeTicks" }));
+  fsCost.appendChild(el("div", { class: "hint", text: "Research costs materials (below) + time only — no gold." }));
+  fsCost.appendChild(el("label", { text: "timeTicks" }));
   const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
   timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
-  timeWrap.appendChild(timeInput);
-  row4.appendChild(timeWrap);
-  fsCost.appendChild(row4);
+  fsCost.appendChild(timeInput);
   form.appendChild(fsCost);
 
   // materials (research-side cost)
@@ -1341,14 +1492,41 @@ function renderPipInspector(root, node) {
     const free = GOODS_IDS.find(g => !(g in entry.cost)) || GOODS_IDS[0];
     entry.cost[free] = 10; renderCostRows();
   } }));
-  fsLad.appendChild(el("label", { text: "effect (JSON — capacityPlus / slotPlus / outputMult / basicConsumptionMult)" }));
-  const leff = el("textarea", { rows: "2" });
-  leff.value = JSON.stringify(entry.effect || {}, null, 0);
-  leff.addEventListener("change", () => {
-    try { entry.effect = JSON.parse(leff.value || "{}"); leff.style.borderColor = ""; }
-    catch (e) { leff.style.borderColor = "var(--err)"; toast("Invalid JSON in ladder effect."); }
-  });
-  fsLad.appendChild(leff);
+  // Item 3: effect authored via dropdown rows (key + numeric value), not
+  // typed JSON — one row per game upgrade-effect key, at most once each.
+  fsLad.appendChild(el("label", { text: "effect (key → value)" }));
+  const effList = el("div", {});
+  const addEffBtn = el("button", { class: "miniBtn", text: "+ add effect", onclick: () => {
+    entry.effect = entry.effect || {};
+    const free = UPGRADE_EFFECT_KEYS.find(k => !(k in entry.effect));
+    if (!free) return;
+    entry.effect[free] = (free === "capacityPlus" || free === "slotPlus") ? 1 : 1.25;
+    renderEffRows();
+  } });
+  function renderEffRows() {
+    effList.innerHTML = "";
+    entry.effect = entry.effect || {};
+    const keys = Object.keys(entry.effect);
+    if (keys.length === 0) effList.appendChild(el("div", { class: "hint", text: "(no effect yet — this level does nothing until one is added)" }));
+    for (const k of keys) {
+      const rowE = el("div", { class: "matRow" });
+      const sel = el("select", {});
+      const otherUsed = keys.filter(x => x !== k);
+      sel.appendChild(optionsFor(UPGRADE_EFFECT_KEYS.filter(ek => ek === k || !otherUsed.includes(ek)), k));
+      sel.addEventListener("change", () => { const v = entry.effect[k]; delete entry.effect[k]; entry.effect[sel.value] = v; renderEffRows(); });
+      rowE.appendChild(sel);
+      const valInput = el("input", { type: "number", value: entry.effect[k], step: "0.05" });
+      valInput.addEventListener("input", () => { entry.effect[k] = parseFloat(valInput.value) || 0; });
+      rowE.appendChild(valInput);
+      const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { delete entry.effect[k]; renderEffRows(); } });
+      rowE.appendChild(rm);
+      effList.appendChild(rowE);
+    }
+    addEffBtn.disabled = keys.length >= UPGRADE_EFFECT_KEYS.length;
+  }
+  renderEffRows();
+  fsLad.appendChild(effList);
+  fsLad.appendChild(addEffBtn);
   form.appendChild(fsLad);
 
   // actions
@@ -1396,8 +1574,15 @@ function renderCardInspector(root, node) {
     const band = bandSel.value;
     const slot = findFreeSlot(band);
     node.band = band; node.pos = slot;
-    if (node.kind !== "kingdom") node.branch = band;
-    layout = computeLayout(); draw(); renderInspector();
+    if (band === "kingdom") {
+      // Item 1: band:kingdom always implies kind:kingdom + no prereqs.
+      node.kind = "kingdom"; node.prereqs = []; delete node.startUnlocked;
+      purgeEdgeSidesFor(node.id);
+    } else {
+      node.branch = band;
+      if (node.kind === "kingdom") node.kind = "unlock";
+    }
+    layout = computeLayout(); draw(); renderInspector(); renderValidation();
   });
   bandWrap.appendChild(bandSel);
   row1.appendChild(bandWrap);
@@ -1409,7 +1594,17 @@ function renderCardInspector(root, node) {
   kindSel.addEventListener("change", () => {
     node.kind = kindSel.value;
     if (node.kind === "anchor") { node.startUnlocked = true; node.cost = 0; node.timeTicks = 0; node.prereqs = []; delete doc.materials[node.id]; }
-    else { delete node.startUnlocked; if (node.kind === "unlock" && !node.cost) node.cost = 100; }
+    else if (node.kind === "kingdom") {
+      // Item 1: kingdom-kind nodes live in the kingdom column and are
+      // always prerequisite-free.
+      delete node.startUnlocked;
+      node.band = "kingdom";
+      node.prereqs = [];
+      purgeEdgeSidesFor(node.id);
+      const slot = findFreeSlot("kingdom");
+      node.pos = slot;
+      layout = computeLayout();
+    } else { delete node.startUnlocked; }
     draw(); renderInspector(); renderValidation();
   });
   kindWrap.appendChild(kindSel);
@@ -1423,7 +1618,7 @@ function renderCardInspector(root, node) {
     suCheck.addEventListener("change", () => {
       node.kind = suCheck.checked ? "anchor" : "unlock";
       if (node.kind === "anchor") { node.startUnlocked = true; node.cost = 0; node.timeTicks = 0; node.prereqs = []; delete doc.materials[node.id]; }
-      else { delete node.startUnlocked; if (!node.cost) node.cost = 100; }
+      else { delete node.startUnlocked; }
       draw(); renderInspector(); renderValidation();
     });
     suLabel.appendChild(suCheck);
@@ -1479,36 +1674,37 @@ function renderCardInspector(root, node) {
       el("div", { class: "hint", text: "This building is startUnlocked — no research is needed, so it has no cost, time, prerequisites or materials." }),
     ]));
   } else {
-    // --- cost / time ---
+    // --- cost / time (item 4: research has NO gold cost — only materials +
+    // time; gold is never shown/editable here) ---
+    node.cost = 0;
     const fsCost = el("fieldset", {});
     fsCost.appendChild(el("legend", { text: "Research cost" }));
-    const row4 = el("div", { class: "row" });
-    const goldWrap = el("div", {});
-    goldWrap.appendChild(el("label", { text: "cost (gold)" }));
-    const goldInput = el("input", { type: "number", value: node.cost || 0, min: "0" });
-    goldInput.addEventListener("input", () => { node.cost = parseFloat(goldInput.value) || 0; draw(); });
-    goldWrap.appendChild(goldInput);
-    row4.appendChild(goldWrap);
-    const timeWrap = el("div", {});
-    timeWrap.appendChild(el("label", { text: "timeTicks" }));
+    fsCost.appendChild(el("div", { class: "hint", text: "Research costs materials (below) + time only — no gold." }));
+    fsCost.appendChild(el("label", { text: "timeTicks" }));
     const timeInput = el("input", { type: "number", value: node.timeTicks || 0, min: "1" });
     timeInput.addEventListener("input", () => { node.timeTicks = parseInt(timeInput.value, 10) || 1; });
-    timeWrap.appendChild(timeInput);
-    row4.appendChild(timeWrap);
-    fsCost.appendChild(row4);
+    fsCost.appendChild(timeInput);
     form.appendChild(fsCost);
 
     // --- prereqs (read-only list + remove) ---
     const fsPre = el("fieldset", {});
     fsPre.appendChild(el("legend", { text: "Prerequisites" }));
-    fsPre.appendChild(el("div", { class: "hint", text: "Drag from another card's ◎ handle onto this card to add one." }));
+    if (node.kind === "kingdom") {
+      fsPre.appendChild(el("div", { class: "hint", text: "Kingdom research is prerequisite-free by design — it can never depend on another node, and can't be dragged onto as a target." }));
+    } else {
+      fsPre.appendChild(el("div", { class: "hint", text: "Drag from another card's ◎ handle onto this card to add one." }));
+    }
     if ((node.prereqs || []).length === 0) {
       fsPre.appendChild(el("div", { class: "hint", text: "(none — root node)" }));
     } else {
       for (const pid of node.prereqs) {
         const rowP = el("div", { class: "matRow" });
         rowP.appendChild(el("div", { text: pid, style: "flex:2" }));
-        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => { node.prereqs = node.prereqs.filter(x => x !== pid); draw(); renderInspector(); renderValidation(); } });
+        const rm = el("button", { class: "miniBtn", text: "×", onclick: () => {
+          node.prereqs = node.prereqs.filter(x => x !== pid);
+          delete doc.edgeSides[edgeSideKey(pid, node.id)];
+          draw(); renderInspector(); renderValidation();
+        } });
         rowP.appendChild(rm);
         fsPre.appendChild(rowP);
       }
@@ -1735,9 +1931,12 @@ function cloneNodeForExport(n) {
   out.pos = { col: n.pos.col, row: n.pos.row };
   out.name = n.name || "";
   out.desc = n.desc || "";
-  out.cost = n.cost || 0;
+  // Item 4: research has no gold cost — always export 0, regardless of
+  // whatever stray value might be sitting on the in-memory node.
+  out.cost = 0;
   out.timeTicks = n.timeTicks != null ? n.timeTicks : 1;
-  out.prereqs = (n.prereqs || []).slice();
+  // Item 1: kingdom nodes are prerequisite-free — always export [].
+  out.prereqs = n.kind === "kingdom" ? [] : (n.prereqs || []).slice();
   out.effect = deepClone(n.effect || {});
   return out;
 }
@@ -1747,6 +1946,13 @@ function buildExport() {
     research: doc.research.map(cloneNodeForExport),
     materials: deepClone(doc.materials),
     upgrades: deepClone(doc.upgrades),
+    // Item 5: connection-line side hints are editor-only — NOT part of the
+    // game's {research,materials,upgrades} shape. They ride along as an
+    // extra top-level key so this same exported file round-trips back into
+    // the editor with lines anchored the same way; a game loader that reads
+    // only research/materials/upgrades (as this tool's shape contract
+    // requires) ignores the unknown key entirely.
+    _editorMeta: { edgeSides: deepClone(doc.edgeSides || {}) },
   };
 }
 
@@ -1755,7 +1961,7 @@ function renderIo() {
   root.innerHTML = "";
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: "Export" }),
-    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly. Start-unlocked (anchor) building cards are included as kind:\"anchor\" entries (startUnlocked:true, no cost/prereqs) rather than kind:\"unlock\" — filter those out (or treat as always-unlocked) in a research loader that only wants gated nodes." }),
+    el("div", { class: "hint", text: "Matches { research:[...], materials:{...}, upgrades:{...} } exactly — research nodes never carry a gold cost (cost:0; pay in materials+time only) and kingdom nodes always export prereqs:[]. Start-unlocked (anchor) building cards are included as kind:\"anchor\" entries (startUnlocked:true, no cost/prereqs) rather than kind:\"unlock\" — filter those out (or treat as always-unlocked) in a research loader that only wants gated nodes. An extra _editorMeta.edgeSides key rides along for this tool's own round-trip (which card side each prereq line attaches to) — it's not part of the game shape and a game loader should ignore it." }),
     el("button", { class: "primary", text: "Refresh preview", onclick: () => { area.value = JSON.stringify(buildExport(), null, 2); } }),
     el("button", { text: "Download research-tree.json", onclick: downloadExport }),
   ]));
@@ -1797,14 +2003,20 @@ function normalizeImported(parsed) {
     pos: { col: (n.pos && n.pos.col) || 0, row: (n.pos && n.pos.row) || 0 },
     name: n.name || n.id,
     desc: n.desc || "",
-    cost: typeof n.cost === "number" ? n.cost : 0,
+    cost: 0, // item 4: research has no gold cost, imported or not
     timeTicks: typeof n.timeTicks === "number" ? n.timeTicks : 1,
     prereqs: Array.isArray(n.prereqs) ? n.prereqs.slice() : [],
     effect: (n.effect && typeof n.effect === "object") ? n.effect : {},
   }));
+  normalizeResearchArray(research); // re-assert kingdom prereqs:[] + cost:0
   const materials = (parsed.materials && typeof parsed.materials === "object") ? deepClone(parsed.materials) : {};
   const upgrades = (parsed.upgrades && typeof parsed.upgrades === "object") ? deepClone(parsed.upgrades) : {};
-  return { research, materials, upgrades };
+  // Item 5: side hints are editor-only metadata riding in _editorMeta — read
+  // them back if present (round-trip), default to {} for game-shipped files
+  // or older exports that don't have them.
+  const edgeSides = (parsed._editorMeta && parsed._editorMeta.edgeSides && typeof parsed._editorMeta.edgeSides === "object")
+    ? deepClone(parsed._editorMeta.edgeSides) : {};
+  return { research, materials, upgrades, edgeSides };
 }
 
 function doImport(text) {
