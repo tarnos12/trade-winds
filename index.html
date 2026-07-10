@@ -10254,8 +10254,12 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.20.2";
+  const GAME_VERSION = "0.20.3";
   const PATCH_NOTES = [
+    { v: "0.20.3", notes: [
+      "City panel is cleaner: hover the Traders bar to see each trader's destination instead of a printed list",
+      "City warehouse shows ▲ (green) for goods it's selling and ▼ (red) for goods it wants to buy",
+    ] },
     { v: "0.20.2", notes: [
       "FIX: cities now actually trade — small towns were never dispatching traders and slowly starved",
       "Traders only set out when there's a real purpose: a needed good a reachable city can actually sell",
