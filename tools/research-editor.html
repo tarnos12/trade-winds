@@ -171,7 +171,7 @@
     <div class="sep"></div>
     <button id="btnExport" class="primary">Export JSON</button>
     <button id="btnImport">Import JSON…</button>
-    <button id="btnReloadDefault">Reload game tree</button>
+    <button id="btnReloadDefault">Reset to Default</button>
     <div class="status" id="statusLine"></div>
   </header>
   <div id="main">
@@ -478,7 +478,32 @@ function freshDoc() {
   };
 }
 
-let doc = freshDoc();
+// Local persistence: the whole editor doc (research + materials + upgrades +
+// editor-only edgeSides/bandSize) is mirrored to localStorage so edits survive
+// a reload. "Reset to Default" clears this and restores the shipped tree.
+const STORAGE_KEY = "tw_research_editor_v1";
+function saveLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(doc)); } catch (e) { /* quota/private-mode: ignore */ }
+}
+function clearLocal() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+}
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.research)) return null;
+    // Backfill editor-only fields so an older save still has them.
+    d.materials = d.materials || {};
+    d.upgrades = d.upgrades || {};
+    d.edgeSides = d.edgeSides || {};
+    d.bandSize = d.bandSize || {};
+    return d;
+  } catch (e) { return null; }
+}
+
+let doc = loadLocal() || freshDoc();
 let selectedId = null;
 let selectedEdge = null; // { parentId, childId }
 let camera = { x: 40, y: 40, zoom: 1 };
@@ -2195,7 +2220,19 @@ document.querySelectorAll(".tabbtn").forEach(btn => {
 });
 
 document.getElementById("btnAdd").addEventListener("click", addCard);
-document.getElementById("btnZoomReset").addEventListener("click", () => { camera = { x: 40, y: 40, zoom: 1 }; draw(); });
+// Frame the view on the Peasant band, anchored to the bottom of the tree —
+// that's the entry point of the bottom-up layout, so both the initial view
+// and Reset View land there instead of at the top (Aristocrats).
+function focusPeasant() {
+  layout = computeLayout();
+  const info = layout.peasant;
+  const vh = canvas.height / devicePixelRatio;
+  camera.zoom = 1;
+  camera.x = 10;
+  const peasantBottom = info.y0 + info.laneH;
+  camera.y = vh - peasantBottom * camera.zoom - 10;
+}
+document.getElementById("btnZoomReset").addEventListener("click", () => { focusPeasant(); draw(); });
 document.getElementById("btnExport").addEventListener("click", () => {
   downloadExport();
   document.querySelector('.tabbtn[data-tab="io"]').click();
@@ -2205,11 +2242,15 @@ document.getElementById("btnImport").addEventListener("click", () => {
   setTimeout(() => document.getElementById("importArea").focus(), 50);
 });
 document.getElementById("btnReloadDefault").addEventListener("click", () => {
-  if (confirm("Reload the tree shipped with the game? This discards unsaved edits.")) {
+  if (confirm("Reset to the tree shipped with the game? This discards your locally-saved edits.")) {
+    clearLocal();
     doc = freshDoc();
     selectedId = null; selectedEdge = null;
     layout = computeLayout();
+    focusPeasant();
     draw(); renderInspector(); renderValidation();
+    if (typeof renderPalette === "function") renderPalette();
+    saveLocal();
   }
 });
 
@@ -2230,10 +2271,18 @@ document.getElementById("btnReloadDefault").addEventListener("click", () => {
 /* --------------------------- init --------------------------------------- */
 
 resizeCanvas();
+focusPeasant();  // start framed on the Peasant band at the bottom of the tree
 renderInspector();
 renderValidation();
 renderPalette();
 draw();
+
+// Autosave the doc locally: a light periodic write plus flushes when the tab
+// is hidden or closed, so edits survive a reload without instrumenting every
+// individual mutation.
+setInterval(saveLocal, 1200);
+window.addEventListener("beforeunload", saveLocal);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveLocal(); });
 </script>
 </body>
 </html>
