@@ -20,3 +20,6 @@ scratch/
 
 # Claude Code ephemeral subagent worktrees (agent-team model) — never commit
 .claude/worktrees/
+
+# Generated Artifact bundles (derived from tools/*.html for publishing) — not source
+*.artifact.html
