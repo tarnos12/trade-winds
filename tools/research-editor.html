@@ -454,7 +454,10 @@ function freshDoc() {
     // Bands with no entry fall back to the shipped defaults in
     // computeLayout(). Never part of the game's {research,materials,upgrades}
     // shape — see buildExport()/normalizeImported(), mirrors edgeSides.
-    bandSize: {},
+    // Aristocrat starts a single row tall by default (it holds one card); the
+    // author can still drag it larger. Only `rows` is seeded — `cols` falls
+    // back to the tier default in bandSizeFor().
+    bandSize: { aristocrat: { rows: 1 } },
   };
 }
 
@@ -544,16 +547,26 @@ function computeLayout() {
   const mainTotalH = y0 - LANE_GAP;
 
   const { maxCol: kMaxCol, maxRow: kMaxRow } = bandSizeFor("kingdom");
-  const kNaturalH = LANE_TOP_PAD + (kMaxRow + 1) * ROW_STEP + LANE_BOT_PAD;
-  // Kingdom's column spans the same height as the whole main stack (or its
-  // own natural height if that's taller), so it visually runs alongside all
-  // of peasant→aristocrat rather than sitting beside just one band.
-  const kLaneH = Math.max(kNaturalH, mainTotalH);
-  bandInfo.kingdom = { y0: 20, maxCol: kMaxCol, maxRow: kMaxRow, laneH: kLaneH };
+  const kLaneH = LANE_TOP_PAD + (kMaxRow + 1) * ROW_STEP + LANE_BOT_PAD;
+  // Kingdom is BOTTOM-ANCHORED: its column is sized to its own content (no
+  // longer stretched to the full stack) and its bottom edge lines up with the
+  // bottom of the main stack (the peasant band), so its research sits "at the
+  // bottom". If the kingdom column is ever taller than the main stack, the
+  // whole main stack is shoved down so nothing clips above the top margin.
+  const mainBottom = mainTotalH; // mainTotalH is already the absolute bottom Y
+  let kY0 = mainBottom - kLaneH;
+  if (kY0 < 20) {
+    const shift = 20 - kY0;
+    for (const band of mainBands) bandInfo[band].y0 += shift;
+    kY0 = 20;
+  }
+  bandInfo.kingdom = { y0: kY0, maxCol: kMaxCol, maxRow: kMaxRow, laneH: kLaneH };
 
+  const lastMain = mainBands[mainBands.length - 1];
+  const mainBandBottom = bandInfo[lastMain].y0 + bandInfo[lastMain].laneH;
   bandInfo.__kingdomWidth = LEFT_PAD + (kMaxCol + 1) * COL_STEP + 20;
   bandInfo.__mainXOffset = bandInfo.__kingdomWidth + LANE_GAP;
-  bandInfo.__totalH = Math.max(mainTotalH, kLaneH) + 20;
+  bandInfo.__totalH = Math.max(mainBandBottom, kY0 + kLaneH) + 20;
   return bandInfo;
 }
 let layout = computeLayout();
