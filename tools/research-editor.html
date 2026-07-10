@@ -689,9 +689,25 @@ function sideCenterFor(node, side) {
   return { x: r.x + r.w, y: r.y + r.h / 2 }; // "right" (default/out side)
 }
 
-function resolvedSides(parentId, childId) {
-  const hint = doc.edgeSides[edgeSideKey(parentId, childId)] || {};
-  return { parentSide: hint.parentSide || "right", childSide: hint.childSide || "left" };
+// "auto" default now picks the side that FACES the other card (center of that
+// side) instead of a fixed right→left midpoint. For the bottom-up tree, a
+// prerequisite sitting directly below its dependent exits its TOP-center and
+// enters the dependent's BOTTOM-center — no more diagonal corner-to-corner line.
+// An explicit author choice (doc.edgeSides) always wins over this heuristic.
+function autoSideFacing(fromNode, toNode) {
+  const a = cardRectFor(fromNode), b = cardRectFor(toNode);
+  const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+  const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+  if (Math.abs(dy) >= Math.abs(dx)) return dy < 0 ? "top" : "bottom";
+  return dx < 0 ? "left" : "right";
+}
+
+function resolvedSides(parent, child) {
+  const hint = doc.edgeSides[edgeSideKey(parent.id, child.id)] || {};
+  return {
+    parentSide: hint.parentSide || autoSideFacing(parent, child),
+    childSide: hint.childSide || autoSideFacing(child, parent),
+  };
 }
 
 // The 1-per-side rule (item 5) is enforced only among EXPLICIT author choices
@@ -756,7 +772,7 @@ function edgeAtWorld(wx, wy) {
   const edges = allEdges();
   const thresh = 7 / camera.zoom;
   for (const e of edges) {
-    const sides = resolvedSides(e.parentId, e.childId);
+    const sides = resolvedSides(e.parent, e.child);
     const a = sideCenterFor(e.parent, sides.parentSide);
     const b = sideCenterFor(e.child, sides.childSide);
     if (distToSegment(wx, wy, a.x, a.y, b.x, b.y) <= thresh) return e;
@@ -828,7 +844,7 @@ function drawEdges() {
   // Straight thick rounded lines, matching .tt-edges path (stroke #2a2216,
   // width 5, round caps) — the game does not use bezier curves.
   for (const e of allEdges()) {
-    const sides = resolvedSides(e.parentId, e.childId);
+    const sides = resolvedSides(e.parent, e.child);
     const a = sideCenterFor(e.parent, sides.parentSide);
     const b = sideCenterFor(e.child, sides.childSide);
     const flags = edgeFlags(e.parent, e.child);
