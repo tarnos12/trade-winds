@@ -146,5 +146,35 @@ Pathing.invalidate();
   ok("dijkstra: picks short branch (cost 3)", r && r.cost === 3);
 }
 
+// --- 10. Cross-game contamination guard: a fresh state (as newGame() builds)
+//     reuses coordinate keys from a PRIOR game (the castle is always at
+//     (0,0), so this is the realistic case, not a contrived one) — WITHOUT
+//     invalidate, Trade/ResearchEconomy would silently see the OLD game's
+//     road graph. Documents the newGame()/loadGame() contract: they must call
+//     Pathing.invalidate() exactly like every other state.roads mutation site
+//     does (place ~6045, erase ~6059, Events bridge ~4747).
+Pathing.invalidate();
+{
+  // "Game 1": a road connects A(0,0) to B(4,0).
+  const game1 = stateWithRoads([[1, 0], [2, 0], [3, 0]]);
+  const r1 = Pathing.route(game1, K(0, 0), K(4, 0));
+  ok("game1: reachable", r1 !== null && r1.cost === 4);
+
+  // "Game 2" (simulates newGame(): a brand-new state, roads reset to empty —
+  // same coordinate keys reused). WITHOUT calling Pathing.invalidate() on the
+  // reset (the bug), a query for the SAME fromKey|toKey pair wrongly returns
+  // game1's cached route even though game2 has NO roads at all.
+  const game2 = stateWithRoads([]);
+  const leaked = Pathing.route(game2, K(0, 0), K(4, 0));
+  ok("BUG DOCUMENTED: without invalidate, game2 leaks game1's cached route",
+     leaked === r1 && leaked !== null);
+
+  // The fix: newGame()/loadGame() must call Pathing.invalidate() on reset.
+  Pathing.invalidate();
+  const fixed = Pathing.route(game2, K(0, 0), K(4, 0));
+  ok("after invalidate (the fix): game2 correctly reports unreachable (no roads)",
+     fixed === null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

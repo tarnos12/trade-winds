@@ -6219,6 +6219,16 @@ var CastleMarket = (function () {
     const pr = CONFIG.mapPresets[preset];
     state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
     state.roads = new Set();
+    // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
+    // Events bridge collapse/repair ~4747) calls Pathing.invalidate() right
+    // after mutating state.roads — newGame()/loadGame() must too, or a second
+    // game started in the same page session (New Game again, or Load Game)
+    // reads STALE cached routes from the PREVIOUS game's road graph (the cache
+    // is a module-level singleton keyed only by hex coords, not by `state`;
+    // the castle is always at (0,0) so coordinate collisions across games are
+    // realistic, not theoretical). loadGame() calls newGame() first, so this
+    // one call covers both paths.
+    Pathing.invalidate();
     state.towns = [];
     state.carts = [];
     state.treasury = 10000;   // EC-A: Kingdom starting gold (pays all placement)
