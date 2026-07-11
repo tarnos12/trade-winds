@@ -15,3 +15,18 @@ Run: `TW_HTML=./index.html node tools/playthrough.js [ticks]`  (default preset `
 Not part of the test suite; a diagnostic tool. Known limitation: the greedy policy
 is chaos-sensitive (small map/plan changes can flip a deterministic run), so treat
 its numbers as directional, and confirm findings with focused sim-level tests.
+
+## Research-tree editor regression harness
+
+`research-editor.html` is a standalone, zero-deps browser app with no automated
+tests of its own — `test/editor.test.js` (at the repo root's `test/`, alongside
+the plain-node PURE_CORE suites) is its first regression net. Unlike those
+suites, it drives the real DOM/canvas UI in headless Chromium via
+playwright-core (same spirit as `playthrough.js`: a diagnostic/regression
+harness, not part of the plain-node `test/*.test.js` run). Covers: add
+card/kingdom card, real-mouse delete (including upgrade-ladder cascade for
+anchor cards), click-to-connect (arm/connect/self-drop/kingdom-reject/Esc/
+outside-click), the effect editor (kingdom-only visibility, add/remove, bool
+controls), and export→import round-tripping.
+
+Run: `PW_CORE=/path/to/playwright-core node test/editor.test.js`
