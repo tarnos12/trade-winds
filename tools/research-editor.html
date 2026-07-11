@@ -167,6 +167,7 @@
   <header>
     <h1>Research Tree Editor — Trade Winds</h1>
     <button id="btnAdd">+ Add Card</button>
+    <button id="btnAddKingdom">+ Add Kingdom Card</button>
     <button id="btnZoomReset">Reset View</button>
     <div class="sep"></div>
     <button id="btnExport" class="primary">Export JSON</button>
@@ -1558,13 +1559,16 @@ function renameNode(node, newId) {
   return true;
 }
 
-function addCard() {
+function addCard(opts) {
+  const kingdom = !!(opts && opts.kind === "kingdom");
   let n = 1;
   while (doc.research.some(x => x.id === "new_node_" + n)) n++;
   const id = "new_node_" + n;
-  const band = "peasant";
+  const band = kingdom ? "kingdom" : "peasant";
   const slot = findFreeSlot(band);
-  const node = { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Building", desc: "", cost: 0, prereqs: [], effect: {} };
+  const node = kingdom
+    ? { id, branch: "production", band, kind: "kingdom", pos: slot, name: "New Kingdom Research", desc: "", cost: 0, prereqs: [], effect: {} }
+    : { id, branch: band, band, kind: "unlock", buildingId: "", pos: slot, name: "New Building", desc: "", cost: 0, prereqs: [], effect: {} };
   doc.research.push(node);
   doc.materials[id] = {};
   layout = computeLayout();
@@ -1922,6 +1926,7 @@ function renderCardInspector(root, node) {
     } else {
       node.branch = band;
       if (node.kind === "kingdom") node.kind = "unlock";
+      node.effect = {};   // effects are kingdom-only
     }
     layout = computeLayout(); draw(); renderInspector(); renderValidation();
   });
@@ -1934,6 +1939,7 @@ function renderCardInspector(root, node) {
   kindSel.appendChild(optionsFor(["unlock", "anchor", "kingdom"], node.kind));
   kindSel.addEventListener("change", () => {
     node.kind = kindSel.value;
+    if (node.kind !== "kingdom") node.effect = {};   // effects are kingdom-only
     if (node.kind === "anchor") { node.startUnlocked = true; node.cost = 0; node.prereqs = []; delete doc.materials[node.id]; }
     else if (node.kind === "kingdom") {
       // Item 1: kingdom-kind nodes live in the kingdom column and are
@@ -2044,7 +2050,11 @@ function renderCardInspector(root, node) {
     }
     form.appendChild(fsPre);
 
-    // --- effect (dropdown rows; replaces the old raw-JSON textarea) ---
+    // --- effect (dropdown rows) — ONLY kingdom nodes carry gameplay effects;
+    // unlock/upgrade nodes gate a building via their link instead, so the effect
+    // editor is hidden for them (and node.effect is kept {} — see the band/kind
+    // handlers above). ---
+    if (node.kind === "kingdom") {
     const fsEff = el("fieldset", {});
     fsEff.appendChild(el("legend", { text: "effect (what this node does)" }));
     fsEff.appendChild(el("div", { class: "hint", text: "Gameplay modifiers applied when this node is researched. Kingdom nodes carry these; Unlock/Upgrade nodes normally have none (they gate a building instead). Keys ending in a × multiply, others add; paved_roads / tariff_slider are on/off flags." }));
@@ -2100,6 +2110,7 @@ function renderCardInspector(root, node) {
     fsEff.appendChild(effList);
     fsEff.appendChild(addEffBtn);
     form.appendChild(fsEff);
+    }
 
     // --- materials ---
     const fsMat = el("fieldset", {});
@@ -2433,7 +2444,8 @@ document.querySelectorAll(".tabbtn").forEach(btn => {
   });
 });
 
-document.getElementById("btnAdd").addEventListener("click", addCard);
+document.getElementById("btnAdd").addEventListener("click", () => addCard());
+document.getElementById("btnAddKingdom").addEventListener("click", () => addCard({ kind: "kingdom" }));
 // Frame the view on the Peasant band, anchored to the bottom of the tree —
 // that's the entry point of the bottom-up layout, so both the initial view
 // and Reset View land there instead of at the top (Aristocrats).

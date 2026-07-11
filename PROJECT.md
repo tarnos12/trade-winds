@@ -126,7 +126,9 @@ preview), click a destination circle on another card to link — the drawn edge 
 circles clicked; click empty space or press Esc to cancel. The edge-inspector anchor dropdown is also
 expanded to those 8 points (+ `auto`). A node's **effect** is edited via dropdown rows (key dropdown +
 value input, or a true/false dropdown for flag keys; **+** adds a row, **−** removes with confirmation)
-instead of a raw-JSON textarea — keys are the 12 recognized `Research.effect` keys.
+instead of a raw-JSON textarea — keys are the 12 recognized `Research.effect` keys. The effect editor
+shows **only for Kingdom cards** (effects are kingdom-only in the game; non-kingdom cards keep
+`effect: {}`), and a dedicated **+ Add Kingdom Card** toolbar button creates kingdom nodes.
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real
