@@ -1,4 +1,4 @@
-# TASKS — Board (owned by Session #1 / Manager)
+# TASKS — Milestone Log (historical board; live status is in PROJECT.md)
 
 ## Milestone: Research overhaul — resource-metered + Research Center ✅ DONE (v0.21.0)
 Author asks: research speed driven by a Research Center placed next to the kingdom
@@ -307,10 +307,11 @@ link collapses the deterministic run (artifact), city#4 import bootstrapping,
 
 ## Milestone: Aristocrats tier ✅ DONE (shipped with CC/v0.17.0 — author un-deferred it with the full T4 needs spec)
 
-Manager's board for the **in-session agent team** ([PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md)).
-Scope: [GDD.md](GDD.md). Manager works on `main`, splits each milestone into
-non-overlapping slices, spawns one **worktree-isolated subagent** per slice, and
-integrates in the merge order below.
+Historical milestone log. Team-running model is now in [CLAUDE.md](CLAUDE.md) +
+[AGENT_TEAMS.md](AGENT_TEAMS.md); live status + roster + exit criteria are in
+[PROJECT.md](PROJECT.md); scope in [GDD.md](GDD.md). The lead works on `main`,
+splits each milestone into non-overlapping slices, spawns one **worktree-isolated
+subagent** per slice, and integrates in the merge order below.
 
 ## Milestone: Phase 5 content (design-free) ✅ DONE
 

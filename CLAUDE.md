@@ -1,178 +1,204 @@
-# Trade Winds — Working Notes for Claude Code
+# CLAUDE.md — Operating Manual (Agent-Team Orchestrator Guide)
 
-This file is the handoff/status doc (it plays the `HANDOFF.md` role the working
-rules describe). **Keep it current: update the "Current status" section in the
-same commit as every completed task**, so any Claude Code session (or the
-author) can resume cold. Author is Mariusz (GitHub `tarnos12`).
+Project-agnostic guide for the **lead (orchestrator)** session: it governs *how*
+work is run, never *what* is built. Claude Code auto-loads a **repo-root**
+`CLAUDE.md` as standing instructions every session — that is why this file lives
+at the root and README does not (README is not auto-loaded).
 
-> **Working rules:** follow
-> <https://raw.githubusercontent.com/tarnos12/claude-rules/master/RULES.md>
-> (canonical; cloud/remote sessions that can't see local config should fetch
-> this raw URL and follow it). Design/scope source of truth: [GDD.md](GDD.md).
-> Read both before starting.
+**Companion docs (all at the repo root):**
+- **`PROJECT.md`** — everything project-specific (goal, stack, constraints,
+  module→ownership map, roster, milestone exit criteria). Generated **once** from
+  the project's `GDD.md` at first session; not regenerated unless the author
+  asks. Example shape:
+  <https://github.com/tarnos12/claude-rules/blob/master/templates/PROJECT.md>.
+- **[`AGENT_TEAMS.md`](AGENT_TEAMS.md)** — the Claude Code agent-teams *feature*
+  reference (enabling, inter-agent messaging, the shared task list, limits).
+  This file is the *methodology*; that one is the *mechanics*.
+- **`.claude/settings.json`** — enables agent teams for every session
+  (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`).
+- **`GDD.md`** — the author-written design authority `PROJECT.md` is distilled from.
 
-## What this is
+---
 
-**Trade Winds** (working title) is a *Let Them Trade*–inspired economy game: you
-build a network of autonomous towns on a hexagonal board that produce, consume,
-and trade with each other on their own. You shape the conditions (placement,
-production, roads) and earn a tariff on every transaction, spending it to upgrade
-the King's castle. **Stack:** a single `index.html`, Canvas 2D, **zero external
-dependencies**, saves in `localStorage`. Hard constraints: single-file,
-offline-first, no build step, desktop-first. See [GDD.md](GDD.md) for full scope.
+## ⚠️ THE 3 RULES — non-negotiable, apply to every teammate
 
-Repo: GitHub `tarnos12/trade-winds` (default branch `main`).
+1. **Own territory** — each agent owns its own file(s) and deliverables; it may send work and
+   communicate, but only ever *edits its own* files (module boundary = ownership boundary).
+2. **Direct messaging** — teammates message each other directly for dependencies; do not route
+   every exchange through the lead.
+3. **Parallel work** — teammates work simultaneously and react to each other throughout. If the
+   work is purely sequential hand-offs (1→2→3), it is **not** an agent team — use subagents.
 
-## Parallel work — in-session agent team
+These three govern every spawn, assignment, and message. Details below.
 
-This project runs multi-part work as an **in-session agent team** — see
-[PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md). **Session #1 is the manager**: it
-works on `main`, owns the board [TASKS.md](TASKS.md), splits each phase into
-non-overlapping slices, **spawns one worktree-isolated subagent per slice** (the
-Agent tool, `isolation: "worktree"`), and integrates results into `main` in a
-defined merge order, resolving conflicts. "#2/#3/#4" are task slots, not separate
-sessions — workers are ephemeral subagents, so there are no per-worker files and
-no coordination branch. (For truly independent long-lived sessions, the older
-central-dispatch model is in the claude-rules template; not used here.)
+---
 
-## Run & test
+## Project specifics live in `PROJECT.md`
 
-- No build step. Run command: **open `index.html` in a browser** (double-click,
-  or serve the folder with any static server). Nothing to compile.
-- **After a change, tell the author how to see it running** and verify it
-  yourself before claiming done.
-- Prefer the fastest feedback loop that proves it: exercise the pure `Sim` /
-  economy-tick logic headless (a small Node script or unit test) rather than
-  always driving the full canvas app.
-- Cache-busting: if assets get `?v=N` tags, bump them on any change.
+Everything particular to the repo — goal, design authority, stack, directory layout, hard
+constraints, the instantiated roster, and milestone exit criteria — lives in **`PROJECT.md`**, not
+here. Read it before the audit so you know what the project is and what "done" means. Teammates wake
+with **no** conversation history, so `PROJECT.md` (plus the state-of-project summary you write) is
+the shared context they build on.
 
-## Current status (update this section every commit)
+**Generating `PROJECT.md` (once):** if `PROJECT.md` is **missing**, generate it a single time at
+session start by distilling the project's design authority (`GDD.md`) — its goal, stack, hard
+constraints, module→ownership map, instantiated roster, and milestone exit criteria. Model the shape
+on the [`templates/PROJECT.md`](https://github.com/tarnos12/claude-rules/blob/master/templates/PROJECT.md)
+example. **Once `PROJECT.md` exists in the repo, do NOT regenerate it** on later sessions — treat the
+committed file as the source of truth and edit it in place only when the author explicitly asks.
+(`GDD.md` is authored by the author; `PROJECT.md` is the team-facing distillation of it, regenerated
+only on request.)
 
-**Phases 1–4 + Town Interiors + Phase 5 (groundwork + design-free content) + Economy v3 + Construction & building logistics (v0.11.0) + Gradual trade transfer (v0.12.0) + Two-part research & per-building upgrades (v0.13.0) + Research-tree overhaul & kingdom resource overview (v0.14.0: full-screen LTT-style tech tree with bands/pips/queue, per-building unlock nodes, autonomous castle buying, Burgher→Citizen display rename, top-left resource sidebar with price charts) DONE. v0.15.0 LTT panel parity + trade fleets (PP-A..E) + v0.16.0 Terrain & Resources v2 (new tile set w/ deposits+fish+snow+mountains, map presets Oasis/Fertile/Big World, clay→bricks & iron chains, 1,050→ tests) + v0.17.0 Content Chains v2 (12 new buildings, T3 goods, per-tier needs matrix, 70%-capacity happiness model, per-tier tax scaling, ARISTOCRATS 4th tier w/ 1-slot upgradable homes, save migrations; 1,121 tests green) DONE. The full author screenshot wave (research tree, resource sidebar, panels, terrain, content) is SHIPPED. Next candidates: harbors/water trade, knights/combat + Provisioner, campaign scenarios (GDD §10), balance pass on the new 4-tier economy. v0.19.0: Peasant+Worker tiers made fully functional (bakery/bread un-gated from burgher goods, fishery output 1→2 — both tiers reach 100% happiness in full-chain cities) + research-tree layout reworked to topological columns so prerequisite edges stay short (no long diagonals). v0.20.0: Citizen+Aristocrat tiers made functional and the game completable to castle-L5 victory — fixed a manor research-gating deadlock (Manor required iron_tool, a burgher-made good, yet Manor is the sole gateway to burgher housing; re-tiered to worker-band bricks); deterministic tests prove burghers→aristocrats grow and victory reached at tick 2859 (balance.test.js 54 asserts; 1,219 total green). v0.20.1 polish pass (Sonnet, screenshot-grounded): celebratory victory overlay (confetti + run-stats recap + fanfare on every win path), fixed a town-placement hover hint that claimed fogged hexes were valid, and themed warehouse-table scrollbars. v0.20.2 hotfixes: (a) cities weren't trading — the trade target was demand/tick × price-buffer(2), so a small city wanted <1 unit of a good, below buyThreshold, and never dispatched a trader; fixed with a CONFIG.trade.minStock floor (6) + purposeful dispatch (a trader only sets out for a shortfall a reachable seller can actually fill, walking shortfalls in priority order instead of giving up on an unsellable top gap). (b) Aristocrat Homes are 1 slot, non-upgradable — removed the stray upgrade ladder + its 2 research nodes. 1,221 tests green. Standing directive: orchestrate work via dynamic Workflows (plan → implement → adversarial review), delegating to Sonnet/Opus subagents by complexity. v0.21.0 Research overhaul (4 slices A→D): research is now RESOURCE-metered, not gold — gold `cost`/`timeTicks` retired. A placeable **Research Center** building next to the castle (built from castleStock materials, no workers, upgradable L1–4 with speeds 2/3/4/6) sets the speed; research is PAUSED until one is built. Consumption is quantized to whole game-seconds (2 ticks): rate[g]=materials[g]·S/maxAmt so all materials of a node finish together (equal drain, floor-cumulative), gated atomically on castleStock availability (a second advances only if every material's delta is on hand). Save v2 stepwise migration (old v1 saves preserved, research bag→{completedSec,subTick,consumed}, researchCenter defaults null). UI: map render + placement + upgrade panel, Keep-tab pipeline rewrite, and a research progress bar in the Kingdom Overview (active node + %bar + per-material consumed/needed). Opus adversarial review (200k-trial drain fuzz: zero over/under-consume) found no blockers; hardened F1 (clamp level/guard speed vs corrupt saves), F2 (no road over the center hex), F4 (zero-material node still needs a center), F5 (build cost planks→wood so a fresh game can build the center from starter stock). 14 files green (research 178, buildings 163, ~1,269 asserts). Editor (tools/research-editor.html, delivered via Artifact) also gained: material icons+amounts on cards, ticks removed, big-icon/2×-chip visual cards, connectors that fan out across a shared card side (top-left/centre/right), band-panel resize, bottom-anchored single-column Kingdom, localStorage autosave + Reset to Default, collapsible help, Peasant-first camera.**
+---
 
-Done:
-- Git repo initialized (branch `main`); remote `tarnos12/trade-winds` added.
-- GDD imported as [GDD.md](GDD.md) (the design/scope source of truth).
-- This handoff doc created and wired to the working rules.
-- Multi-session central-dispatch set up: [PARALLEL_SESSIONS.md](PARALLEL_SESSIONS.md),
-  board [TASKS.md](TASKS.md), worker files [TASK_2.md](TASK_2.md) /
-  [TASK_3.md](TASK_3.md) / [TASK_4.md](TASK_4.md). Session #1 = manager (works on
-  `main`; workers pull `main` before each task and PR into it).
-- **Phase 1 — The Board** landed in `index.html`: `CONFIG`, `HexMath`, seeded
-  `MapGen` (mulberry32, quantile biomes, island falloff), fog, offscreen terrain
-  pre-render (1 `drawImage`/frame), camera pan/zoom, build mode (roads + town
-  markers + erase), two-clock loop (rAF render + 500ms×speed economy
-  accumulator). Headless test `test/board.test.js` (25/25). Verified in headless
-  Chromium: no console errors, canvas renders. DoD met.
+## THIS IS AN EXISTING PROJECT — audit before you assign
 
-- **Phase 2 — Towns & Production** landed via the agent team (merge order T5 →
-  T4 → T6): `CONFIG.goods`/`CONFIG.buildings` + `Sim.priceFor` price model
-  (§6.1), the pure `Sim.tick` production→consumption→happiness→population step
-  wired to the 500ms accumulator, and town entities + a 4-tab DOM town panel.
-  Tests: `board` 25 · `prices` 51 · `sim` 27; integrated headless smoke clean.
-  DoD met (a town grows/starves; prices react to stockpiles).
+Assume **not greenfield**. The lead's first job is not to build; it is to understand what already
+exists. **Do not spawn a single teammate until the audit is complete.**
 
-- **Phase 3 — Trade** landed via the agent team (merge order T7 → T8 → T9):
-  `Pathing` (Dijkstra road graph + route cache), pure `Trade.tick` (autonomous
-  carts pick top-3 profitable routes, transactions, 25% tariff → `state.treasury`,
-  seeded/deterministic), and cart rendering + treasury HUD + castle warehouse.
-  Towns start at level 2 so they trade on placement. Tests: `pathing` 24 ·
-  `trade` 28. Verified end-to-end headless (carts trade, treasury grows, goods
-  flow; road cut nulls the route). DoD met.
+### 1. Audit protocol (do this yourself, first)
+1. Read the current source tree. Map which modules exist and what is stubbed vs. functional.
+2. Build/run the project and observe what actually works. Cross-reference against the design
+   authority to determine **what is done, what is in progress, and what specifically remains**.
+3. Read any shared config/constants files to learn the current surface. Read existing tests for
+   coverage.
+4. Check version control / recent changes; note WIP and known-broken areas.
+5. Write a short **state-of-project summary** (current status, working parts, gaps, risks) to a
+   shared doc all teammates can read.
+6. Drop any large/relevant reference docs (framework, MCP, this guide's linked docs) as local
+   markdown in `/docs` so the team can consult them without re-fetching.
 
-- **Town Interiors** landed via the agent team (TI-A → TI-B → TI-C): replaced
-  auto-seeded buildings with player placement — a 15-type catalog (extractors on
-  terrain / processors / houses), `Buildings.canPlace` (terrain + radius + slot
-  cap + affordability), `Sim.tick` staffs buildings from population and grows
-  workers/burghers from housing as needs are met, build-menu UI + placement
-  overlay, buildings rendered. Towns start center-only with a founding kit.
-  Tests: `buildings` 37, `sim` 40.
+### 2. Readiness gate (after the audit, before the full team)
+Judge whether the codebase is **team-ready**: modules map cleanly to boundaries, each is separately
+ownable, shared/global files are genuinely isolated, project constraints are intact, and files don't
+cross-cut in ways that force two teammates to edit the same file.
 
-- **Two-part research + per-building upgrades (v0.13.0)** landed via dynamic
-  Workflows (RU-A logic by Opus w/ plan + dual adversarial review; RU-B UI by
-  Sonnet w/ Opus review). Part 1: a **'development' research branch** (4 chained
-  nodes: hut/lumberjack/farm/sawmill upgrades; materials in RESEARCH_MATERIALS)
-  unlocks upgrade *possibilities*. Part 2: click a building → buy its next level
-  (`Buildings.startUpgrade`) — **gold → treasury at purchase; resources delivered
-  from town.stock** by the shared CB-A delivery step (priority-first), pending
-  needs feed town demand. `CONFIG.upgrades` ladders: hut L2–4 (+1 capacity each,
-  L4 −30% basic consumption), lumberjack/farm L2–3 (output ×1.25/×1.5), sawmill
-  L2–3 (output + L3 +1 slot). `Buildings.upgradeEffect` wired into worker slots,
-  production, housingCapacity, and a capacity-weighted per-tier basic-consumption
-  multiplier. UI: building-panel Upgrades section (pending/available/locked/max),
-  🏗 Development research column, map level badges + pending-material chips,
-  `BuildingUI.startUpgrade` hook. Building fields `upgradeLevel`/`pendingUpgrade`.
-  Tests: buildings 109, sim 88, research 72 (496 total green).
+- **If team-ready:** proceed to spawn the live team against remaining work.
+- **If NOT team-ready:** run a **restructuring pass first** with a small temporary team (2–4):
+  - Scope = **shape only**. Carve code onto clean boundaries, hoist stray constants into their
+    designated home, remove constraint violations, define each module's exposed interface.
+    **No new features.**
+  - Temp roster: a **Refactor Architect** (Opus, owns target module map + interfaces),
+    1–2 **Refactor Devs** (Sonnet, move code without changing behavior),
+    **QA/Verification** (Opus, confirms behavior is *identical* before/after). Have the Test Author
+    write **characterization tests** first as the regression net.
+  - Work in an isolated branch/worktree. Merge only when QA confirms behavioral equivalence and the
+    boundaries are clean.
+  - **Disband the temp team**, update the state-of-project summary to describe the new structure,
+    then spawn the proper build team.
+  - Exit criterion: *"same behavior, clean seams, characterization tests green."*
 
-- **Gradual trade transfer (v0.12.0)**: trades are no longer instant. Each trader
-  travels, then **parks to LOAD at the seller and UNLOAD at the buyer** over
-  `ceil(qty / (CONFIG.trade.transferRate × tickSec))` ticks (`transferRate` = 5
-  items/sec of game time; same for castle traders via `CONFIG.researchEconomy`).
-  The **purchase settles atomically on arrival** (unchanged economics — so market
-  moves / Sim consumption can't nibble a half-loaded cart and balance is preserved);
-  the dwell is load *time* and the haul **meters into the buyer's stock** as it
-  unloads. This intentionally cuts throughput (~3× fewer trips), so tight economies
-  lean more on local production. Render: `cartPixel` mirror removed (returning carts
-  animated backwards — fixed), `drawCarts(dt)` eases position with a frame-rate-
-  independent `1−e^(−dt/τ)` lerp; hover shows Loading/Hauling/Unloading + live count.
-  Tests: `trade` 64 (452 total green).
+**Lead decision flow:** audit → readiness gate → (optional restructure team → verify → disband) →
+build team → build to next milestone → QA sign-off.
 
-- **Construction & building logistics (v0.11.0)** landed via the agent team
-  (CB-A → CB-B → CB-C → CB-D): buildings are placed **under construction** —
-  placement charges only GOLD (treasury); the RESOURCE cost is delivered from the
-  city's own stock over time (`CONFIG.town.deliveryRate`) by a pure Sim step, and
-  each unbuilt building's remaining need feeds town demand (so the external trader
-  buys materials → "city demand from its own buildings"). Sim skips unbuilt
-  buildings, staffs effective slots (`workerSlots − closedSlots`), priority
-  buildings first. New `Buildings` helpers `resourceCost`/`isInstant`/
-  `constructionNeed`; building fields `built`/`delivered`/`closedSlots`/`priority`.
-  Visuals: under-construction scaffold + missing-resource chips on the map; trader
-  cargo icon+number (greyed = requested/en-route-to-buy). New **per-building click
-  panel** (info + construction + ⭐ priority + click-to-lock worker slots) — building
-  info moved OUT of the city panel; the Population tab gained a **workforce roster**
-  (assigned vs idle, hover breakdown). Tests: buildings 84, sim 76 (446 total green).
+---
 
-- **Phase 4 — Progression** landed via the agent team (P4-A → P4-B → P4-C):
-  research tree (15 nodes, treasury-funded, effects queryable), town leveling
-  (L1→4; a town must reach L2 to trade — replaces the old auto-L2 bridge), King's
-  quests + prestige, castle levels 1→5 (L5 = victory), Kingdom screen, town
-  alerts, and random events (bumper/craze/fair/collapsed-bridge). Accumulator runs
-  Sim→Trade→Research→Quests→Events. Tests: `research` 40, `progress` 29.
+## The 3 key rules (detail)
+1. **Own territory.** Each agent owns its own file(s) and deliverables. Teammates may send work and
+   communicate, but each only *edits its own* files (module/directory boundary = ownership).
+2. **Direct messaging.** Teammates message each other directly for dependencies — no routing every
+   exchange through the lead. (Mechanics: [`AGENT_TEAMS.md`](AGENT_TEAMS.md).)
+3. **Parallel work.** Teammates work simultaneously and react to each other throughout. If work is
+   purely sequential hand-offs (1→2→3), it is **not** an agent team — use subagents.
 
-Next (recommended order):
-1. **Phase 5 — Content & Polish** (GDD §10): campaign scenarios + start screen,
-   tutorial (first King's requests as onboarding), audio (WebAudio), juice
-   (chimney smoke, transaction particles), optional bandits/guards. Also wire
-   more research effects into Sim/Trade/Buildings (currently queryable but only
-   lightly applied).
-2. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
-   goods count, win condition, title) — resolve before/along Phase 5.
-3. GDD §13 open questions (combat scope, tab-hidden behavior, tariff range,
-   goods count, win condition, title) — not blockers yet.
+## Dos and don'ts
+- **Do** give each agent specific file ownership. **Don't** let two agents share/overwrite a file.
+- **Do** define concrete deliverables. **Don't** use vague outputs.
+- **Do** name recipients explicitly (who messages whom). **Don't** assume they'll infer it.
+- **Do** keep the **live team at 3–5**. **Don't** run 10+ swarms (each agent ≈ 1× more cost).
+- **Do** give full context in every spawn prompt — teammates inherit **no** conversation history.
 
-Note: terrain enum as built uses `fertile` (not `field`); the code is the source
-of truth — full set: `water, meadow, forest, hills, mountains, fertile, wasteland`.
+## Team hygiene
+- Teammates inherit the lead's **permissions**, and can access all project **files, MCP servers,
+  and skills**. Preapprove common tools/bash commands in local settings so teammates don't stall on
+  prompts.
+- Use **plan-approval mode** for risky work (restructures especially): teammates plan first, and the
+  lead (or a dedicated plan-reviewer teammate) approves before execution.
+- Have teammates persist intermediate work to **temp files** so nothing is lost between hand-offs.
+- **Shutdown = save cleanly.** On a shutdown request a teammate may say "not done, let me save."
+  Only shut down once teammates confirm; never force-kill mid-work.
 
-## Architecture conventions (hold these)
+## Model selection
+Match reasoning tier to task difficulty:
+- **Opus** — hard, cross-cutting, or emergent work where a subtle mistake is expensive (lead,
+  hardest subsystem, QA/verification).
+- **Sonnet** — solid feature implementation and test authoring (most domain teammates).
+- **Haiku** — mechanical, high-volume, low-reasoning work (asset/data wrangling, config plumbing).
+- **Fable** — creative or writing-heavy work (content, copy, narrative, design feel).
 
-Derived from GDD §9; keep these load-bearing:
-- **One pure `Sim` core.** The economy tick (production → consumption → prices →
-  cart decisions) is deterministic and side-effect-free — no I/O, no DOM, no
-  canvas. This is what makes it testable and lets it run at 4x / autoplay.
-- **Two clocks, separated:** render on `requestAnimationFrame`; economy on a
-  fixed 500ms × gameSpeed timestep ("fix your timestep" accumulator).
-- **`CONFIG` is the single source of truth** for all balance constants — one
-  object, easy tuning. No magic numbers scattered in logic.
-- **UI in DOM, world in canvas.** Panels are HTML layered over the canvas, not
-  drawn in it. Terrain pre-rendered to an offscreen canvas (1 `drawImage`),
-  redrawn only when fog reveals.
-- **Persistence is versioned** (`saveVersion`) with a migration path; autosave
-  every 30s + on `visibilitychange`. JSON export/import as a string.
-- **Prefer additive, self-contained modules** over editing shared hot files.
+---
 
-## Workflow
+## Roster (a BENCH, not a standing team)
 
-- One commit per completed task; **update "Current status" above in that same
-  commit.** (Full rules: the RULES.md link at the top.)
-- Commit after every completed task; push once a remote exists.
-- Platform: Windows. CRLF warnings from git are expected/harmless.
+Generic archetypes — instantiate per project against the actual modules. Spawn only the **3–5** the
+current milestone needs at once. Roles marked *(subagent)* are usually focused subagents spawned by
+the relevant teammate: they hand off an artifact and don't need parallel back-and-forth.
+
+| Archetype | Model | Owns / does | Talks to |
+|---|---|---|---|
+| **Lead / Integrator & Architect** | Opus | Module interfaces, sequencing, integration passes. The hub. | everyone |
+| **Domain Dev(s)** | Sonnet | One module/feature area each; own separate files | adjacent domains, QA |
+| **Hard-Problem Dev** | Opus | The most complex / emergent subsystem in the project | related domains, QA |
+| **Shared-Standard Owner** | Fable/Sonnet | **Sole writer** of the shared config/constants/schema file | every dev, QA |
+| **Test Author** | Sonnet | Unit, integration, and regression/characterization tests | every dev, QA |
+| **QA / Verification** | Opus | The adversary: runs suite, hunts failures, verifies fixes, gates milestone exits | Lead, Test Author, any dev |
+| **Persistence / Infra** *(subagent)* | Sonnet | Save/schema/migration, build/CI plumbing | contributing modules |
+| **Asset / Data Pipeline** *(subagent)* | Haiku | Assets, data tables, mapping docs, mechanical plumbing | relevant devs |
+
+**Shared-file rule:** any shared/global file (config, constants, schema, shared types) has **one
+designated owner** — everyone else requests a change rather than editing it. This keeps the single
+most-touched file from becoming the main merge-conflict point.
+
+### Game-dev discipline bench (optional expansion)
+
+For **game projects**, instantiate from this expanded bench in addition to the generic archetypes
+above (ignore this table for non-game projects). Each row is still an *archetype* — map it to the
+actual module and pick the model by task difficulty. Keep the live team at 3–5 per milestone — this
+is a menu, not a headcount.
+
+| Discipline | Model | Owns / does | Talks to |
+|---|---|---|---|
+| **Gameplay AI** | Opus | Agent behavior, pathfinding, decision-making, steering, task/utility selection | World/Sim, Systems, QA |
+| **Graphics / Rendering** | Sonnet | Render pipeline, layers/compositing, sprites/atlases or shaders, camera, animation, culling | World, Gameplay, UI, Asset |
+| **World / Procedural Generation** | Sonnet (Opus if complex) | World/level/terrain generation, seeding, biomes, spawn placement, chunking | Rendering, Sim, Systems |
+| **Simulation / Physics** | Opus/Sonnet | Movement, collision, gravity, fluids/particles, tick loop, determinism, LOD | Gameplay AI, World, Perf |
+| **Gameplay Systems / Mechanics** | Sonnet | Rules and progression: crafting, economy, inventory, combat, quests, scoring | Gameplay AI, UI, Balance |
+| **Audio** | Sonnet (Fable for creative sound/music design) | Event-driven SFX + music hooks, audio bus/mixing, ambience triggers | Systems, Gameplay, UI |
+| **UI / UX / HUD** | Sonnet | Menus, HUD, panels, input handling, player-facing controls and feedback | every gameplay owner, Rendering |
+| **Performance / Optimization** | Opus | Profiling, frame/tick budgets, memory, hot-path tuning, load management | Rendering, Sim, Gameplay AI |
+| **Tools / Build / Infra** *(subagent)* | Sonnet | Build/CI, editor tooling, data pipelines, packaging, save/schema/migration | contributing modules |
+| **Content / Asset Pipeline** *(subagent)* | Haiku | Art/audio imports, data tables, mapping docs, license credits, mechanical plumbing | Rendering, Audio, Systems |
+| **Level / Encounter Design & Balance** | Fable | Tuning tables, difficulty curves, encounter/level layout, playtesting for feel | Systems, Gameplay AI, QA |
+| **Narrative / Content Writing** | Fable | Story, dialogue, item/flavor text, tutorials, in-world copy | Systems, UI, Design |
+| **Netcode / Multiplayer** *(if applicable)* | Opus | Netcode, state sync, prediction/rollback, lobby/session, anti-cheat | Sim, Gameplay, Systems |
+
+Standard **Test Author** (Sonnet) and **QA / Verification** (Opus) apply to game projects unchanged.
+
+---
+
+## General working rules (apply on every project, team or solo)
+
+- **Git & committing.** Commit after every completed task — one task = one focused, well-described
+  commit; push after committing. Land each completed task as a **PR** and merge it once tested. If
+  on the default branch and the change is substantial, branch first. `git fetch` and check the base
+  before starting (other sessions may share the repo).
+- **Session continuity.** Keep the project's current state where it belongs — `PROJECT.md` or a
+  dedicated status doc it points to — and **update it in the SAME commit as the code change**, so any
+  session (a different Claude instance, a cloud agent, or the author weeks later) can resume cold.
+- **Verify before claiming done.** Actually run the code / exercise the change and check behavior;
+  report failures honestly with real output. Prefer the fastest feedback loop that proves it
+  (headless test over driving the full app). After a change, tell the author **how to see it
+  running** and include a link (deployed URL or a published Artifact — a dev-server localhost a
+  remote session can't reach is not enough). Bump any cache-busting version tag on a code change.
+- **Style.** Direct, outcome first. Loop the author in on load-bearing findings and direction
+  changes; don't narrate every step. For a multi-part task, do the whole thing rather than stopping
+  to ask permission for each reversible step.
+
+---
+
+## Deliverable
+
+Whatever the current milestone requires, advanced to its **next exit criterion** and **verified by
+QA against the design authority** before it is called done. Define each milestone's exit criterion
+explicitly (a concrete, checkable outcome) so QA has a clear gate to sign off against.
