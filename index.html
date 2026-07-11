@@ -10946,8 +10946,14 @@ var CastleMarket = (function () {
   // === TUTORIAL END ===
 
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.20.3";
+  const GAME_VERSION = "0.21.0";
   const PATCH_NOTES = [
+    { v: "0.21.0", notes: [
+      "Research is reworked: it no longer costs gold — a project is powered by RESOURCES metered in over time",
+      "Build a Research Center on a hex next to the castle to unlock research; its level sets the speed",
+      "Materials drain equally so every resource for a project finishes together; research pauses if the castle runs short",
+      "Kingdom Overview and the Keep tab now show a live research progress bar with each material's consumed/needed count",
+    ] },
     { v: "0.20.3", notes: [
       "City panel is cleaner: hover the Traders bar to see each trader's destination instead of a printed list",
       "City warehouse shows ▲ (green) for goods it's selling and ▼ (red) for goods it wants to buy",

@@ -1,5 +1,23 @@
 # TASKS — Board (owned by Session #1 / Manager)
 
+## Milestone: Research overhaul — resource-metered + Research Center ✅ DONE (v0.21.0)
+Author asks: research speed driven by a Research Center placed next to the kingdom
+(acts like a building but no workers); speed = resources/sec consumed; materials
+drained EQUALLY (rounded) so all of a node's materials finish together; research
+pauses when the castle can't afford the next second; add a Kingdom-overview progress
+bar; research costs resources only (no gold, no ticks). Delivered as 4 sequential
+slices on `main` (one hot file): A pure-core metering + Research Center speed (Opus),
+B placement/upgrade API + save v2 stepwise migration (Opus), C UI: map render +
+placement + panel + Keep pipeline + Kingdom progress bar (Sonnet), D Opus adversarial
+review (200k-trial fuzz, no blockers) → hardened 4 minor/latent findings. Default
+speed L1 = 2/sec (levels 2/3/4/6). 14 test files green (research 178, buildings 163).
+NOT yet deployed to gh-pages at time of writing until final playtest sign-off.
+
+OPEN follow-ups / candidates: balance the Research Center build+upgrade costs and the
+per-level speeds against real playthroughs; consider surfacing an ETA (note F3: the
+displayed whole-second ETA can read 1s optimistic — cosmetic, completion is
+consumed-gated); wire more research effects into Sim/Trade.
+
 ## Milestone: Trade hotfix + aristocrat homes ✅ DONE (v0.20.2)
 Author playtest report (2026-07-09): "3 cities, no trading, traders inactive." Root
 cause: trade target stock = demand/tick × price-buffer(2) → a 4-peasant city wanted
