@@ -186,7 +186,7 @@
         <b>Resize a band</b> by dragging the small gold-outlined square in the bottom-right corner of its lane (right → columns, down → rows).<br>
         Upgrade pips sit above a building's card — select one to edit its ladder level.<br>
         Kingdom research lives in the left column and is always prerequisite-free.<br>
-        Select a prerequisite line to choose which side of each card it attaches to (each side hosts at most one line).<br>
+        Select a prerequisite line to choose which side of each card it attaches to; multiple lines on the same side fan out along it (e.g. top-left / top-centre / top-right).<br>
         Scroll to zoom, drag empty space to pan.
       </div>
       <button id="helpToggle" title="Help" aria-expanded="false">?</button>
@@ -828,6 +828,55 @@ function resolvedSides(parent, child) {
   };
 }
 
+function cardCenter(node) { const r = cardRectFor(node); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+
+// A single anchor point on `side` of `node`, spread by index within a group of
+// `n` edges that share that side. n===1 → the side CENTRE (old behaviour). For
+// n>1 the points fan out along the side between insets, so e.g. three lines on
+// the TOP land at top-left / top-centre / top-right instead of all piling onto
+// one spot.
+function anchorPointFor(node, side, i, n) {
+  const r = cardRectFor(node);
+  const inset = 14;
+  const frac = n <= 1 ? 0.5 : i / (n - 1);
+  if (side === "top" || side === "bottom") {
+    return { x: r.x + inset + frac * (r.w - 2 * inset), y: side === "top" ? r.y : r.y + r.h };
+  }
+  return { x: side === "left" ? r.x : r.x + r.w, y: r.y + inset + frac * (r.h - 2 * inset) };
+}
+
+// Build a per-edge anchor map ({edgeKey → {a,b}}). Edges are grouped by the
+// (card, side) each endpoint attaches to; within a group they're ordered by the
+// OTHER endpoint's position along that side (to reduce crossings) and spread via
+// anchorPointFor. Cheap (a handful of edges) so drawEdges + edgeAtWorld both
+// recompute it fresh.
+function edgeAnchorMap() {
+  const groups = new Map(); // "cardId|side" → [{ e, endpoint, node, side, other }]
+  for (const e of allEdges()) {
+    const s = resolvedSides(e.parent, e.child);
+    const push = (node, side, endpoint, other) => {
+      const key = node.id + "|" + side;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ e, endpoint, node, side, other });
+    };
+    push(e.parent, s.parentSide, "a", cardCenter(e.child));
+    push(e.child, s.childSide, "b", cardCenter(e.parent));
+  }
+  const map = new Map();
+  for (const [key, arr] of groups) {
+    const side = key.slice(key.indexOf("|") + 1);
+    const horizontal = side === "top" || side === "bottom";
+    arr.sort((x, y) => horizontal ? x.other.x - y.other.x : x.other.y - y.other.y);
+    arr.forEach((item, i) => {
+      const pt = anchorPointFor(item.node, side, i, arr.length);
+      const ek = edgeSideKey(item.e.parentId, item.e.childId);
+      if (!map.has(ek)) map.set(ek, {});
+      map.get(ek)[item.endpoint] = pt;
+    });
+  }
+  return map;
+}
+
 // The 1-per-side rule (item 5) is enforced only among EXPLICIT author choices
 // — a card's default (unset) edges keep landing at right/left like before, so
 // dense fan-outs already in the shipped tree (e.g. unlock_quarry gating 5
@@ -857,12 +906,8 @@ function setEdgeSide(parentId, childId, endpoint, value, selectEl) {
     draw();
     return;
   }
-  if (isSideTakenExplicit(nodeId, value, key)) {
-    toast(`Side "${value}" on "${nodeId}" is already used by another connection.`);
-    const hint = doc.edgeSides[key] || {};
-    if (selectEl) selectEl.value = hint[endpoint] || "auto";
-    return;
-  }
+  // Multiple edges MAY share a side now — they auto-spread along it (see
+  // edgeAnchorMap), so there is no longer a one-per-side restriction.
   doc.edgeSides[key] = doc.edgeSides[key] || {};
   doc.edgeSides[key][endpoint] = value;
   draw();
@@ -888,11 +933,13 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 function edgeAtWorld(wx, wy) {
   const edges = allEdges();
+  const anchors = edgeAnchorMap();
   const thresh = 7 / camera.zoom;
   for (const e of edges) {
     const sides = resolvedSides(e.parent, e.child);
-    const a = sideCenterFor(e.parent, sides.parentSide);
-    const b = sideCenterFor(e.child, sides.childSide);
+    const slot = anchors.get(edgeSideKey(e.parentId, e.childId)) || {};
+    const a = slot.a || sideCenterFor(e.parent, sides.parentSide);
+    const b = slot.b || sideCenterFor(e.child, sides.childSide);
     if (distToSegment(wx, wy, a.x, a.y, b.x, b.y) <= thresh) return e;
   }
   return null;
@@ -973,10 +1020,12 @@ function hexAlpha(hex, a) {
 function drawEdges() {
   // Straight thick rounded lines, matching .tt-edges path (stroke #2a2216,
   // width 5, round caps) — the game does not use bezier curves.
+  const anchors = edgeAnchorMap();
   for (const e of allEdges()) {
     const sides = resolvedSides(e.parent, e.child);
-    const a = sideCenterFor(e.parent, sides.parentSide);
-    const b = sideCenterFor(e.child, sides.childSide);
+    const slot = anchors.get(edgeSideKey(e.parentId, e.childId)) || {};
+    const a = slot.a || sideCenterFor(e.parent, sides.parentSide);
+    const b = slot.b || sideCenterFor(e.child, sides.childSide);
     const flags = edgeFlags(e.parent, e.child);
     const isSel = selectedEdge && selectedEdge.parentId === e.parentId && selectedEdge.childId === e.childId;
     ctx.beginPath();
@@ -1541,7 +1590,7 @@ function renderInspector() {
     const box = el("div", {});
     const fs = el("fieldset", {});
     fs.appendChild(el("legend", { text: "Selected prerequisite edge" }));
-    fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}". Pick which side of each card this line attaches to — each side hosts at most one connection. "auto" keeps the default right/left midpoint.` }));
+    fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}". Pick which side of each card this line attaches to. Multiple lines on the same side fan out along it (e.g. top-left / top-centre / top-right). "auto" picks the side facing the other card.` }));
 
     const row = el("div", { class: "row" });
     const pWrap = el("div", {});
