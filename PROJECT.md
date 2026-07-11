@@ -124,7 +124,9 @@ a Peasant-first camera. Each card exposes **8 connection circles** (4 corners + 
 Connecting is **click-to-connect**: click a source circle to arm it (highlighted, with a rubber-band
 preview), click a destination circle on another card to link — the drawn edge anchors to the exact two
 circles clicked; click empty space or press Esc to cancel. The edge-inspector anchor dropdown is also
-expanded to those 8 points (+ `auto`).
+expanded to those 8 points (+ `auto`). A node's **effect** is edited via dropdown rows (key dropdown +
+value input, or a true/false dropdown for flag keys; **+** adds a row, **−** removes with confirmation)
+instead of a raw-JSON textarea — keys are the 12 recognized `Research.effect` keys.
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real

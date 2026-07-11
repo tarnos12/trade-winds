@@ -266,6 +266,26 @@ const MAX_UPGRADES_PER_BUILDING = 5;
 // The game's per-building upgrade effect keys (CONFIG.upgrades[building][i].effect) —
 // authored via a dropdown (item 3) instead of typed JSON.
 const UPGRADE_EFFECT_KEYS = ["capacityPlus", "slotPlus", "outputMult", "basicConsumptionMult"];
+// The game's node-level effect keys (CONFIG.research[].effect), read by
+// Research.effect(). type: "mult" (×, keys the game multiplies), "add" (+, summed),
+// "bool" (OR'd flag). `def` is the value inserted when the key is first added.
+const NODE_EFFECT_KEYS = [
+  { key: "globalOutput",    type: "mult", def: 1.25 },
+  { key: "extractorOutput", type: "mult", def: 1.2  },
+  { key: "mineOutput",      type: "mult", def: 1.25 },
+  { key: "processorOutput", type: "mult", def: 1.2  },
+  { key: "housingBonus",    type: "mult", def: 1.15 },
+  { key: "cartCapacity",    type: "mult", def: 1.5  },
+  { key: "extraCarts",      type: "add",  def: 1    },
+  { key: "tariffBonus",     type: "add",  def: 0.03 },
+  { key: "slotBonus",       type: "add",  def: 1    },
+  { key: "warehouseCap",    type: "add",  def: 200  },
+  { key: "paved_roads",     type: "bool", def: true },
+  { key: "tariff_slider",   type: "bool", def: true },
+];
+const NODE_EFFECT_KEY_LIST = NODE_EFFECT_KEYS.map(e => e.key);
+const NODE_EFFECT_META = {};
+NODE_EFFECT_KEYS.forEach(e => { NODE_EFFECT_META[e.key] = e; });
 // Connection-line side anchors (item 5). "auto" = old default (right/left midpoint).
 // 8 connector anchor points per card: 4 edge mid-points + 4 corners. A card draws
 // a draggable link handle at each; the edge inspector can anchor an edge to any of
@@ -2024,16 +2044,61 @@ function renderCardInspector(root, node) {
     }
     form.appendChild(fsPre);
 
-    // --- effect JSON ---
+    // --- effect (dropdown rows; replaces the old raw-JSON textarea) ---
     const fsEff = el("fieldset", {});
-    fsEff.appendChild(el("legend", { text: "effect (JSON)" }));
-    const effArea = el("textarea", { rows: "3" });
-    effArea.value = JSON.stringify(node.effect || {}, null, 0);
-    effArea.addEventListener("change", () => {
-      try { node.effect = JSON.parse(effArea.value || "{}"); effArea.style.borderColor = ""; }
-      catch (e) { effArea.style.borderColor = "var(--err)"; toast("Invalid JSON in effect."); }
-    });
-    fsEff.appendChild(effArea);
+    fsEff.appendChild(el("legend", { text: "effect (what this node does)" }));
+    fsEff.appendChild(el("div", { class: "hint", text: "Gameplay modifiers applied when this node is researched. Kingdom nodes carry these; Unlock/Upgrade nodes normally have none (they gate a building instead). Keys ending in a × multiply, others add; paved_roads / tariff_slider are on/off flags." }));
+    node.effect = node.effect || {};
+    const effList = el("div", {});
+    const addEffBtn = el("button", { class: "miniBtn", text: "+ add effect", onclick: () => {
+      const free = NODE_EFFECT_KEY_LIST.find(k => !(k in node.effect));
+      if (!free) return;
+      const meta = NODE_EFFECT_META[free];
+      node.effect[free] = meta.type === "bool" ? true : meta.def;
+      renderEffectRows();
+    } });
+    function renderEffectRows() {
+      effList.innerHTML = "";
+      node.effect = node.effect || {};
+      const keys = Object.keys(node.effect);
+      if (keys.length === 0) effList.appendChild(el("div", { class: "hint", text: "(no effect — this node has no gameplay modifier)" }));
+      for (const k of keys) {
+        const rowE = el("div", { class: "matRow" });
+        // key dropdown — hide keys already used by OTHER rows so each appears once
+        const otherUsed = keys.filter(x => x !== k);
+        const sel = el("select", {});
+        sel.appendChild(optionsFor(NODE_EFFECT_KEY_LIST.filter(ek => ek === k || !otherUsed.includes(ek)), k));
+        sel.addEventListener("change", () => {
+          const meta2 = NODE_EFFECT_META[sel.value];
+          delete node.effect[k];
+          node.effect[sel.value] = meta2.type === "bool" ? true : meta2.def;
+          renderEffectRows();
+        });
+        rowE.appendChild(sel);
+        // value control — a number for mult/add keys, a true/false dropdown for flags
+        const meta = NODE_EFFECT_META[k] || { type: "add" };
+        if (meta.type === "bool") {
+          const bsel = el("select", {});
+          bsel.appendChild(optionsFor(["true", "false"], String(node.effect[k] !== false)));
+          bsel.addEventListener("change", () => { node.effect[k] = (bsel.value === "true"); });
+          rowE.appendChild(bsel);
+        } else {
+          const valInput = el("input", { type: "number", value: node.effect[k], step: meta.type === "mult" ? "0.05" : "1" });
+          valInput.addEventListener("input", () => { node.effect[k] = parseFloat(valInput.value) || 0; });
+          rowE.appendChild(valInput);
+        }
+        // remove (with confirmation)
+        const rm = el("button", { class: "miniBtn", text: "−", title: "Remove this effect", onclick: () => {
+          if (confirm(`Remove effect "${k}" from "${node.name || node.id}"?`)) { delete node.effect[k]; renderEffectRows(); }
+        } });
+        rowE.appendChild(rm);
+        effList.appendChild(rowE);
+      }
+      addEffBtn.disabled = keys.length >= NODE_EFFECT_KEY_LIST.length;
+    }
+    renderEffectRows();
+    fsEff.appendChild(effList);
+    fsEff.appendChild(addEffBtn);
     form.appendChild(fsEff);
 
     // --- materials ---
