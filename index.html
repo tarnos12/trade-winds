@@ -3870,12 +3870,15 @@ const Research = {
   // (research PAUSED); otherwise the center's level (default 1).
   centerLevel(state) {
     if (!state || !state.researchCenter || !state.researchCenter.built) return 0;
-    return state.researchCenter.level || 1;
+    const lvl = state.researchCenter.level || 1;
+    const max = (((CONFIG.researchCenter && CONFIG.researchCenter.levels) || []).length - 1) || 1;
+    return Math.min(Math.max(1, max), Math.max(1, lvl));   // clamp: never index past the levels table
   },
   // Research SPEED (materials/game-second) from the center's level; 0 = paused.
   centerSpeed(state) {
     const lvl = Research.centerLevel(state);
-    return lvl ? CONFIG.researchCenter.levels[lvl].speed : 0;
+    const cfg = lvl ? (CONFIG.researchCenter.levels[lvl]) : null;
+    return cfg ? cfg.speed : 0;   // defensive: a missing level yields 0, never throws
   },
   // Pure per-second equal-DRAIN plan for a node's materials at speed S. Returns
   // { T, rate, gids }: gids = the material ids; T = whole game-seconds to finish
@@ -3998,13 +4001,13 @@ const Research = {
     if (!node) { R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {}; return; }
     const M = node.materials || {};
     const gids = Object.keys(M);
-    if (!gids.length) {   // zero-material node → complete instantly
+    const S = Research.centerSpeed(state);
+    if (S === 0) return;   // no center / under construction → PAUSED (even a zero-material node waits for a center)
+    if (!gids.length) {   // zero-material node → complete instantly (center present)
       if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
       R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
       return;
     }
-    const S = Research.centerSpeed(state);
-    if (S === 0) return;   // no center / under construction → PAUSED (no accrual)
     R.subTick = Math.min(TICKS_PER_SEC, R.subTick + 1);
     if (R.subTick < TICKS_PER_SEC) return;   // not a game-second boundary yet
 
@@ -4142,7 +4145,7 @@ Object.assign(CONFIG, {
 Object.assign(CONFIG, {
   researchCenter: {
     name: "Research Center", glyph: "📖",
-    build: { gold: 300, cost: { stone: 20, planks: 10 } },
+    build: { gold: 300, cost: { stone: 20, wood: 10 } },   // wood+stone are in the castle's starterStock, so a fresh game can build the center without first needing a plank-producing city
     deliveryRate: 5,
     levels: [ null,
       { level: 1, speed: 2 },
@@ -6009,6 +6012,8 @@ var CastleMarket = (function () {
     const k = HexMath.key(q, r);
     const hex = state.map.hexes.get(k);
     if (!hex || !isVisible(k)) return false;
+    // Nothing (road/town/building) may overwrite the Research Center's hex.
+    if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return false;
     if (state.mode === "road") {
       if (!CONFIG.terrain[hex.terrain].road) return false;
       if (state.roads.has(k)) return false;
@@ -6339,7 +6344,10 @@ var CastleMarket = (function () {
     let pending = null;
     if (rc.pendingUpgrade && typeof rc.pendingUpgrade === "object") {
       const pu = rc.pendingUpgrade;
-      if (typeof pu.toLevel === "number" && pu.delivered && typeof pu.delivered === "object") {
+      // Require toLevel to name a REAL level (levels[toLevel] exists) — an
+      // out-of-range toLevel would otherwise self-apply on the next tick and
+      // push center.level past the table, crashing centerSpeed every tick.
+      if (typeof pu.toLevel === "number" && levels[pu.toLevel] && pu.delivered && typeof pu.delivered === "object") {
         // re-derive cost from CONFIG so material metering (Research.centerUpgradeNeed) works.
         const lvlCfg = levels[pu.toLevel];
         pending = { toLevel: pu.toLevel, cost: Object.assign({}, (lvlCfg && lvlCfg.cost) || {}), delivered: pu.delivered };
