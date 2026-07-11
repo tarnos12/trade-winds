@@ -128,7 +128,11 @@ expanded to those 8 points (+ `auto`). A node's **effect** is edited via dropdow
 value input, or a true/false dropdown for flag keys; **+** adds a row, **−** removes with confirmation)
 instead of a raw-JSON textarea — keys are the 12 recognized `Research.effect` keys. The effect editor
 shows **only for Kingdom cards** (effects are kingdom-only in the game; non-kingdom cards keep
-`effect: {}`), and a dedicated **+ Add Kingdom Card** toolbar button creates kingdom nodes.
+`effect: {}`), and a dedicated **+ Add Kingdom Card** toolbar button creates kingdom nodes. All
+destructive confirmations use a **modal-free in-DOM confirm** (`uiConfirm`) instead of native
+`confirm()`, which is silently blocked in the Artifact's sandboxed iframe — that was the "Delete card
+button doesn't work" bug. The editor now has a headless regression harness (`test/editor.test.js`)
+including a sandboxed-iframe case, produced by the QA + Test-Author agent team.
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real

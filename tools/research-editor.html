@@ -1507,9 +1507,9 @@ window.addEventListener("keydown", (ev) => {
     if (node.kind === "upgrade") {
       const ladder = ladderFor(node.buildingId);
       const topLevel = ladder.length ? Math.max(...ladder.map(e => e.level)) : null;
-      if (node.level === topLevel && confirm(`Remove upgrade level "${node.name || node.id}"?`)) removeUpgrade(node.buildingId);
-    } else if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites.`)) {
-      deleteCard(node.id);
+      if (node.level === topLevel) uiConfirm(`Remove upgrade level "${node.name || node.id}"?`, () => removeUpgrade(node.buildingId));
+    } else {
+      uiConfirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites.`, () => deleteCard(node.id));
     }
   }
 });
@@ -1520,6 +1520,46 @@ function toast(msg) {
   el.classList.add("show");
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+// Modal-free confirmation. The editor ships as a published Artifact, which
+// renders inside a SANDBOXED iframe (sandbox="allow-scripts allow-same-origin",
+// WITHOUT allow-modals). Chromium blocks native confirm()/alert()/prompt() in
+// that sandbox — the call is ignored and returns undefined (falsy) — so every
+// confirm()-gated action (delete card, remove upgrade, remove effect, reset)
+// silently no-opped in the Artifact even though it worked on file://. That was
+// the "Delete this card button doesn't work" report. This renders an in-DOM
+// confirm dialog instead (styled with the editor's own CSS vars) and runs
+// `onConfirm` only when the user clicks Confirm. Stable ids (#uiConfirmOk /
+// #uiConfirmCancel) let headless tests click through it.
+function uiConfirm(message, onConfirm) {
+  const prev = document.getElementById("uiConfirm");
+  if (prev) prev.remove();
+  const overlay = el("div", { id: "uiConfirm" });
+  overlay.style.cssText = "position:fixed;inset:0;z-index:100;display:flex;align-items:center;" +
+    "justify-content:center;background:rgba(0,0,0,0.55);";
+  const boxEl = el("div", {});
+  boxEl.style.cssText = "background:var(--panel);border:1px solid var(--accent);border-radius:8px;" +
+    "padding:16px 18px;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,.5);color:var(--paper);";
+  boxEl.appendChild(el("div", { text: message, style: "font-size:13px;line-height:1.5;margin-bottom:14px;" }));
+  const row = el("div", { style: "display:flex;gap:8px;justify-content:flex-end;" });
+  const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
+  const confirmNow = () => { close(); onConfirm(); };
+  function onKey(e) {
+    if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
+    else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.stopPropagation(); } // don't leak to the board Delete handler while open
+  }
+  const cancel = el("button", { id: "uiConfirmCancel", text: "Cancel", onclick: close });
+  const ok = el("button", { id: "uiConfirmOk", class: "danger", text: "Confirm", onclick: confirmNow });
+  row.appendChild(cancel); row.appendChild(ok);
+  boxEl.appendChild(row);
+  overlay.appendChild(boxEl);
+  // Click on the dark backdrop (outside the box) cancels.
+  overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", onKey, true);
+  ok.focus();
 }
 
 /* --------------------------- selection / inspector ------------------------ */
@@ -1879,7 +1919,7 @@ function renderPipInspector(root, node) {
   fsAct.appendChild(el("legend", { text: "Actions" }));
   if (!isTop) fsAct.appendChild(el("div", { class: "hint", text: "Only the topmost upgrade level can be removed, to keep levels sequential — remove higher levels first (from the building card's Upgrades panel)." }));
   const rmBtn = el("button", { class: "danger", text: "Remove this upgrade (top level)", onclick: () => {
-    if (confirm(`Remove upgrade level "${node.name || node.id}" from "${node.buildingId}"?`)) removeUpgrade(node.buildingId);
+    uiConfirm(`Remove upgrade level "${node.name || node.id}" from "${node.buildingId}"?`, () => removeUpgrade(node.buildingId));
   } });
   if (!isTop) rmBtn.disabled = true;
   fsAct.appendChild(rmBtn);
@@ -2099,7 +2139,7 @@ function renderCardInspector(root, node) {
         }
         // remove (with confirmation)
         const rm = el("button", { class: "miniBtn", text: "−", title: "Remove this effect", onclick: () => {
-          if (confirm(`Remove effect "${k}" from "${node.name || node.id}"?`)) { delete node.effect[k]; renderEffectRows(); }
+          uiConfirm(`Remove effect "${k}" from "${node.name || node.id}"?`, () => { delete node.effect[k]; renderEffectRows(); });
         } });
         rowE.appendChild(rm);
         effList.appendChild(rowE);
@@ -2169,7 +2209,7 @@ function renderCardInspector(root, node) {
     btnRow.appendChild(addBtn);
     const rmBtn = el("button", { class: "miniBtn danger", text: "Remove top upgrade", onclick: () => {
       const top = ladder[ladder.length - 1];
-      if (top && confirm(`Remove upgrade level "${top.name || top.unlockedBy}"?`)) removeUpgrade(node.buildingId);
+      if (top) uiConfirm(`Remove upgrade level "${top.name || top.unlockedBy}"?`, () => removeUpgrade(node.buildingId));
     } });
     if (!ladder.length) rmBtn.disabled = true;
     btnRow.appendChild(rmBtn);
@@ -2181,7 +2221,7 @@ function renderCardInspector(root, node) {
   const fsAct = el("fieldset", {});
   fsAct.appendChild(el("legend", { text: "Actions" }));
   fsAct.appendChild(el("button", { class: "danger", text: "Delete this card", onclick: () => {
-    if (confirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites${doc.upgrades[node.buildingId] ? " and deletes its upgrade ladder" : ""}.`)) deleteCard(node.id);
+    uiConfirm(`Delete "${node.id}"? This also removes it from other cards' prerequisites${doc.upgrades[node.buildingId] ? " and deletes its upgrade ladder" : ""}.`, () => deleteCard(node.id));
   } }));
   form.appendChild(fsAct);
 
@@ -2468,7 +2508,7 @@ document.getElementById("btnImport").addEventListener("click", () => {
   setTimeout(() => document.getElementById("importArea").focus(), 50);
 });
 document.getElementById("btnReloadDefault").addEventListener("click", () => {
-  if (confirm("Reset to the tree shipped with the game? This discards your locally-saved edits.")) {
+  uiConfirm("Reset to the tree shipped with the game? This discards your locally-saved edits.", () => {
     clearLocal();
     doc = freshDoc();
     selectedId = null; selectedEdge = null;
@@ -2477,7 +2517,7 @@ document.getElementById("btnReloadDefault").addEventListener("click", () => {
     draw(); renderInspector(); renderValidation();
     if (typeof renderPalette === "function") renderPalette();
     saveLocal();
-  }
+  });
 });
 
 // Collapsible help: the boardHint panel starts hidden; the round "?" button
