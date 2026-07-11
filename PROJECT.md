@@ -134,6 +134,15 @@ destructive confirmations use a **modal-free in-DOM confirm** (`uiConfirm`) inst
 button doesn't work" bug. The editor now has a headless regression harness (`test/editor.test.js`)
 including a sandboxed-iframe case, produced by the QA + Test-Author agent team.
 
+**Modularization (restructuring pass, in progress).** To unlock the parallel agent-team workflow, the
+single-file game is being split into `src/*.js` modules reassembled by a **zero-dependency
+`tools/build.js`** (in-place `/* BUILD:<name> START/END */` marker splice; `build` / `--check` /
+`--extract`). The shipped `index.html` stays one self-contained, offline, zero-dep file — `src/` is the
+editable source, `index.html` the committed build output (edit `src` → build → commit both). Phase 1
+done: build system + first 2 pure-core modules (`config`, `hexmath`) extracted, round-trip byte-exact,
+all 14 pure-core suites green. Plan + 16-module fan-out in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md).
+Phase 2 (impure shell) deferred.
+
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real
    playthroughs; wire more research effects into Sim/Trade.

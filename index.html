@@ -1139,6 +1139,7 @@
    ===================================================================== */
 /* PURE_CORE_START */
 
+/* BUILD:config START */
 // Single source of truth for all balance/layout constants (GDD §9.1).
 const CONFIG = {
   saveVersion: 2,
@@ -1213,6 +1214,7 @@ const CONFIG = {
   // === /TV2 terrain set ===
   fogColor: "#1b1710",
 };
+/* BUILD:config END */
 
 // Seeded PRNG — mulberry32 (GDD §9.1: MapGen uses mulberry32).
 function mulberry32(a) {
@@ -1235,6 +1237,7 @@ function hashSeed(str) {
   return h >>> 0;
 }
 
+/* BUILD:hexmath START */
 // Pointy-top axial hex math (GDD §3.1, §9.1).
 const HexMath = {
   DIRS: [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]],
@@ -1271,6 +1274,7 @@ const HexMath = {
     return out;
   },
 };
+/* BUILD:hexmath END */
 
 // Value-noise field with fractal Brownian motion (GDD §9.1: noise → biomes).
 function makeValueNoise(seed) {
