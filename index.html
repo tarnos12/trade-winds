@@ -6270,6 +6270,7 @@ var CastleMarket = (function () {
         towns: state.towns,
         carts: state.carts,
         treasury: state.treasury,
+        tick: state.tick,                  // BUGFIX: persist the sim tick — town.cooldownUntil and happyMods[].untilTick are ABSOLUTE tick values, so without restoring tick they read as stuck/inflated after a save+reload
         tariffRate: state.tariffRate,      // TARIFF-SLIDER (P5D-D): player-set base tariff
         tradeSeed: state.tradeSeed,
         research: state.research,          // RESEARCH (P4-A): tech tree progress
@@ -6370,6 +6371,7 @@ var CastleMarket = (function () {
     state.towns = data.towns || [];
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
+    state.tick = typeof data.tick === "number" ? data.tick : 0;   // BUGFIX: restore the sim tick so cooldownUntil / happyMods untilTick (absolute ticks) stay consistent (old saves lack it → default 0, same as pre-fix behavior)
     state.tariffRate = typeof data.tariffRate === "number" ? data.tariffRate : CONFIG.trade.tariffRate; // TARIFF-SLIDER (P5D-D)
     if (typeof data.tradeSeed === "number") state.tradeSeed = data.tradeSeed;
     state.research = Research.normalize(data.research);   // RESEARCH (P4-A)
