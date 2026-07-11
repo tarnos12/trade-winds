@@ -29,7 +29,7 @@ const RESEARCH_ORDER = [
   "guild_halls", "warehousing", "extra_caravan", "town_charters", "upg_farm_l3",
   "upg_lumberjack_l3", "upg_sawmill_l3",
   // aristocrat band
-  "unlock_aristocrat_home", "upg_aristocrat_home_l2", "upg_aristocrat_home_l3",
+  "unlock_aristocrat_home",   // NOTE: the tree has no upg_aristocrat_home_l2/l3 nodes
   "master_crafts", "trade_network", "industrialize", "tariff_office", "bureaucracy",
 ];
 
@@ -121,6 +121,7 @@ function run() {
     for (const id of RESEARCH_ORDER) {
       if (Research.has(state, id)) continue;
       const node = Research.get(id);
+      if (!node) continue;   // defensive: skip any id not present in the tech tree
       if (!Research.prereqsMet(state, node)) continue;
       if ((node.cost || 0) > (state.treasury || 0)) continue;
       const mats = node.materials || {};

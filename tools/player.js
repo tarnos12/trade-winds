@@ -83,7 +83,10 @@ function build() {
     research: Research.fresh(),
     market: Market && Market.fresh ? Market.fresh() : { hist: {}, head: 0, len: 0 },
     warehouse: {},
-    castleStock: {},
+    // Seed the castle material store from CONFIG.researchEconomy.starterStock, exactly
+    // as the real game does (index.html newGame). This is what lets the FIRST Research
+    // Center be built (build cost stone:20/wood:10) before any city produces a surplus.
+    castleStock: Object.assign({}, (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {}),
     researchSeed: 0x9e3779b9 | 0,
     castleTrade: {},
     castleReserved: {},
@@ -169,6 +172,22 @@ function build() {
     return false;
   }
 
+  // ---- Research Center: place it next to the castle at setup ---------------
+  // The tech tree is PAUSED until a built Research Center exists (centerSpeed 0 =
+  // no accrual/consumption). A rational player builds it immediately — it costs
+  // only 300g + stone:20/wood:10, all covered by the castle's starterStock. Place
+  // it on the first free castle-adjacent buildable hex (not on a road/town/castle);
+  // Research.tickCenter then delivers the materials from castleStock over ~6 ticks.
+  const castle = Buildings.castleHex ? (function () {
+    const c = (CONFIG.town && CONFIG.town.castle) || { q: 0, r: 0 }; return c;
+  })() : { q: 0, r: 0 };
+  let centerPlaced = false;
+  for (const n of HexMath.neighbors(castle.q, castle.r)) {
+    const res = Buildings.placeResearchCenter(state, n.q, n.r);
+    if (res.ok) { centerPlaced = true; break; }
+  }
+  if (!centerPlaced) throw new Error("player.js: could not place Research Center adjacent to the castle");
+
   return { C, state, placeBuilding, makeTown, CENTERS };
 }
 
@@ -181,6 +200,12 @@ function step(C, state) {
   if (Market && Market.tick) Market.tick(state);
   ResearchEconomy.tick(state);
   CastleMarket.tick(state);
+  // Slice A: deliver materials from castleStock into the Research Center
+  // (build/upgrade) AFTER the buyers stock the castle, BEFORE research runs —
+  // mirrors the real game's accumulator order (index.html main loop). Without
+  // this the center never finishes construction, so research stays PAUSED and
+  // the whole tier progression stalls at peasants.
+  if (Research.tickCenter) Research.tickCenter(state);
   Research.tick(state);
   Quests.tick(state);
 }
