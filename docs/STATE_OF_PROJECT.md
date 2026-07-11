@@ -56,10 +56,30 @@ kingdom panels, tech tree, HUD, start screen, tutorial coach, patch notes).
    **force-push** (branch diverged during a rollback) → requires author approval.
    Playable build currently ships as a published Artifact.
 
+## Team model — agent teams vs subagents (two distinct concepts)
+Agent teams **are enabled** for this repo (`.claude/settings.json` commits
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, so every fresh clone has them). They are
+**not** the same as `Agent`-tool subagents — the deciding question is whether the
+workers need to **talk to each other**, not merely run in parallel
+(AGENT_TEAMS.md §2):
+- **Agent team** — teammates are full sessions that **message each other** and
+  share a task list. Use for phases where cross-talk is the point *and* the hot
+  file isn't being mutated: **parallel review** before a merge
+  (correctness / sim-determinism / perf, challenging each other) and
+  **competing-hypothesis debugging** (e.g. the peasant-stall — rival root-cause
+  theories tested in parallel, each trying to disprove the others).
+- **Subagent / single session** — a clean deliverable handed back, no cross-talk.
+  Use for the **serialized `index.html` edit itself**: the single hot file means
+  two workers can't edit it at once, so implementation edits serialize (worktree
+  subagent or single session), with the lead as sole integrator + gatekeeper and
+  QA signing off against the GDD exit criterion.
+- The single-file constraint limits **parallel *editing*** of `index.html`, not
+  agent teams in general — read/analysis teamwork (review, debugging) still fits.
+- Note: AGENT_TEAMS.md §11–12 examples assume a *multi-file* layout
+  (`world/`, `config.js`) that does **not** match this single-file repo; the
+  authoritative reconciliation is PROJECT.md "Team model".
+
 ## Risks / gotchas
-- **Single hot file** → not "team-ready" for a live agent team; use
-  worktree-isolated subagents with the lead as sole serial integrator (per
-  PROJECT.md "Team model").
 - **`CONFIG` is the only home for balance constants** — no magic numbers in logic.
 - **Keep PURE_CORE pure** — anything the tests eval must stay DOM/RNG/clock-free.
 - Save bumps must ship a **stepwise migration**, never discard old saves.
