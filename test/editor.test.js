@@ -41,6 +41,13 @@ const { chromium } = require(PW);
 const path = require("path");
 
 const FILE_URL = "file://" + path.join(__dirname, "..", "tools", "research-editor.html");
+// Host page that embeds the editor in a SANDBOXED iframe
+// (sandbox="allow-scripts allow-same-origin", crucially WITHOUT allow-modals) —
+// the exact environment of the published Artifact, where native
+// confirm()/alert()/prompt() are blocked. Used by the regression group that
+// locks in the delete-in-sandbox fix.
+const SANDBOX_URL = process.env.SANDBOX_HOST ||
+  "file://" + path.join(__dirname, "fixtures", "sandbox_host.html");
 
 // ---------------------------------------------------------------------------
 // tiny pass/fail tally, mirrors the style of test/*.test.js's ok()
@@ -84,13 +91,44 @@ async function withPage(fn) {
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(String(e && e.stack || e)));
-  page.on("dialog", (d) => d.accept());
+  // SAFETY NET ONLY. The editor no longer uses native confirm()/alert()/prompt()
+  // — every confirm-gated action now goes through the in-DOM #uiConfirm overlay
+  // (EditorDev's fix: native dialogs are silently blocked inside the sandboxed
+  // Artifact iframe, which was the "Delete button doesn't work" bug). So NO
+  // native dialog should EVER fire; if one does, record it and fail the
+  // scenario. We deliberately do NOT auto-accept here anymore — auto-accepting
+  // would mask a regression back to native confirm().
+  const nativeDialogs = [];
+  page.on("dialog", (d) => { nativeDialogs.push(d.type() + ": " + d.message()); d.dismiss().catch(() => {}); });
   await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { /* ignore */ } });
   await page.goto(FILE_URL);
   await page.waitForFunction(() => typeof doc !== "undefined" && Array.isArray(doc.research));
   await fn(page);
   if (pageErrors.length) throw new Error("page error(s): " + pageErrors.join(" | "));
+  if (nativeDialogs.length) {
+    throw new Error("unexpected native dialog(s) — the editor must use the in-DOM #uiConfirm overlay, never confirm()/alert()/prompt(): " + nativeDialogs.join(" | "));
+  }
   await context.close();
+}
+
+// Drive the in-DOM confirm overlay (#uiConfirm) that replaced native confirm().
+// After a confirm-gated action is triggered, this asserts the overlay APPEARS,
+// clicks through it (#uiConfirmOk to confirm, #uiConfirmCancel to cancel), and
+// asserts it then DISAPPEARS. `root` is a Page or a FrameLocator so the same
+// helper works for the top-level page and the sandboxed-iframe group.
+async function clickConfirm(root, label, opts) {
+  const cancel = !!(opts && opts.cancel);
+  const overlay = root.locator("#uiConfirm");
+  let appeared = true;
+  try { await overlay.waitFor({ state: "visible", timeout: 4000 }); }
+  catch (e) { appeared = false; }
+  ok(label + ": #uiConfirm overlay appeared", appeared);
+  if (!appeared) return;
+  await root.locator(cancel ? "#uiConfirmCancel" : "#uiConfirmOk").click();
+  let dismissed = true;
+  try { await overlay.waitFor({ state: "detached", timeout: 4000 }); }
+  catch (e) { dismissed = false; }
+  ok(label + ": #uiConfirm overlay dismissed after " + (cancel ? "Cancel" : "Confirm"), dismissed);
 }
 
 // Re-point the camera (zoom=1) so world point (wx,wy) lands exactly on the
@@ -171,13 +209,15 @@ async function testAddCards() {
 //    button — for an unlock card, a kingdom card, and an anchor card that has
 //    an upgrade ladder (the reported bug area: ladder pips must cascade too).
 // ===========================================================================
-async function deleteSelectedCardViaUI(page) {
+async function deleteSelectedCardViaUI(page, label) {
   // Selecting the card (a real canvas click) re-renders #tab-inspector with a
   // fresh "Delete this card" button; click THAT button for real, exactly like
-  // a user would, then let the auto-accepted confirm() dialog through.
+  // a user would, then confirm through the in-DOM #uiConfirm overlay (no native
+  // dialog fires anymore — see withPage's safety net).
   const btn = page.locator('#tab-inspector button.danger:has-text("Delete this card")');
   await btn.waitFor({ state: "visible" });
   await btn.click();
+  await clickConfirm(page, label);
 }
 
 async function testDeleteUnlockCard() {
@@ -186,7 +226,7 @@ async function testDeleteUnlockCard() {
     ok("precondition: unlock_quarry exists", await page.evaluate((id) => !!findNode(id), id));
     await clickCard(page, id);
     ok("card got selected by the canvas click", await page.evaluate((id) => selectedId === id, id));
-    await deleteSelectedCardViaUI(page);
+    await deleteSelectedCardViaUI(page, "delete unlock card");
     ok("delete unlock card: removed from doc.research", await page.evaluate((id) => !findNode(id), id));
     ok("delete unlock card: materials entry removed", await page.evaluate((id) => !(id in doc.materials), id));
     ok("delete unlock card: purged from every other card's prereqs",
@@ -201,7 +241,7 @@ async function testDeleteKingdomCard() {
       await page.evaluate((id) => { const n = findNode(id); return !!n && n.kind === "kingdom"; }, id));
     await clickCard(page, id);
     ok("kingdom card got selected", await page.evaluate((id) => selectedId === id, id));
-    await deleteSelectedCardViaUI(page);
+    await deleteSelectedCardViaUI(page, "delete kingdom card");
     ok("delete kingdom card: removed from doc.research", await page.evaluate((id) => !findNode(id), id));
     ok("delete kingdom card: materials entry removed", await page.evaluate((id) => !(id in doc.materials), id));
   });
@@ -222,7 +262,7 @@ async function testDeleteAnchorWithLadder() {
 
     await clickCard(page, id);
     ok("anchor card got selected", await page.evaluate((id) => selectedId === id, id));
-    await deleteSelectedCardViaUI(page);
+    await deleteSelectedCardViaUI(page, "delete anchor card");
 
     const post = await page.evaluate(({ id, buildingId, ladderIds }) => {
       return {
@@ -330,10 +370,12 @@ async function testClickToConnect() {
 // ===========================================================================
 async function testKeyboardDelete() {
   await withPage(async (page) => {
-    // plain unlock card
+    // plain unlock card. The Delete key now opens the in-DOM #uiConfirm overlay
+    // (the keydown handler routes through uiConfirm too), so confirm through it.
     await clickCard(page, "unlock_fishery");
     ok("kbd-delete precondition: unlock_fishery selected", await page.evaluate(() => selectedId === "unlock_fishery"));
     await page.keyboard.press("Delete");
+    await clickConfirm(page, "kbd-delete unlock card");
     ok("kbd-delete: Delete key removes the selected unlock card",
       await page.evaluate(() => !findNode("unlock_fishery")));
     ok("kbd-delete: its materials entry removed", await page.evaluate(() => !("unlock_fishery" in doc.materials)));
@@ -345,6 +387,7 @@ async function testKeyboardDelete() {
     await clickCard(page, "anchor_lumberjack");
     ok("kbd-delete precondition: anchor_lumberjack selected", await page.evaluate(() => selectedId === "anchor_lumberjack"));
     await page.keyboard.press("Delete");
+    await clickConfirm(page, "kbd-delete laddered anchor");
     const post = await page.evaluate(({ b, ids }) => ({
       cardGone: !findNode("anchor_lumberjack"),
       ladderGone: !(b in doc.upgrades),
@@ -452,10 +495,11 @@ async function testEffectEditor() {
       eff.extractorOutput === 1.2, JSON.stringify(eff));
     ok('"+ add effect" appended (not replaced) — 2 keys now present', Object.keys(eff).length === 2, JSON.stringify(eff));
 
-    // - remove (with confirm, auto-accepted) deletes exactly that row.
+    // - remove (confirm via the in-DOM #uiConfirm overlay) deletes exactly that row.
     const firstRow = fs.locator(".matRow").first();
     const removeBtn = firstRow.locator('button[title="Remove this effect"]');
     await removeBtn.click();
+    await clickConfirm(page, "effect −remove");
     eff = await page.evaluate((id) => findNode(id).effect, kId);
     ok('"− remove" deletes the row\'s key (globalOutput gone)', !("globalOutput" in eff), JSON.stringify(eff));
     ok('"− remove" leaves the other row intact (extractorOutput remains)', eff.extractorOutput === 1.2, JSON.stringify(eff));
@@ -511,6 +555,7 @@ async function testExportImportRoundTrip() {
     // THEN import the captured export back in via the real Import flow:
     // click "Import JSON…" -> fill the textarea -> click "Load JSON below".
     await page.locator("#btnReloadDefault").click();
+    await clickConfirm(page, "reset to default");
     ok("reset: the new cards are gone after Reset to Default", await page.evaluate((aId) => !findNode(aId), aId));
 
     await page.locator("#btnImport").click();
@@ -546,6 +591,73 @@ async function testExportImportRoundTrip() {
   });
 }
 // ===========================================================================
+// 6. SANDBOXED-IFRAME delete flow — the regression that started this. The
+//    editor runs inside sandbox="allow-scripts allow-same-origin" (no
+//    allow-modals), exactly like the published Artifact. Before EditorDev's
+//    fix, "Delete this card" called native confirm(), which Chromium blocks in
+//    that sandbox: it returned undefined (falsy), deleteCard() never ran, and
+//    the card was NOT deleted (the "button doesn't work" bug). With the in-DOM
+//    #uiConfirm overlay the flow completes with ZERO native dialogs. This group
+//    must PASS now and would have FAILED before the fix (card not deleted).
+// ===========================================================================
+async function testSandboxedDelete() {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on("pageerror", (e) => pageErrors.push(String(e && e.stack || e)));
+  // Count — and dismiss — any native dialog. Zero must fire.
+  const nativeDialogs = [];
+  page.on("dialog", (d) => { nativeDialogs.push(d.type() + ": " + d.message()); d.dismiss().catch(() => {}); });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { /* ignore */ } });
+
+  try {
+    await page.goto(SANDBOX_URL);
+    const frameEl = await page.waitForSelector("#f");
+    const frame = await frameEl.contentFrame();
+    ok("sandbox: editor iframe present", !!frame);
+    await frame.waitForFunction(() => typeof doc !== "undefined" && Array.isArray(doc.research));
+    ok("sandbox: iframe really is sandboxed (allow-scripts allow-same-origin, no allow-modals)",
+      (await page.locator("#f").getAttribute("sandbox")) === "allow-scripts allow-same-origin",
+      await page.locator("#f").getAttribute("sandbox"));
+
+    const id = "unlock_quarry";
+    ok("sandbox precondition: unlock_quarry exists in the framed editor",
+      await frame.evaluate((id) => !!findNode(id), id));
+
+    // Select the card with a REAL mouse click. The iframe sits at the host
+    // origin (0,0), no border/scroll, so a coordinate in the frame's own
+    // viewport equals the same host-viewport coordinate page.mouse uses.
+    const pt = await frame.evaluate((id) => {
+      camera.zoom = 1;
+      const n = findNode(id), r = cardRectFor(n);
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      const cv = document.getElementById("board").getBoundingClientRect();
+      camera.x = cv.width / 2 - cx; camera.y = cv.height / 2 - cy; draw();
+      return { x: cv.left + cv.width / 2, y: cv.top + cv.height / 2 };
+    }, id);
+    await page.mouse.click(pt.x, pt.y);
+    ok("sandbox: card selected via a real mouse click inside the iframe",
+      await frame.evaluate((id) => selectedId === id, id));
+
+    // Click "Delete this card" (real DOM click), then the overlay's Confirm.
+    const fl = page.frameLocator("#f");
+    await fl.locator('#tab-inspector button.danger:has-text("Delete this card")').click();
+    ok("sandbox: #uiConfirm overlay appeared (native confirm would be blocked here)",
+      await frame.evaluate(() => !!document.getElementById("uiConfirm")));
+    await fl.locator("#uiConfirmOk").click();
+
+    let deleted = true;
+    try { await frame.waitForFunction((id) => !findNode(id), id, { timeout: 4000 }); }
+    catch (e) { deleted = false; }
+    ok("sandbox: card DELETED after clicking #uiConfirmOk (the fix — would fail with native confirm)", deleted);
+    ok("sandbox: ZERO native dialogs fired throughout the flow", nativeDialogs.length === 0, JSON.stringify(nativeDialogs));
+    ok("sandbox: no uncaught page errors in the framed editor", pageErrors.length === 0, pageErrors.join(" | "));
+  } finally {
+    await context.close();
+  }
+}
+
+// ===========================================================================
 // main
 // ===========================================================================
 async function main() {
@@ -560,6 +672,7 @@ async function main() {
     await group("3c. edge deletion (Delete key + 'Delete edge' button)", testEdgeDeletion);
     await group("4. effect editor (kingdom shows/unlock hides, add/remove, bool control)", testEffectEditor);
     await group("5. export -> import round trip", testExportImportRoundTrip);
+    await group("6. sandboxed-iframe delete flow (Artifact-parity regression lock)", testSandboxedDelete);
   } finally {
     await browser.close();
   }

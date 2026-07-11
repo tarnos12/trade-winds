@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>editor sandbox host (test fixture)</title></head>
+<body style="margin:0">
+<!--
+  Test fixture for test/editor.test.js (group 6). Embeds the research-tree editor
+  in a SANDBOXED iframe — sandbox="allow-scripts allow-same-origin", deliberately
+  WITHOUT allow-modals — to mirror the published-Artifact environment, where the
+  browser silently blocks native confirm()/alert()/prompt(). This is the context
+  that surfaced the "Delete this card does nothing in the Artifact" bug. The src
+  is RELATIVE so the fixture is portable (no absolute/scratchpad paths).
+-->
+<iframe id="f" src="../../tools/research-editor.html"
+        sandbox="allow-scripts allow-same-origin"
+        style="border:0;width:1400px;height:950px"></iframe>
+</body>
+</html>

@@ -25,8 +25,16 @@ suites, it drives the real DOM/canvas UI in headless Chromium via
 playwright-core (same spirit as `playthrough.js`: a diagnostic/regression
 harness, not part of the plain-node `test/*.test.js` run). Covers: add
 card/kingdom card, real-mouse delete (including upgrade-ladder cascade for
-anchor cards), click-to-connect (arm/connect/self-drop/kingdom-reject/Esc/
-outside-click), the effect editor (kingdom-only visibility, add/remove, bool
-controls), and export→import round-tripping.
+anchor cards) driven through the in-DOM `#uiConfirm` overlay that replaced
+native `confirm()`, keyboard-Delete and edge deletion, click-to-connect
+(arm/connect/self-drop/kingdom-reject/Esc/outside-click), the effect editor
+(kingdom-only visibility, add/remove, bool controls), and export→import
+round-tripping. A final group runs the delete flow inside a **sandboxed
+iframe** (`sandbox="allow-scripts allow-same-origin"`, no `allow-modals` — the
+published-Artifact environment) to lock in the fix for the "Delete button does
+nothing in the Artifact" regression: native `confirm()` is blocked there, so
+the overlay path must complete with zero native dialogs. The suite fails if any
+native `confirm()`/`alert()`/`prompt()` ever fires.
 
 Run: `PW_CORE=/path/to/playwright-core node test/editor.test.js`
+(optionally `SANDBOX_HOST=file:///path/to/sandbox_host.html` for the iframe group)
