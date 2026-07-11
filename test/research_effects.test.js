@@ -31,8 +31,9 @@ function ok(name, cond) {
 const K = (q, r) => HexMath.key(q, r);
 
 // A research bag with a given set of nodes already unlocked (no active project).
+// Slice A shape: per-second metering fields (no gold progress/spent).
 function withResearch(unlocked) {
-  return { unlocked: unlocked.slice(), active: null, progress: 0, spent: 0 };
+  return { unlocked: unlocked.slice(), active: null, queue: [], completedSec: 0, subTick: 0, consumed: {} };
 }
 
 // ---- Production: a single town with one producer, ticked once. --------------

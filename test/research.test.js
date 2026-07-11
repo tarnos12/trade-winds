@@ -34,6 +34,15 @@ function fillMats(st, id) {
   const mats = (Research.get(id) || {}).materials || {};
   for (const gid in mats) st.castleStock[gid] = (st.castleStock[gid] || 0) + mats[gid];
 }
+// Slice A: sim ticks per game-second (2 at base 500ms), mirrors index.html.
+const TPS = Math.max(1, Math.round(1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500)));
+// Slice A: install a BUILT Research Center at `level` (its speed drives research).
+function giveCenter(st, level) {
+  st.researchCenter = { q: 1, r: 0, built: true, delivered: {}, level: level || 1, pendingUpgrade: null };
+  return st;
+}
+// Slice A: advance n whole game-seconds of research (TPS ticks each).
+function runSecs(st, n) { for (let i = 0; i < TPS * n; i++) Research.tick(st); }
 
 // =========================================================================
 // Catalog shape — RT-A tiered tree: 15 kingdom + one unlock node per
@@ -77,9 +86,11 @@ ok("Research.normalize migrates unlock_smelter/unlock_weaver → forge/tailoring
     && r.unlocked.indexOf("unlock_smelter") < 0 && r.unlocked.indexOf("unlock_weaver") < 0;
 })());
 ok("every node assigned to a real band", CONFIG.research.every(n => Research.bands().indexOf(n.band) >= 0));
+// Slice A: cost/timeTicks are no longer load-bearing (gold clock gone) — assert
+// only the fields the material-metered engine + layout actually use.
 ok("every node has required fields (incl. band, kind, pos)", CONFIG.research.every(n =>
-  n.id && n.branch && n.name && n.desc && typeof n.cost === "number" &&
-  typeof n.timeTicks === "number" && Array.isArray(n.prereqs) && n.effect && typeof n.effect === "object" &&
+  n.id && n.branch && n.name && n.desc &&
+  Array.isArray(n.prereqs) && n.effect && typeof n.effect === "object" &&
   typeof n.band === "string" && typeof n.kind === "string" &&
   n.pos && Number.isInteger(n.pos.col) && Number.isInteger(n.pos.row)));
 ok("node kinds are kingdom|unlock|upgrade", CONFIG.research.every(n => ["kingdom", "unlock", "upgrade"].indexOf(n.kind) >= 0));
@@ -149,22 +160,20 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 }));
 
 // =========================================================================
-// canStart gating — prereqs, funds, single-active, already-done
+// canStart gating — prereqs, single-active, already-done (Slice A: NO gold gate)
 // =========================================================================
 (() => {
-  const st = mkState({ treasury: 100000 });
+  const st = mkState();
   ok("root available immediately", Research.canStart(st, "crop_rotation"));
   ok("gated node not startable without prereq", !Research.canStart(st, "deep_veins"));
   ok("gated node reports unavailable", !Research.isAvailable(st, "deep_veins"));
   ok("root reports available", Research.isAvailable(st, "crop_rotation"));
 })();
 
+// Slice A: research is FREE of treasury — a broke kingdom can still start a node.
 (() => {
-  const st = mkState({ treasury: 100 });   // crop_rotation costs 150
-  ok("cannot start when treasury < cost", !Research.canStart(st, "crop_rotation"));
-  ok("but it is still 'available' (funds independent of prereqs)", Research.isAvailable(st, "crop_rotation"));
-  st.treasury = 150;
-  ok("affordable at exactly cost", Research.canStart(st, "crop_rotation"));
+  const st = mkState({ treasury: 0 });
+  ok("canStart with zero treasury (no gold gate)", Research.canStart(st, "crop_rotation"));
 })();
 
 (() => {
@@ -176,57 +185,28 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 })();
 
 // =========================================================================
-// start + tick to completion — spends treasury, unlocks, has() reflects it
+// start + run to completion — per-second material metering (needs a center)
 // =========================================================================
 (() => {
-  const node = Research.get("crop_rotation");
-  const st = mkState({ treasury: 500 });
+  const st = mkState();
   fillMats(st, "crop_rotation");   // CRE: castle traders have delivered the materials
+  giveCenter(st);                  // L1 speed 2
+  const T = Research.consumptionPlan(Research.get("crop_rotation").materials, Research.centerSpeed(st)).T;
   ok("has() false before completion", !Research.has(st, "crop_rotation"));
   Research.start(st, "crop_rotation");
-  tick(st, node.timeTicks - 1);
-  ok("still active one tick before done", st.research.active === "crop_rotation");
+  runSecs(st, T - 1);
+  ok("still active one second before done", st.research.active === "crop_rotation");
   ok("not yet unlocked mid-way", !Research.has(st, "crop_rotation"));
-  const before = st.treasury;
-  tick(st, 1);   // final tick
+  runSecs(st, 1);   // final second
   ok("active cleared on completion", st.research.active === null);
-  ok("progress reset on completion", st.research.progress === 0);
+  ok("completedSec reset on completion", st.research.completedSec === 0);
+  ok("subTick reset on completion", st.research.subTick === 0);
+  ok("consumed reset on completion", Object.keys(st.research.consumed).length === 0);
   ok("unlocked contains node", st.research.unlocked.indexOf("crop_rotation") >= 0);
   ok("has() true after completion", Research.has(st, "crop_rotation"));
-  ok("total spent equals cost", Math.abs((500 - st.treasury) - node.cost) < 1e-6);
-  ok("last installment was charged", st.treasury < before);
+  ok("materials fully drained from castleStock", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  ok("treasury untouched by research (materials, not gold)", st.treasury === 0);
   ok("prereq now unlocks the next node", Research.canStart(st, "deep_veins"));
-})();
-
-// =========================================================================
-// Proportional spend & stalling when treasury can't cover the installment
-// =========================================================================
-(() => {
-  const node = Research.get("crop_rotation");   // cost 150, 20 ticks → 7.5/tick
-  const st = mkState({ treasury: 150 });
-  Research.start(st, "crop_rotation");
-  tick(st, 10);   // half the ticks
-  ok("spends ~proportionally (half cost by half time)",
-    Math.abs((150 - st.treasury) - node.cost / 2) < 1e-6);
-  ok("still researching at the halfway point", st.research.active === "crop_rotation");
-})();
-
-(() => {
-  const node = Research.get("crop_rotation");
-  const st = mkState({ treasury: 150 });
-  fillMats(st, "crop_rotation");   // CRE: materials on hand, so gold is the only brake here
-  Research.start(st, "crop_rotation");
-  tick(st, 5);
-  const spentBefore = st.research.spent;
-  st.treasury = 0;              // player drains the coffers elsewhere
-  const progAt = st.research.progress;
-  tick(st, 10);                // should stall — no funds
-  ok("stalls when treasury can't fund the installment", st.research.progress === progAt);
-  ok("no gold spent while stalled", st.research.spent === spentBefore && st.treasury === 0);
-  ok("still active (not completed for free) while stalled", st.research.active === "crop_rotation");
-  st.treasury = 1000;          // refill
-  tick(st, node.timeTicks);    // more than enough to finish
-  ok("resumes and completes once funded", Research.has(st, "crop_rotation"));
 })();
 
 // =========================================================================
@@ -234,48 +214,136 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 // =========================================================================
 (() => {
   function run() {
-    const st = mkState({ treasury: 5000 });
+    const st = mkState();
     fillMats(st, "paved_roads"); fillMats(st, "larger_carts");
+    giveCenter(st);
     Research.start(st, "paved_roads");
-    tick(st, Research.get("paved_roads").timeTicks);
+    runSecs(st, 40);
     Research.start(st, "larger_carts");
-    tick(st, Research.get("larger_carts").timeTicks);
-    return JSON.stringify(st.research) + "|" + st.treasury + "|" + JSON.stringify(st.castleStock);
+    runSecs(st, 40);
+    return JSON.stringify(st.research) + "|" + JSON.stringify(st.castleStock);
   }
   const a = run();
   ok("deterministic across identical runs", a === run());
-  ok("both queued nodes complete when materials + gold present", a.indexOf('"paved_roads"') >= 0 && a.indexOf('"larger_carts"') >= 0);
+  ok("both nodes complete when materials + center present", a.indexOf('"paved_roads"') >= 0 && a.indexOf('"larger_carts"') >= 0);
 })();
 
 // =========================================================================
-// CRE — materials gate: a node stalls at full progress without materials, and
-// completes (consuming them) once the castle stockpile covers the requirement.
+// Requires-center gate: with materials but NO center, research is PAUSED (no
+// accrual, nothing consumed). A placed-but-unbuilt center is also paused.
 // =========================================================================
 (() => {
   const node = Research.get("crop_rotation");   // needs { wood, stone }
-  const st = mkState({ treasury: 5000 });        // plenty of gold, NO materials yet
+  const st = mkState();
+  fillMats(st, "crop_rotation");                 // materials on hand
   Research.start(st, "crop_rotation");
-  tick(st, node.timeTicks + 5);                  // run well past the labour clock
-  ok("stalls at full labour progress without materials", st.research.active === "crop_rotation");
-  ok("progress caps at timeTicks while waiting on materials", st.research.progress === node.timeTicks);
-  ok("gold fully paid but node not unlocked", !Research.has(st, "crop_rotation") && st.research.spent === node.cost);
-  // Deliver the materials (as the castle's traders would) → next tick completes.
-  fillMats(st, "crop_rotation");
-  tick(st, 1);
-  ok("completes the tick materials arrive", Research.has(st, "crop_rotation"));
-  ok("no extra gold charged after the labour clock filled", Math.abs((5000 - st.treasury) - node.cost) < 1e-6);
-  ok("materials consumed from the castle stockpile on completion",
-    (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  runSecs(st, 20);                               // no center → paused indefinitely
+  ok("no center → stays active (paused)", st.research.active === "crop_rotation");
+  ok("no center → completedSec stays 0 even with full stock", st.research.completedSec === 0);
+  ok("no center → nothing consumed", (st.castleStock.wood || 0) === node.materials.wood && (st.castleStock.stone || 0) === node.materials.stone);
+  // placed but under construction (built:false) is still speed 0 → paused.
+  st.researchCenter = { q: 1, r: 0, built: false, delivered: {}, level: 1, pendingUpgrade: null };
+  runSecs(st, 20);
+  ok("unbuilt center → still paused", st.research.completedSec === 0 && st.research.active === "crop_rotation");
+  // build it → completes.
+  giveCenter(st);
+  const T = Research.consumptionPlan(node.materials, Research.centerSpeed(st)).T;
+  runSecs(st, T);
+  ok("built center → node completes", Research.has(st, "crop_rotation"));
+  ok("materials consumed once built", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
 })();
 
 // Partial materials do NOT complete the node (every required good must be met).
 (() => {
   const node = Research.get("crop_rotation");
-  const st = mkState({ treasury: 5000, castleStock: { wood: node.materials.wood } }); // stone missing
+  const st = mkState({ castleStock: { wood: node.materials.wood } }); // stone missing
+  giveCenter(st);
   Research.start(st, "crop_rotation");
-  tick(st, node.timeTicks + 3);
-  ok("partial materials keep the node stalled", !Research.has(st, "crop_rotation") && st.research.active === "crop_rotation");
-  ok("delivered-but-unused materials are NOT consumed while stalled", (st.castleStock.wood || 0) === node.materials.wood);
+  runSecs(st, 30);
+  ok("partial materials keep the node active (not unlocked)", !Research.has(st, "crop_rotation") && st.research.active === "crop_rotation");
+  // The per-second draw is ATOMIC (all-or-nothing): with stone missing, NOTHING is
+  // consumed — not even the available wood.
+  ok("atomic gate: nothing consumed while stone is missing", (st.castleStock.wood || 0) === node.materials.wood && (st.research.completedSec || 0) === 0);
+})();
+
+// =========================================================================
+// NEW (Slice A) — consumptionPlan equal-drain math (pure, per plan spec)
+// =========================================================================
+(() => {
+  const plan = Research.consumptionPlan({ wood: 20, plank: 10, stone: 5 }, 2);
+  ok("consumptionPlan T = ceil(maxAmt/S) = 10", plan.T === 10);
+  ok("consumptionPlan rate.wood = 2", Math.abs(plan.rate.wood - 2) < 1e-9);
+  ok("consumptionPlan rate.plank = 1", Math.abs(plan.rate.plank - 1) < 1e-9);
+  ok("consumptionPlan rate.stone = 0.5", Math.abs(plan.rate.stone - 0.5) < 1e-9);
+  ok("consumptionPlan gids = the material ids", plan.gids.length === 3 && plan.gids.indexOf("wood") >= 0);
+  // Per-second cumulative floor(rate*e) capped at material total.
+  const cum = (e) => plan.gids.map(g => Math.min({ wood: 20, plank: 10, stone: 5 }[g], Math.floor(plan.rate[g] * e)));
+  ok("second-1 cumulative floor is (2,1,0)", JSON.stringify(cum(1)) === JSON.stringify([2, 1, 0]));
+  ok("second-2 cumulative floor is (4,2,1)", JSON.stringify(cum(2)) === JSON.stringify([4, 2, 1]));
+  ok("10-second cumulative equals the totals (20,10,5)", JSON.stringify(cum(10)) === JSON.stringify([20, 10, 5]));
+  // Empty-materials guard.
+  const empty = Research.consumptionPlan({}, 2);
+  ok("consumptionPlan of {} → {T:0,rate:{},gids:[]}", empty.T === 0 && empty.gids.length === 0 && Object.keys(empty.rate).length === 0);
+})();
+
+// NEW (Slice A) — per-second AVAILABILITY gating: exactly one second drains with a
+// one-second stock, then the node pauses until the rest of the materials arrive.
+(() => {
+  // Use a synthetic node's numbers directly via the engine on crop_rotation but
+  // meter with a hand-built stock. crop_rotation = { wood:20, stone:10 }, S=2 →
+  // rate wood 2, stone 1; second-1 delta = (2,1).
+  const st = mkState({ castleStock: { wood: 2, stone: 1 } });
+  giveCenter(st);
+  Research.start(st, "crop_rotation");
+  runSecs(st, 1);
+  ok("one game-second drains exactly the second-1 delta", st.research.completedSec === 1 && (st.research.consumed.wood || 0) === 2 && (st.research.consumed.stone || 0) === 1);
+  ok("stock emptied by that one second", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  runSecs(st, 20);
+  ok("pauses at 1 second until more materials arrive", st.research.completedSec === 1);
+  // Top up the rest → completes.
+  st.castleStock.wood = 18; st.castleStock.stone = 9;
+  runSecs(st, 20);
+  ok("resumes and completes once the rest is delivered", Research.has(st, "crop_rotation"));
+})();
+
+// NEW (Slice A) — SPEED ladder: a higher-level center finishes in fewer seconds,
+// consuming the SAME totals.
+(() => {
+  const node = Research.get("crop_rotation");
+  function secsToDone(level) {
+    const st = mkState(); fillMats(st, "crop_rotation"); giveCenter(st, level);
+    Research.start(st, "crop_rotation");
+    let s = 0; while (!Research.has(st, "crop_rotation") && s < 500) { runSecs(st, 1); s++; }
+    return { s, drained: (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0 };
+  }
+  const l1 = secsToDone(1);   // speed 2 → 10s
+  const l2 = secsToDone(2);   // speed 3 → ceil(20/3)=7s
+  ok("L2 center finishes in fewer game-seconds than L1", l2.s < l1.s && l2.s > 0);
+  ok("both levels consume the same totals (materials fully drained)", l1.drained && l2.drained);
+})();
+
+// NEW (Slice A) — tickCenter builds the center from castleStock (built flips, drained).
+(() => {
+  const cost = CONFIG.researchCenter.build.cost;   // { stone:20, planks:10 }
+  const st = mkState({ castleStock: Object.assign({}, cost) });
+  st.researchCenter = { q: 1, r: 0, built: false, delivered: {}, level: 1, pendingUpgrade: null };
+  ok("center starts unbuilt", st.researchCenter.built === false);
+  for (let i = 0; i < 20 && !st.researchCenter.built; i++) Research.tickCenter(st);
+  ok("tickCenter flips built:true once all materials delivered", st.researchCenter.built === true);
+  ok("build materials drained from castleStock", (st.castleStock.stone || 0) === 0 && (st.castleStock.planks || 0) === 0);
+  ok("delivered matches the build cost", st.researchCenter.delivered.stone === cost.stone && st.researchCenter.delivered.planks === cost.planks);
+})();
+
+// materialsSatisfied / remaining helpers behave (remaining now also subtracts consumed).
+(() => {
+  const node = Research.get("deep_veins");   // === TV2: { stone, iron } ===
+  const st = mkState({ castleStock: {} });
+  ok("materialsSatisfied false when empty", !ResearchEconomy.materialsSatisfied(st, node));
+  ok("remaining equals requirement when empty", ResearchEconomy.remaining(st, node, "iron") === node.materials.iron);
+  st.castleStock.stone = node.materials.stone;
+  st.castleStock.iron = node.materials.iron;
+  ok("materialsSatisfied true once covered", ResearchEconomy.materialsSatisfied(st, node));
+  ok("remaining zero once covered", ResearchEconomy.remaining(st, node, "iron") === 0);
 })();
 
 // materialsSatisfied / remaining helpers behave.
@@ -298,7 +366,7 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   st.research.unlocked = ["tax_ledgers", "bureaucracy"];   // 0.03 + 0.07 tariffBonus
   ok("additive effect sums across unlocked nodes",
     Math.abs(Research.effect(st, "tariffBonus", 0) - 0.10) < 1e-9);
-  ok("boolean flag OR", Research.effect(mkState({ research: { unlocked: ["paved_roads"], active: null, progress: 0, spent: 0 } }), "paved_roads", false) === true);
+  ok("boolean flag OR", Research.effect(mkState({ research: { unlocked: ["paved_roads"], active: null, queue: [], completedSec: 0, subTick: 0, consumed: {} } }), "paved_roads", false) === true);
   ok("multiplier effect multiplies", (() => {
     const s = mkState(); s.research.unlocked = ["guild_halls", "master_crafts"]; // 1.2 * 1.35
     return Math.abs(Research.effect(s, "processorOutput", 1) - 1.62) < 1e-9;
@@ -311,9 +379,16 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 // =========================================================================
 (() => {
   ok("normalize handles undefined", JSON.stringify(Research.normalize(undefined)) === JSON.stringify(Research.fresh()));
-  const cleaned = Research.normalize({ unlocked: ["crop_rotation", "bogus"], active: "ghost", progress: 5, spent: 9 });
+  const cleaned = Research.normalize({ unlocked: ["crop_rotation", "bogus"], active: "ghost", completedSec: 5, consumed: { wood: 3 } });
   ok("normalize drops unknown unlocked ids", cleaned.unlocked.length === 1 && cleaned.unlocked[0] === "crop_rotation");
-  ok("normalize clears invalid active + its progress", cleaned.active === null && cleaned.progress === 0 && cleaned.spent === 0);
+  ok("normalize clears invalid active + its metering", cleaned.active === null && cleaned.completedSec === 0 && cleaned.subTick === 0 && Object.keys(cleaned.consumed).length === 0);
+  ok("normalize drops the retired spent/progress fields", !("spent" in cleaned) && !("progress" in cleaned));
+  // A valid active project keeps sanitized metering (clamped to the node's needs).
+  const active = Research.normalize({ unlocked: [], active: "crop_rotation", completedSec: 4, subTick: 99, consumed: { wood: 5, stone: 999, bogus: 3 } });
+  ok("normalize keeps completedSec for a valid active project", active.completedSec === 4);
+  ok("normalize clamps subTick into 0..TICKS_PER_SEC", active.subTick === TPS);
+  ok("normalize keeps only real material gids, clamped to the requirement",
+    active.consumed.wood === 5 && active.consumed.stone === Research.get("crop_rotation").materials.stone && !("bogus" in active.consumed));
 })();
 
 // =========================================================================
@@ -329,6 +404,7 @@ function mkCity(over) {
   const node = Research.get("crop_rotation");   // needs { wood:20, stone:10 }
   const city = mkCity({ stock: { wood: 500, stone: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 1 });
+  giveCenter(st);   // Slice A: a built center powers completion
   Research.start(st, "crop_rotation");
 
   // Panel OPEN → castle dispatches buyers, gathers materials, node completes.
@@ -362,6 +438,7 @@ function mkCity(over) {
 (() => {
   const city = mkCity({ stock: { wood: 500, stone: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 3 });
+  giveCenter(st);
   Research.start(st, "crop_rotation");
   let done = false, sawCart = false;
   for (let i = 0; i < 300 && !done; i++) {
@@ -379,6 +456,7 @@ function mkCity(over) {
 (() => {
   const city = mkCity({ stock: { wood: 500, stone: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 5 });
+  giveCenter(st);
   Research.start(st, "crop_rotation");
   let done = false;
   for (let i = 0; i < 300 && !done; i++) { ResearchEconomy.tick(st); Research.tick(st); if (Research.has(st, "crop_rotation")) done = true; }
@@ -390,6 +468,7 @@ function mkCity(over) {
   function run() {
     const city = mkCity({ stock: { wood: 500, stone: 500 } });
     const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 42 });
+    giveCenter(st);
     Research.start(st, "crop_rotation");
     for (let i = 0; i < 60; i++) { ResearchEconomy.tick(st, true); Research.tick(st); }
     return JSON.stringify({ has: Research.has(st, "crop_rotation"), gold: city.gold, treas: Math.round(st.treasury * 100) });
@@ -438,9 +517,10 @@ function mkCity(over) {
   ok("dependent unlock node gated before prereq", !Research.isAvailable(st, "unlock_iron_mine"));
   ok("iron_mine building gated before its unlock node", !Research.has(st, "unlock_quarry") && CONFIG.buildings.iron_mine.unlockedBy === "unlock_iron_mine");
   fillMats(st, "unlock_quarry");
+  giveCenter(st);
   Research.start(st, "unlock_quarry");
-  tick(st, Research.get("unlock_quarry").timeTicks);
-  ok("unlock_quarry unlocks via normal start→tick flow", Research.has(st, "unlock_quarry"));
+  runSecs(st, 30);
+  ok("unlock_quarry unlocks via normal start→run flow", Research.has(st, "unlock_quarry"));
   ok("unlock_iron_mine now available after its prereq", Research.canStart(st, "unlock_iron_mine"));
 })();
 // === /RT-A ===================================================================
@@ -531,13 +611,13 @@ function mkCity(over) {
 (() => {
   const st = mkState({ treasury: 1e6 });
   fillMats(st, "crop_rotation");
+  giveCenter(st);
   Research.start(st, "crop_rotation");
   Research.enqueue(st, "deep_veins");   // prereq = crop_rotation (met after it finishes)
-  const node = Research.get("crop_rotation");
-  tick(st, node.timeTicks);   // finish crop_rotation
+  runSecs(st, 30);   // finish crop_rotation
   ok("first node completed", Research.has(st, "crop_rotation"));
   fillMats(st, "deep_veins");
-  tick(st, 1);   // auto-start the queued deep_veins
+  Research.tick(st);   // auto-start the queued deep_veins
   ok("queued node auto-started after the active one finished", st.research.active === "deep_veins");
   ok("auto-started node removed from queue", !Research.isQueued(st, "deep_veins"));
 })();
@@ -577,6 +657,7 @@ function mkCity(over) {
                 roads: new Set(), carts: [], treasury: 100000,
                 castleStock: Object.assign({}, CONFIG.researchEconomy.starterStock),
                 research: Research.fresh(), researchSeed: 5, tick: 0 };
+  giveCenter(st2);   // Slice A: a built center powers completion
   Research.start(st2, "unlock_fishery");
   let done = false;
   for (let i = 0; i < 200 && !done; i++) { ResearchEconomy.tick(st2, false); Research.tick(st2); done = Research.has(st2, "unlock_fishery"); }
