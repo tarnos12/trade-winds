@@ -5555,6 +5555,10 @@ var CastleMarket = (function () {
   // owning city is resolved per-hex by Buildings.canPlaceBuilding on click).
   // Shared by the render overlay (below) and the bottom build bar (BUILD-BAR).
   let placing = null;
+  // === RESEARCH CENTER (Slice C) === a second, simpler placement session for the
+  // unique castle-adjacent Research Center (no typeId/owning-town resolution needed
+  // — Buildings.canPlaceResearchCenter/placeResearchCenter take q,r directly).
+  let placingResearchCenter = false;
 
   function drawRoads() {
     if (state.roads.size === 0) return;
@@ -5787,7 +5791,47 @@ var CastleMarket = (function () {
   // BORDERS ANY city footprint (union over all towns) green (valid) / red
   // (invalid) via the adjacency model Buildings.canPlaceBuilding, and outline the
   // hover hex. The owning city is resolved per-hex by the model — no selected town.
+  // === RESEARCH CENTER (Slice C) === valid/invalid tint over the castle's 6
+  // neighbour hexes while placing the Center, mirroring drawPlacementOverlay's
+  // footprint-ring look (green=ok/red=blocked) + a brighter hover outline.
+  function drawResearchCenterPlacementOverlay() {
+    const castle = Buildings.castleHex();
+    for (const n of HexMath.neighbors(castle.q, castle.r)) {
+      const k = HexMath.key(n.q, n.r);
+      if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+      const res = Buildings.canPlaceResearchCenter(state, n.q, n.r);
+      const p = HexMath.hexToPixel(n.q, n.r, SIZE);
+      const pts = hexCorners(p.x, p.y);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = res.ok ? "rgba(80,200,110,0.30)" : "rgba(224,80,60,0.14)";
+      ctx.fill();
+      ctx.lineWidth = res.ok ? 2 : 1;
+      ctx.strokeStyle = res.ok ? "#6fbf73" : "rgba(224,80,60,0.45)";
+      ctx.stroke();
+    }
+    if (hoverHex) {
+      const hk = HexMath.key(hoverHex.q, hoverHex.r);
+      if (state.map.hexes.has(hk) && isVisible(hk)) {
+        const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
+        const pts = hexCorners(p.x, p.y);
+        const res = Buildings.canPlaceResearchCenter(state, hoverHex.q, hoverHex.r);
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = res.ok ? "#8fe89a" : "#e0503c";
+        ctx.stroke();
+      }
+    }
+  }
+  // === /RESEARCH CENTER (Slice C) ===
+
   function drawPlacementOverlay() {
+    if (placingResearchCenter) { drawResearchCenterPlacementOverlay(); return; }
     if (!placing) return;
     // Footprint key set (skip occupied hexes) + candidate ring = footprint neighbours.
     const footSet = new Set();
@@ -5858,6 +5902,86 @@ var CastleMarket = (function () {
     ctx.lineTo(p.x, p.y - hh / 2 - cw - SIZE * 0.26);
     ctx.closePath(); ctx.fill();
   }
+
+  // === RESEARCH CENTER (Slice C) === map render of state.researchCenter, next to
+  // the castle. Mirrors drawBuildings' under-construction scaffold + missing-
+  // material chips (unbuilt) and the RU-B level badge + pending-upgrade chips
+  // (built), reusing drawGoodChip/drawConstructionNeed's conventions.
+  function drawResearchCenter() {
+    const c = state.researchCenter;
+    if (!c) return;
+    const p = HexMath.hexToPixel(c.q, c.r, SIZE);
+    const rad = SIZE * 0.3;
+    const fill = "#5a7c9c", edge = "#2e4a63";
+    if (!c.built) {
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = edge;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = "#3a2c12";
+      ctx.font = Math.round(SIZE * 0.32) + "px system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🏗", p.x, p.y + 0.5);
+      if (!(state.zoom < 0.6)) {
+        const need = (typeof Research !== "undefined" && Research.centerConstructionNeed) ? Research.centerConstructionNeed(state) : {};
+        const entries = [];
+        for (const gid in need) { const q = Number(need[gid]); if (q > 0.05) entries.push([gid, q]); }
+        entries.sort((a, b) => b[1] - a[1]);
+        const top = entries.slice(0, 3);
+        const step = Math.max(11, SIZE * 0.26);
+        const baseY = p.y - rad - step * 0.6;
+        for (let i = 0; i < top.length; i++) drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96 });
+      }
+      ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+      return;
+    }
+    ctx.fillStyle = fill; ctx.strokeStyle = edge; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#f4ecdd";
+    ctx.font = Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("📖", p.x, p.y + 0.5);
+    // level badge — same look/position as drawUpgradeBadge (built below drawBuildings).
+    const lvl = c.level || 1;
+    const label = ROMAN[lvl] || ("L" + lvl);
+    const fontPx = Math.max(8, Math.round(SIZE * 0.2));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    const bx = p.x + rad * 0.62, by = p.y + rad * 0.62;
+    const tw = ctx.measureText(label).width;
+    const r = Math.max(fontPx * 0.55, (tw + 5) / 2);
+    ctx.fillStyle = "rgba(18,12,5,0.75)";
+    ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffce4d"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = "#ffce4d";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, bx, by + 0.5);
+    ctx.restore();
+    // pending-upgrade indicator + material chips (built, mid-upgrade only).
+    if (c.pendingUpgrade && !(state.zoom < 0.6)) {
+      ctx.font = Math.round(SIZE * 0.24) + "px system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffce4d";
+      ctx.fillText("⬆", p.x - rad * 0.85, p.y - rad * 0.85);
+      const need = (typeof Research !== "undefined" && Research.centerUpgradeNeed) ? Research.centerUpgradeNeed(state) : {};
+      const entries = [];
+      for (const gid in need) { const q = Number(need[gid]); if (q > 0.05) entries.push([gid, q]); }
+      entries.sort((a, b) => b[1] - a[1]);
+      const top = entries.slice(0, 3);
+      const step = Math.max(11, SIZE * 0.26);
+      const baseY = p.y - rad - step * 0.6;
+      for (let i = 0; i < top.length; i++) drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96, muted: true });
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+  // === /RESEARCH CENTER (Slice C) ===
 
   function drawHoverGhost() {
     if (!hoverHex || state.mode === "pan") return;
@@ -6412,6 +6536,7 @@ var CastleMarket = (function () {
     drawAlerts();     // P4-C: subtle status icons over towns in a bad state
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
+    drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)
@@ -7202,6 +7327,7 @@ var CastleMarket = (function () {
       return;
     }
     if (placing && placing.typeId === typeId) { cancelPlacing(); return; }
+    cancelPlacingResearchCenter();   // RESEARCH CENTER (Slice C): the two placement sessions are exclusive
     setMode("pan");
     placing = { typeId };
     closeFlyout();   // CBM: selecting an item closes the submenu
@@ -7256,6 +7382,49 @@ var CastleMarket = (function () {
     if (!anyRoom) cancelPlacing();
     if (activeTown) renderTownPanel();
   }
+
+  // === RESEARCH CENTER (Slice C) — placement UX. Mirrors startPlacing/
+  // cancelPlacing/tryPlaceBuilding above, but drives Buildings.canPlaceResearchCenter
+  // /placeResearchCenter directly (a unique castle-adjacent building, not owned by
+  // any town, so there's no per-hex owner resolution). Only one Center is ever
+  // allowed — callers (build bar / Keep tab button) should hide/disable the entry
+  // point once state.researchCenter exists, but this guards defensively too.
+  function startPlacingResearchCenter() {
+    if (state.researchCenter) return;
+    if (placingResearchCenter) { cancelPlacingResearchCenter(); return; }
+    cancelPlacing();   // exclusive with town-building placement
+    setMode("pan");
+    placingResearchCenter = true;
+    closeFlyout();
+    buildBarHintEl.className = "";
+    buildBarHintEl.textContent = "Placing the Research Center — click a hex next to the castle.";
+    updateBuildBar();
+  }
+  function cancelPlacingResearchCenter() {
+    if (!placingResearchCenter) return;
+    placingResearchCenter = false;
+    updateBuildBar();
+  }
+  // Place the Research Center at the screen point. No owning-town charge split —
+  // Buildings.placeResearchCenter bills the build gold straight to the treasury.
+  function tryPlaceResearchCenter(sx, sy) {
+    if (!placingResearchCenter) return;
+    const h = hexAtScreen(sx, sy);
+    const res = Buildings.canPlaceResearchCenter(state, h.q, h.r);
+    if (!res.ok) {
+      showToast("✗ " + res.reason);
+      buildBarHintEl.textContent = "✗ " + res.reason;
+      buildBarHintEl.className = "bad";
+      return;
+    }
+    Buildings.placeResearchCenter(state, h.q, h.r);
+    cancelPlacingResearchCenter();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    scheduleSave();
+    SFX.play("place");
+    if (castleOpen) renderCastlePanel(true);
+  }
+  // === /RESEARCH CENTER (Slice C) ===
 
   // Bottom-bar wiring.
   buildBuildBar();
@@ -7331,7 +7500,12 @@ var CastleMarket = (function () {
   // Town tool is active, show the town-center reason from canPlaceTown; else idle.
   canvas.addEventListener("mousemove", (e) => {
     const h = hexAtScreen(e.clientX, e.clientY);
-    if (placing) {
+    if (placingResearchCenter) {
+      // RESEARCH CENTER (Slice C): live validity hint while placing the Center.
+      const res = Buildings.canPlaceResearchCenter(state, h.q, h.r);
+      buildBarHintEl.textContent = res.ok ? "✓ valid — click to build the Research Center" : "✗ " + res.reason;
+      buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (placing) {
       const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
       buildBarHintEl.textContent = res.ok
         ? "✓ valid — click to build in Town #" + res.town.id
@@ -7357,6 +7531,7 @@ var CastleMarket = (function () {
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (bbOpenCat) { closeFlyout(); return; }   // CBM: Esc closes the flyout first
+    if (placingResearchCenter) { cancelPlacingResearchCenter(); return; }   // RESEARCH CENTER (Slice C)
     if (placing) cancelPlacing();
   });
 
@@ -7372,9 +7547,17 @@ var CastleMarket = (function () {
     if (Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 5) return; // a drag
     // TI-C: while placing, a non-drag left click drops the building (and never
     // opens/closes the panel or is treated as a town click).
+    // RESEARCH CENTER (Slice C): the Center's own placement session takes the
+    // click first — same "drop and stay exclusive" pattern as building placement.
+    if (placingResearchCenter) { tryPlaceResearchCenter(e.clientX, e.clientY); return; }
     if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
+    // RESEARCH CENTER (Slice C): a click on the Center's hex opens its own panel
+    // (never the town/building panel — it belongs to no town).
+    if (state.researchCenter && state.researchCenter.q === h.q && state.researchCenter.r === h.r) {
+      openResearchCenterPanel(); return;
+    }
     // === CB-C: a non-drag click on a BUILDING hex opens that building's detail
     // panel (and never the town panel). Town-CENTRE clicks still open the town.
     const hit = buildingAtHex(h.q, h.r);
@@ -7382,7 +7565,7 @@ var CastleMarket = (function () {
     // === /CB-C ===
     const town = state.towns.find(t => t.q === h.q && t.r === h.r);
     if (town) { closeBuildingPanel(); openTownPanel(town); }
-    else { if (activeTown) closeTownPanel(); if (bpBuilding) closeBuildingPanel(); }
+    else { if (activeTown) closeTownPanel(); if (bpBuilding || rcPanelOpen) closeBuildingPanel(); }
   });
 
   // Live refresh: reflect stock/price/pop changes as the economy ticks (T4 later)
@@ -7431,16 +7614,81 @@ var CastleMarket = (function () {
 
   function openBuildingPanel(town, b) {
     bpTown = town; bpBuilding = b;
+    rcPanelOpen = false;                 // RESEARCH CENTER (Slice C): shares this DOM panel — exclusive
     closeTownPanel();                    // one detail panel at a time
     bpEl.classList.remove("hidden");
     bpEl.setAttribute("aria-hidden", "false");
     renderBuildingPanel();
   }
   function closeBuildingPanel() {
-    bpBuilding = null; bpTown = null;
+    bpBuilding = null; bpTown = null; rcPanelOpen = false;
     bpEl.classList.add("hidden");
     bpEl.setAttribute("aria-hidden", "true");
   }
+
+  // === RESEARCH CENTER (Slice C) — click panel. The Center belongs to no town,
+  // so it reuses the #buildingPanel DOM (bpEl/bpNameEl/bpTierEl/bpBodyEl) under a
+  // separate `rcPanelOpen` flag instead of bpBuilding/bpTown (which stay null here).
+  // closeBuildingPanel() above already clears rcPanelOpen, so every existing
+  // "close the detail panel" call site (town click, Esc, opening the tech tree /
+  // Kingdom screen, etc.) closes this panel too, for free.
+  let rcPanelOpen = false;
+  function openResearchCenterPanel() {
+    if (!state.researchCenter) return;
+    bpBuilding = null; bpTown = null;
+    closeTownPanel();
+    rcPanelOpen = true;
+    bpEl.classList.remove("hidden");
+    bpEl.setAttribute("aria-hidden", "false");
+    renderResearchCenterPanel();
+  }
+  function renderResearchCenterPanel() {
+    if (!rcPanelOpen) return;
+    const c = state.researchCenter;
+    if (!c) { closeBuildingPanel(); return; }   // outlived its Center (shouldn't happen — unique/permanent)
+    bpNameEl.textContent = (CONFIG.researchCenter && CONFIG.researchCenter.name) || "Research Center";
+    bpTierEl.textContent = c.built ? ("Level " + (c.level || 1)) : "Under construction";
+
+    let html = `<div class="tp-row"><span class="k">Hex</span><span class="v">${c.q}, ${c.r}</span></div>`;
+
+    if (!c.built) {
+      const cost = (CONFIG.researchCenter.build && CONFIG.researchCenter.build.cost) || {};
+      const need = Research.centerConstructionNeed(state);
+      html += `<div class="tp-sec">Under construction</div>`;
+      html += `<div style="margin:4px 0 6px">${bpUpgradeChips(cost, c.delivered) || "<span class='tp-empty'>no materials required</span>"}</div>`;
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${CONFIG.researchCenter.deliveryRate}/tick).</div>`;
+    } else {
+      const speed = Research.centerSpeed(state);
+      html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
+      html += `<div class="tp-row"><span class="k">Research speed</span><span class="v">${fmt(speed)} materials/sec</span></div>`;
+
+      html += `<div class="tp-sec">Upgrade</div>`;
+      if (c.pendingUpgrade) {
+        const need = Research.centerUpgradeNeed(state);
+        const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+        html += `<div class="bp-status">⬆ Upgrading to Level ${c.pendingUpgrade.toLevel}…</div>`;
+        html += `<div style="margin:4px 0 6px">${bpUpgradeChips(c.pendingUpgrade.cost, c.pendingUpgrade.delivered) || "<span class='tp-empty'>no materials required</span>"}</div>`;
+        html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
+      } else {
+        const nxt = Buildings.centerNextUpgrade(state);
+        if (nxt) {
+          const matCost = {};
+          for (const g in (nxt.cost || {})) if (g !== "gold") matCost[g] = nxt.cost[g];
+          const gold = (nxt.cost && nxt.cost.gold) || 0;
+          const can = Buildings.canUpgradeCenter(state);
+          html += `<div class="tp-row"><span class="k">Level ${nxt.level} — ${fmt(nxt.speed)}/sec</span><span class="v">${fmt(gold)}g</span></div>`;
+          html += `<div style="margin:4px 0 6px">${bpUpgradeChips(matCost, {}) || "<span class='tp-empty'>no materials required</span>"}</div>`;
+          html += `<button class="bp-star" data-rc-upgrade ${can.ok ? "" : "disabled"} title="${can.ok ? "" : esc(can.reason || "")}">Upgrade${can.ok ? "" : " — " + esc(can.reason || "unavailable")}</button>`;
+        } else {
+          html += `<div class="tp-hint2">Max level.</div>`;
+        }
+      }
+    }
+
+    bpBodyEl.innerHTML = html;
+  }
+  // === /RESEARCH CENTER (Slice C) ===
 
   function renderBuildingPanel() {
     const b = bpBuilding, town = bpTown;
@@ -7725,6 +7973,17 @@ var CastleMarket = (function () {
 
   // Slot toggles + priority (event delegation; b.closedSlots is a count in [0,total]).
   bpBodyEl.addEventListener("click", (e) => {
+    // === RESEARCH CENTER (Slice C): the Center's own "Upgrade" button, handled
+    // separately since bpBuilding/bpTown stay null while its panel is open.
+    if (rcPanelOpen) {
+      const rcUpg = e.target.closest("[data-rc-upgrade]");
+      if (rcUpg && !rcUpg.disabled) {
+        Buildings.startCenterUpgrade(state);
+        scheduleSave();
+        renderResearchCenterPanel();
+      }
+      return;
+    }
     const b = bpBuilding; if (!b) return;
     const slot = e.target.closest("[data-slot]");
     if (slot) {
@@ -7750,9 +8009,11 @@ var CastleMarket = (function () {
   document.getElementById("bpClose").addEventListener("click", closeBuildingPanel);
 
   // Live refresh while a building panel is open (workers/delivery update as ticks run).
-  setInterval(() => { if (bpBuilding) renderBuildingPanel(); }, 500);
+  setInterval(() => { if (bpBuilding) renderBuildingPanel(); else if (rcPanelOpen) renderResearchCenterPanel(); }, 500);
 
   window.BuildingUI = { openBuildingPanel, closeBuildingPanel, buildingAtHex,
+                        openResearchCenterPanel, renderResearchCenterPanel,   // RESEARCH CENTER (Slice C)
+                        get rcPanelOpen() { return rcPanelOpen; },
                         get openBuilding() { return bpBuilding; },
                         get openBuildingTown() { return bpTown; },
                         // === RU-B: smoke-test passthrough — starts the next upgrade on `b` and
@@ -7768,9 +8029,12 @@ var CastleMarket = (function () {
   // Expose for headless smoke test / console debugging.
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
                     startPlacing, cancelPlacing, tryPlaceBuilding,
+                    // RESEARCH CENTER (Slice C): the Center's own placement session.
+                    startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,
                     openCategory, closeFlyout, refreshCatButtons,   // CBM
                     get activeTown() { return activeTown; },
                     get placing() { return placing; },
+                    get placingResearchCenter() { return placingResearchCenter; },
                     get openCat() { return bbOpenCat; },
                     get state() { return state; } };
   // === TOWN-UI END ===
@@ -8291,6 +8555,11 @@ var CastleMarket = (function () {
   // PP-C: listener moved from #cwBody to the panel root — the stores table now
   // lives on the Warehouse tab (#cwStores) while the upgrade button stays on Keep.
   castleEl.addEventListener("click", (e) => {
+    // RESEARCH CENTER (Slice C): "Place Research Center" button in the rc-box.
+    if (e.target.closest("button[data-place-rc]")) {
+      startPlacingResearchCenter();
+      return;
+    }
     if (e.target.closest("button[data-castle-upgrade]")) {
       const res = Castle.upgrade(state);
       if (res.ok) {
@@ -8771,21 +9040,42 @@ var CastleMarket = (function () {
                       addPanelSection(fn) { if (typeof fn === "function") { castlePanelSections.push(fn); if (castleOpen) renderCastlePanel(); } },
                       get isOpen() { return castleOpen; } };
 
-  // === PP-C === Research Center pipeline (Keep tab) — replaces the CRE "Royal
-  // Commission" box. Visual row-flow: material rows (castleStock have/required,
-  // en-route hint from live royal buyers) → progress "book" (Research.activeFraction
-  // + gold installments, RESEARCH-CORE's spent/cost with a per-tick hint) → the node.
-  // Below: a one-line queue glance (state.research.queue). Registered through the CP
-  // addPanelSection hook so renderCastlePanel stays hook-driven.
+  // === RESEARCH CENTER (Slice C) === Research Center pipeline (Keep tab) —
+  // rewritten for the Slice A/B material-metering model (no more node.cost /
+  // timeTicks / R.spent / R.progress). Three explicit states: no Center (with a
+  // "Place" button), Center under construction, and the normal metered pipeline
+  // once built (material rows read live from state.research.consumed). Registered
+  // through the CP addPanelSection hook so renderCastlePanel stays hook-driven.
   window.CastleUI.addPanelSection(function (st) {
-    const R = st.research || {};
-    const node = (R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
     const GLYPH = { production: "⚒️", logistics: "🛞", administration: "📜" };
     let out = '<div class="rc-box"><div class="rc-title">📖 Research Center</div>';
+    const rc = st.researchCenter;
+
+    if (!rc) {
+      const buildGold = (CONFIG.researchCenter.build && CONFIG.researchCenter.build.gold) || 0;
+      out += '<div class="rc-idle">No Research Center — build one beside the castle to start researching.</div>' +
+        '<button class="bp-star" data-place-rc>🏗 Place Research Center (' + fmt(buildGold) + 'g)</button>';
+      return out + "</div>";
+    }
+
+    if (!rc.built) {
+      const cost = (CONFIG.researchCenter.build && CONFIG.researchCenter.build.cost) || {};
+      const need = (typeof Research !== "undefined" && Research.centerConstructionNeed) ? Research.centerConstructionNeed(st) : {};
+      out += '<div class="rc-idle">Research Center under construction — materials are delivered from the King’s stock.</div>';
+      out += '<div style="margin:4px 0 6px">' + bpUpgradeChips(cost, rc.delivered) + "</div>";
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+      out += '<div class="rc-queue">' + (needStr ? "Still needs: " + esc(needStr) : "Almost done…") + "</div>";
+      return out + "</div>";
+    }
+
+    const R = st.research || {};
+    const node = (R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
+    const speed = Research.centerSpeed(st);
     if (!node) {
-      out += '<div class="rc-idle">The scholars are idle — open the 🔬 Research tree to start a project.</div>';
+      out += '<div class="rc-idle">The scholars are idle (Level ' + (rc.level || 1) + ' · ' + fmt(speed) +
+        '/sec) — open the 🔬 Research tree to start a project.</div>';
     } else {
-      const cs = (st.castleStock && typeof st.castleStock === "object") ? st.castleStock : {};
+      const consumed = R.consumed || {};
       const mats = node.materials || {};
       const keys = Object.keys(mats);
       let matHtml = "";
@@ -8793,27 +9083,22 @@ var CastleMarket = (function () {
         matHtml = '<div class="rc-mat" style="opacity:.7">no materials needed</div>';
       } else {
         for (const gid of keys) {
-          const have = Math.floor(cs[gid] || 0), req = mats[gid];
-          let fly = 0;
-          for (const c of (st.carts || [])) if (!c.done && c.kind === "castle" && c.goodId === gid) fly += (c.qty || 0);
+          const have = Math.floor(consumed[gid] || 0), req = mats[gid];
           const done = have >= req;
           matHtml += '<div class="rc-mat' + (done ? " ok" : "") + '" title="' +
-            esc(GOOD_LABEL(gid)) + ' — consumed in full when the project completes">' +
+            esc(GOOD_LABEL(gid)) + ' — drawn from the King’s stock as the project runs">' +
             goodIcon(gid) + " <span>" + Math.min(have, req) + "/" + req + "</span>" +
-            (done ? " ✓" : (fly > 0 ? ' <span class="fly" title="En route on royal buyers">🐎+' + fmt(fly) + "</span>" : "")) +
-            "</div>";
+            (done ? " ✓" : "") + "</div>";
         }
       }
       const pct = Math.round((Research.activeFraction ? Research.activeFraction(st) : 0) * 100);
-      const spent = Math.round(R.spent || 0);
-      const perTickGold = Math.round(10 * node.cost / Math.max(1, node.timeTicks | 0)) / 10;
       const glyph = node.kind === "unlock" ? "🏗" : node.kind === "upgrade" ? "⬆️" : (GLYPH[node.branch] || "🔬");
       out += '<div class="rc-flow">' +
         '<div class="rc-mats">' + matHtml + "</div>" +
         '<div class="rc-arrow">➜</div>' +
         '<div class="rc-book">📖<div class="bar"><span style="width:' + pct + '%"></span></div>' +
           '<div class="pct">' + pct + '%</div>' +
-          '<div class="gold" title="Paid in installments, ~' + perTickGold + '🪙 per tick of labour">' + spent + "/" + node.cost + "🪙</div></div>" +
+          '<div class="gold" title="Research speed from the Center’s level">' + fmt(speed) + '/sec</div></div>' +
         '<div class="rc-arrow">➜</div>' +
         '<div class="rc-node">' + glyph + '<div class="nm">' + esc(node.name) + "</div></div>" +
         "</div>";
@@ -8822,6 +9107,11 @@ var CastleMarket = (function () {
     const names = [];
     for (const id of q) { const n = (typeof Research !== "undefined") ? Research.get(id) : null; names.push(n ? n.name : id); }
     out += '<div class="rc-queue">' + (names.length ? "Next: " + esc(names.join(" · ")) : "Queue empty") + "</div>";
+    if (rc.pendingUpgrade) {
+      const upNeed = (typeof Research !== "undefined" && Research.centerUpgradeNeed) ? Research.centerUpgradeNeed(st) : {};
+      const upStr = Object.keys(upNeed).map(g => fmt(upNeed[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+      out += '<div class="rc-queue">⬆ Upgrading to Level ' + rc.pendingUpgrade.toLevel + (upStr ? " — needs " + esc(upStr) : "") + "</div>";
+    }
     return out + "</div>";
   });
   // PP-C: tab switch exposed for the headless smoke / console debugging.
@@ -8892,16 +9182,34 @@ var CastleMarket = (function () {
     if (node.kind === "kingdom") return TT_KINGDOM_GLYPH[node.branch] || "📜";
     return TT_BUILDING_GLYPH[node.buildingId] || "🏭";
   }
-  // === RSF: active node with a full labour clock but missing castle materials
-  // is WAITING — surfaced distinctly so "stuck at 100%" explains itself.
+  // === RESEARCH CENTER (Slice C) — rewritten for the Slice A/B material-metering
+  // model (RSF's old node.timeTicks/state.research.progress no longer exist).
+  // "Waiting" now covers two cases: no built Research Center at all (globally
+  // paused, centerSpeed 0), or a built Center whose current second-boundary draw
+  // can't be fully afforded from castleStock yet — mirrors Research.tick's own
+  // per-second affordability check (pure read, no mutation).
   function ttWaitingOnMaterials(id) {
     if (!Research.isActive(state, id)) return false;
+    if (Research.centerLevel(state) === 0) return true;   // no built Center → paused
     const node = Research.get(id); if (!node) return false;
-    const total = Math.max(1, node.timeTicks | 0);
-    if ((state.research.progress || 0) < total) return false;
-    return !(typeof ResearchEconomy === "undefined" || ResearchEconomy.materialsSatisfied(state, node));
+    const M = node.materials || {};
+    const gids = Object.keys(M);
+    if (!gids.length) return false;
+    const S = Research.centerSpeed(state);
+    if (!S) return true;
+    const R = state.research || {};
+    const rate = Research.consumptionPlan(M, S).rate;
+    const e = (R.completedSec || 0) + 1;
+    const consumed = R.consumed || {};
+    const stock = state.castleStock || {};
+    for (const gid of gids) {
+      const target = Math.min(M[gid], Math.floor(rate[gid] * e));
+      const d = Math.max(0, target - (consumed[gid] || 0));
+      if (d > 0 && (stock[gid] || 0) < d) return true;
+    }
+    return false;
   }
-  // === /RSF ===
+  // === /RESEARCH CENTER (Slice C) ===
   function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
     if (Research.isActive(state, id)) return "researching";
@@ -8913,7 +9221,7 @@ var CastleMarket = (function () {
     if (s === "done") return "✓";
     if (s === "researching") return ttWaitingOnMaterials(id) ? "⏳" : Math.round(Research.activeFraction(state) * 100) + "%";
     if (s === "queued") { const i = (state.research.queue || []).indexOf(id); return "#" + (i + 1); }
-    if (s === "available") { const n = Research.get(id); return n ? fmt(n.cost) + " 🪙" : ""; }
+    if (s === "available") return "▶";   // RESEARCH CENTER (Slice C): materials shown in the tooltip, not a gold badge
     return "🔒";
   }
 
@@ -9061,11 +9369,20 @@ var CastleMarket = (function () {
       const node = Research.get(R.active);
       const frac = Research.activeFraction(state);
       const qWaiting = ttWaitingOnMaterials(R.active);
+      const noCenter = Research.centerLevel(state) === 0;
+      // RESEARCH CENTER (Slice C): per-material consumed/required rows replace the
+      // old node.cost/R.spent gold installment line (Slice A/B has no gold cost).
+      const mats = node.materials || {};
+      const consumed = R.consumed || {};
+      const matRows = Object.keys(mats).map(gid =>
+        `<span style="margin-right:8px">${goodIcon(gid)} ${Math.floor(consumed[gid] || 0)}/${mats[gid]}</span>`).join("") ||
+        "no materials needed";
       html += `<div class="tt-qactive" data-node="${R.active}">` +
         `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${qWaiting ? "⏳" : Math.round(frac * 100) + "%"}</span></div>` +
-        (qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
+        (noCenter ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Paused — build a Research Center to resume</div>` :
+          qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
-        `<div style="font-size:11px;opacity:.75;margin-top:5px">${fmt(R.spent || 0)}/${fmt(node.cost)} 🪙</div></div>`;
+        `<div style="font-size:11px;opacity:.75;margin-top:5px">${matRows}</div></div>`;
     }
     const q = Array.isArray(R.queue) ? R.queue : [];
     if (q.length) {
@@ -9097,7 +9414,9 @@ var CastleMarket = (function () {
       eff = (b ? b.name : node.buildingId) + " Lv" + node.level + (sum ? ": " + sum : "");
     } else eff = node.desc || "";
     const waiting = ttWaitingOnMaterials(id);
-    const curTxt = waiting ? "Waiting for materials — the King's buyers purchase them from cities" :
+    const noCenter = Research.centerLevel(state) === 0;
+    const curTxt = (noCenter && Research.isActive(state, id)) ? "Paused — needs a Research Center" :
+      waiting ? "Waiting for materials — the King's buyers purchase them from cities" :
       { done: "Finished", researching: "In Progress",
       queued: "Queued (#" + (((state.research.queue || []).indexOf(id)) + 1) + ")",
       available: "Available", locked: "Locked" }[s] || s;
@@ -9105,15 +9424,17 @@ var CastleMarket = (function () {
     let html = `<div class="tt-tip-name">${esc(node.name)}</div><div>${esc(eff)}</div>`;
     if (Research.isActive(state, id)) html += `<div>Progress: ${Math.round(Research.activeFraction(state) * 100)}%</div>`;
     html += `<div>Currently: ${curTxt}</div>`;
-    html += `<div>Estimated cost: ${fmt(node.cost)} 🪙</div>`;
+    // RESEARCH CENTER (Slice C): materials only — no gold cost (Slice A/B removed
+    // node.cost/timeTicks as the pacing model; a node's price is its materials).
+    if (noCenter) html += `<div style="color:#e0b34c">⏳ Paused — needs a Research Center</div>`;
     const mats = node.materials || {};
+    const active = Research.isActive(state, id);
+    const consumed = (active && state.research && state.research.consumed) || {};
     for (const gid in mats) {
       const qty = mats[gid];
-      const val = qty * ((CONFIG.goods[gid] && CONFIG.goods[gid].basePrice) || 0);
-      // RSF: while active, show live delivery progress (have/required) per material
-      const have = Research.isActive(state, id) ? Math.min(qty, Math.floor((state.castleStock && state.castleStock[gid]) || 0)) : null;
-      const qtyTxt = have === null ? String(qty) : (have + "/" + qty);
-      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt} = ${fmt(val)} 🪙</div>`;
+      // while active, show live consumed/required progress per material
+      const qtyTxt = active ? (Math.min(qty, Math.floor(consumed[gid] || 0)) + "/" + qty) : String(qty);
+      html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt}</div>`;
     }
     return html;
   }
@@ -9469,9 +9790,50 @@ var CastleMarket = (function () {
     ["surplus", "Top surplus"], ["shortage", "Top shortage"],
   ];
 
+  // === RESEARCH CENTER (Slice C) — Kingdom Overview research header block, above
+  // the towns table. Same three states as the Keep-tab rc-box (no Center / under
+  // construction / metered pipeline), condensed into a compact progress bar +
+  // per-material consumed/required rows (state.research.consumed vs node.materials).
+  function kwResearchBlockHTML() {
+    const rc = state.researchCenter;
+    let html = '<div class="rc-box" style="margin-top:0"><div class="rc-title">📖 Research</div>';
+    if (!rc) {
+      html += '<div class="rc-idle">No Research Center — build one from the Keep tab to start researching.</div>';
+      return html + "</div>";
+    }
+    if (!rc.built) {
+      const cost = (CONFIG.researchCenter.build && CONFIG.researchCenter.build.cost) || {};
+      html += '<div class="rc-idle">Research Center under construction.</div>';
+      html += '<div style="margin:4px 0 6px">' + bpUpgradeChips(cost, rc.delivered) + "</div>";
+      return html + "</div>";
+    }
+    const R = state.research || {};
+    const node = R.active ? Research.get(R.active) : null;
+    const speed = Research.centerSpeed(state);
+    if (!node) {
+      html += '<div class="rc-idle">Idle — Level ' + (rc.level || 1) + ' · ' + fmt(speed) +
+        '/sec. Open the tech tree to start a project.</div>';
+      return html + "</div>";
+    }
+    const pct = Math.round(Research.activeFraction(state) * 100);
+    const mats = node.materials || {};
+    const consumed = R.consumed || {};
+    let matRows = "";
+    for (const gid in mats) {
+      const have = Math.floor(consumed[gid] || 0), req = mats[gid];
+      matRows += `<div class="tp-row"><span class="k">${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${have}/${req}</span></div>`;
+    }
+    html += `<div class="tp-row"><span class="k">Researching</span><span class="v">${esc(node.name)}</span></div>`;
+    html += `<div class="rc-book" style="text-align:left;min-width:0;margin:4px 0"><div class="bar"><span style="width:${pct}%"></span></div><div class="pct">${pct}%</div></div>`;
+    html += matRows;
+    return html + "</div>";
+  }
+  // === /RESEARCH CENTER (Slice C) ===
+
   function renderKingdom() {
     if (!kingdomOpen) return;
     renderEventBanner();
+    const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
     rows.sort((a, b) => {
@@ -9480,7 +9842,7 @@ var CastleMarket = (function () {
         return dir * String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv));
       return dir * ((av || 0) - (bv || 0));
     });
-    if (!rows.length) { kwBodyEl.innerHTML = '<div class="kw-empty">No towns yet — place a town to see it here.</div>'; return; }
+    if (!rows.length) { kwBodyEl.innerHTML = researchHtml + '<div class="kw-empty">No towns yet — place a town to see it here.</div>'; return; }
     const head = KW_COLS.map(c =>
       `<th data-sort="${c[0]}">${c[1]}${kwSort.key === c[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
     const trs = rows.map(r => `<tr>
@@ -9489,7 +9851,7 @@ var CastleMarket = (function () {
       <td>${r.happiness}%</td><td>${fmt(r.gold)}g</td>
       <td class="kw-good up">${esc(goodLabel(r.surplus))}</td>
       <td class="kw-good down">${esc(goodLabel(r.shortage))}</td></tr>`).join("");
-    kwBodyEl.innerHTML = `<table class="kw-tbl"><thead><tr>${head}</tr></thead><tbody>${trs}</tbody></table>`;
+    kwBodyEl.innerHTML = researchHtml + `<table class="kw-tbl"><thead><tr>${head}</tr></thead><tbody>${trs}</tbody></table>`;
   }
 
   kwBodyEl.addEventListener("click", (e) => {
