@@ -568,5 +568,134 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 }
 // === /RU-A =================================================================
 
+// ============================================================================
+// 15) RESEARCH CENTER (Slice B) — config sanity + placement + upgrade API.
+// ============================================================================
+{
+  const RC = CONFIG.researchCenter;
+
+  // -- config shape sanity --
+  ok("CONFIG.researchCenter exists (name/glyph)", !!RC && typeof RC.name === "string" && typeof RC.glyph === "string");
+  ok("researchCenter build.gold > 0", RC.build && RC.build.gold > 0);
+  ok("researchCenter build.cost keys are real goods",
+    Object.keys(RC.build.cost || {}).every(g => !!CONFIG.goods[g]));
+  ok("researchCenter levels[1].speed === 2", RC.levels[1].speed === 2);
+  ok("researchCenter speeds strictly increase across levels", (() => {
+    let prev = -Infinity;
+    for (let i = 1; i < RC.levels.length; i++) {
+      if (!(RC.levels[i].speed > prev)) return false;
+      prev = RC.levels[i].speed;
+    }
+    return true;
+  })());
+  ok("every researchCenter upgrade cost good is real", (() => {
+    for (let i = 2; i < RC.levels.length; i++) {
+      const cost = RC.levels[i].cost || {};
+      for (const g in cost) if (!CONFIG.goods[g]) return false;
+    }
+    return true;
+  })());
+
+  // -- canPlaceResearchCenter: OK adjacent to the castle on buildable land --
+  // makeState() has barren hexes at (1,0) and (2,0) beside the castle (0,0).
+  {
+    const st = makeState();
+    ok("center OK on buildable land adjacent to castle", Buildings.canPlaceResearchCenter(st, 1, 0).ok === true);
+
+    // on the castle hex → rejected
+    ok("center on castle hex → not ok", Buildings.canPlaceResearchCenter(st, 0, 0).ok === false);
+
+    // NOT adjacent to the castle → rejected (5,0 is far away)
+    const far = Buildings.canPlaceResearchCenter(st, 5, 0);
+    ok("center not adjacent to castle → not ok + reason", far.ok === false && /castle/i.test(far.reason));
+
+    // water hex adjacent-ish → rejected (buildable land gate). (3,0) is water but not
+    // castle-adjacent; use a fabricated water hex next to the castle.
+    st.map.hexes.set(HexMath.key(-1, 0), { q: -1, r: 0, terrain: "water", revealed: true });
+    const onWater = Buildings.canPlaceResearchCenter(st, -1, 0);
+    ok("center on water → not ok", onWater.ok === false && !!onWater.reason);
+
+    // road on the hex → rejected
+    const st2 = makeState();
+    st2.roads.add(HexMath.key(1, 0));
+    ok("center on a road hex → not ok", Buildings.canPlaceResearchCenter(st2, 1, 0).ok === false);
+
+    // occupied by a town building → rejected
+    const st3 = makeState();
+    st3.towns.push(makeTown({ q: 2, r: 0, buildings: [{ typeId: "hut", q: 1, r: 0, workers: 0 }] }));
+    ok("center on an occupied hex → not ok", Buildings.canPlaceResearchCenter(st3, 1, 0).ok === false);
+
+    // treasury too low → rejected
+    const st4 = makeState();
+    st4.treasury = RC.build.gold - 1;
+    const poor = Buildings.canPlaceResearchCenter(st4, 1, 0);
+    ok("treasury < build.gold → not ok + 'gold'", poor.ok === false && /gold/i.test(poor.reason));
+  }
+
+  // -- placeResearchCenter deducts gold + sets the under-construction shape --
+  {
+    const st = makeState();
+    const t0 = st.treasury;
+    const res = Buildings.placeResearchCenter(st, 1, 0);
+    ok("placeResearchCenter returns ok", res.ok === true);
+    ok("placeResearchCenter deducts build.gold from treasury", st.treasury === t0 - RC.build.gold);
+    const c = st.researchCenter;
+    ok("center shape: built:false, level:1, delivered:{}, pendingUpgrade:null",
+      c && c.built === false && c.level === 1 && c.delivered && Object.keys(c.delivered).length === 0 && c.pendingUpgrade === null);
+    ok("center records its hex", c.q === 1 && c.r === 0);
+    ok("researchCenter(state) convenience returns it", Buildings.researchCenter(st) === c);
+
+    // exactly one center: a second placement is rejected.
+    const second = Buildings.canPlaceResearchCenter(st, 2, 0);
+    ok("second center → not ok + 'already'", second.ok === false && /already/i.test(second.reason));
+    ok("placeResearchCenter refuses a second center", Buildings.placeResearchCenter(st, 2, 0).ok === false);
+  }
+
+  // -- centerNextUpgrade / canUpgradeCenter / startCenterUpgrade --
+  {
+    // unbuilt center → no upgrade offered
+    const stUnbuilt = makeState();
+    stUnbuilt.researchCenter = { q: 1, r: 0, built: false, delivered: {}, level: 1, pendingUpgrade: null };
+    ok("centerNextUpgrade null while unbuilt", Buildings.centerNextUpgrade(stUnbuilt) === null);
+
+    // built L1 with funds → next upgrade is L2, upgrade allowed
+    const st = makeState();
+    st.treasury = 100000;
+    st.researchCenter = { q: 1, r: 0, built: true, delivered: {}, level: 1, pendingUpgrade: null };
+    const nxt = Buildings.centerNextUpgrade(st);
+    ok("centerNextUpgrade of built L1 → level 2", nxt && nxt.level === 2);
+    ok("canUpgradeCenter ok with funds", Buildings.canUpgradeCenter(st).ok === true);
+
+    const g0 = st.treasury;
+    const up = Buildings.startCenterUpgrade(st);
+    ok("startCenterUpgrade returns ok", up.ok === true);
+    ok("startCenterUpgrade deducts levels[2].cost.gold", st.treasury === g0 - RC.levels[2].cost.gold);
+    const pu = st.researchCenter.pendingUpgrade;
+    ok("pendingUpgrade set toLevel 2 with empty delivered", pu && pu.toLevel === 2 && pu.delivered && Object.keys(pu.delivered).length === 0);
+    ok("pendingUpgrade snapshots cost (so Research.centerUpgradeNeed meters materials)",
+      pu.cost && pu.cost.planks === RC.levels[2].cost.planks && pu.cost.stone === RC.levels[2].cost.stone);
+
+    // while pending → no further upgrade + startCenterUpgrade refused
+    ok("centerNextUpgrade null while pending", Buildings.centerNextUpgrade(st) === null);
+    ok("canUpgradeCenter blocked while pending", Buildings.canUpgradeCenter(st).ok === false);
+    ok("startCenterUpgrade refused while pending", Buildings.startCenterUpgrade(st).ok === false);
+
+    // gold too low → blocked
+    const stPoor = makeState();
+    stPoor.treasury = 0;
+    stPoor.researchCenter = { q: 1, r: 0, built: true, delivered: {}, level: 1, pendingUpgrade: null };
+    const poorUp = Buildings.canUpgradeCenter(stPoor);
+    ok("canUpgradeCenter blocked when gold too low", poorUp.ok === false && /gold/i.test(poorUp.reason));
+
+    // at max level → no next upgrade
+    const stMax = makeState();
+    stMax.treasury = 100000;
+    stMax.researchCenter = { q: 1, r: 0, built: true, delivered: {}, level: RC.levels.length - 1, pendingUpgrade: null };
+    ok("centerNextUpgrade null at max level", Buildings.centerNextUpgrade(stMax) === null);
+    ok("canUpgradeCenter blocked at max level", Buildings.canUpgradeCenter(stMax).ok === false);
+  }
+}
+// === /RESEARCH CENTER (Slice B) =============================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
