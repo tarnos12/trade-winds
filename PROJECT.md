@@ -120,9 +120,11 @@ construction/building logistics, castle-L5 victory + celebratory overlay, and tr
 hotfixes. The **research-tree editor** (`tools/research-editor.html`, shipped via Artifact) gained
 visual cards (big icons, 2× material chips, no ticks), side-fanning connectors, resizable band panels,
 bottom-anchored single-column Kingdom, localStorage autosave + Reset to Default, collapsible help, and
-a Peasant-first camera. Each card now exposes **8 drag-to-connect handles** (4 corners + 4 edge
-mid-points, all functionally identical), and the edge-inspector anchor dropdown is expanded to those 8
-points (+ `auto`).
+a Peasant-first camera. Each card exposes **8 connection circles** (4 corners + 4 edge mid-points).
+Connecting is **click-to-connect**: click a source circle to arm it (highlighted, with a rubber-band
+preview), click a destination circle on another card to link — the drawn edge anchors to the exact two
+circles clicked; click empty space or press Esc to cancel. The edge-inspector anchor dropdown is also
+expanded to those 8 points (+ `auto`).
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real

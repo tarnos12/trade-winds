@@ -179,14 +179,13 @@
       <canvas id="board"></canvas>
       <div id="boardHint">
         <div class="help-hd"><span>Help</span><span class="help-close" id="helpClose" title="Close">✕</span></div>
-        <b>Drag</b> a card body to move it into another slot.<br>
-        <b>Drag from the small ◎ handle</b> (top-right of a card) onto another card to add a
-        prerequisite (source → target; target gains source as a prereq).<br>
+        <b>Drag</b> a card body (its centre) to move it into another slot.<br>
+        <b>Connect two cards:</b> click one of the 8 connection circles (4 corners + 4 edge mid-points) to arm it as the source, then click a circle on another card to link them (source → target). The line attaches to the exact two circles you click. Click empty space or press <b>Esc</b> to cancel.<br>
         <b>Click</b> a connector line or a card, then press <b>Delete</b> to remove it.<br>
         <b>Resize a band</b> by dragging the small gold-outlined square in the bottom-right corner of its lane (right → columns, down → rows).<br>
         Upgrade pips sit above a building's card — select one to edit its ladder level.<br>
         Kingdom research lives in the left column and is always prerequisite-free.<br>
-        Select a prerequisite line to choose which side of each card it attaches to; multiple lines on the same side fan out along it (e.g. top-left / top-centre / top-right).<br>
+        Select a prerequisite line to fine-tune which side or corner of each card it attaches to (4 edges + 4 corners); multiple lines on the same edge fan out along it.<br>
         Scroll to zoom, drag empty space to pan.
       </div>
       <button id="helpToggle" title="Help" aria-expanded="false">?</button>
@@ -462,8 +461,8 @@ const PIP_ROW_H = PIP_H + 8;               // headroom reserved above each card
 const COL_STEP = CARD_W + 30;
 const ROW_STEP = CARD_H + PIP_ROW_H + 30;
 const LANE_TOP_PAD = 36 + PIP_ROW_H, LANE_BOT_PAD = 20, LANE_GAP = 24, LEFT_PAD = 34;
-const HANDLE_R = 8;        // hit tolerance for a link handle
 const HANDLE_DRAW_R = 5;   // drawn radius of each of the 8 link handles
+const HANDLE_PICK_R = 13;  // generous click radius for arming/targeting a handle
 // Colors copied verbatim from index.html's :root / .tt-* rules.
 const C_BG = "#14110c";
 const C_CARD_BG = "#1c160f";
@@ -726,7 +725,12 @@ let dragStart = null; // {sx,sy}
 let dragNode = null;  // node being moved/linked
 let dragMoved = false;
 let dragPreview = null; // {x,y} world, while moving
-let linkCursor = null; // world pos while linking
+// Click-to-connect state: click a source circle to arm it, then click a
+// destination circle to link. `armed` holds the source circle; `hoverCursor`
+// drives the rubber-band; `hoverHandleKey` highlights the circle under the cursor.
+let armed = null;          // { nodeId, side } or null
+let hoverCursor = null;    // world pos while a source is armed
+let hoverHandleKey = null; // "nodeId|side" under the cursor, or null
 let camStart = null;
 let resizeBand = null;  // band name being resized
 let resizeStart = null; // { wx, wy, cols, rows } — starting pointer pos + starting cell counts
@@ -759,6 +763,63 @@ function nodeAtWorld(wx, wy) {
 function handlePointsFor(node) {
   const r = cardRectFor(node);
   return CARD_SIDES.map(side => sidePoint(r, side));
+}
+
+// Hit-test the 8 connection circles across ALL primary cards. Returns the
+// closest { node, side, point } within HANDLE_PICK_R, or null. Generous radius
+// so the circles are easy to grab (they sit on the card's edges/corners).
+function handleAtWorld(wx, wy) {
+  let best = null, bestD = HANDLE_PICK_R;
+  for (const node of primaryCards()) {
+    const r = cardRectFor(node);
+    for (const side of CARD_SIDES) {
+      const p = sidePoint(r, side);
+      const d = Math.hypot(wx - p.x, wy - p.y);
+      if (d <= bestD) { bestD = d; best = { node, side, point: p }; }
+    }
+  }
+  return best;
+}
+
+// Click-to-connect. The first click on a circle arms it as the source; the next
+// click on a DIFFERENT card's circle creates the prerequisite and anchors the
+// drawn line to the exact two circles clicked. Clicking another circle on the
+// same card just re-points the source. Kingdom cards can't be a target.
+function handleConnectClick(hh) {
+  if (!armed) {
+    armed = { nodeId: hh.node.id, side: hh.side };
+    hoverCursor = hh.point;
+    toast(`Source armed: "${hh.node.id}". Click a destination circle (or click empty space / press Esc to cancel).`);
+    draw();
+    return;
+  }
+  if (hh.node.id === armed.nodeId) {            // same card → move the source circle
+    armed.side = hh.side;
+    draw();
+    return;
+  }
+  const target = hh.node;
+  if (target.kind === "kingdom") {
+    toast("Kingdom research is prerequisite-free — it can't take a prerequisite.");
+    armed = null; hoverCursor = null; draw();
+    return;
+  }
+  const source = findNode(armed.nodeId);
+  if (!source) { armed = null; hoverCursor = null; draw(); return; }
+  target.prereqs = target.prereqs || [];
+  const existed = target.prereqs.includes(source.id);
+  if (!existed) target.prereqs.push(source.id);
+  // Anchor the line to the exact circles the user picked (fixes the old
+  // "always exits the right side" behaviour).
+  setEdgeSide(source.id, target.id, "parentSide", armed.side);
+  setEdgeSide(source.id, target.id, "childSide", hh.side);
+  toast(existed
+    ? `Prerequisite already existed — re-anchored "${source.id}" → "${target.id}".`
+    : `Connected "${source.id}" (${armed.side}) → "${target.id}" (${hh.side}).`);
+  armed = null; hoverCursor = null;
+  renderValidation();
+  draw();
+  renderInspector();
 }
 
 /* --------------------------- pips: layout + hit-test ------------------ */
@@ -1072,11 +1133,13 @@ function drawEdges() {
 }
 
 function drawLinkPreview() {
-  if (dragMode === "link" && dragNode && linkCursor) {
-    const a = sideCenterFor(dragNode, "right");
+  if (armed && hoverCursor) {
+    const src = findNode(armed.nodeId);
+    if (!src) return;
+    const a = sidePoint(cardRectFor(src), armed.side);   // emanate from the ARMED circle
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
-    ctx.lineTo(linkCursor.x, linkCursor.y);
+    ctx.lineTo(hoverCursor.x, hoverCursor.y);
     ctx.strokeStyle = C_ACCENT;
     ctx.lineWidth = 3;
     ctx.setLineDash([4, 4]);
@@ -1167,16 +1230,20 @@ function drawCard(node, r) {
     }
   }
 
-  // link handles — 8 connection points (4 corners + 4 edge mid-points). All are
-  // identical: drag from ANY onto another card to add a prereq (purely visual;
-  // the edge's anchor side is chosen in the edge inspector).
-  ctx.fillStyle = C_ACCENT;
-  ctx.strokeStyle = C_EDGE;
-  ctx.lineWidth = 1;
-  for (const hp of handlePointsFor(node)) {
+  // link handles — 8 connection circles (4 corners + 4 edge mid-points). Click a
+  // circle to arm it as a source, then click a destination circle on another card
+  // (see handleConnectClick). The armed circle and the circle under the cursor are
+  // drawn larger/brighter for easy targeting.
+  for (const side of CARD_SIDES) {
+    const hp = sidePoint(r, side);
+    const isArmed = armed && armed.nodeId === node.id && armed.side === side;
+    const isHover = hoverHandleKey === node.id + "|" + side;
     ctx.beginPath();
-    ctx.arc(hp.x, hp.y, HANDLE_DRAW_R, 0, 7);
+    ctx.arc(hp.x, hp.y, (isArmed || isHover) ? HANDLE_DRAW_R + 3 : HANDLE_DRAW_R, 0, 7);
+    ctx.fillStyle = isArmed ? "#ffffff" : C_ACCENT;
     ctx.fill();
+    ctx.strokeStyle = (isArmed || isHover) ? C_ACCENT : C_EDGE;
+    ctx.lineWidth = (isArmed || isHover) ? 2 : 1;
     ctx.stroke();
   }
   ctx.restore();
@@ -1255,20 +1322,21 @@ canvas.addEventListener("mousedown", (ev) => {
     return;
   }
 
+  // Click-to-connect: a click on any of the 8 connection circles arms it as a
+  // source (or completes a pending link). Checked before card move/select so the
+  // circles on the card edge take priority over dragging the card.
+  const hh = handleAtWorld(w.x, w.y);
+  if (hh) { handleConnectClick(hh); return; }
+
+  // A click that ISN'T on a circle cancels a pending connection.
+  if (armed) { armed = null; hoverCursor = null; toast("Connection cancelled."); draw(); return; }
+
   // Pips are never dragged/linked — click just selects them.
   const pip = pipAtWorld(w.x, w.y);
   if (pip) { selectNode(pip.id); return; }
 
   const node = nodeAtWorld(w.x, w.y);
   if (node) {
-    const onHandle = handlePointsFor(node).some(h => Math.hypot(w.x - h.x, w.y - h.y) <= HANDLE_R + 5);
-    if (onHandle) {
-      dragMode = "link";
-      dragNode = node;
-      linkCursor = w;
-      canvas.classList.add("linking");
-      return;
-    }
     dragMode = "move";
     dragNode = node;
     const rect = cardRectFor(node);
@@ -1304,9 +1372,6 @@ window.addEventListener("mousemove", (ev) => {
     dragPreview.x = w.x - dragPreview.offX;
     dragPreview.y = w.y - dragPreview.offY;
     draw();
-  } else if (dragMode === "link") {
-    linkCursor = w;
-    draw();
   } else if (dragMode === "resize" && resizeBand) {
     const dCols = Math.round((w.x - resizeStart.wx) / COL_STEP);
     const dRows = Math.round((w.y - resizeStart.wy) / ROW_STEP);
@@ -1318,6 +1383,24 @@ window.addEventListener("mousemove", (ev) => {
     layout = computeLayout();
     draw();
   }
+});
+
+// Hover feedback for the connection circles + the armed rubber-band. Canvas-only
+// and skipped during an active drag (the window mousemove above owns those).
+canvas.addEventListener("mousemove", (ev) => {
+  if (dragMode) return;
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  const hh = handleAtWorld(w.x, w.y);
+  const key = hh ? hh.node.id + "|" + hh.side : null;
+  let dirty = false;
+  if (key !== hoverHandleKey) { hoverHandleKey = key; dirty = true; }
+  if (armed) { hoverCursor = w; dirty = true; }
+  canvas.style.cursor = (hh || armed) ? "crosshair" : "";
+  if (dirty) draw();
+});
+canvas.addEventListener("mouseleave", () => {
+  if (hoverHandleKey !== null) { hoverHandleKey = null; draw(); }
 });
 
 window.addEventListener("mouseup", (ev) => {
@@ -1365,26 +1448,9 @@ window.addEventListener("mouseup", (ev) => {
       }
       selectNode(dragNode.id);
     }
-  } else if (dragMode === "link" && dragNode) {
-    const target = anyNodeAtWorld(w.x, w.y);
-    if (target && target.kind === "upgrade") {
-      toast("Upgrade pips chain automatically — drag prereqs between building cards instead.");
-    } else if (target && target.kind === "kingdom") {
-      // Item 1: kingdom research is prerequisite-free — reject the drop.
-      toast("Kingdom research is prerequisite-free — it can't take a prerequisite.");
-    } else if (target && target.id !== dragNode.id) {
-      target.prereqs = target.prereqs || [];
-      if (!target.prereqs.includes(dragNode.id)) {
-        target.prereqs.push(dragNode.id);
-        toast(`Added prereq: "${dragNode.id}" → "${target.id}"`);
-      } else {
-        toast("Prerequisite already exists.");
-      }
-      renderValidation();
-    }
   }
 
-  dragMode = null; dragNode = null; dragPreview = null; linkCursor = null;
+  dragMode = null; dragNode = null; dragPreview = null;
   resizeBand = null; resizeStart = null;
   draw();
   renderInspector();
@@ -1403,6 +1469,7 @@ canvas.addEventListener("wheel", (ev) => {
 }, { passive: false });
 
 window.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && armed) { armed = null; hoverCursor = null; toast("Connection cancelled."); draw(); return; }
   if (ev.key !== "Delete" && ev.key !== "Backspace") return;
   if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
   if (selectedEdge) {
