@@ -55,7 +55,7 @@ function makeOldSave() {
     castleStock: { furniture: 1 },
     castleReserved: { cloth: 1 },
     castleTrade: { jewelry: 1 },
-    research: { unlocked: ["unlock_smelter", "unlock_weaver", "unlock_miner", "crop_rotation"], active: null, progress: 0, spent: 0, queue: [] },
+    research: { unlocked: ["unlock_smelter", "unlock_weaver", "unlock_miner", "crop_rotation"], active: null, progress: 7, spent: 42, queue: [] },
   };
 }
 
@@ -108,6 +108,10 @@ ok("research: unlock_weaver→unlock_tailoring", st.research.unlocked.indexOf("u
 ok("research: unlock_miner→unlock_iron_mine", st.research.unlocked.indexOf("unlock_iron_mine") >= 0);
 ok("research: legacy kingdom node survives", st.research.unlocked.indexOf("crop_rotation") >= 0);
 ok("research: retired ids gone", st.research.unlocked.indexOf("unlock_smelter") < 0 && st.research.unlocked.indexOf("unlock_weaver") < 0);
+
+// ---- Slice A: normalize migrates the gold-clock bag → per-second metering bag ----
+ok("research: normalized bag has the per-second metering fields", st.research.completedSec === 0 && st.research.subTick === 0 && st.research.consumed && typeof st.research.consumed === "object");
+ok("research: retired progress/spent fields dropped by normalize", !("spent" in st.research) && !("progress" in st.research));
 
 // ---- no NaN anywhere after migration ----
 ok("no NaN / non-finite number anywhere in the migrated save", !hasNaN(st));

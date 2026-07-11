@@ -3646,10 +3646,18 @@ Object.assign(CONFIG, {
   ],
 });
 
+// Sim ticks per game-second — the per-second material metering below advances one
+// "second" every this-many Sim ticks (2 at the 500ms base clock). Derived from
+// CONFIG.econ so a different baseTickMs stays correct; never hard-coded.
+const TICKS_PER_SEC = Math.max(1, Math.round(1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500)));
+
 // Pure research engine. All queries take `state` and never mutate CONFIG.
 const Research = {
   // The blank shape newGame/loadGame should install (also used to repair saves).
-  fresh() { return { unlocked: [], active: null, progress: 0, spent: 0, queue: [] }; },
+  // Slice A: per-second metering bag — completedSec (whole game-seconds drained),
+  // subTick (0..TICKS_PER_SEC accumulator), consumed (gid→qty already drawn from
+  // castleStock for the active node). No more gold `progress`/`spent`.
+  fresh() { return { unlocked: [], active: null, queue: [], completedSec: 0, subTick: 0, consumed: {} }; },
   // Defensive normalizer for loaded/foreign data.
   normalize(r) {
     const f = Research.fresh();
@@ -3678,9 +3686,6 @@ const Research = {
     f.unlocked = [...new Set(expanded.filter(id => !!Research.get(id)))];
     // === /RT-A ===
     f.active = (typeof r.active === "string" && Research.get(r.active)) ? r.active : null;
-    f.progress = (typeof r.progress === "number" && r.progress >= 0) ? r.progress : 0;
-    f.spent = (typeof r.spent === "number" && r.spent >= 0) ? r.spent : 0;
-    if (!f.active) { f.progress = 0; f.spent = 0; }
     // === RT-A2: sanitize the research queue (ordered node ids). Drop
     // unknown/duplicate ids, ids already unlocked, and the currently-active id;
     // coerce a non-array (or missing, legacy save) to []. f.active/f.unlocked are
@@ -3692,6 +3697,22 @@ const Research = {
       f.unlocked.indexOf(id) < 0 && id !== f.active &&
       !seenQ.has(id) && (seenQ.add(id), true));
     // === /RT-A2 ===
+    // === Slice A: sanitize the per-second metering fields against the active node.
+    // No valid active project → zeroed. consumed keeps only real material gids,
+    // each clamped to that node's requirement. ===
+    if (f.active) {
+      const M = (Research.get(f.active) || {}).materials || {};
+      f.completedSec = (typeof r.completedSec === "number" && r.completedSec >= 0) ? Math.floor(r.completedSec) : 0;
+      f.subTick = (typeof r.subTick === "number" && r.subTick >= 0) ? Math.min(TICKS_PER_SEC, Math.floor(r.subTick)) : 0;
+      f.consumed = {};
+      const rc = (r && typeof r.consumed === "object" && r.consumed) || {};
+      for (const gid in M) {
+        const v = rc[gid];
+        if (typeof v === "number" && v > 0) f.consumed[gid] = Math.min(M[gid], Math.floor(v));
+      }
+    } else {
+      f.completedSec = 0; f.subTick = 0; f.consumed = {};
+    }
     return f;
   },
   get(id) {
@@ -3723,39 +3744,147 @@ const Research = {
     if (Research.has(state, id) || Research.isActive(state, id)) return false;
     return Research.prereqsMet(state, node);
   },
-  // canStart also requires no other active project + affordability (full cost as
-  // an affordability *gate*; the gold itself is spent over time in tick()).
+  // canStart requires only: state has research, no other active project, not
+  // already unlocked, prereqs met. Slice A dropped the gold gate — research no
+  // longer costs treasury; it's paid in MATERIALS metered per game-second in tick().
   canStart(state, id) {
     const node = Research.get(id);
     if (!node || !state || !state.research) return false;
     if (state.research.active) return false;         // one project at a time
     if (Research.has(state, id)) return false;       // already researched
     if (!Research.prereqsMet(state, node)) return false;
-    if ((state.treasury || 0) < node.cost) return false;
     return true;
   },
-  // Deduct NOTHING at start — we reserve nothing and instead charge the treasury
-  // in equal-value installments across timeTicks in tick(). (Documented choice.)
+  // Deduct NOTHING at start — materials are drawn from state.castleStock over time
+  // in tick() (Slice A). Resets the per-second metering bag for the new project.
   start(state, id) {
     if (!Research.canStart(state, id)) return false;
     state.research.active = id;
-    state.research.progress = 0;
-    state.research.spent = 0;
+    state.research.completedSec = 0;
+    state.research.subTick = 0;
+    state.research.consumed = {};
     return true;
   },
-  // Advance the active project one tick, paying the proportional installment of
-  // its cost from state.treasury. If the treasury can't cover this tick's
-  // installment the project STALLS (progress does not advance) until coin is
-  // available — deterministic, no partial-price completions. On the final tick it
-  // unlocks and clears `active`.
+
+  // === Slice A: Research Center helpers ===================================
+  // Center level: 0 when there is no center or it's still under construction
+  // (research PAUSED); otherwise the center's level (default 1).
+  centerLevel(state) {
+    if (!state || !state.researchCenter || !state.researchCenter.built) return 0;
+    return state.researchCenter.level || 1;
+  },
+  // Research SPEED (materials/game-second) from the center's level; 0 = paused.
+  centerSpeed(state) {
+    const lvl = Research.centerLevel(state);
+    return lvl ? CONFIG.researchCenter.levels[lvl].speed : 0;
+  },
+  // Pure per-second equal-DRAIN plan for a node's materials at speed S. Returns
+  // { T, rate, gids }: gids = the material ids; T = whole game-seconds to finish
+  // (ceil(maxAmt / S)); rate[gid] = the per-second draw of gid, scaled so the
+  // LARGEST material empties exactly at S/sec and everything finishes together.
+  // Empty materials → { T:0, rate:{}, gids:[] }.
+  consumptionPlan(materials, S) {
+    const gids = Object.keys(materials || {});
+    if (!gids.length) return { T: 0, rate: {}, gids: [] };
+    let maxAmt = 0;
+    for (const g of gids) if (materials[g] > maxAmt) maxAmt = materials[g];
+    const T = Math.ceil(maxAmt / S);
+    const rate = {};
+    for (const g of gids) rate[g] = materials[g] * S / maxAmt;
+    return { T, rate, gids };
+  },
+  // Positive remaining build-materials for a PLACED, UNBUILT center (cost minus
+  // already-delivered). {} when there's no center, it's built, or nothing's left.
+  centerConstructionNeed(state) {
+    const c = state && state.researchCenter;
+    if (!c || c.built) return {};
+    const cost = (CONFIG.researchCenter.build && CONFIG.researchCenter.build.cost) || {};
+    const out = {};
+    for (const gid in cost) {
+      const rem = cost[gid] - ((c.delivered && c.delivered[gid]) || 0);
+      if (rem > 0) out[gid] = rem;
+    }
+    return out;
+  },
+  // Positive remaining upgrade-materials for a built center with a pendingUpgrade
+  // (cost minus delivered), EXCLUDING the gold key (gold is paid at purchase).
+  centerUpgradeNeed(state) {
+    const c = state && state.researchCenter;
+    if (!c || !c.built || !c.pendingUpgrade) return {};
+    const cost = c.pendingUpgrade.cost || {};
+    const del = c.pendingUpgrade.delivered || {};
+    const out = {};
+    for (const gid in cost) {
+      if (gid === "gold") continue;
+      const rem = cost[gid] - (del[gid] || 0);
+      if (rem > 0) out[gid] = rem;
+    }
+    return out;
+  },
+  // Pure construction/upgrade DELIVERY step: moves materials FROM state.castleStock
+  // into the center's delivered maps, up to deliveryRate items/tick total. When the
+  // construction need empties → built=true; when a pending upgrade's need empties →
+  // apply the new level and clear pendingUpgrade. Wired AFTER ResearchEconomy.tick.
+  tickCenter(state) {
+    const c = state && state.researchCenter;
+    if (!c) return;
+    const stock = state.castleStock || (state.castleStock = {});
+    let budget = CONFIG.researchCenter.deliveryRate;
+    if (!c.built) {
+      if (!c.delivered) c.delivered = {};
+      const need = Research.centerConstructionNeed(state);
+      for (const gid in need) {
+        if (budget <= 0) break;
+        const move = Math.min(need[gid], stock[gid] || 0, budget);
+        if (move > 0) {
+          stock[gid] = (stock[gid] || 0) - move;
+          c.delivered[gid] = (c.delivered[gid] || 0) + move;
+          budget -= move;
+        }
+      }
+      if (Object.keys(Research.centerConstructionNeed(state)).length === 0) c.built = true;
+      return;
+    }
+    if (c.pendingUpgrade) {
+      const pu = c.pendingUpgrade;
+      if (!pu.delivered) pu.delivered = {};
+      const need = Research.centerUpgradeNeed(state);
+      for (const gid in need) {
+        if (budget <= 0) break;
+        const move = Math.min(need[gid], stock[gid] || 0, budget);
+        if (move > 0) {
+          stock[gid] = (stock[gid] || 0) - move;
+          pu.delivered[gid] = (pu.delivered[gid] || 0) + move;
+          budget -= move;
+        }
+      }
+      if (Object.keys(Research.centerUpgradeNeed(state)).length === 0) {
+        c.level = pu.toLevel; c.pendingUpgrade = null;
+      }
+    }
+  },
+  // === /Slice A helpers ==================================================
+  // Advance the active project one tick (Slice A — per-second equal-drain metering).
+  // Research is powered by the Research Center: its SPEED (centerSpeed) sets how many
+  // material-units/game-second are drawn from state.castleStock. Each game-second is
+  // TICKS_PER_SEC sim ticks; on a second boundary we ATOMICALLY draw that second's
+  // planned delta of EVERY material (all-or-nothing on availability), so materials
+  // deplete together and a shortfall pauses the whole node until stock arrives. No
+  // center (speed 0) → paused (no accrual, no consumption). Zero-material node →
+  // instant complete.
   tick(state) {
     if (!state || !state.research) return;
     const R = state.research;
+    // normalize bag defaults (defensive against partial/legacy in-memory state)
+    if (!Array.isArray(R.unlocked)) R.unlocked = [];
+    if (!Array.isArray(R.queue)) R.queue = [];
+    if (typeof R.completedSec !== "number") R.completedSec = 0;
+    if (typeof R.subTick !== "number") R.subTick = 0;
+    if (!R.consumed || typeof R.consumed !== "object") R.consumed = {};
     // === RT-A2: nothing active → scan the queue IN ORDER and start the FIRST
-    // entry whose prereqs are met (canStart also gates funds + single-active, so
-    // this matches the manual start path). Entries with unmet prereqs — or that
-    // are momentarily unaffordable — stay put, order preserved, retried next tick.
-    if (!R.active && Array.isArray(R.queue) && R.queue.length) {
+    // entry whose prereqs are met (canStart gates single-active + prereqs; funds
+    // gate removed). Entries with unmet prereqs stay put, order preserved. ===
+    if (!R.active && R.queue.length) {
       for (let i = 0; i < R.queue.length; i++) {
         if (Research.canStart(state, R.queue[i])) {
           Research.start(state, R.queue[i]);
@@ -3767,43 +3896,62 @@ const Research = {
     // === /RT-A2 ===
     if (!R.active) return;
     const node = Research.get(R.active);
-    if (!node) { R.active = null; R.progress = 0; R.spent = 0; return; }
-    const total = Math.max(1, node.timeTicks | 0);
-    // Advance the labour clock + pay the proportional gold installment, but NEVER
-    // past `total` — so gold caps at node.cost while the node waits on materials
-    // (CRE gate below). The old behaviour is preserved for the labour phase.
-    if ((R.progress || 0) < total) {
-      const nextProgress = (R.progress || 0) + 1;
-      const targetSpent = node.cost * (nextProgress / total);
-      const due = targetSpent - (R.spent || 0);
-      if (due > (state.treasury || 0) + 1e-9) return;   // can't afford → stall
-      if (due > 0) {
-        state.treasury = (state.treasury || 0) - due;
-        R.spent = (R.spent || 0) + due;
-      }
-      R.progress = nextProgress;
-    }
-    // === RESEARCH-ECONOMY === (CRE) completion is materials-gated: the node only
-    // unlocks once the labour clock is full AND the castle's traders have delivered
-    // every required material into state.castleStock. Then those materials are
-    // consumed. A node with no materials (or before the CRE module loads) behaves
-    // exactly like the old time-only model. Without materials the node STALLS at
-    // progress=total (gold already fully paid), waiting for the royal buyers.
-    const matsReady = (typeof ResearchEconomy === "undefined") ||
-      ResearchEconomy.materialsSatisfied(state, node);
-    if (R.progress >= total && matsReady) {
-      if (typeof ResearchEconomy !== "undefined") ResearchEconomy.consumeMaterials(state, node);
+    if (!node) { R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {}; return; }
+    const M = node.materials || {};
+    const gids = Object.keys(M);
+    if (!gids.length) {   // zero-material node → complete instantly
       if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
-      R.active = null; R.progress = 0; R.spent = 0;
+      R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
+      return;
+    }
+    const S = Research.centerSpeed(state);
+    if (S === 0) return;   // no center / under construction → PAUSED (no accrual)
+    R.subTick = Math.min(TICKS_PER_SEC, R.subTick + 1);
+    if (R.subTick < TICKS_PER_SEC) return;   // not a game-second boundary yet
+
+    // --- Second boundary: draw this second's equal-drain delta, atomically. ---
+    const rate = Research.consumptionPlan(M, S).rate;
+    const e = R.completedSec + 1;
+    const stock = state.castleStock || (state.castleStock = {});
+    const delta = {};
+    let affordable = true;
+    for (const gid of gids) {
+      const target = Math.min(M[gid], Math.floor(rate[gid] * e));
+      const d = Math.max(0, target - (R.consumed[gid] || 0));
+      delta[gid] = d;
+      if ((stock[gid] || 0) < d) affordable = false;
+    }
+    if (!affordable) return;   // stays pinned at TICKS_PER_SEC, retries next tick
+    for (const gid of gids) {
+      if (delta[gid] > 0) {
+        stock[gid] = (stock[gid] || 0) - delta[gid];
+        R.consumed[gid] = (R.consumed[gid] || 0) + delta[gid];
+      }
+    }
+    R.completedSec++;
+    R.subTick = 0;
+
+    // Completion: every material fully consumed → unlock and reset.
+    let complete = true;
+    for (const gid of gids) if ((R.consumed[gid] || 0) < M[gid]) { complete = false; break; }
+    if (complete) {
+      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
     }
   },
 
-  // Fraction 0..1 of the active project completed (0 if none).
+  // Fraction 0..1 of the active project completed (0 if none) — material-based:
+  // total materials consumed / total materials required.
   activeFraction(state) {
     if (!state || !state.research || !state.research.active) return 0;
     const node = Research.get(state.research.active);
     if (!node) return 0;
-    return Math.max(0, Math.min(1, (state.research.progress || 0) / Math.max(1, node.timeTicks)));
+    const M = node.materials || {};
+    let tot = 0; for (const gid in M) tot += M[gid];
+    if (!tot) return 1;   // active but zero-material → treat as complete
+    const consumed = state.research.consumed || {};
+    let cons = 0; for (const gid in M) cons += Math.min(M[gid], consumed[gid] || 0);
+    return Math.max(0, Math.min(1, cons / tot));
   },
   // Aggregate an effect value across all UNLOCKED nodes so other systems can read
   // research without this file reaching into theirs. Multiplier keys (…Output,
@@ -3885,6 +4033,24 @@ Object.assign(CONFIG, {
     // nodes never hard-stall while young cities have no surplus to sell. Covers
     // any single peasant-band root node's materials.
     starterStock: { wood: 40, stone: 20 },
+  },
+});
+
+// === RESEARCH CENTER (Slice A) — the King's Research Center building. Its LEVEL
+// sets research SPEED (materials metered per game-second); no center (or one still
+// under construction) means research is PAUSED. Built/upgraded by delivering
+// materials from state.castleStock (see Research.tickCenter). Pure config. ===
+Object.assign(CONFIG, {
+  researchCenter: {
+    name: "Research Center", glyph: "📖",
+    build: { gold: 300, cost: { stone: 20, planks: 10 } },
+    deliveryRate: 5,
+    levels: [ null,
+      { level: 1, speed: 2 },
+      { level: 2, speed: 3, cost: { gold: 400,  planks: 20, stone: 15 } },
+      { level: 3, speed: 4, cost: { gold: 800,  planks: 30, iron_tool: 15 } },
+      { level: 4, speed: 6, cost: { gold: 1500, iron_tool: 25, chairs: 15 } },
+    ],
   },
 });
 
@@ -3985,9 +4151,15 @@ var ResearchEconomy = (function () {
     for (const c of (state.carts || [])) if (!c.done && c.kind === "castle" && c.goodId === gid) n += c.qty;
     return n;
   }
-  // Still-needed qty of a material = required − held in castleStock − in transit.
+  // How much of a material the active node has ALREADY drawn from castleStock
+  // (Slice A metering) — so remaining() doesn't re-buy what's been consumed.
+  function consumedOf(state, gid) {
+    return (state && state.research && state.research.consumed && state.research.consumed[gid]) || 0;
+  }
+  // Still-needed qty of a material = required − already-consumed − held in
+  // castleStock − in transit.
   function remaining(state, node, gid) {
-    return (need(node)[gid] || 0) - (stock(state)[gid] || 0) - inFlight(state, gid);
+    return (need(node)[gid] || 0) - consumedOf(state, gid) - (stock(state)[gid] || 0) - inFlight(state, gid);
   }
   function materialsSatisfied(state, node) {
     const m = need(node), s = stock(state);
@@ -4056,18 +4228,35 @@ var ResearchEconomy = (function () {
     const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
     const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
 
-    // --- 1. Dispatch (whenever a node is ACTIVE — RT-A2 removed the panel gate) ---
+    // --- 1. Dispatch. Castle traders buy the UNION of (a) the active node's
+    //     still-to-consume materials AND (b) the Research Center's outstanding
+    //     build / upgrade materials — even when no node is active (a center under
+    //     construction still needs hauling). All deliver into state.castleStock. ---
     const R = state.research;
     const node = (R && R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
-    if (node && Object.keys(need(node)).length) {
+    const centerCons = (typeof Research !== "undefined" && Research.centerConstructionNeed) ? Research.centerConstructionNeed(state) : {};
+    const centerUpg  = (typeof Research !== "undefined" && Research.centerUpgradeNeed)  ? Research.centerUpgradeNeed(state)  : {};
+    // Candidate material ids across all three demands (recomputed rem below each pass).
+    const wantGids = new Set();
+    if (node) for (const g in need(node)) wantGids.add(g);
+    for (const g in centerCons) wantGids.add(g);
+    for (const g in centerUpg)  wantGids.add(g);
+    // rem[gid] = (node need − consumed) + centerConstruction + centerUpgrade − stock − in-flight.
+    const remFor = (gid) => {
+      let total = 0;
+      if (node) total += Math.max(0, (need(node)[gid] || 0) - consumedOf(state, gid));
+      total += (centerCons[gid] || 0) + (centerUpg[gid] || 0);
+      return total - (stock(state)[gid] || 0) - inFlight(state, gid);
+    };
+    if (wantGids.size) {
       const fromKey = castleHex();
       let guard = 0;
       // Fill up to the trader cap; each pass buys one material batch from one city.
       while (activeCastleCarts(state) < C.maxTraders && guard++ <= C.maxTraders) {
         // (a) Still-needed materials (respecting stock + in-flight).
         const gaps = [];
-        for (const gid in need(node)) {
-          const rem = remaining(state, node, gid);
+        for (const gid of wantGids) {
+          const rem = remFor(gid);
           if (rem > C.buyThreshold && rem > 0) gaps.push({ gid, rem });
         }
         if (!gaps.length) break;   // everything gathered or already on the road
@@ -6037,6 +6226,9 @@ var CastleMarket = (function () {
         // PP-A: castle MARKET buyers run AFTER research buyers (research materials
         // get first pick of the shared fleet), buying player-enabled goods to limit.
         if (typeof CastleMarket !== "undefined") CastleMarket.tick(state);
+        // Slice A: deliver materials from castleStock into the Research Center
+        // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
+        if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
         Research.tick(state); Quests.tick(state);
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
         if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
