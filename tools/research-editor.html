@@ -268,7 +268,27 @@ const MAX_UPGRADES_PER_BUILDING = 5;
 // authored via a dropdown (item 3) instead of typed JSON.
 const UPGRADE_EFFECT_KEYS = ["capacityPlus", "slotPlus", "outputMult", "basicConsumptionMult"];
 // Connection-line side anchors (item 5). "auto" = old default (right/left midpoint).
-const SIDE_OPTIONS = ["auto", "top", "bottom", "left", "right"];
+// 8 connector anchor points per card: 4 edge mid-points + 4 corners. A card draws
+// a draggable link handle at each; the edge inspector can anchor an edge to any of
+// them. Ring order, clockwise from the top-left corner.
+const CARD_SIDES = ["top-left", "top", "top-right", "right", "bottom-right", "bottom", "bottom-left", "left"];
+// Edge-inspector dropdown: "auto" (face the other card) + the 8 explicit points.
+const SIDE_OPTIONS = ["auto", "top", "bottom", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right"];
+
+// The point on a card rect `r` for one of the 8 sides/corners.
+function sidePoint(r, side) {
+  switch (side) {
+    case "top":          return { x: r.x + r.w / 2, y: r.y };
+    case "bottom":       return { x: r.x + r.w / 2, y: r.y + r.h };
+    case "left":         return { x: r.x,           y: r.y + r.h / 2 };
+    case "top-left":     return { x: r.x,           y: r.y };
+    case "top-right":    return { x: r.x + r.w,     y: r.y };
+    case "bottom-left":  return { x: r.x,           y: r.y + r.h };
+    case "bottom-right": return { x: r.x + r.w,     y: r.y + r.h };
+    case "right":
+    default:             return { x: r.x + r.w,     y: r.y + r.h / 2 }; // "right" = default/out side
+  }
+}
 
 const DEFAULT_RESEARCH = [
   // ---- Production (kingdom) ----
@@ -442,7 +462,8 @@ const PIP_ROW_H = PIP_H + 8;               // headroom reserved above each card
 const COL_STEP = CARD_W + 30;
 const ROW_STEP = CARD_H + PIP_ROW_H + 30;
 const LANE_TOP_PAD = 36 + PIP_ROW_H, LANE_BOT_PAD = 20, LANE_GAP = 24, LEFT_PAD = 34;
-const HANDLE_R = 8;
+const HANDLE_R = 8;        // hit tolerance for a link handle
+const HANDLE_DRAW_R = 5;   // drawn radius of each of the 8 link handles
 // Colors copied verbatim from index.html's :root / .tt-* rules.
 const C_BG = "#14110c";
 const C_CARD_BG = "#1c160f";
@@ -732,9 +753,12 @@ function nodeAtWorld(wx, wy) {
   return null;
 }
 
-function handleWorldPos(node) {
+// The 8 draggable link-handle points (corners + edge mid-points) on a card.
+// Dragging from ANY of them starts the same prereq link (purely a visual choice
+// of grab point — the edge's anchor side is set later in the edge inspector).
+function handlePointsFor(node) {
   const r = cardRectFor(node);
-  return { x: r.x + r.w - 2, y: r.y + 2 };
+  return CARD_SIDES.map(side => sidePoint(r, side));
 }
 
 /* --------------------------- pips: layout + hit-test ------------------ */
@@ -800,11 +824,7 @@ function edgeFlags(parent, child) {
 function edgeSideKey(parentId, childId) { return parentId + "→" + childId; }
 
 function sideCenterFor(node, side) {
-  const r = cardRectFor(node);
-  if (side === "top") return { x: r.x + r.w / 2, y: r.y };
-  if (side === "bottom") return { x: r.x + r.w / 2, y: r.y + r.h };
-  if (side === "left") return { x: r.x, y: r.y + r.h / 2 };
-  return { x: r.x + r.w, y: r.y + r.h / 2 }; // "right" (default/out side)
+  return sidePoint(cardRectFor(node), side);
 }
 
 // "auto" default now picks the side that FACES the other card (center of that
@@ -837,6 +857,8 @@ function cardCenter(node) { const r = cardRectFor(node); return { x: r.x + r.w /
 // one spot.
 function anchorPointFor(node, side, i, n) {
   const r = cardRectFor(node);
+  // Corners are single points — edges sharing a corner stack on it (no fan).
+  if (side.indexOf("-") !== -1) return sidePoint(r, side);
   const inset = 14;
   const frac = n <= 1 ? 0.5 : i / (n - 1);
   if (side === "top" || side === "bottom") {
@@ -1145,15 +1167,18 @@ function drawCard(node, r) {
     }
   }
 
-  // link handle (top-right) — drag onto another card to add a prereq
-  const hp = handleWorldPos(node);
-  ctx.beginPath();
-  ctx.arc(hp.x, hp.y, HANDLE_R, 0, 7);
+  // link handles — 8 connection points (4 corners + 4 edge mid-points). All are
+  // identical: drag from ANY onto another card to add a prereq (purely visual;
+  // the edge's anchor side is chosen in the edge inspector).
   ctx.fillStyle = C_ACCENT;
-  ctx.fill();
   ctx.strokeStyle = C_EDGE;
   ctx.lineWidth = 1;
-  ctx.stroke();
+  for (const hp of handlePointsFor(node)) {
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, HANDLE_DRAW_R, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.restore();
   ctx.textBaseline = "alphabetic";
 }
@@ -1236,9 +1261,8 @@ canvas.addEventListener("mousedown", (ev) => {
 
   const node = nodeAtWorld(w.x, w.y);
   if (node) {
-    const h = handleWorldPos(node);
-    const distH = Math.hypot(w.x - h.x, w.y - h.y);
-    if (distH <= HANDLE_R + 5) {
+    const onHandle = handlePointsFor(node).some(h => Math.hypot(w.x - h.x, w.y - h.y) <= HANDLE_R + 5);
+    if (onHandle) {
       dragMode = "link";
       dragNode = node;
       linkCursor = w;
@@ -1590,7 +1614,7 @@ function renderInspector() {
     const box = el("div", {});
     const fs = el("fieldset", {});
     fs.appendChild(el("legend", { text: "Selected prerequisite edge" }));
-    fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}". Pick which side of each card this line attaches to. Multiple lines on the same side fan out along it (e.g. top-left / top-centre / top-right). "auto" picks the side facing the other card.` }));
+    fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}". Pick which side or corner of each card this line attaches to — 4 edges + 4 corners. Multiple lines on the same edge fan out along it. "auto" picks the side facing the other card.` }));
 
     const row = el("div", { class: "row" });
     const pWrap = el("div", {});
