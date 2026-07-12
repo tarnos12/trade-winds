@@ -8,7 +8,7 @@
       "Bottom Build menu can now Destroy roads (instant) and Destroy buildings (with confirmation)",
       "Traders glide smoothly between tiles; internal city porters have their own color and show what they carry",
       "Stone and other early resources now spawn closer to your starting castle",
-      "Rates in tooltips are shown per second instead of per tick, so they're easier to read",
+      "Rates in tooltips and descriptions are now shown per minute, so they're easier to read",
     ] },
     { v: "0.22.0", notes: [
       "NEW WIN CONDITION: raise an Aristocrat's House to 100% happiness — the castle is now just a milestone",

@@ -128,8 +128,8 @@
     const node = R.active ? Research.get(R.active) : null;
     const speed = Research.centerSpeed(state);
     if (!node) {
-      html += '<div class="rc-idle">Idle — Level ' + (rc.level || 1) + ' · ' + fmt(speed) +
-        '/sec. Open the tech tree to start a project.</div>';
+      html += '<div class="rc-idle">Idle — Level ' + (rc.level || 1) + ' · ' + fmt(speed * 60) +
+        '/min. Open the tech tree to start a project.</div>';
       return html + "</div>";
     }
     const pct = Math.round(Research.activeFraction(state) * 100);

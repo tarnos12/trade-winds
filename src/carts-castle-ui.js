@@ -940,10 +940,10 @@
       if (rdBarLbl) rdBarLbl.textContent = Math.round(s.total) + " / " + Math.round(cap);
       const rc = roleCounts(gid);
       // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
-      // perSec() helper (window.perSec, town-ui.js) rather than a local *TICKS_PER_SEC.
-      const rate = (typeof perSec === "function") ? perSec(s.netRate || 0) : (s.netRate || 0);
+      // perMin() helper (window.perMin, town-ui.js) rather than a local *TICKS_PER_SEC.
+      const rate = (typeof perMin === "function") ? perMin(s.netRate || 0) : (s.netRate || 0);
       const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/s";
+      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/min";
       if (rdStats) rdStats.innerHTML =
         '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
@@ -1064,8 +1064,8 @@
     const node = (R.active && typeof Research !== "undefined") ? Research.get(R.active) : null;
     const speed = Research.centerSpeed(st);
     if (!node) {
-      out += '<div class="rc-idle">The scholars are idle (Level ' + (rc.level || 1) + ' · ' + fmt(speed) +
-        '/sec) — open the 🔬 Research tree to start a project.</div>';
+      out += '<div class="rc-idle">The scholars are idle (Level ' + (rc.level || 1) + ' · ' + fmt(speed * 60) +
+        '/min) — open the 🔬 Research tree to start a project.</div>';
     } else {
       const consumed = R.consumed || {};
       const mats = node.materials || {};
@@ -1090,7 +1090,7 @@
         '<div class="rc-arrow">➜</div>' +
         '<div class="rc-book">📖<div class="bar"><span style="width:' + pct + '%"></span></div>' +
           '<div class="pct">' + pct + '%</div>' +
-          '<div class="gold" title="Research speed from the Center’s level">' + fmt(speed) + '/sec</div></div>' +
+          '<div class="gold" title="Research speed from the Center’s level">' + fmt(speed * 60) + '/min</div></div>' +
         '<div class="rc-arrow">➜</div>' +
         '<div class="rc-node">' + glyph + '<div class="nm">' + esc(node.name) + "</div></div>" +
         "</div>";

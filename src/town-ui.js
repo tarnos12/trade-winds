@@ -97,11 +97,11 @@
   // (sim.js/buildings.js/goods.js) and RenderDev (carts-castle-ui.js) can reuse
   // the same conversion instead of redefining it. Falls back to 2 if
   // TICKS_PER_SEC (research.js) hasn't loaded yet — defensive only.
-  function perSec(x) {
+  function perMin(x) {
     const tps = (typeof TICKS_PER_SEC === "number" && TICKS_PER_SEC > 0) ? TICKS_PER_SEC : 2;
-    return (Number(x) || 0) * tps;
+    return (Number(x) || 0) * tps * 60;   // per GAME-MINUTE (2 ticks = 1s ⇒ ×120/tick)
   }
-  if (typeof window !== "undefined") window.perSec = perSec;
+  if (typeof window !== "undefined") window.perMin = perMin;
 
   // === ICONS: per-good emoji (author request — no external images, single-file).
   // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
@@ -292,7 +292,7 @@
       const j = jobs[ti.key];
       const off = pop <= 0 && homes <= 0;
       const tip = `Homes ${Math.min(pop, homes)}/${homes} · Jobs ${j.filled}/${j.total} · ` +
-        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(perSec(inc))}🪙/s`;
+        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(perMin(inc))}🪙/min`;
       html += `<div class="pp-tier ${off ? "off" : ""}" title="${escAttr(tip)}">
         <span class="glyph">${ti.glyph}</span>
         <span class="lbl" style="color:${ti.color}">${ti.label}</span>
@@ -337,20 +337,20 @@
       <div class="pp-chart-cap"><span>Budget (last ~5 min)</span><b id="ppBudNow">${Math.round(t.gold || 0).toLocaleString()} 🪙</b></div>`;
 
     // Income / expense breakdown — rolling per-tick averages from the PP-A ledger,
-    // shown per-second (F: perSec) since that's the game-second the player feels.
+    // shown per-second (F: perMin) since that's the game-second the player feels.
     const N = 120;   // ~1 min of ticks at 1×
-    const avg = key => perSec(typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
+    const avg = key => perMin(typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
     const tax = avg("tax"), sales = avg("sales"), buys = avg("buys"), transfers = avg("transfers");
     const net = tax + sales - buys + transfers;
     const row = (ico, lbl, v, cls, sign) =>
-      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/s</span></div>`;
+      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/min</span></div>`;
     html += `<div class="tp-sec">Income &amp; expenses</div><div class="pp-brk">` +
       row("💰", "Taxes", tax, "pos", "+") +
       row("📤", "Sales", sales, "pos", "+") +
       row("📥", "Purchases", buys, buys > 0 ? "neg" : "", "−") +
       row("🤝", "Transfers", transfers, transfers > 0 ? "pos" : transfers < 0 ? "neg" : "", transfers < 0 ? "−" : "+") +
       `<div class="tp-row net"><span class="k">Net</span><span class="v ${net > 0 ? "pos" : net < 0 ? "neg" : ""}">` +
-      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/s</span></div></div>`;
+      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/min</span></div></div>`;
     return html;
   }
 
@@ -493,11 +493,11 @@
       const arrow = trendArrow(t, gid, price);
       const r = rates[gid];
       const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
-        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perSec(r)))}/s</span>`
+        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perMin(r)))}/min</span>`
         : `<span class="num dim">—</span>`;
       const inb = inbound[gid] || 0;
       const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
-      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perSec((t.demand && t.demand[gid]) || 0))}/s` +
+      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perMin((t.demand && t.demand[gid]) || 0))}/min` +
         (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
@@ -1187,11 +1187,11 @@
       html += `<div class="tp-sec">Under construction</div>`;
       html += `<div style="margin:4px 0 6px">${bpUpgradeChips(cost, c.delivered) || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
-      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${fmt(perSec(CONFIG.researchCenter.deliveryRate))}/sec).</div>`;
+      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${fmt(perMin(CONFIG.researchCenter.deliveryRate))}/min).</div>`;
     } else {
       const speed = Research.centerSpeed(state);
       html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
-      html += `<div class="tp-row"><span class="k">Research speed</span><span class="v">${fmt(speed)} materials/sec</span></div>`;
+      html += `<div class="tp-row"><span class="k">Research speed</span><span class="v">${fmt(speed * 60)} materials/min</span></div>`;
 
       html += `<div class="tp-sec">Upgrade</div>`;
       if (c.pendingUpgrade) {
@@ -1207,7 +1207,7 @@
           for (const g in (nxt.cost || {})) if (g !== "gold") matCost[g] = nxt.cost[g];
           const gold = (nxt.cost && nxt.cost.gold) || 0;
           const can = Buildings.canUpgradeCenter(state);
-          html += `<div class="tp-row"><span class="k">Level ${nxt.level} — ${fmt(nxt.speed)}/sec</span><span class="v">${fmt(gold)}g</span></div>`;
+          html += `<div class="tp-row"><span class="k">Level ${nxt.level} — ${fmt(nxt.speed * 60)}/min</span><span class="v">${fmt(gold)}g</span></div>`;
           html += `<div style="margin:4px 0 6px">${bpUpgradeChips(matCost, {}) || "<span class='tp-empty'>no materials required</span>"}</div>`;
           html += `<button class="bp-star" data-rc-upgrade ${can.ok ? "" : "disabled"} title="${can.ok ? "" : esc(can.reason || "")}">Upgrade${can.ok ? "" : " — " + esc(can.reason || "unavailable")}</button>`;
         } else {
@@ -1257,13 +1257,13 @@
     if (def.output) {
       const c = goodColor(def.output.goodId);
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perSec(def.output.ratePerWorker))}/wkr/s</span></div>`;
+        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perMin(def.output.ratePerWorker))}/wkr/min</span></div>`;
     }
     if (def.inputs && Object.keys(def.inputs).length) {
-      html += `<div class="tp-sec">Inputs / worker / sec</div>`;
+      html += `<div class="tp-sec">Inputs / worker / min</div>`;
       for (const gid in def.inputs) {
         const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perSec(def.inputs[gid]))}</span></div>`;
+        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perMin(def.inputs[gid]))}</span></div>`;
       }
     }
     // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
@@ -1442,11 +1442,11 @@
       const cov = ppdCoverage(town, gid, r, tierPop);
       const deg = Math.round(cov * 360);
       const c = goodColor(gid);
-      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perSec(r))} / resident / sec">
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perMin(r))} / resident / min">
         <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
           <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
         </div>
-        <div class="ppd-rate">${fmt(perSec(r))}/s</div>
+        <div class="ppd-rate">${fmt(perMin(r))}/min</div>
       </div>`;
     }
     if (!cells) return "";
@@ -1486,8 +1486,8 @@
       if (typeof Sim !== "undefined" && typeof Sim.houseIncome === "function")
         inc = Sim.houseIncome(town, b) || 0;
     } catch (e) { inc = 0; }
-    const incS = perSec(inc);
-    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${incS.toFixed(incS > 0 && incS < 0.1 ? 2 : 1)} 🪙/s</span></div>`;
+    const incS = perMin(inc);
+    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${incS.toFixed(incS > 0 && incS < 0.1 ? 2 : 1)} 🪙/min</span></div>`;
 
     // 4. happiness meter: red→green→gold bar; marker at THIS tier's happiness
     // (PP-A tierHappiness; legacy fallback = town.happiness). Gold zone starts
