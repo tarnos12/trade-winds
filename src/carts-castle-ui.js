@@ -524,9 +524,10 @@
       if (res.ok) {
         renderCastlePanel(true);
         updateProgressHud();
-        if (res.victory) showVictory();
+        // BALPV: castle L5 is a milestone, not the win — victory now fires from
+        // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
         scheduleSave();
-        SFX.play(res.victory ? "quest" : "levelup");
+        SFX.play("levelup");
       }
       return;
     }

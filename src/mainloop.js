@@ -61,7 +61,7 @@
         // Slice A: deliver materials from castleStock into the Research Center
         // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
         if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
-        Research.tick(state); Quests.tick(state);
+        Research.tick(state); Quests.tick(state); Victory.check(state);
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
         if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
           _prevQuestReward = state.lastQuestReward;

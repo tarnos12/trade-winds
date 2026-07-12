@@ -25,7 +25,7 @@ Object.assign(CONFIG, {
     mead:        { id: "mead",        tier: 2, basePrice: 14, inputs: { grain: 2 } },             // === CC: Brewery; migrates old "beer" ===
     clothes:     { id: "clothes",     tier: 2, basePrice: 22, inputs: { wool: 2 } },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
     stone_tools: { id: "stone_tools", tier: 2, basePrice: 28, inputs: { planks: 1, stone: 1 } },  // === CC: StoneTools Maker ===
-    oil:         { id: "oil",         tier: 2, basePrice: 18, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) ===
+    oil:         { id: "oil",         tier: 2, basePrice: 15, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
     coal:        { id: "coal",        tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
     gold:        { id: "gold",        tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
     bricks:      { id: "bricks",      tier: 2, basePrice: 16, inputs: { clay: 2 } },              // === TV2: clay 6×2=12 (Brickworks) ===
@@ -36,8 +36,8 @@ Object.assign(CONFIG, {
     iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70,  inputs: { coal: 2, iron: 2 } },         // === CC: Armory (coal10×2+iron8×2=36) ===
     chairs:         { id: "chairs",         tier: 3, basePrice: 64,  inputs: { planks: 2, oil: 1 } },        // === CC: Carpentry; migrates old "furniture" ===
     gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120, inputs: { gold: 1, iron_tool: 1 } },    // === CC: Goldsmith; migrates old "jewelry" ===
-    brandy:         { id: "brandy",         tier: 3, basePrice: 60,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) ===
-    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 200, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) ===
+    brandy:         { id: "brandy",         tier: 3, basePrice: 72,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
+    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -238,7 +238,11 @@ Object.assign(CONFIG, {
     },
     pottery_workshop: {
       id: "pottery_workshop", name: "Pottery", kind: "processor",
-      terrain: null, workerTier: "burgher",
+      // === BALPV: pottery is a burgher EXTRA, an aristocrat BASIC, and a distillery
+      // input (triple-purposed like lamp) — worker-staffed so the burgher growth gate
+      // isn't self-locked; research stays in the burgher band via researchBand
+      // (lamp_maker precedent). ===
+      terrain: null, workerTier: "worker", researchBand: "burgher",
       inputs: { clay: 2 }, output: { goodId: "pottery", ratePerWorker: 1 },
       unlockedBy: "unlock_pottery_workshop",
       workerSlots: 2, cost: { wood: 30, stone: 20, bricks: 5, gold: 140 },
@@ -268,7 +272,11 @@ Object.assign(CONFIG, {
     },
     carpentry: {
       id: "carpentry", name: "Carpentry", kind: "processor",
-      terrain: null, workerTier: "burgher",
+      // === BALPV: chairs are a burgher EXTRA, an aristocrat BASIC, a research material
+      // (×4 nodes) and an aristocrat_home input — the most-demanded T3 good; worker-
+      // staffed so the aristocrat gate doesn't hang on burgher-only supply. Research
+      // stays in the burgher band via researchBand (lamp_maker precedent). ===
+      terrain: null, workerTier: "worker", researchBand: "burgher",
       inputs: { planks: 2, oil: 1 }, output: { goodId: "chairs", ratePerWorker: 1 },
       unlockedBy: "unlock_carpentry",
       workerSlots: 2, cost: { wood: 35, stone: 20, planks: 10, gold: 180 },
@@ -300,7 +308,7 @@ Object.assign(CONFIG, {
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
-      terrain: null, houseTier: "burgher", houseCapacity: 4,
+      terrain: null, houseTier: "burgher", houseCapacity: 6,   // === BALPV: 4→6 — two manors must staff the 7 burgher-band T3 processors (2 slots each) ===
       unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
       cost: { wood: 40, stone: 30, planks: 10, bricks: 10, gold: 220 },   // === TV2: bricks component ===
     },
@@ -309,14 +317,17 @@ Object.assign(CONFIG, {
       id: "aristocrat_home", name: "Aristocrats Home", kind: "house",
       terrain: null, houseTier: "aristocrat", houseCapacity: 1,
       unlockedBy: "unlock_aristocrat_home",
-      cost: { wood: 40, stone: 30, bricks: 20, chairs: 2, gold_ring: 1, gold: 400 },
+      // === BALPV: dropped chairs:2 + gold_ring:1 — the new 100%-happiness victory
+      // already forces the full T3 economy, so the FIRST home must be constructible in
+      // a cold economy (no chicken-and-egg T3-in-build-cost gate). T1/T2 mats only. ===
+      cost: { wood: 40, stone: 30, bricks: 20, gold: 400 },
     },
   },
 
   // Town-interior layout constants (GDD §4.1). slotCap is indexed by town level
   // (index 0 unused); every placed building — house or producer — takes a slot.
   town: {
-    slotCap: [0, 8, 12, 16, 20], // EC-A→BAL2: buildable slots by level 1..4 (a peasant base + one worker chain must fit)
+    slotCap: [0, 8, 12, 17, 24], // EC-A→BAL2→BALPV: buildable slots by level 1..4 (L3+1/L4+4 fit a burgher quarter + aristocrat_home for the T3 victory; L1/L2 unchanged)
                                 // (the center is separate → level 1 = 7 buildings + center).
     castle: { q: 0, r: 0 },     // PV2-A: the King's hub (map center). Not a city —
                                 // it carries a footprint so cities keep a 1-hex gap.

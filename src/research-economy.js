@@ -120,8 +120,16 @@ const RESEARCH_MATERIALS = {
   unlock_goldsmith:        { gold: 10, iron_tool: 10 },
   unlock_lamp_maker:       { oil: 15, planks: 15 },
   unlock_carpentry:        { planks: 25, oil: 10 },
-  unlock_luxury_tailor:    { clothes: 15, gold_ring: 5 },
-  unlock_aristocrat_home:  { bricks: 30, chairs: 10, gold_ring: 5 },
+  // === BALPV (Phase 2A): drop the T3 gate. gold_ring (goldsmith/burgher) was a
+  // circular gate — luxury_tailor's own building CONSUMES gold_ring (goods.js), so
+  // gating its RESEARCH on gold_ring recreated the deadlock. clothes+planks are
+  // reachable burgher/worker-band goods; the finery forcing lives in the building input. ===
+  unlock_luxury_tailor:    { clothes: 15, planks: 10 },
+  // === BALPV (Phase 2A): drop chairs+gold_ring (T3). The NEW victory (100% aristocrat
+  // happiness) is itself the T3 forcing function, so the HOME research need not pre-
+  // require T3 — a second T3 gate here only reinstates the chicken-and-egg. Worker-band
+  // bricks+planks let a player stand up the home, then work UP to 100%. ===
+  unlock_aristocrat_home:  { bricks: 30, planks: 15 },
   // === /CC ================================================
 };
 for (const _rn of (CONFIG.research || [])) {

@@ -32,6 +32,12 @@ Object.assign(CONFIG, {
   ],
 });
 
+// === BALPV (Phase 2A): NEW victory condition. The game is won when any town has a
+// BUILT aristocrat_home whose aristocrat-tier happiness has reached ~100% (see
+// Victory.check below). This supersedes the old castle-L5 victory (Castle.upgrade no
+// longer flips state.victory). Threshold lives here so QA tests + UI read one source. ===
+Object.assign(CONFIG, { victory: { aristocratHappiness: 99.5 } });
+
 // Castle levels 1→5 (GDD §3.3, §7.4). levels[N] = requirement to REACH level N
 // from N-1; both prestige and treasury are consumed. Level 5 = victory.
 // CONFIG.castle may already exist (the browser CASTLE-UI slice adds warehouse
@@ -95,8 +101,10 @@ Castle.canUpgrade = function (state) {
   if ((state.treasury || 0) < req.goldReq) return { ok: false, reason: "Needs " + req.goldReq + " g" };
   return { ok: true };
 };
-// Consume prestige + treasury and raise state.castleLevel. Reaching maxLevel (5)
-// flips state.victory. Returns the gate result (+ level/victory on success).
+// Consume prestige + treasury and raise state.castleLevel. Reaching maxLevel (5) is
+// a MILESTONE / prestige sink only — it no longer wins the game (BALPV Phase 2A: the
+// victory is now a 100%-happy aristocrat estate, see Victory.check). Returns the gate
+// result (+ level on success). Deliberately does NOT set/return state.victory.
 Castle.upgrade = function (state) {
   const res = Castle.canUpgrade(state);
   if (!res.ok) return res;
@@ -104,8 +112,32 @@ Castle.upgrade = function (state) {
   state.prestige = (state.prestige || 0) - req.prestigeReq;
   state.treasury = (state.treasury || 0) - req.goldReq;
   state.castleLevel = (state.castleLevel || 1) + 1;
-  if (state.castleLevel >= CONFIG.castle.maxLevel) state.victory = true;
-  return { ok: true, level: state.castleLevel, victory: !!state.victory };
+  return { ok: true, level: state.castleLevel };
+};
+
+// --- Victory: a fully-happy aristocrat estate (BALPV Phase 2A) ---------------
+// The game is won when ANY town has a BUILT aristocrat_home AND that town's
+// aristocrat-tier happiness has reached the target (~100%). Pure — reads only
+// state, no Math.random / Date — and LATCHES on state.victory, so it is
+// save/load-safe (a loaded win stays won; a loaded near-win re-detects next tick).
+// tierHappiness.aristocrats is null unless aristocrats actually live there
+// (Sim sets it null when pop.aristocrats<=0), so an empty home can never false-win.
+// Wired into the fixed timestep right after Quests.tick(state).
+var Victory = (typeof Victory !== "undefined" && Victory) || {};
+Victory.check = function (state) {
+  if (!state || state.victory) return state;                 // latch
+  const need = (CONFIG.victory && CONFIG.victory.aristocratHappiness) || 99.5;
+  for (const t of (state.towns || [])) {
+    if (!t) continue;
+    const th = t.tierHappiness && t.tierHappiness.aristocrats;
+    if (typeof th !== "number" || th < need) continue;       // null/absent → no win
+    const homes = Array.isArray(t.buildings) ? t.buildings : [];
+    if (homes.some(b => b && b.typeId === "aristocrat_home" && b.built !== false)) {
+      state.victory = true;
+      break;
+    }
+  }
+  return state;
 };
 
 // --- King's quests (pure tick) ----------------------------------------------
