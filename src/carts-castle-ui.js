@@ -97,9 +97,9 @@
     // ms apart — so cartPixel(cart)'s LOGICAL target position itself jumps once
     // per tick. Rather than drawing that jump directly (the "carts jump tile-to-
     // tile" symptom), each cart glides from wherever it was last DRAWN to the new
-    // target over the real-world duration of one tick, eased with smoothstep so
-    // the start/stop isn't robotic — a constant-rate glide that lands right as
-    // the next tick arrives. Purely a render-side interpolation buffer: this
+    // target over the real-world duration of one tick, at CONSTANT velocity
+    // (linear, no easing) so the trader flows steadily and lands right as the
+    // next tick arrives. Purely a render-side interpolation buffer: this
     // never reads/writes cart.progress or the sim tick, only the cached pixel
     // position in `cartRender`.
     const frameDt = Math.max(0, Number(dt) || 16);
@@ -123,9 +123,13 @@
       }
       if (rp.t < 1) {
         rp.t = Math.min(1, rp.t + frameDt / tickMs);
-        const e = rp.t * rp.t * (3 - 2 * rp.t);   // smoothstep ease
-        rp.x = rp.fx + (rp.tx - rp.fx) * e;
-        rp.y = rp.fy + (rp.ty - rp.fy) * e;
+        // LINEAR (no easing) → CONSTANT velocity across the leg. Each economy tick
+        // advances cart.progress by a fixed amount (more on a road, half as much
+        // off-road), so equal-duration legs cover equal distance ⇒ the trader flows
+        // at a steady speed, naturally slower off-road and faster on a road. (An
+        // ease here would visibly accelerate/decelerate every tick — the pulsing.)
+        rp.x = rp.fx + (rp.tx - rp.fx) * rp.t;
+        rp.y = rp.fy + (rp.ty - rp.fy) * rp.t;
       }
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
