@@ -74,17 +74,36 @@
       return null;
     }
 
-    // Small porter token: faint shadow + little body + a goods-coloured parcel.
-    // No wheels and ~half the radius of a trade cart's parcel, so it never reads
-    // as an external caravan.
-    function drawToken(x, y, color) {
+    // Small porter token: faint shadow + little body + the carried good's icon.
+    // No wheels and ~half the radius of a trade cart's parcel (size/shape already
+    // reads as ambient, not an external caravan) — I: the BODY colour is also now
+    // a cool slate-teal, deliberately far from the external wagon's warm browns
+    // (drawCartToken in carts-castle-ui.js: body #6b4a22, wheels #2a1c0c) so the
+    // two trader layers are unmistakable at a glance, not just a size difference.
+    // The goods-icon glyph (goodIcon, town-ui.js — shared closure) replaces the
+    // old plain colour dot so the carried good reads explicitly, matching the
+    // external carts' cargo-chip convention (drawGoodChip, renderer.js).
+    const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
+    function drawToken(x, y, good) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#7a5a30"; ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1;
+      ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x, y - r * 0.12, r * 0.55, 0, Math.PI * 2); ctx.fill();
+      // carried-good icon, small pill above the body so it stays legible at 1/4 scale.
+      const iconPx = Math.max(7, Math.round(SIZE * 0.16));
+      const ico = (typeof goodIcon === "function") ? goodIcon(good) : "";
+      if (ico) {
+        ctx.save();
+        ctx.font = iconPx + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const iy = y - r * 1.9;
+        ctx.fillStyle = "rgba(18,12,5,0.55)";
+        ctx.beginPath(); ctx.arc(x, iy, iconPx * 0.62, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#f4ecdd";
+        ctx.fillText(ico, x, iy + 0.5);
+        ctx.restore();
+      }
     }
 
     function draw(dt) {
@@ -105,7 +124,7 @@
         const j = tr.off * SIZE * 0.4;
         const x = a.x + dx * f + (-dy / len) * j;
         const y = a.y + dy * f + ( dx / len) * j;
-        drawToken(x, y, goodColor(tr.good));
+        drawToken(x, y, tr.good);
       }
     }
 

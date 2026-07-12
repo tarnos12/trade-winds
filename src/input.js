@@ -64,6 +64,17 @@
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
+    // === J === destroy-road / destroy-building modes (bottom Build bar's 🏗
+    // flyout). Separate from "erase" above (which mixes roads + town-center
+    // demolish) so each has a single, predictable click behaviour.
+    if (state.mode === "eraseRoad") {
+      return state.roads.has(k);
+    }
+    if (state.mode === "eraseBuilding") {
+      // A regular placed building (house/producer) — never a town center,
+      // which has no entry in any town.buildings[] and is handled by "erase".
+      return !!(typeof buildingAtHex === "function" && buildingAtHex(q, r));
+    }
     return false;
   }
 
@@ -113,6 +124,37 @@
         }
       }
       if (changed) scheduleSave();
+    } else if (state.mode === "eraseRoad") {
+      // === J === Destroy road — NO confirmation (mirrors the road-erase half
+      // of "erase" above); works on click and drag-paint alike.
+      if (state.roads.delete(k)) {
+        Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
+      }
+    } else if (state.mode === "eraseBuilding") {
+      // === J === Destroy building — ALWAYS confirms via the in-DOM uiConfirm
+      // modal (never native confirm()), single-click only (drag-paint would
+      // stack confirm dialogs, so it's ignored here like the town-erase case
+      // above). Removing the building just splices it out of town.buildings —
+      // that alone frees its build slot (Buildings.usedSlots is buildings.length)
+      // — no refund, matching the existing erase behaviour.
+      if (isPaint) return;
+      const hit = (typeof buildingAtHex === "function") ? buildingAtHex(q, r) : null;
+      if (!hit) return;
+      const { town, b } = hit;
+      const def = CONFIG.buildings[b.typeId];
+      const name = (def && def.name) || b.typeId;
+      uiConfirm("Destroy this " + name + "? This cannot be undone (no refund).", () => {
+        const list = Array.isArray(town.buildings) ? town.buildings : [];
+        const idx = list.indexOf(b);
+        if (idx < 0) return;   // already gone (e.g. town itself was erased meanwhile)
+        list.splice(idx, 1);
+        // Close/refresh any panel currently showing the destroyed building.
+        if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === b) {
+          window.BuildingUI.closeBuildingPanel();
+        }
+        scheduleSave();
+        SFX.play("place");
+      });
     }
   }
 
@@ -152,7 +194,10 @@
     if (panButton) {
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
-    } else if (state.mode === "road" || state.mode === "erase") {
+    } else if (state.mode === "road" || state.mode === "erase" || state.mode === "eraseRoad") {
+      // === J === eraseRoad drag-paints like "erase"/"road" (roads are safe to
+      // sweep-delete — no confirmation either way); eraseBuilding is click-only
+      // (see place()'s isPaint guard) so a drag can't stack confirm dialogs.
       const k = HexMath.key(h.q, h.r);
       if (k !== lastPaintKey) { lastPaintKey = k; place(h.q, h.r, true); }  // P0: isPaint — drag never deletes a town center
     }

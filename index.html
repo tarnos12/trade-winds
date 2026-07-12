@@ -576,6 +576,21 @@
   .tt-tip .tt-tip-name { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
   .tt-tip .tt-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
   /* === RT-B TECH-TREE CSS END === */
+  /* === TILE-TOOLTIP CSS START === (C: hex hover tooltip — element/CSS owned by
+     UIDev, driven from renderer.js; classes below match what RenderDev's
+     hover code writes into #tileTip.innerHTML). Scoped under #tileTip so
+     "tt-build/none/locked" can't collide with the RT-B tech-tree's own
+     similarly-prefixed classes above. */
+  #tileTip { position: fixed; z-index: 80; max-width: 240px; pointer-events: none;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 7px 10px; font-size: 12px; line-height: 1.5; color: var(--paper);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.55); }
+  #tileTip.hidden { display: none; }
+  #tileTip b { display: block; font-size: 13px; margin-bottom: 2px; }
+  #tileTip .tt-build { opacity: 0.9; }
+  #tileTip .tt-build.tt-none { opacity: 0.55; font-style: italic; }
+  #tileTip .tt-locked { opacity: 0.55; text-decoration: line-through; }
+  /* === TILE-TOOLTIP CSS END === */
   /* === CB-C CSS START === per-building detail panel (mirrors the .tp-* look) */
   #buildingPanel {
     position: fixed; top: 56px; right: 12px; width: 300px;
@@ -1017,6 +1032,14 @@
   <div id="stat">—</div>
 </div>
 
+<!-- === TILE-TOOLTIP === (C: hex hover tooltip — RenderDev drives this from
+     renderer.js's hover-hex detection; UIDev (this file) owns the DOM element +
+     CSS. Renderer sets innerHTML (terrain name + buildable-here list) and
+     left/top in page coords, then toggles the "hidden" class. pointer-events:
+     none so it can never intercept hover/click meant for the canvas. -->
+<div id="tileTip" class="hidden" role="tooltip" aria-hidden="true"></div>
+<!-- === /TILE-TOOLTIP === -->
+
 <!-- === BUILD-BAR HTML START === (PV2-B / slot #4 — persistent bottom build bar) -->
 <!-- Not tied to a selected town: clicking a type enters placement mode and the
      owning city is resolved on click by footprint adjacency (canPlaceBuilding). -->
@@ -1457,6 +1480,18 @@ const MapGen = {
     const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
     const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
     const deps = preset.deposits || {};
+    // === B (batch-2): pull PEASANT / early-tier deposits INWARD. `stone` is
+    // quarried by PEASANTS and is the first mined material the early buildings
+    // need — but a `ring:0` stone could seed ANYWHERE in the depositable pool
+    // (out to the rim), so it often spawned far from the castle. We cap the SEED
+    // distance for these near-spawn types to an inner band (a fraction of radius),
+    // analogous to fish's `near`. T2/T3 deposits (iron/coal/gold) are UNTOUCHED and
+    // keep their outer rings, so tier ordering (stone nearest → gold furthest) is
+    // preserved. A preset may override the cap per type via `deposits.<type>.near`.
+    // Only the SEED pool is biased inward (growth candidates still respect the ring
+    // via `takable`); determinism holds (seeded rng only) and every deposit still
+    // generates — we fall back to the full ring pool when the inner band is empty.
+    const NEAR_FRAC = { stone: 0.4, clay: 0.6 };   // stone hugs spawn; clay slightly further (still inner)
     // fixed order so RNG draws are reproducible
     for (const type of ["stone", "clay", "iron", "coal", "gold"]) {
       const cfg = deps[type]; if (!cfg) continue;
@@ -1467,9 +1502,16 @@ const MapGen = {
       // expand 1–2 hexes inward). Fish is exempt: it's T1, near-spawn. ===
       const ringOk = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) >= (cfg.ring || 0); };
       const takable = (k) => depositable[hexes.get(k).terrain] && ringOk(k);
+      // B: outer SEED cap for near-spawn peasant/early types (null = no cap → old behaviour).
+      const nearCap = (cfg.near != null) ? cfg.near
+        : (NEAR_FRAC[type] != null ? Math.max(cfg.ring || 0, Math.round(radius * NEAR_FRAC[type])) : null);
       for (let i = 0; i < (cfg.count || 0); i++) {
-        const pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
+        let pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
                         .map(h => HexMath.key(h.q, h.r));
+        if (nearCap != null) {   // B: bias the seed toward the castle (inner band), keep full pool as fallback
+          const inner = pool.filter(k => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) <= nearCap; });
+          if (inner.length) pool = inner;
+        }
         if (!pool.length) break;
         const start = pool[Math.floor(rng() * pool.length)];
         const size = 1 + Math.floor(rng() * 3);   // 1..3
@@ -2231,6 +2273,65 @@ Sim.tick = function (State) {
     for (const b of buildings) if (!b || !b.priority) assignWorkers(b);
     // === /CB-A ===
 
+    // === CB-A/RU-A: construction + upgrade delivery — RUNS BEFORE PRODUCTION.
+    // WOODFIX (batch-2 E/G+D-root): this block MUST precede the production step
+    // below. Production consumes shared inputs (wood → planks, etc.) straight out
+    // of town.stock; when it ran first it drained the very materials a build/
+    // upgrade needs, so a town with a running sawmill (or any input-eating
+    // processor) left construction only the per-tick *leftover* wood — builds/
+    // upgrades crawled or stalled ("full of planks, sheep farm builds slowly for
+    // lack of wood") even while imported wood kept arriving, because the sawmill
+    // ate each fresh shipment before the delivery step saw it, AND pending
+    // upgrades (Buildings.startUpgrade → pendingUpgrade) looked "dead" for the
+    // same reason. Giving construction/upgrades FIRST claim on stock fixes both;
+    // production below simply works with whatever inputs remain. Determinism is
+    // unchanged (no RNG here) — only the stock-claim ORDER moved.
+    //
+    // Move construction materials from the town's own stock into each building
+    // that is still under construction (built:false), up to a shared per-tick
+    // budget (CONFIG.town.deliveryRate). Priority-true buildings are filled
+    // first (two-pass, array order → deterministic). A building whose remaining
+    // need reaches empty flips to built:true. EVERY unbuilt building's remaining
+    // need (whether or not the budget reached it this tick) is added to the town
+    // demand, so the external trader buys the materials the city cannot yet make.
+    // Delivery also feeds pending upgrades (shared budget). Targets are built
+    // priority-first WITHIN each kind: unbuilt-priority, upgrade-priority,
+    // unbuilt-nonpriority, upgrade-nonpriority. When no upgrades are pending the
+    // sequence is identical to the CB-A construction order.
+    {
+      // === PP-A === per-transporter delivery: the shared budget scales with the
+      // town's internal-hauler count (deliveryRate × transporterCount(town)).
+      let budget = ((CONFIG.town && CONFIG.town.deliveryRate) || 5)
+        * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
+      // === /PP-A ===
+      const targets = [];   // { b, kind: "build" | "upgrade" }
+      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
+      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
+      for (const t of targets) {
+        const b = t.b;
+        if (t.kind === "build" && !b.delivered) b.delivered = {};
+        if (t.kind === "upgrade" && !b.pendingUpgrade.delivered) b.pendingUpgrade.delivered = {};
+        const dst = t.kind === "build" ? b.delivered : b.pendingUpgrade.delivered;
+        const need = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
+        for (const gid in need) {
+          if (budget <= 0) break;
+          const have = stock[gid] || 0;
+          const move = Math.min(need[gid], have, budget);
+          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
+        }
+        const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
+        let done = true;
+        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
+        if (done) {
+          if (t.kind === "build") b.built = true;
+          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
+        }
+      }
+    }
+    // === /CB-A + /RU-A (moved above production by WOODFIX) ============
+
     // --- 1. Production -------------------------------------------------
     // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
     // consuming its inputs (processors); throughput is throttled by missing inputs.
@@ -2277,52 +2378,6 @@ Sim.tick = function (State) {
       stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
       // === /RU-A ===
     }
-
-    // === CB-A: construction delivery ==================================
-    // Move construction materials from the town's own stock into each building
-    // that is still under construction (built:false), up to a shared per-tick
-    // budget (CONFIG.town.deliveryRate). Priority-true buildings are filled
-    // first (two-pass, array order → deterministic). A building whose remaining
-    // need reaches empty flips to built:true. EVERY unbuilt building's remaining
-    // need (whether or not the budget reached it this tick) is added to the town
-    // demand, so the external trader buys the materials the city cannot yet make.
-    // === RU-A: delivery also feeds pending upgrades (shared budget). Targets
-    // are built priority-first WITHIN each kind: unbuilt-priority, upgrade-
-    // priority, unbuilt-nonpriority, upgrade-nonpriority. When no upgrades are
-    // pending the sequence is identical to the CB-A construction order.
-    {
-      // === PP-A === per-transporter delivery: the shared budget scales with the
-      // town's internal-hauler count (deliveryRate × transporterCount(town)).
-      let budget = ((CONFIG.town && CONFIG.town.deliveryRate) || 5)
-        * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
-      // === /PP-A ===
-      const targets = [];   // { b, kind: "build" | "upgrade" }
-      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
-      for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
-      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
-      for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
-      for (const t of targets) {
-        const b = t.b;
-        if (t.kind === "build" && !b.delivered) b.delivered = {};
-        if (t.kind === "upgrade" && !b.pendingUpgrade.delivered) b.pendingUpgrade.delivered = {};
-        const dst = t.kind === "build" ? b.delivered : b.pendingUpgrade.delivered;
-        const need = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        for (const gid in need) {
-          if (budget <= 0) break;
-          const have = stock[gid] || 0;
-          const move = Math.min(need[gid], have, budget);
-          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
-        }
-        const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        let done = true;
-        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
-        if (done) {
-          if (t.kind === "build") b.built = true;
-          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
-        }
-      }
-    }
-    // === /CB-A + /RU-A ================================================
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
     // town demand (per-town share) — prices rise and town traders import the
@@ -6254,6 +6309,95 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
     ctx.stroke();
   }
+
+  // === C: TILE HOVER TOOLTIP ==============================================
+  // Drives the #tileTip DOM element UIDev owns in index.html (id agreed via
+  // SendMessage: fixed-position, starts with class "hidden", pointer-events:
+  // none, positioned in page coords via style.left/top). This module only
+  // computes content + toggles it; the element/CSS are UIDev's.
+  //
+  // Terrain display names — CONFIG.terrain (config.js) has no `label` field,
+  // only inline comments naming each biome; mirrored here for the tooltip.
+  const TERRAIN_NAME = {
+    barren: "Barren Land", desert: "Desert", fertile: "Fertile Soil",
+    snow: "Iceland", water: "Water", mountains: "Mountains",
+    fish: "Fish Shoal", forest: "Forest", stone_deposit: "Stone Deposit",
+    clay_deposit: "Clay Deposit", iron_deposit: "Iron Deposit",
+    gold_deposit: "Gold Deposit", coal_deposit: "Coal Deposit",
+  };
+  function terrainDisplayName(terr) {
+    return TERRAIN_NAME[terr] || (terr ? String(terr).replace(/_/g, " ") : "Unknown");
+  }
+  // Buildings whose TERRAIN requirement matches hex (q,r) — mirrors ONLY the
+  // terrain gate of Buildings.canPlaceBuilding step (1) (buildings.js:315-336):
+  // extractor-on-adjacent-terrain / extractor-on-own-terrain / generic
+  // buildable-land + houseOnly. Deliberately skips the other placement gates
+  // (city adjacency, free hex, slot cap, gold) — the tooltip answers "what
+  // fits this ground", not "could I place something here this instant".
+  // Read-only; duplicated here (not imported) because buildings.js is
+  // CoreDev's file and canPlaceBuilding interleaves the terrain rule with
+  // gates that don't belong in a hover tooltip.
+  function terrainEligibleBuildings(q, r) {
+    const map = state && state.map;
+    const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+    if (!hex) return [];
+    const terr = hex.terrain;
+    const terrDef = CONFIG.terrain[terr];
+    const isLand = !!(terrDef && terrDef.buildable);
+    const out = [];
+    for (const typeId in CONFIG.buildings) {
+      const def = CONFIG.buildings[typeId];
+      let ok;
+      if (def.kind === "extractor" && def.adjacent) {
+        ok = isLand && HexMath.neighbors(q, r).some(n => {
+          const nh = map.hexes.get(HexMath.key(n.q, n.r));
+          return nh && nh.terrain === def.adjacent;
+        });
+      } else if (def.kind === "extractor") {
+        ok = terr === def.terrain;
+      } else {
+        ok = isLand && !(terrDef && terrDef.houseOnly && def.kind !== "house");
+      }
+      if (ok) out.push(def);
+    }
+    return out;
+  }
+  const tileTipEl = document.getElementById("tileTip");
+  let tileTipHexKey = null;   // last hex the tooltip HTML was built for (skip rebuild on same hex)
+  function updateTileTooltip(clientX, clientY) {
+    if (!tileTipEl) return;   // UIDev's element not landed yet — no-op, not a crash
+    if (!hoverHex || !state.map) { hideTileTip(); return; }
+    const k = HexMath.key(hoverHex.q, hoverHex.r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) { hideTileTip(); return; }
+    if (tileTipHexKey !== k) {
+      tileTipHexKey = k;
+      const buildables = terrainEligibleBuildings(hoverHex.q, hoverHex.r);
+      let html = "<b>" + esc(terrainDisplayName(hex.terrain)) + "</b>";
+      if (buildables.length) {
+        const parts = buildables.map(def => {
+          const locked = (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
+          return "<span" + (locked ? ' class="tt-locked"' : "") + ">" + esc(def.name) +
+            (locked ? " (locked)" : "") + "</span>";
+        });
+        html += '<div class="tt-build">' + parts.join(", ") + "</div>";
+      } else {
+        html += '<div class="tt-build tt-none">Nothing buildable here</div>';
+      }
+      tileTipEl.innerHTML = html;
+    }
+    tileTipEl.classList.remove("hidden");
+    tileTipEl.setAttribute("aria-hidden", "false");
+    tileTipEl.style.left = (clientX + 16) + "px";
+    tileTipEl.style.top = (clientY + 16) + "px";
+  }
+  function hideTileTip() {
+    if (tileTipEl) { tileTipEl.classList.add("hidden"); tileTipEl.setAttribute("aria-hidden", "true"); }
+    tileTipHexKey = null;
+  }
+  canvas.addEventListener("mousemove", (e) => updateTileTooltip(e.clientX, e.clientY));
+  canvas.addEventListener("mouseleave", hideTileTip);
+  // === /C: TILE HOVER TOOLTIP ==============================================
 /* BUILD:renderer END */
 
 /* BUILD:input START */
@@ -6323,6 +6467,17 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
+    // === J === destroy-road / destroy-building modes (bottom Build bar's 🏗
+    // flyout). Separate from "erase" above (which mixes roads + town-center
+    // demolish) so each has a single, predictable click behaviour.
+    if (state.mode === "eraseRoad") {
+      return state.roads.has(k);
+    }
+    if (state.mode === "eraseBuilding") {
+      // A regular placed building (house/producer) — never a town center,
+      // which has no entry in any town.buildings[] and is handled by "erase".
+      return !!(typeof buildingAtHex === "function" && buildingAtHex(q, r));
+    }
     return false;
   }
 
@@ -6372,6 +6527,37 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
         }
       }
       if (changed) scheduleSave();
+    } else if (state.mode === "eraseRoad") {
+      // === J === Destroy road — NO confirmation (mirrors the road-erase half
+      // of "erase" above); works on click and drag-paint alike.
+      if (state.roads.delete(k)) {
+        Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
+      }
+    } else if (state.mode === "eraseBuilding") {
+      // === J === Destroy building — ALWAYS confirms via the in-DOM uiConfirm
+      // modal (never native confirm()), single-click only (drag-paint would
+      // stack confirm dialogs, so it's ignored here like the town-erase case
+      // above). Removing the building just splices it out of town.buildings —
+      // that alone frees its build slot (Buildings.usedSlots is buildings.length)
+      // — no refund, matching the existing erase behaviour.
+      if (isPaint) return;
+      const hit = (typeof buildingAtHex === "function") ? buildingAtHex(q, r) : null;
+      if (!hit) return;
+      const { town, b } = hit;
+      const def = CONFIG.buildings[b.typeId];
+      const name = (def && def.name) || b.typeId;
+      uiConfirm("Destroy this " + name + "? This cannot be undone (no refund).", () => {
+        const list = Array.isArray(town.buildings) ? town.buildings : [];
+        const idx = list.indexOf(b);
+        if (idx < 0) return;   // already gone (e.g. town itself was erased meanwhile)
+        list.splice(idx, 1);
+        // Close/refresh any panel currently showing the destroyed building.
+        if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === b) {
+          window.BuildingUI.closeBuildingPanel();
+        }
+        scheduleSave();
+        SFX.play("place");
+      });
     }
   }
 
@@ -6411,7 +6597,10 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (panButton) {
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
-    } else if (state.mode === "road" || state.mode === "erase") {
+    } else if (state.mode === "road" || state.mode === "erase" || state.mode === "eraseRoad") {
+      // === J === eraseRoad drag-paints like "erase"/"road" (roads are safe to
+      // sweep-delete — no confirmation either way); eraseBuilding is click-only
+      // (see place()'s isPaint guard) so a drag can't stack confirm dialogs.
       const k = HexMath.key(h.q, h.r);
       if (k !== lastPaintKey) { lastPaintKey = k; place(h.q, h.r, true); }  // P0: isPaint — drag never deletes a town center
     }
@@ -7033,6 +7222,19 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   const GOOD_LABEL = id => id.charAt(0).toUpperCase() + id.slice(1);
   const fmt = n => (Math.round(n * 10) / 10).toLocaleString();
 
+  // === F: shared per-tick -> per-second display helper (2 ticks = 1 game-second).
+  // UIDev owns this ONE definition (BATCH2_BRIEF.md: "define it ONCE, others
+  // import/use it") — every "/tick" rate shown to the player anywhere in the UI
+  // should be run through this before display. Exposed on window so CoreDev
+  // (sim.js/buildings.js/goods.js) and RenderDev (carts-castle-ui.js) can reuse
+  // the same conversion instead of redefining it. Falls back to 2 if
+  // TICKS_PER_SEC (research.js) hasn't loaded yet — defensive only.
+  function perSec(x) {
+    const tps = (typeof TICKS_PER_SEC === "number" && TICKS_PER_SEC > 0) ? TICKS_PER_SEC : 2;
+    return (Number(x) || 0) * tps;
+  }
+  if (typeof window !== "undefined") window.perSec = perSec;
+
   // === ICONS: per-good emoji (author request — no external images, single-file).
   // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
   const GOOD_ICON = {
@@ -7110,6 +7312,36 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     }
     return out;
   }
+
+  // === D: upgrade-in-progress helpers — the click-to-upgrade handler
+  // (data-upgrade, below) IS correctly wired to Buildings.startUpgrade; when the
+  // material-delivery pipeline stalls (CoreDev's E/G fix) the upgrade just sits
+  // at pendingUpgrade with delivered:{} and LOOKS dead. These helpers give every
+  // upgrading building a visible % + "waiting on X" state so it never reads as
+  // nothing-happened, regardless of how fast delivery actually runs.
+  // 0..100 delivery percent across ALL required materials (unweighted qty sum —
+  // same simple approximation the construction chips already use). null when no
+  // upgrade is pending.
+  function ppUpgradePct(b) {
+    if (!b || !b.pendingUpgrade || typeof Buildings === "undefined" || !Buildings.upgradeResourceCost) return null;
+    const rc = Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel);
+    const delivered = b.pendingUpgrade.delivered || {};
+    let need = 0, have = 0;
+    for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], delivered[gid] || 0); }
+    return need > 0 ? Math.max(0, Math.min(100, Math.round(have / need * 100))) : 100;
+  }
+  // Human-readable "waiting on" string for a pending upgrade: remaining qty per
+  // good, flagging goods this city's OWN stock currently has none of (the
+  // clearest signal that it's stuck on delivery/trade, not "about to land").
+  function ppUpgradeWaitStr(town, b) {
+    if (!b || !b.pendingUpgrade || typeof Buildings === "undefined" || !Buildings.upgradeConstructionNeed) return "";
+    const need = Buildings.upgradeConstructionNeed(b);
+    return Object.keys(need).map(gid => {
+      const short = !((town && town.stock && (town.stock[gid] || 0) > 0.05));
+      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" : ""}`;
+    }).join(" · ");
+  }
+  // === /D ===
 
   // Transporter usage this tick ≈ deliverable-now construction/upgrade materials
   // vs the delivery budget (deliveryRate × transporterCount) — the same
@@ -7192,7 +7424,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       const j = jobs[ti.key];
       const off = pop <= 0 && homes <= 0;
       const tip = `Homes ${Math.min(pop, homes)}/${homes} · Jobs ${j.filled}/${j.total} · ` +
-        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(inc)}🪙/t`;
+        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(perSec(inc))}🪙/s`;
       html += `<div class="pp-tier ${off ? "off" : ""}" title="${escAttr(tip)}">
         <span class="glyph">${ti.glyph}</span>
         <span class="lbl" style="color:${ti.color}">${ti.label}</span>
@@ -7236,20 +7468,21 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       </div>
       <div class="pp-chart-cap"><span>Budget (last ~5 min)</span><b id="ppBudNow">${Math.round(t.gold || 0).toLocaleString()} 🪙</b></div>`;
 
-    // Income / expense breakdown — rolling per-tick averages from the PP-A ledger.
+    // Income / expense breakdown — rolling per-tick averages from the PP-A ledger,
+    // shown per-second (F: perSec) since that's the game-second the player feels.
     const N = 120;   // ~1 min of ticks at 1×
-    const avg = key => (typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
+    const avg = key => perSec(typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
     const tax = avg("tax"), sales = avg("sales"), buys = avg("buys"), transfers = avg("transfers");
     const net = tax + sales - buys + transfers;
     const row = (ico, lbl, v, cls, sign) =>
-      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/t</span></div>`;
+      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/s</span></div>`;
     html += `<div class="tp-sec">Income &amp; expenses</div><div class="pp-brk">` +
       row("💰", "Taxes", tax, "pos", "+") +
       row("📤", "Sales", sales, "pos", "+") +
       row("📥", "Purchases", buys, buys > 0 ? "neg" : "", "−") +
       row("🤝", "Transfers", transfers, transfers > 0 ? "pos" : transfers < 0 ? "neg" : "", transfers < 0 ? "−" : "+") +
       `<div class="tp-row net"><span class="k">Net</span><span class="v ${net > 0 ? "pos" : net < 0 ? "neg" : ""}">` +
-      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/t</span></div></div>`;
+      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/s</span></div></div>`;
     return html;
   }
 
@@ -7392,11 +7625,11 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       const arrow = trendArrow(t, gid, price);
       const r = rates[gid];
       const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
-        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(r))}/t</span>`
+        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perSec(r)))}/s</span>`
         : `<span class="num dim">—</span>`;
       const inb = inbound[gid] || 0;
       const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
-      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1((t.demand && t.demand[gid]) || 0)}/t` +
+      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perSec((t.demand && t.demand[gid]) || 0))}/s` +
         (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
@@ -7438,12 +7671,18 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
           const occ = uc ? 0 : Math.min(left, hcap);
           left -= occ;
           const pips = "●".repeat(occ) + "○".repeat(Math.max(0, hcap - occ));
+          // === D: a pending upgrade is informational (not a problem needing
+          // attention), so it gets its own ⬆ badge + % — never a bare ⚠ that
+          // reads as broken while it's just waiting on delivery.
+          const upgPct = ppUpgradePct(hs.b);
           const tip = `${hs.def.name}${(hs.b.upgradeLevel || 1) > 1 ? " L" + hs.b.upgradeLevel : ""} — ${occ}/${hcap} occupied` +
-            (uc ? " · ⚠ under construction" : "") + (hs.b.priority ? " · ⭐ priority" : "") + ". Click for details.";
+            (uc ? " · ⚠ under construction" : "") +
+            (upgPct != null ? ` · ⬆ upgrading ${upgPct}%` : "") +
+            (hs.b.priority ? " · ⭐ priority" : "") + ". Click for details.";
           html += `<button class="pp-card" data-pp-b="${hs.i}" title="${escAttr(tip)}">` +
             `<span>${ppGlyph(hs.b.typeId)}</span><span class="pips">${pips}</span>` +
             (hs.b.priority ? `<span class="star">⭐</span>` : "") +
-            (uc ? `<span class="badge">⚠</span>` : "") + `</button>`;
+            (uc ? `<span class="badge">⚠</span>` : (upgPct != null ? `<span class="badge">⬆</span>` : "")) + `</button>`;
         }
         html += `</div>`;
       }
@@ -7463,16 +7702,20 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
             for (const gid in def.inputs)
               if (((t.stock && t.stock[gid]) || 0) <= 0.05) missing += (missing ? ", " : "") + GOOD_LABEL(gid);
           const warn = uc || (open > 0 && w === 0) || !!missing;
+          // === D: pending upgrade gets its own ⬆ badge (not the warn ⚠) — it's
+          // expected/normal, just slow when delivery is starved.
+          const upgPct = ppUpgradePct(b);
           const why = uc ? "under construction"
             : (missing ? "missing input: " + missing : (open > 0 && w === 0 ? "no workers" : ""));
           const pips = "●".repeat(w) + "○".repeat(Math.max(0, open - w)) + "🔒".repeat(closed);
           const tip = `${def.name}${(b.upgradeLevel || 1) > 1 ? " L" + b.upgradeLevel : ""} — ${w}/${open} workers` +
             (closed ? ` (${closed} locked)` : "") + (why ? " · ⚠ " + why : "") +
+            (upgPct != null ? ` · ⬆ upgrading ${upgPct}%` : "") +
             (b.priority ? " · ⭐ priority" : "") + ". Click for details.";
           html += `<button class="pp-card" data-pp-b="${wk.i}" title="${escAttr(tip)}">` +
             `<span>${ppGlyph(b.typeId)}</span><span class="pips">${pips}</span>` +
             (b.priority ? `<span class="star">⭐</span>` : "") +
-            (warn ? `<span class="badge">⚠</span>` : "") + `</button>`;
+            (warn ? `<span class="badge">⚠</span>` : (upgPct != null ? `<span class="badge">⬆</span>` : "")) + `</button>`;
         }
         html += `</div>`;
       }
@@ -7628,15 +7871,22 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   // Render the flyout body for a category into buildBarFlyoutEl.
   function renderFlyout(cat) {
     if (cat.kind === "special") {
-      // Build: City / Road / Bridge. City & Road switch build mode; Bridge is a stub.
+      // Build: City / Road / Bridge / Destroy road / Destroy building. City &
+      // Road switch build mode; Bridge is a stub. === J === Destroy road/building
+      // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
+      // needs no confirmation (matches the existing road-erase behaviour);
+      // destroying a building always confirms via uiConfirm before removing it.
       const items = [
         { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
         { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
+        { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
+        { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
-        html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}"
+        const active = !it.disabled && state.mode === it.action;
+        html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}${active ? " active" : ""}"
           data-action="${esc(it.action)}"${it.disabled ? " aria-disabled=\"true\"" : ""} title="${esc(it.tip)}">
           <span class="bb-name">${esc(it.name)}</span>
           <span class="bb-cost">${esc(it.sub)}</span></button>`;
@@ -7832,20 +8082,24 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (btn) openCategory(btn.dataset.cat);
   });
   // Flyout item clicks: a building typeId enters placement; a Build action
-  // (City/Road) switches build mode; Bridge is a disabled stub.
+  // (City/Road/Destroy road/Destroy building) switches build mode; Bridge is a
+  // disabled stub. === J === eraseRoad/eraseBuilding are the new destroy modes;
+  // input.js's canPlace/place implement the actual click behaviour per mode.
   buildBarFlyoutEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".bb-btn");
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
-    if (action === "town" || action === "road") {
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
       buildBarHintEl.className = "";
-      buildBarHintEl.textContent = action === "town"
-        ? "Click a valid site to found a city."
-        : "Drag across land to lay roads.";
+      buildBarHintEl.textContent =
+        action === "town" ? "Click a valid site to found a city."
+        : action === "road" ? "Drag across land to lay roads."
+        : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
+        : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
     }
   });
   buildBarCancelEl.addEventListener("click", () => cancelPlacing());
@@ -7919,6 +8173,17 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       const res = fogged ? { ok: false, reason: "Unexplored — reveal this area first" } : Buildings.canPlaceTown(state, h.q, h.r);
       buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city" : "✗ " + res.reason;
       buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (state.mode === "eraseRoad") {
+      // === J === live hint for the road-destroy mode (no confirmation on click).
+      const ok = state.roads.has(HexMath.key(h.q, h.r));
+      buildBarHintEl.textContent = ok ? "✓ road here — click or drag to destroy it" : "✗ no road on this hex";
+      buildBarHintEl.className = ok ? "ok" : "bad";
+    } else if (state.mode === "eraseBuilding") {
+      // === J === live hint for the building-destroy mode (click always confirms).
+      const hit = (typeof buildingAtHex === "function") ? buildingAtHex(h.q, h.r) : null;
+      const name = hit ? ((CONFIG.buildings[hit.b.typeId] || {}).name || hit.b.typeId) : "";
+      buildBarHintEl.textContent = hit ? "✓ click to destroy this " + name + " (confirmation required)" : "✗ no building on this hex";
+      buildBarHintEl.className = hit ? "ok" : "bad";
     } else if (buildBarHintEl.textContent !== BB_DEFAULT_HINT) {
       buildBarHintEl.className = "";
       buildBarHintEl.textContent = BB_DEFAULT_HINT;
@@ -8054,7 +8319,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       html += `<div class="tp-sec">Under construction</div>`;
       html += `<div style="margin:4px 0 6px">${bpUpgradeChips(cost, c.delivered) || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
-      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${CONFIG.researchCenter.deliveryRate}/tick).</div>`;
+      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${fmt(perSec(CONFIG.researchCenter.deliveryRate))}/sec).</div>`;
     } else {
       const speed = Research.centerSpeed(state);
       html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
@@ -8124,13 +8389,13 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (def.output) {
       const c = goodColor(def.output.goodId);
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${def.output.ratePerWorker}/wkr</span></div>`;
+        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perSec(def.output.ratePerWorker))}/wkr/s</span></div>`;
     }
     if (def.inputs && Object.keys(def.inputs).length) {
-      html += `<div class="tp-sec">Inputs / unit</div>`;
+      html += `<div class="tp-sec">Inputs / worker / sec</div>`;
       for (const gid in def.inputs) {
         const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
+        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perSec(def.inputs[gid]))}</span></div>`;
       }
     }
     // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
@@ -8210,8 +8475,16 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (b.pendingUpgrade) {
       const rc = (typeof Buildings.upgradeResourceCost === "function") ? Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel) : {};
       const chips = bpUpgradeChips(rc, b.pendingUpgrade.delivered);
-      out += `<div class="bp-status">⬆ Upgrading to Lv${b.pendingUpgrade.toLevel}...</div>`;
+      // === D: this is the state a stalled delivery pipeline leaves an upgrade
+      // in for a long time — show a % bar + explicit "waiting on" line so it
+      // never reads as nothing-happened, independent of how fast CoreDev's
+      // delivery fix actually moves materials.
+      const pct = ppUpgradePct(b);
+      const waitStr = ppUpgradeWaitStr(town, b);
+      out += `<div class="bp-status">⬆ Upgrading to Lv${b.pendingUpgrade.toLevel}… ${pct}%</div>`;
+      out += `<div class="tp-tbar"><span class="bar${pct > 0 ? "" : " idle"}"><span style="width:${pct}%"></span></span><span class="st">${pct}%</span></div>`;
       out += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
+      out += `<div class="tp-hint2">${waitStr ? "Waiting on delivery: " + esc(waitStr) : "All materials delivered — finishing up"}</div>`;
       return out;
     }
 
@@ -8301,11 +8574,11 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       const cov = ppdCoverage(town, gid, r, tierPop);
       const deg = Math.round(cov * 360);
       const c = goodColor(gid);
-      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${r} / resident / tick">
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perSec(r))} / resident / sec">
         <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
           <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
         </div>
-        <div class="ppd-rate">${r}/t</div>
+        <div class="ppd-rate">${fmt(perSec(r))}/s</div>
       </div>`;
     }
     if (!cells) return "";
@@ -8345,7 +8618,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       if (typeof Sim !== "undefined" && typeof Sim.houseIncome === "function")
         inc = Sim.houseIncome(town, b) || 0;
     } catch (e) { inc = 0; }
-    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${inc.toFixed(inc > 0 && inc < 0.1 ? 2 : 1)} 🪙/t</span></div>`;
+    const incS = perSec(inc);
+    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${incS.toFixed(incS > 0 && incS < 0.1 ? 2 : 1)} 🪙/s</span></div>`;
 
     // 4. happiness meter: red→green→gold bar; marker at THIS tier's happiness
     // (PP-A tierHappiness; legacy fallback = town.happiness). Gold zone starts
@@ -8509,7 +8783,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     return pts[pts.length - 1];
   }
 
-  const cartRender = {};   // cart.id -> smoothed {x,y} for render-dt lerp
+  const cartRender = {};   // cart.id -> smoothed render state {x,y (drawn), fx,fy (glide-from), tx,ty (glide-to), t (0..1 progress of the current glide leg)} — see drawCarts (H)
   // === PP-E: cached owner-label strings per cart (no per-frame allocations) ===
   const ppeCartLabel = {}; // cart.id -> "City #N" / "Castle"
   const PPE_CART_LABEL_FONT = "bold " + Math.max(8, Math.round(SIZE * 0.24)) + "px system-ui, sans-serif";
@@ -8532,11 +8806,18 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     const carts = state.carts || [];
     if (!carts.length) return;
     const zoomedOut = state.zoom < 0.6;   // dots-only when far out (GDD §8)
-    // Frame-rate-independent smoothing toward the logical position. The economy
-    // only moves carts every 500ms step, so we ease the visual continuously each
-    // frame: k = 1 − e^(−dt/τ). τ≈120ms trails just enough to read as gliding
-    // motion between steps (and settles when a cart parks to load/unload).
-    const k = 1 - Math.exp(-(Math.max(0, Number(dt) || 16)) / 120);
+    // H: smooth cart glide. cart.progress (the TRADE-LOGIC source of truth) only
+    // advances on economy ticks — CONFIG.econ.baseTickMs / state.gameSpeed real
+    // ms apart — so cartPixel(cart)'s LOGICAL target position itself jumps once
+    // per tick. Rather than drawing that jump directly (the "carts jump tile-to-
+    // tile" symptom), each cart glides from wherever it was last DRAWN to the new
+    // target over the real-world duration of one tick, eased with smoothstep so
+    // the start/stop isn't robotic — a constant-rate glide that lands right as
+    // the next tick arrives. Purely a render-side interpolation buffer: this
+    // never reads/writes cart.progress or the sim tick, only the cached pixel
+    // position in `cartRender`.
+    const frameDt = Math.max(0, Number(dt) || 16);
+    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / Math.max(0.05, state.gameSpeed || 1));
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
@@ -8544,8 +8825,22 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       if (!target) continue;
       live.add(cart.id);
       let rp = cartRender[cart.id];
-      if (!rp) rp = cartRender[cart.id] = { x: target.x, y: target.y };
-      else { rp.x += (target.x - rp.x) * k; rp.y += (target.y - rp.y) * k; }
+      if (!rp) {
+        // first sighting of this cart — nothing to glide from yet, snap once.
+        rp = cartRender[cart.id] = { x: target.x, y: target.y, fx: target.x, fy: target.y, tx: target.x, ty: target.y, t: 1 };
+      } else if (target.x !== rp.tx || target.y !== rp.ty) {
+        // the logical position advanced (a tick moved cart.progress, or the cart
+        // turned for home) — start a fresh glide leg from the current draw spot.
+        rp.fx = rp.x; rp.fy = rp.y;
+        rp.tx = target.x; rp.ty = target.y;
+        rp.t = 0;
+      }
+      if (rp.t < 1) {
+        rp.t = Math.min(1, rp.t + frameDt / tickMs);
+        const e = rp.t * rp.t * (3 - 2 * rp.t);   // smoothstep ease
+        rp.x = rp.fx + (rp.tx - rp.fx) * e;
+        rp.y = rp.fy + (rp.ty - rp.fy) * e;
+      }
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
         ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
@@ -9349,9 +9644,11 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       if (rdBar) rdBar.style.width = pct.toFixed(1) + "%";
       if (rdBarLbl) rdBarLbl.textContent = Math.round(s.total) + " / " + Math.round(cap);
       const rc = roleCounts(gid);
-      const rate = s.netRate || 0;
+      // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
+      // perSec() helper (window.perSec, town-ui.js) rather than a local *TICKS_PER_SEC.
+      const rate = (typeof perSec === "function") ? perSec(s.netRate || 0) : (s.netRate || 0);
       const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/tick";
+      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/s";
       if (rdStats) rdStats.innerHTML =
         '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
@@ -10652,17 +10949,36 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       return null;
     }
 
-    // Small porter token: faint shadow + little body + a goods-coloured parcel.
-    // No wheels and ~half the radius of a trade cart's parcel, so it never reads
-    // as an external caravan.
-    function drawToken(x, y, color) {
+    // Small porter token: faint shadow + little body + the carried good's icon.
+    // No wheels and ~half the radius of a trade cart's parcel (size/shape already
+    // reads as ambient, not an external caravan) — I: the BODY colour is also now
+    // a cool slate-teal, deliberately far from the external wagon's warm browns
+    // (drawCartToken in carts-castle-ui.js: body #6b4a22, wheels #2a1c0c) so the
+    // two trader layers are unmistakable at a glance, not just a size difference.
+    // The goods-icon glyph (goodIcon, town-ui.js — shared closure) replaces the
+    // old plain colour dot so the carried good reads explicitly, matching the
+    // external carts' cargo-chip convention (drawGoodChip, renderer.js).
+    const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
+    function drawToken(x, y, good) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#7a5a30"; ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1;
+      ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x, y - r * 0.12, r * 0.55, 0, Math.PI * 2); ctx.fill();
+      // carried-good icon, small pill above the body so it stays legible at 1/4 scale.
+      const iconPx = Math.max(7, Math.round(SIZE * 0.16));
+      const ico = (typeof goodIcon === "function") ? goodIcon(good) : "";
+      if (ico) {
+        ctx.save();
+        ctx.font = iconPx + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const iy = y - r * 1.9;
+        ctx.fillStyle = "rgba(18,12,5,0.55)";
+        ctx.beginPath(); ctx.arc(x, iy, iconPx * 0.62, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#f4ecdd";
+        ctx.fillText(ico, x, iy + 0.5);
+        ctx.restore();
+      }
     }
 
     function draw(dt) {
@@ -10683,7 +10999,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
         const j = tr.off * SIZE * 0.4;
         const x = a.x + dx * f + (-dy / len) * j;
         const y = a.y + dy * f + ( dx / len) * j;
-        drawToken(x, y, goodColor(tr.good));
+        drawToken(x, y, tr.good);
       }
     }
 
@@ -11425,8 +11741,17 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.22.0";
+  const GAME_VERSION = "0.23.0";
   const PATCH_NOTES = [
+    { v: "0.23.0", notes: [
+      "Towns now trade WITHOUT roads too — but a road route makes traders travel twice as fast",
+      "FIX: buildings and upgrades no longer starve for materials — construction now gets its share of stock before local production eats it",
+      "Hover any tile to see its name and what you can build there",
+      "Bottom Build menu can now Destroy roads (instant) and Destroy buildings (with confirmation)",
+      "Traders glide smoothly between tiles; internal city porters have their own color and show what they carry",
+      "Stone and other early resources now spawn closer to your starting castle",
+      "Rates in tooltips are shown per second instead of per tick, so they're easier to read",
+    ] },
     { v: "0.22.0", notes: [
       "NEW WIN CONDITION: raise an Aristocrat's House to 100% happiness — the castle is now just a milestone",
       "Winning it means supplying every luxury (rings, brandy, fine clothes, chairs, lamps…), so the whole late economy finally comes alive",

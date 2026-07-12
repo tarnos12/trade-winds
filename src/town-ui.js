@@ -90,6 +90,19 @@
   const GOOD_LABEL = id => id.charAt(0).toUpperCase() + id.slice(1);
   const fmt = n => (Math.round(n * 10) / 10).toLocaleString();
 
+  // === F: shared per-tick -> per-second display helper (2 ticks = 1 game-second).
+  // UIDev owns this ONE definition (BATCH2_BRIEF.md: "define it ONCE, others
+  // import/use it") — every "/tick" rate shown to the player anywhere in the UI
+  // should be run through this before display. Exposed on window so CoreDev
+  // (sim.js/buildings.js/goods.js) and RenderDev (carts-castle-ui.js) can reuse
+  // the same conversion instead of redefining it. Falls back to 2 if
+  // TICKS_PER_SEC (research.js) hasn't loaded yet — defensive only.
+  function perSec(x) {
+    const tps = (typeof TICKS_PER_SEC === "number" && TICKS_PER_SEC > 0) ? TICKS_PER_SEC : 2;
+    return (Number(x) || 0) * tps;
+  }
+  if (typeof window !== "undefined") window.perSec = perSec;
+
   // === ICONS: per-good emoji (author request — no external images, single-file).
   // Shared by every panel/chip/tooltip; canvas chips draw these via fillText.
   const GOOD_ICON = {
@@ -167,6 +180,36 @@
     }
     return out;
   }
+
+  // === D: upgrade-in-progress helpers — the click-to-upgrade handler
+  // (data-upgrade, below) IS correctly wired to Buildings.startUpgrade; when the
+  // material-delivery pipeline stalls (CoreDev's E/G fix) the upgrade just sits
+  // at pendingUpgrade with delivered:{} and LOOKS dead. These helpers give every
+  // upgrading building a visible % + "waiting on X" state so it never reads as
+  // nothing-happened, regardless of how fast delivery actually runs.
+  // 0..100 delivery percent across ALL required materials (unweighted qty sum —
+  // same simple approximation the construction chips already use). null when no
+  // upgrade is pending.
+  function ppUpgradePct(b) {
+    if (!b || !b.pendingUpgrade || typeof Buildings === "undefined" || !Buildings.upgradeResourceCost) return null;
+    const rc = Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel);
+    const delivered = b.pendingUpgrade.delivered || {};
+    let need = 0, have = 0;
+    for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], delivered[gid] || 0); }
+    return need > 0 ? Math.max(0, Math.min(100, Math.round(have / need * 100))) : 100;
+  }
+  // Human-readable "waiting on" string for a pending upgrade: remaining qty per
+  // good, flagging goods this city's OWN stock currently has none of (the
+  // clearest signal that it's stuck on delivery/trade, not "about to land").
+  function ppUpgradeWaitStr(town, b) {
+    if (!b || !b.pendingUpgrade || typeof Buildings === "undefined" || !Buildings.upgradeConstructionNeed) return "";
+    const need = Buildings.upgradeConstructionNeed(b);
+    return Object.keys(need).map(gid => {
+      const short = !((town && town.stock && (town.stock[gid] || 0) > 0.05));
+      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" : ""}`;
+    }).join(" · ");
+  }
+  // === /D ===
 
   // Transporter usage this tick ≈ deliverable-now construction/upgrade materials
   // vs the delivery budget (deliveryRate × transporterCount) — the same
@@ -249,7 +292,7 @@
       const j = jobs[ti.key];
       const off = pop <= 0 && homes <= 0;
       const tip = `Homes ${Math.min(pop, homes)}/${homes} · Jobs ${j.filled}/${j.total} · ` +
-        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(inc)}🪙/t`;
+        `Happiness ${th == null ? "—" : th + "%"} · Income ${fmt1(perSec(inc))}🪙/s`;
       html += `<div class="pp-tier ${off ? "off" : ""}" title="${escAttr(tip)}">
         <span class="glyph">${ti.glyph}</span>
         <span class="lbl" style="color:${ti.color}">${ti.label}</span>
@@ -293,20 +336,21 @@
       </div>
       <div class="pp-chart-cap"><span>Budget (last ~5 min)</span><b id="ppBudNow">${Math.round(t.gold || 0).toLocaleString()} 🪙</b></div>`;
 
-    // Income / expense breakdown — rolling per-tick averages from the PP-A ledger.
+    // Income / expense breakdown — rolling per-tick averages from the PP-A ledger,
+    // shown per-second (F: perSec) since that's the game-second the player feels.
     const N = 120;   // ~1 min of ticks at 1×
-    const avg = key => (typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
+    const avg = key => perSec(typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, key, N) : 0);
     const tax = avg("tax"), sales = avg("sales"), buys = avg("buys"), transfers = avg("transfers");
     const net = tax + sales - buys + transfers;
     const row = (ico, lbl, v, cls, sign) =>
-      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/t</span></div>`;
+      `<div class="tp-row"><span class="k">${ico} ${lbl}</span><span class="v ${cls}">${sign}${fmt1(Math.abs(v))}🪙/s</span></div>`;
     html += `<div class="tp-sec">Income &amp; expenses</div><div class="pp-brk">` +
       row("💰", "Taxes", tax, "pos", "+") +
       row("📤", "Sales", sales, "pos", "+") +
       row("📥", "Purchases", buys, buys > 0 ? "neg" : "", "−") +
       row("🤝", "Transfers", transfers, transfers > 0 ? "pos" : transfers < 0 ? "neg" : "", transfers < 0 ? "−" : "+") +
       `<div class="tp-row net"><span class="k">Net</span><span class="v ${net > 0 ? "pos" : net < 0 ? "neg" : ""}">` +
-      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/t</span></div></div>`;
+      `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/s</span></div></div>`;
     return html;
   }
 
@@ -449,11 +493,11 @@
       const arrow = trendArrow(t, gid, price);
       const r = rates[gid];
       const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
-        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(r))}/t</span>`
+        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perSec(r)))}/s</span>`
         : `<span class="num dim">—</span>`;
       const inb = inbound[gid] || 0;
       const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
-      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1((t.demand && t.demand[gid]) || 0)}/t` +
+      const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perSec((t.demand && t.demand[gid]) || 0))}/s` +
         (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
@@ -495,12 +539,18 @@
           const occ = uc ? 0 : Math.min(left, hcap);
           left -= occ;
           const pips = "●".repeat(occ) + "○".repeat(Math.max(0, hcap - occ));
+          // === D: a pending upgrade is informational (not a problem needing
+          // attention), so it gets its own ⬆ badge + % — never a bare ⚠ that
+          // reads as broken while it's just waiting on delivery.
+          const upgPct = ppUpgradePct(hs.b);
           const tip = `${hs.def.name}${(hs.b.upgradeLevel || 1) > 1 ? " L" + hs.b.upgradeLevel : ""} — ${occ}/${hcap} occupied` +
-            (uc ? " · ⚠ under construction" : "") + (hs.b.priority ? " · ⭐ priority" : "") + ". Click for details.";
+            (uc ? " · ⚠ under construction" : "") +
+            (upgPct != null ? ` · ⬆ upgrading ${upgPct}%` : "") +
+            (hs.b.priority ? " · ⭐ priority" : "") + ". Click for details.";
           html += `<button class="pp-card" data-pp-b="${hs.i}" title="${escAttr(tip)}">` +
             `<span>${ppGlyph(hs.b.typeId)}</span><span class="pips">${pips}</span>` +
             (hs.b.priority ? `<span class="star">⭐</span>` : "") +
-            (uc ? `<span class="badge">⚠</span>` : "") + `</button>`;
+            (uc ? `<span class="badge">⚠</span>` : (upgPct != null ? `<span class="badge">⬆</span>` : "")) + `</button>`;
         }
         html += `</div>`;
       }
@@ -520,16 +570,20 @@
             for (const gid in def.inputs)
               if (((t.stock && t.stock[gid]) || 0) <= 0.05) missing += (missing ? ", " : "") + GOOD_LABEL(gid);
           const warn = uc || (open > 0 && w === 0) || !!missing;
+          // === D: pending upgrade gets its own ⬆ badge (not the warn ⚠) — it's
+          // expected/normal, just slow when delivery is starved.
+          const upgPct = ppUpgradePct(b);
           const why = uc ? "under construction"
             : (missing ? "missing input: " + missing : (open > 0 && w === 0 ? "no workers" : ""));
           const pips = "●".repeat(w) + "○".repeat(Math.max(0, open - w)) + "🔒".repeat(closed);
           const tip = `${def.name}${(b.upgradeLevel || 1) > 1 ? " L" + b.upgradeLevel : ""} — ${w}/${open} workers` +
             (closed ? ` (${closed} locked)` : "") + (why ? " · ⚠ " + why : "") +
+            (upgPct != null ? ` · ⬆ upgrading ${upgPct}%` : "") +
             (b.priority ? " · ⭐ priority" : "") + ". Click for details.";
           html += `<button class="pp-card" data-pp-b="${wk.i}" title="${escAttr(tip)}">` +
             `<span>${ppGlyph(b.typeId)}</span><span class="pips">${pips}</span>` +
             (b.priority ? `<span class="star">⭐</span>` : "") +
-            (warn ? `<span class="badge">⚠</span>` : "") + `</button>`;
+            (warn ? `<span class="badge">⚠</span>` : (upgPct != null ? `<span class="badge">⬆</span>` : "")) + `</button>`;
         }
         html += `</div>`;
       }
@@ -685,15 +739,22 @@
   // Render the flyout body for a category into buildBarFlyoutEl.
   function renderFlyout(cat) {
     if (cat.kind === "special") {
-      // Build: City / Road / Bridge. City & Road switch build mode; Bridge is a stub.
+      // Build: City / Road / Bridge / Destroy road / Destroy building. City &
+      // Road switch build mode; Bridge is a stub. === J === Destroy road/building
+      // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
+      // needs no confirmation (matches the existing road-erase behaviour);
+      // destroying a building always confirms via uiConfirm before removing it.
       const items = [
         { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
         { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
+        { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
+        { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
-        html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}"
+        const active = !it.disabled && state.mode === it.action;
+        html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}${active ? " active" : ""}"
           data-action="${esc(it.action)}"${it.disabled ? " aria-disabled=\"true\"" : ""} title="${esc(it.tip)}">
           <span class="bb-name">${esc(it.name)}</span>
           <span class="bb-cost">${esc(it.sub)}</span></button>`;
@@ -889,20 +950,24 @@
     if (btn) openCategory(btn.dataset.cat);
   });
   // Flyout item clicks: a building typeId enters placement; a Build action
-  // (City/Road) switches build mode; Bridge is a disabled stub.
+  // (City/Road/Destroy road/Destroy building) switches build mode; Bridge is a
+  // disabled stub. === J === eraseRoad/eraseBuilding are the new destroy modes;
+  // input.js's canPlace/place implement the actual click behaviour per mode.
   buildBarFlyoutEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".bb-btn");
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
-    if (action === "town" || action === "road") {
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
       buildBarHintEl.className = "";
-      buildBarHintEl.textContent = action === "town"
-        ? "Click a valid site to found a city."
-        : "Drag across land to lay roads.";
+      buildBarHintEl.textContent =
+        action === "town" ? "Click a valid site to found a city."
+        : action === "road" ? "Drag across land to lay roads."
+        : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
+        : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
     }
   });
   buildBarCancelEl.addEventListener("click", () => cancelPlacing());
@@ -976,6 +1041,17 @@
       const res = fogged ? { ok: false, reason: "Unexplored — reveal this area first" } : Buildings.canPlaceTown(state, h.q, h.r);
       buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city" : "✗ " + res.reason;
       buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (state.mode === "eraseRoad") {
+      // === J === live hint for the road-destroy mode (no confirmation on click).
+      const ok = state.roads.has(HexMath.key(h.q, h.r));
+      buildBarHintEl.textContent = ok ? "✓ road here — click or drag to destroy it" : "✗ no road on this hex";
+      buildBarHintEl.className = ok ? "ok" : "bad";
+    } else if (state.mode === "eraseBuilding") {
+      // === J === live hint for the building-destroy mode (click always confirms).
+      const hit = (typeof buildingAtHex === "function") ? buildingAtHex(h.q, h.r) : null;
+      const name = hit ? ((CONFIG.buildings[hit.b.typeId] || {}).name || hit.b.typeId) : "";
+      buildBarHintEl.textContent = hit ? "✓ click to destroy this " + name + " (confirmation required)" : "✗ no building on this hex";
+      buildBarHintEl.className = hit ? "ok" : "bad";
     } else if (buildBarHintEl.textContent !== BB_DEFAULT_HINT) {
       buildBarHintEl.className = "";
       buildBarHintEl.textContent = BB_DEFAULT_HINT;
@@ -1111,7 +1187,7 @@
       html += `<div class="tp-sec">Under construction</div>`;
       html += `<div style="margin:4px 0 6px">${bpUpgradeChips(cost, c.delivered) || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
-      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${CONFIG.researchCenter.deliveryRate}/tick).</div>`;
+      html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"} (delivered from the King's stock, ${fmt(perSec(CONFIG.researchCenter.deliveryRate))}/sec).</div>`;
     } else {
       const speed = Research.centerSpeed(state);
       html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
@@ -1181,13 +1257,13 @@
     if (def.output) {
       const c = goodColor(def.output.goodId);
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${def.output.ratePerWorker}/wkr</span></div>`;
+        <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perSec(def.output.ratePerWorker))}/wkr/s</span></div>`;
     }
     if (def.inputs && Object.keys(def.inputs).length) {
-      html += `<div class="tp-sec">Inputs / unit</div>`;
+      html += `<div class="tp-sec">Inputs / worker / sec</div>`;
       for (const gid in def.inputs) {
         const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${def.inputs[gid]}</span></div>`;
+        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perSec(def.inputs[gid]))}</span></div>`;
       }
     }
     // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
@@ -1267,8 +1343,16 @@
     if (b.pendingUpgrade) {
       const rc = (typeof Buildings.upgradeResourceCost === "function") ? Buildings.upgradeResourceCost(b.typeId, b.pendingUpgrade.toLevel) : {};
       const chips = bpUpgradeChips(rc, b.pendingUpgrade.delivered);
-      out += `<div class="bp-status">⬆ Upgrading to Lv${b.pendingUpgrade.toLevel}...</div>`;
+      // === D: this is the state a stalled delivery pipeline leaves an upgrade
+      // in for a long time — show a % bar + explicit "waiting on" line so it
+      // never reads as nothing-happened, independent of how fast CoreDev's
+      // delivery fix actually moves materials.
+      const pct = ppUpgradePct(b);
+      const waitStr = ppUpgradeWaitStr(town, b);
+      out += `<div class="bp-status">⬆ Upgrading to Lv${b.pendingUpgrade.toLevel}… ${pct}%</div>`;
+      out += `<div class="tp-tbar"><span class="bar${pct > 0 ? "" : " idle"}"><span style="width:${pct}%"></span></span><span class="st">${pct}%</span></div>`;
       out += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
+      out += `<div class="tp-hint2">${waitStr ? "Waiting on delivery: " + esc(waitStr) : "All materials delivered — finishing up"}</div>`;
       return out;
     }
 
@@ -1358,11 +1442,11 @@
       const cov = ppdCoverage(town, gid, r, tierPop);
       const deg = Math.round(cov * 360);
       const c = goodColor(gid);
-      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${r} / resident / tick">
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perSec(r))} / resident / sec">
         <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
           <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
         </div>
-        <div class="ppd-rate">${r}/t</div>
+        <div class="ppd-rate">${fmt(perSec(r))}/s</div>
       </div>`;
     }
     if (!cells) return "";
@@ -1402,7 +1486,8 @@
       if (typeof Sim !== "undefined" && typeof Sim.houseIncome === "function")
         inc = Sim.houseIncome(town, b) || 0;
     } catch (e) { inc = 0; }
-    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${inc.toFixed(inc > 0 && inc < 0.1 ? 2 : 1)} 🪙/t</span></div>`;
+    const incS = perSec(inc);
+    out += `<div class="tp-row" data-ppd-income><span class="k">Income</span><span class="v">${incS.toFixed(incS > 0 && incS < 0.1 ? 2 : 1)} 🪙/s</span></div>`;
 
     // 4. happiness meter: red→green→gold bar; marker at THIS tier's happiness
     // (PP-A tierHappiness; legacy fallback = town.happiness). Gold zone starts

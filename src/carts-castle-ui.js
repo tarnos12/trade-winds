@@ -69,7 +69,7 @@
     return pts[pts.length - 1];
   }
 
-  const cartRender = {};   // cart.id -> smoothed {x,y} for render-dt lerp
+  const cartRender = {};   // cart.id -> smoothed render state {x,y (drawn), fx,fy (glide-from), tx,ty (glide-to), t (0..1 progress of the current glide leg)} — see drawCarts (H)
   // === PP-E: cached owner-label strings per cart (no per-frame allocations) ===
   const ppeCartLabel = {}; // cart.id -> "City #N" / "Castle"
   const PPE_CART_LABEL_FONT = "bold " + Math.max(8, Math.round(SIZE * 0.24)) + "px system-ui, sans-serif";
@@ -92,11 +92,18 @@
     const carts = state.carts || [];
     if (!carts.length) return;
     const zoomedOut = state.zoom < 0.6;   // dots-only when far out (GDD §8)
-    // Frame-rate-independent smoothing toward the logical position. The economy
-    // only moves carts every 500ms step, so we ease the visual continuously each
-    // frame: k = 1 − e^(−dt/τ). τ≈120ms trails just enough to read as gliding
-    // motion between steps (and settles when a cart parks to load/unload).
-    const k = 1 - Math.exp(-(Math.max(0, Number(dt) || 16)) / 120);
+    // H: smooth cart glide. cart.progress (the TRADE-LOGIC source of truth) only
+    // advances on economy ticks — CONFIG.econ.baseTickMs / state.gameSpeed real
+    // ms apart — so cartPixel(cart)'s LOGICAL target position itself jumps once
+    // per tick. Rather than drawing that jump directly (the "carts jump tile-to-
+    // tile" symptom), each cart glides from wherever it was last DRAWN to the new
+    // target over the real-world duration of one tick, eased with smoothstep so
+    // the start/stop isn't robotic — a constant-rate glide that lands right as
+    // the next tick arrives. Purely a render-side interpolation buffer: this
+    // never reads/writes cart.progress or the sim tick, only the cached pixel
+    // position in `cartRender`.
+    const frameDt = Math.max(0, Number(dt) || 16);
+    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / Math.max(0.05, state.gameSpeed || 1));
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
@@ -104,8 +111,22 @@
       if (!target) continue;
       live.add(cart.id);
       let rp = cartRender[cart.id];
-      if (!rp) rp = cartRender[cart.id] = { x: target.x, y: target.y };
-      else { rp.x += (target.x - rp.x) * k; rp.y += (target.y - rp.y) * k; }
+      if (!rp) {
+        // first sighting of this cart — nothing to glide from yet, snap once.
+        rp = cartRender[cart.id] = { x: target.x, y: target.y, fx: target.x, fy: target.y, tx: target.x, ty: target.y, t: 1 };
+      } else if (target.x !== rp.tx || target.y !== rp.ty) {
+        // the logical position advanced (a tick moved cart.progress, or the cart
+        // turned for home) — start a fresh glide leg from the current draw spot.
+        rp.fx = rp.x; rp.fy = rp.y;
+        rp.tx = target.x; rp.ty = target.y;
+        rp.t = 0;
+      }
+      if (rp.t < 1) {
+        rp.t = Math.min(1, rp.t + frameDt / tickMs);
+        const e = rp.t * rp.t * (3 - 2 * rp.t);   // smoothstep ease
+        rp.x = rp.fx + (rp.tx - rp.fx) * e;
+        rp.y = rp.fy + (rp.ty - rp.fy) * e;
+      }
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
         ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
@@ -909,9 +930,11 @@
       if (rdBar) rdBar.style.width = pct.toFixed(1) + "%";
       if (rdBarLbl) rdBarLbl.textContent = Math.round(s.total) + " / " + Math.round(cap);
       const rc = roleCounts(gid);
-      const rate = s.netRate || 0;
+      // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
+      // perSec() helper (window.perSec, town-ui.js) rather than a local *TICKS_PER_SEC.
+      const rate = (typeof perSec === "function") ? perSec(s.netRate || 0) : (s.netRate || 0);
       const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/tick";
+      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/s";
       if (rdStats) rdStats.innerHTML =
         '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +

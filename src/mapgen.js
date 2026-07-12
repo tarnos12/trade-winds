@@ -137,6 +137,18 @@ const MapGen = {
     const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
     const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
     const deps = preset.deposits || {};
+    // === B (batch-2): pull PEASANT / early-tier deposits INWARD. `stone` is
+    // quarried by PEASANTS and is the first mined material the early buildings
+    // need — but a `ring:0` stone could seed ANYWHERE in the depositable pool
+    // (out to the rim), so it often spawned far from the castle. We cap the SEED
+    // distance for these near-spawn types to an inner band (a fraction of radius),
+    // analogous to fish's `near`. T2/T3 deposits (iron/coal/gold) are UNTOUCHED and
+    // keep their outer rings, so tier ordering (stone nearest → gold furthest) is
+    // preserved. A preset may override the cap per type via `deposits.<type>.near`.
+    // Only the SEED pool is biased inward (growth candidates still respect the ring
+    // via `takable`); determinism holds (seeded rng only) and every deposit still
+    // generates — we fall back to the full ring pool when the inner band is empty.
+    const NEAR_FRAC = { stone: 0.4, clay: 0.6 };   // stone hugs spawn; clay slightly further (still inner)
     // fixed order so RNG draws are reproducible
     for (const type of ["stone", "clay", "iron", "coal", "gold"]) {
       const cfg = deps[type]; if (!cfg) continue;
@@ -147,9 +159,16 @@ const MapGen = {
       // expand 1–2 hexes inward). Fish is exempt: it's T1, near-spawn. ===
       const ringOk = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) >= (cfg.ring || 0); };
       const takable = (k) => depositable[hexes.get(k).terrain] && ringOk(k);
+      // B: outer SEED cap for near-spawn peasant/early types (null = no cap → old behaviour).
+      const nearCap = (cfg.near != null) ? cfg.near
+        : (NEAR_FRAC[type] != null ? Math.max(cfg.ring || 0, Math.round(radius * NEAR_FRAC[type])) : null);
       for (let i = 0; i < (cfg.count || 0); i++) {
-        const pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
+        let pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
                         .map(h => HexMath.key(h.q, h.r));
+        if (nearCap != null) {   // B: bias the seed toward the castle (inner band), keep full pool as fallback
+          const inner = pool.filter(k => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) <= nearCap; });
+          if (inner.length) pool = inner;
+        }
         if (!pool.length) break;
         const start = pool[Math.floor(rng() * pool.length)];
         const size = 1 + Math.floor(rng() * 3);   // 1..3

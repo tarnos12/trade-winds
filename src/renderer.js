@@ -795,3 +795,92 @@
     ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
     ctx.stroke();
   }
+
+  // === C: TILE HOVER TOOLTIP ==============================================
+  // Drives the #tileTip DOM element UIDev owns in index.html (id agreed via
+  // SendMessage: fixed-position, starts with class "hidden", pointer-events:
+  // none, positioned in page coords via style.left/top). This module only
+  // computes content + toggles it; the element/CSS are UIDev's.
+  //
+  // Terrain display names — CONFIG.terrain (config.js) has no `label` field,
+  // only inline comments naming each biome; mirrored here for the tooltip.
+  const TERRAIN_NAME = {
+    barren: "Barren Land", desert: "Desert", fertile: "Fertile Soil",
+    snow: "Iceland", water: "Water", mountains: "Mountains",
+    fish: "Fish Shoal", forest: "Forest", stone_deposit: "Stone Deposit",
+    clay_deposit: "Clay Deposit", iron_deposit: "Iron Deposit",
+    gold_deposit: "Gold Deposit", coal_deposit: "Coal Deposit",
+  };
+  function terrainDisplayName(terr) {
+    return TERRAIN_NAME[terr] || (terr ? String(terr).replace(/_/g, " ") : "Unknown");
+  }
+  // Buildings whose TERRAIN requirement matches hex (q,r) — mirrors ONLY the
+  // terrain gate of Buildings.canPlaceBuilding step (1) (buildings.js:315-336):
+  // extractor-on-adjacent-terrain / extractor-on-own-terrain / generic
+  // buildable-land + houseOnly. Deliberately skips the other placement gates
+  // (city adjacency, free hex, slot cap, gold) — the tooltip answers "what
+  // fits this ground", not "could I place something here this instant".
+  // Read-only; duplicated here (not imported) because buildings.js is
+  // CoreDev's file and canPlaceBuilding interleaves the terrain rule with
+  // gates that don't belong in a hover tooltip.
+  function terrainEligibleBuildings(q, r) {
+    const map = state && state.map;
+    const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+    if (!hex) return [];
+    const terr = hex.terrain;
+    const terrDef = CONFIG.terrain[terr];
+    const isLand = !!(terrDef && terrDef.buildable);
+    const out = [];
+    for (const typeId in CONFIG.buildings) {
+      const def = CONFIG.buildings[typeId];
+      let ok;
+      if (def.kind === "extractor" && def.adjacent) {
+        ok = isLand && HexMath.neighbors(q, r).some(n => {
+          const nh = map.hexes.get(HexMath.key(n.q, n.r));
+          return nh && nh.terrain === def.adjacent;
+        });
+      } else if (def.kind === "extractor") {
+        ok = terr === def.terrain;
+      } else {
+        ok = isLand && !(terrDef && terrDef.houseOnly && def.kind !== "house");
+      }
+      if (ok) out.push(def);
+    }
+    return out;
+  }
+  const tileTipEl = document.getElementById("tileTip");
+  let tileTipHexKey = null;   // last hex the tooltip HTML was built for (skip rebuild on same hex)
+  function updateTileTooltip(clientX, clientY) {
+    if (!tileTipEl) return;   // UIDev's element not landed yet — no-op, not a crash
+    if (!hoverHex || !state.map) { hideTileTip(); return; }
+    const k = HexMath.key(hoverHex.q, hoverHex.r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) { hideTileTip(); return; }
+    if (tileTipHexKey !== k) {
+      tileTipHexKey = k;
+      const buildables = terrainEligibleBuildings(hoverHex.q, hoverHex.r);
+      let html = "<b>" + esc(terrainDisplayName(hex.terrain)) + "</b>";
+      if (buildables.length) {
+        const parts = buildables.map(def => {
+          const locked = (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
+          return "<span" + (locked ? ' class="tt-locked"' : "") + ">" + esc(def.name) +
+            (locked ? " (locked)" : "") + "</span>";
+        });
+        html += '<div class="tt-build">' + parts.join(", ") + "</div>";
+      } else {
+        html += '<div class="tt-build tt-none">Nothing buildable here</div>';
+      }
+      tileTipEl.innerHTML = html;
+    }
+    tileTipEl.classList.remove("hidden");
+    tileTipEl.setAttribute("aria-hidden", "false");
+    tileTipEl.style.left = (clientX + 16) + "px";
+    tileTipEl.style.top = (clientY + 16) + "px";
+  }
+  function hideTileTip() {
+    if (tileTipEl) { tileTipEl.classList.add("hidden"); tileTipEl.setAttribute("aria-hidden", "true"); }
+    tileTipHexKey = null;
+  }
+  canvas.addEventListener("mousemove", (e) => updateTileTooltip(e.clientX, e.clientY));
+  canvas.addEventListener("mouseleave", hideTileTip);
+  // === /C: TILE HOVER TOOLTIP ==============================================

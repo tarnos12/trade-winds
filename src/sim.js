@@ -148,6 +148,65 @@ Sim.tick = function (State) {
     for (const b of buildings) if (!b || !b.priority) assignWorkers(b);
     // === /CB-A ===
 
+    // === CB-A/RU-A: construction + upgrade delivery — RUNS BEFORE PRODUCTION.
+    // WOODFIX (batch-2 E/G+D-root): this block MUST precede the production step
+    // below. Production consumes shared inputs (wood → planks, etc.) straight out
+    // of town.stock; when it ran first it drained the very materials a build/
+    // upgrade needs, so a town with a running sawmill (or any input-eating
+    // processor) left construction only the per-tick *leftover* wood — builds/
+    // upgrades crawled or stalled ("full of planks, sheep farm builds slowly for
+    // lack of wood") even while imported wood kept arriving, because the sawmill
+    // ate each fresh shipment before the delivery step saw it, AND pending
+    // upgrades (Buildings.startUpgrade → pendingUpgrade) looked "dead" for the
+    // same reason. Giving construction/upgrades FIRST claim on stock fixes both;
+    // production below simply works with whatever inputs remain. Determinism is
+    // unchanged (no RNG here) — only the stock-claim ORDER moved.
+    //
+    // Move construction materials from the town's own stock into each building
+    // that is still under construction (built:false), up to a shared per-tick
+    // budget (CONFIG.town.deliveryRate). Priority-true buildings are filled
+    // first (two-pass, array order → deterministic). A building whose remaining
+    // need reaches empty flips to built:true. EVERY unbuilt building's remaining
+    // need (whether or not the budget reached it this tick) is added to the town
+    // demand, so the external trader buys the materials the city cannot yet make.
+    // Delivery also feeds pending upgrades (shared budget). Targets are built
+    // priority-first WITHIN each kind: unbuilt-priority, upgrade-priority,
+    // unbuilt-nonpriority, upgrade-nonpriority. When no upgrades are pending the
+    // sequence is identical to the CB-A construction order.
+    {
+      // === PP-A === per-transporter delivery: the shared budget scales with the
+      // town's internal-hauler count (deliveryRate × transporterCount(town)).
+      let budget = ((CONFIG.town && CONFIG.town.deliveryRate) || 5)
+        * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
+      // === /PP-A ===
+      const targets = [];   // { b, kind: "build" | "upgrade" }
+      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
+      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
+      for (const t of targets) {
+        const b = t.b;
+        if (t.kind === "build" && !b.delivered) b.delivered = {};
+        if (t.kind === "upgrade" && !b.pendingUpgrade.delivered) b.pendingUpgrade.delivered = {};
+        const dst = t.kind === "build" ? b.delivered : b.pendingUpgrade.delivered;
+        const need = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
+        for (const gid in need) {
+          if (budget <= 0) break;
+          const have = stock[gid] || 0;
+          const move = Math.min(need[gid], have, budget);
+          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
+        }
+        const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
+        let done = true;
+        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
+        if (done) {
+          if (t.kind === "build") b.built = true;
+          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
+        }
+      }
+    }
+    // === /CB-A + /RU-A (moved above production by WOODFIX) ============
+
     // --- 1. Production -------------------------------------------------
     // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
     // consuming its inputs (processors); throughput is throttled by missing inputs.
@@ -194,52 +253,6 @@ Sim.tick = function (State) {
       stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
       // === /RU-A ===
     }
-
-    // === CB-A: construction delivery ==================================
-    // Move construction materials from the town's own stock into each building
-    // that is still under construction (built:false), up to a shared per-tick
-    // budget (CONFIG.town.deliveryRate). Priority-true buildings are filled
-    // first (two-pass, array order → deterministic). A building whose remaining
-    // need reaches empty flips to built:true. EVERY unbuilt building's remaining
-    // need (whether or not the budget reached it this tick) is added to the town
-    // demand, so the external trader buys the materials the city cannot yet make.
-    // === RU-A: delivery also feeds pending upgrades (shared budget). Targets
-    // are built priority-first WITHIN each kind: unbuilt-priority, upgrade-
-    // priority, unbuilt-nonpriority, upgrade-nonpriority. When no upgrades are
-    // pending the sequence is identical to the CB-A construction order.
-    {
-      // === PP-A === per-transporter delivery: the shared budget scales with the
-      // town's internal-hauler count (deliveryRate × transporterCount(town)).
-      let budget = ((CONFIG.town && CONFIG.town.deliveryRate) || 5)
-        * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
-      // === /PP-A ===
-      const targets = [];   // { b, kind: "build" | "upgrade" }
-      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
-      for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
-      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
-      for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
-      for (const t of targets) {
-        const b = t.b;
-        if (t.kind === "build" && !b.delivered) b.delivered = {};
-        if (t.kind === "upgrade" && !b.pendingUpgrade.delivered) b.pendingUpgrade.delivered = {};
-        const dst = t.kind === "build" ? b.delivered : b.pendingUpgrade.delivered;
-        const need = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        for (const gid in need) {
-          if (budget <= 0) break;
-          const have = stock[gid] || 0;
-          const move = Math.min(need[gid], have, budget);
-          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
-        }
-        const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        let done = true;
-        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
-        if (done) {
-          if (t.kind === "build") b.built = true;
-          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
-        }
-      }
-    }
-    // === /CB-A + /RU-A ================================================
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
     // town demand (per-town share) — prices rise and town traders import the

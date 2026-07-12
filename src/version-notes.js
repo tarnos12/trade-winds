@@ -1,6 +1,15 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.22.0";
+  const GAME_VERSION = "0.23.0";
   const PATCH_NOTES = [
+    { v: "0.23.0", notes: [
+      "Towns now trade WITHOUT roads too — but a road route makes traders travel twice as fast",
+      "FIX: buildings and upgrades no longer starve for materials — construction now gets its share of stock before local production eats it",
+      "Hover any tile to see its name and what you can build there",
+      "Bottom Build menu can now Destroy roads (instant) and Destroy buildings (with confirmation)",
+      "Traders glide smoothly between tiles; internal city porters have their own color and show what they carry",
+      "Stone and other early resources now spawn closer to your starting castle",
+      "Rates in tooltips are shown per second instead of per tick, so they're easier to read",
+    ] },
     { v: "0.22.0", notes: [
       "NEW WIN CONDITION: raise an Aristocrat's House to 100% happiness — the castle is now just a milestone",
       "Winning it means supplying every luxury (rings, brandy, fine clothes, chairs, lamps…), so the whole late economy finally comes alive",

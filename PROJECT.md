@@ -102,6 +102,22 @@ not live teammates (see Team model).
 
 ## Current status (update every commit)
 
+**v0.23.0 — Playtest-feedback batch (on `main`).** Ten items shipped by a 4-person agent team
+(CoreDev/RenderDev/UIDev/QA) on the modular `src/`. **Trade works without roads** now — `Pathing.route`
+always returns a route (`road:false` off-road fallback) and off-road carts travel at half speed
+(`CONFIG.trade.offRoadSpeedMult`), so a road route is 2× faster. **Bug fixed (root cause):**
+construction/upgrade material delivery ran *after* production in `Sim.tick`, so a staffed producer ate
+imported wood before builds/upgrades could claim it — builds crawled and upgrades looked dead. Delivery
+now runs **before** production (construction 60→7 ticks); the building panel also shows an upgrade
+progress bar + "waiting on delivery". New: **tile hover tooltip** (terrain name + what's buildable),
+**Destroy road / Destroy building** in the build flyout (road no-confirm; building via `uiConfirm`),
+**smooth cart interpolation** (glide, no tile-jumping), **internal traders** get a distinct color + show
+carried-good icons, **peasant deposits (stone/clay) seed nearer spawn** (`mapgen`), and all UI rate
+displays are **per-second** (`window.perSec`, 2 ticks = 1s). Verified: 17/17 pure-core suites (trade
+105/0, pathing 28/0 re-baselined to the off-road intent), `--check` OK, editor 95/95, deterministic,
+clean headless boot + in-browser feature checks (tooltip, destroy flyout, perSec). Brief:
+[`docs/proposals/BATCH2_BRIEF.md`](docs/proposals/BATCH2_BRIEF.md).
+
 **v0.22.0 — New victory + aristocrat-economy balance pass (on `main`).** The win is now **an
 Aristocrat's House reaching 100% happiness** (`Victory.check` in `progress.js`, threshold
 `CONFIG.victory.aristocratHappiness = 99.5`; castle L5 no longer flips victory — it's a milestone).
