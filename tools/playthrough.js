@@ -154,6 +154,13 @@ function run() {
   const firstTier70 = {};  // tier -> tick
   const castleLevelAt = {};
   let victoryAt = null;
+  // NEW-VICTORY tracking (aristocrat_home @ >=threshold aristocrat happiness). Measured
+  // independently of state.victory so the report shows the milestone even before the
+  // browser shell wires Victory.check into the loop. Threshold reads CONFIG.victory
+  // (added by EconDev in 2A) with a 99.5 fallback so this runs on pre-2A builds too.
+  const VTHRESH = (CONFIG.victory && CONFIG.victory.aristocratHappiness) || 99.5;
+  let newVictoryAt = null;    // first tick any town has a built aristocrat_home @>=VTHRESH
+  let firstHomeBuiltAt = null; // first tick any town has a BUILT aristocrat_home
   const snaps = [];
   const TIERS = ["peasants", "workers", "burghers", "aristocrats"];
 
@@ -326,10 +333,21 @@ function run() {
     }
     if (!castleLevelAt[state.castleLevel]) castleLevelAt[state.castleLevel] = tick;
     if (state.victory && !victoryAt) victoryAt = tick;
+    // NEW-VICTORY + first-home milestones (read-only scan; no state mutation).
+    if (!newVictoryAt || !firstHomeBuiltAt) {
+      for (const t of state.towns) {
+        const home = t.buildings.some(b => b && b.typeId === "aristocrat_home" && b.built !== false);
+        if (!home) continue;
+        if (!firstHomeBuiltAt) firstHomeBuiltAt = tick;
+        const ah = t.tierHappiness && t.tierHappiness.aristocrats;
+        if (!newVictoryAt && typeof ah === "number" && ah >= VTHRESH) newVictoryAt = tick;
+      }
+    }
     if (tick % SNAP === 0) snapshot(tick);
   }
 
-  return { C, state, snaps, firstTierPop, firstTier70, castleLevelAt, victoryAt };
+  return { C, state, snaps, firstTierPop, firstTier70, castleLevelAt, victoryAt,
+           newVictoryAt, firstHomeBuiltAt, VTHRESH };
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +356,8 @@ function run() {
 function report() {
   const t0 = Date.now();
   const R = run();
-  const { C, state, snaps, firstTierPop, firstTier70, castleLevelAt, victoryAt } = R;
+  const { C, state, snaps, firstTierPop, firstTier70, castleLevelAt, victoryAt,
+          newVictoryAt, firstHomeBuiltAt, VTHRESH } = R;
   const { CONFIG } = C;
   const TIERS = ["peasants", "workers", "burghers", "aristocrats"];
   const last = snaps[snaps.length - 1];
@@ -355,7 +374,13 @@ function report() {
     "   >=70% happy: " + (firstTier70[tk] || "NEVER"));
   p("  castle levels reached: " + Object.keys(castleLevelAt).sort((a,b)=>a-b)
     .map(l => "L" + l + "@" + castleLevelAt[l]).join("  "));
-  p("  VICTORY (castle L5): " + (victoryAt ? "tick " + victoryAt : "NOT REACHED"));
+  // Legacy castle-L5 line — retained. Under the NEW rule this NO LONGER wins; it is
+  // reported only as a mid-game milestone / regression signal.
+  p("  [legacy] castle L5 milestone: " + (castleLevelAt[5] ? "tick " + castleLevelAt[5] : "NOT REACHED") +
+    "   (state.victory fired: " + (victoryAt ? "tick " + victoryAt : "no") + ")");
+  p("  >> NEW VICTORY (aristocrat_home @>=" + VTHRESH + "% aris happiness): " +
+    (newVictoryAt ? "tick " + newVictoryAt : "NOT REACHED"));
+  p("     first aristocrat_home BUILT: " + (firstHomeBuiltAt ? "tick " + firstHomeBuiltAt : "NEVER"));
   p("  final: treasury=" + last.treasury + " prestige=" + last.prestige +
     " castle=L" + last.castle + " research=" + last.research + "/" +
     CONFIG.research.length + " active=" + (last.active || "-"));
@@ -365,6 +390,63 @@ function report() {
     p("  City#" + c.id + " L" + c.level + " happ=" + c.happ + " bld=" + c.bld + " gold=" + c.gold);
     p("      pop  " + TIERS.map((k,i)=>k.slice(0,4)+":"+c.pop[i]).join("  "));
     p("      th%  " + TIERS.map((k,i)=>k.slice(0,4)+":"+(c.th[i]==null?"-":c.th[i])).join("  "));
+  }
+
+  // --- NEW-VICTORY diagnostic: aristocrat homes + why aristocrats (aren't) 100% ---
+  // For every town that has any aristocrat_home, show the home's built state, the
+  // town's live aristocrat tierHappiness, and per-good satisfaction (stock on the
+  // shelf) for the aristocrat BASIC + EXTRA needs — so the capping good is one glance.
+  {
+    const arisNeeds = (CONFIG.needs.tiers.aristocrats) || { basic: [], extra: [] };
+    const allNeeds = [...arisNeeds.basic, ...arisNeeds.extra];
+    p("\n--- (a3) ARISTOCRAT-HOUSE STATUS (the NEW win gate) ---");
+    let anyHome = false;
+    for (const t of state.towns) {
+      const homes = t.buildings.filter(b => b && b.typeId === "aristocrat_home");
+      if (!homes.length) continue;
+      anyHome = true;
+      const built = homes.filter(b => b.built !== false).length;
+      const ah = t.tierHappiness && t.tierHappiness.aristocrats;
+      const ahStr = (typeof ah === "number") ? ah.toFixed(1) + "%"
+                  : (ah === null || ah === undefined ? "null (no aristocrats living here)" : String(ah));
+      p("  City#" + t.id + ": aristocrat_home ×" + homes.length + " (" + built + " built✓, " +
+        (homes.length - built) + " scaffold✗)  pop.aris=" + (Math.round((t.pop.aristocrats||0)*10)/10) +
+        "  tierHappiness.aristocrats=" + ahStr +
+        (typeof ah === "number" && ah >= VTHRESH ? "  <<< WINS" : ""));
+      p("      need shelf: " + allNeeds.map(g => {
+        const cls = arisNeeds.basic.indexOf(g) >= 0 ? "b" : "x";
+        const have = Math.round(t.stock[g] || 0);
+        return g + "[" + cls + "]:" + have + (have > 0.5 ? "" : "·MISSING");
+      }).join("  "));
+    }
+    if (!anyHome) p("  (no aristocrat_home built or scaffolded in any town — win path not yet engaged)");
+  }
+
+  // --- T3 LUXURY STATUS: the 7 goods exit-criterion 2b requires to be > 0 --------
+  {
+    const T3 = ["lamp", "pottery", "iron_armor", "chairs", "gold_ring", "brandy", "luxury_clothes"];
+    // producing cities per good = built building whose output is that good
+    const producers = {};
+    for (const g of T3) producers[g] = [];
+    for (const t of state.towns) {
+      for (const b of t.buildings) {
+        if (b.built === false) continue;
+        const def = CONFIG.buildings[b.typeId];
+        if (def && def.output && T3.indexOf(def.output.goodId) >= 0)
+          if (producers[def.output.goodId].indexOf(t.id) < 0) producers[def.output.goodId].push(t.id);
+      }
+    }
+    p("\n--- T3 LUXURY STATUS (exit-criterion 2b: every good must total > 0) ---");
+    let allNonZero = true;
+    for (const g of T3) {
+      const total = (last.goods[g] && last.goods[g].total) || 0;
+      const ok = total > 0.5;
+      if (!ok) allNonZero = false;
+      p("  " + g.padEnd(15) + " total=" + total.toFixed(1).padStart(7) +
+        (ok ? "  ✓" : "  ✗ DEAD") +
+        "   producers: " + (producers[g].length ? producers[g].map(i => "City#" + i).join(",") : "NONE built"));
+    }
+    p("  => criterion 2b (all 7 T3 luxuries > 0): " + (allNonZero ? "PASS" : "FAIL"));
   }
 
   // --- BAL2 tuner aid: per-city building roster (typeId Lvl built? workers) ----

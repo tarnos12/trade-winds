@@ -98,13 +98,16 @@ function stockAfterTick(typeId, good, unlocked) {
     { typeId: "cottage", q: 1, r: 0 },   // EC-A: worker 3
     { typeId: "manor", q: 0, r: 2 },     // EC-A: burgher 4
   ] };
+  // Phase-2 victory pass raised manor houseCapacity 4 -> 6 (more burgher housing so the
+  // burgher band can grow enough to staff/feed the T3 luxury chain). hut(2)/cottage(3)
+  // unchanged. So burgher base = 6, and ×1.15 royal_census => 6.9.
   const base = Buildings.housingCapacity(town);
-  ok("housingCapacity base (no state) unchanged", base.peasants === 2 && base.workers === 3 && base.burghers === 4);
+  ok("housingCapacity base (no state) unchanged", base.peasants === 2 && base.workers === 3 && base.burghers === 6);
   const noState = Buildings.housingCapacity(town, { research: withResearch([]) });
-  ok("housingCapacity with empty research == base", noState.peasants === 2 && noState.workers === 3 && noState.burghers === 4);
+  ok("housingCapacity with empty research == base", noState.peasants === 2 && noState.workers === 3 && noState.burghers === 6);
   const boosted = Buildings.housingCapacity(town, { research: withResearch(["royal_census"]) });
   ok("housingBonus scales all tiers (×1.15)",
-    Math.abs(boosted.peasants - 2.3) < 1e-9 && Math.abs(boosted.workers - 3.45) < 1e-9 && Math.abs(boosted.burghers - 4.6) < 1e-9);
+    Math.abs(boosted.peasants - 2.3) < 1e-9 && Math.abs(boosted.workers - 3.45) < 1e-9 && Math.abs(boosted.burghers - 6.9) < 1e-9);
 })();
 
 // =========================================================================
@@ -112,8 +115,8 @@ function stockAfterTick(typeId, good, unlocked) {
 //    No-state call must return the base cap (buildings.test.js contract).
 // =========================================================================
 (() => {
-  ok("slotCap base by level unchanged (no state)",
-    Buildings.slotCap(1) === 8 && Buildings.slotCap(2) === 12 && Buildings.slotCap(3) === 16 && Buildings.slotCap(4) === 20);
+  ok("slotCap base by level (Phase-2 victory-pass retune: L3=17, L4=24)",
+    Buildings.slotCap(1) === 8 && Buildings.slotCap(2) === 12 && Buildings.slotCap(3) === 17 && Buildings.slotCap(4) === 24);
   ok("slotCap with empty research == base", Buildings.slotCap(2, { research: withResearch([]) }) === 12);
   ok("slotBonus adds +1 slot", Buildings.slotCap(2, { research: withResearch(["town_charters"]) }) === 13);
 })();

@@ -16,10 +16,12 @@ const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(
   m[1] + "\nthis.CONFIG=CONFIG; this.HexMath=HexMath; this.Sim=Sim;" +
-         "this.Town=Town; this.Castle=Castle; this.Quests=Quests;",
+         "this.Town=Town; this.Castle=Castle; this.Quests=Quests;" +
+         // Victory lands in slice 2A — export defensively so a pre-2A eval doesn't throw.
+         "\nthis.Victory=(typeof Victory!=='undefined')?Victory:undefined;",
   sandbox
 );
-const { CONFIG, Town, Castle, Quests } = sandbox;
+const { CONFIG, Town, Castle, Quests, Victory } = sandbox;
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -117,15 +119,38 @@ function mkTown(over) {
   ok("castle L2 is not victory", state.victory !== true);
 })();
 
-// ---- 5. Reaching level 5 flags victory --------------------------------------
+// ---- 5. Reaching level 5 does NOT win (victory moved to aristocrat_home @100%) --
+// The win condition is no longer castle L5 — it is a built aristocrat_home at 100%
+// aristocrat happiness (see §6 + test/victory.test.js). Castle L5 stays a milestone /
+// prestige sink; Castle.upgrade must NOT flip state.victory nor return a truthy .victory.
 (function () {
-  // Fund the castle heavily and upgrade until max.
   const state = { castleLevel: 1, prestige: 1000, treasury: 100000 };
-  let guard = 0;
-  while (Castle.canUpgrade(state).ok && guard++ < 10) Castle.upgrade(state);
+  let last = null, guard = 0;
+  while (Castle.canUpgrade(state).ok && guard++ < 10) last = Castle.upgrade(state);
   ok("castle reaches max level 5", state.castleLevel === CONFIG.castle.maxLevel);
-  ok("castle level 5 flags victory", state.victory === true);
+  ok("castle level 5 does NOT flag victory", state.victory !== true);
+  ok("Castle.upgrade return carries no truthy .victory", !(last && last.victory));
   ok("no upgrade past max", Castle.canUpgrade(state).ok === false);
+})();
+
+// ---- 6. Aristocrat house at 100% happiness flags victory (the NEW win) -------
+// Full truth table lives in test/victory.test.js; this is the progress-suite anchor.
+// Victory/CONFIG.victory arrive in slice 2A — gate cleanly so this fails (not crashes)
+// pre-2A and turns green once the Lead builds 2A.
+(function () {
+  const apiReady = !!(Victory && typeof Victory.check === "function"
+                      && CONFIG.victory && typeof CONFIG.victory.aristocratHappiness === "number");
+  ok("Victory.check + CONFIG.victory present (built in 2A)", apiReady);
+  if (!apiReady) return;
+  const win = { towns: [ { id: 1, buildings: [{ typeId: "aristocrat_home", built: true }],
+                           tierHappiness: { aristocrats: 100 }, pop: { aristocrats: 1 } } ], victory: false };
+  Victory.check(win);
+  ok("aristocrat_home @100% flags victory", win.victory === true);
+  // control: castle L5 with no aristocrat_home does NOT win
+  const noWin = { towns: [ { id: 1, buildings: [], tierHappiness: { aristocrats: 100 }, pop: { aristocrats: 0 } } ],
+                  victory: false, castleLevel: 5 };
+  Victory.check(noWin);
+  ok("no aristocrat_home => no victory even at castle L5", noWin.victory !== true);
 })();
 
 // -----------------------------------------------------------------------------

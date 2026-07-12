@@ -57,18 +57,20 @@ function makeTown(over) {
 }
 
 // ============================================================================
-// 1) slotCap by town level = 8 / 12 / 16 / 20 (EC-A -> BAL2 retune; index 0 unused; fallback 3).
+// 1) slotCap by town level = 8 / 12 / 17 / 24 (EC-A -> BAL2 -> Phase-2 victory-pass
+//    retune: L3/L4 widened so a connected city can host the full T3 luxury chain +
+//    aristocrat housing; index 0 unused; fallback 3).
 // ============================================================================
 ok("slotCap(1) === 8", Buildings.slotCap(1) === 8);
 ok("slotCap(2) === 12", Buildings.slotCap(2) === 12);
-ok("slotCap(3) === 16", Buildings.slotCap(3) === 16);
-ok("slotCap(4) === 20", Buildings.slotCap(4) === 20);
+ok("slotCap(3) === 17", Buildings.slotCap(3) === 17);
+ok("slotCap(4) === 24", Buildings.slotCap(4) === 24);
 ok("slotCap(unknown) falls back to 3", Buildings.slotCap(99) === 3);
 
 // ============================================================================
 // 2) CONFIG.town + catalog sanity (shared data contract).
 // ============================================================================
-ok("CONFIG.town.slotCap = [0,8,12,16,20]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 8, 12, 16, 20]));
+ok("CONFIG.town.slotCap = [0,8,12,17,24]", JSON.stringify(CONFIG.town.slotCap) === JSON.stringify([0, 8, 12, 17, 24]));
 ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q === 0 && CONFIG.town.castle.r === 0);
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
@@ -105,7 +107,16 @@ ok("expected extractor ids present", ["lumberjack", "farm", "iron_mine", "quarry
 // === CC: smelter/weaver RETIRED; new worker + citizen processors present. ===
 ok("smelter + weaver retired (removed from catalog)", !CONFIG.buildings.smelter && !CONFIG.buildings.weaver);
 ok("expected WORKER processor ids present", ["sawmill", "mill", "bakery", "brewery", "brickworks", "tailoring", "charcoal_burner", "stonetool_maker", "oil_maker"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor"));
-ok("expected CITIZEN processor ids present + burgher-staffed", ["forge", "armory", "pottery_workshop", "distillery", "goldsmith", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "burgher"));
+// Phase-2 victory pass re-tiered pottery_workshop + carpentry to WORKER-staffed (with
+// a burgher research band, lamp_maker precedent) so their T3 inputs (pottery, chairs)
+// can be produced before a full burgher workforce exists — un-gating the aristocrat
+// chain. The remaining luxury processors stay burgher-staffed.
+ok("expected LUXURY processor ids present + correctly tiered", (() => {
+  const burgherMade = ["forge", "armory", "distillery", "goldsmith", "luxury_tailor"];
+  const workerMadeCitizenBand = ["pottery_workshop", "carpentry"];
+  return burgherMade.every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "burgher")
+      && workerMadeCitizenBand.every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "processor" && CONFIG.buildings[id].workerTier === "worker" && CONFIG.buildings[id].researchBand === "burgher");
+})());
 // BAL2 bootstrap staffing: lamp (citizen BASIC) is worker-made; coal (worker BASIC)
 // is peasant-made via Charcoal Burning — research bands preserved via researchBand.
 ok("lamp_maker is worker-staffed with citizen-band research", CONFIG.buildings.lamp_maker.workerTier === "worker" && CONFIG.buildings.lamp_maker.researchBand === "burgher");

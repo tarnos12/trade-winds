@@ -315,19 +315,19 @@ ok("aristocrat base tax rate is the config maximum (mutation guard)",
    JSON.stringify(RPT));
 
 // ---------------------------------------------------------------------------
-// (H) VICTORY PATH — a healthy kingdom drives Quests -> prestige -> Castle L5.
-//     Deterministic: 3 towns at >=90% happiness (the happiness quest passes),
-//     the castle warehouse is fed the active deliver-quest's good (simulating
-//     castle trade), and a steady tariff income accrues. Assert castle level 5
-//     (victory) is reached, and that the rotation never jams on an impossible
-//     deliver quest (all deliver goods are producible with full research).
+// (H) CASTLE LADDER — mid-game prestige sink, NO LONGER the victory (Phase-2 pass).
+//     The win moved to a 100%-happy aristocrat_home (see test/victory.test.js +
+//     test/aristocrat_economy.test.js). A healthy kingdom still drives
+//     Quests -> prestige -> Castle L5; assert the ladder climbs to L5 as a MILESTONE,
+//     that reaching L5 does NOT flip victory, and that the deliver-quest rotation
+//     never jams on an impossible good.
 // ---------------------------------------------------------------------------
 const vstate = {
   tick: 0, treasury: 0, prestige: 0, castleLevel: 1, warehouse: {},
   research: { unlocked: (CONFIG.research || []).map(n => n.id), active: null, progress: 0, queue: [] },
   towns: [{ happiness: 92 }, { happiness: 95 }, { happiness: 90 }],
 };
-let victoryTick = -1;
+let l5Tick = -1;
 for (let t = 0; t < 20000; t++) {
   vstate.tick = t;
   vstate.treasury += 1.0;                       // steady tariff income
@@ -336,13 +336,14 @@ for (let t = 0; t < 20000; t++) {
   if (tmpl && tmpl.kind === "deliver") vstate.warehouse[tmpl.good] = (vstate.warehouse[tmpl.good] || 0) + 0.5;
   Quests.tick(vstate);
   if (Castle.canUpgrade(vstate).ok) Castle.upgrade(vstate);
-  if (vstate.victory) { victoryTick = t; break; }
+  if (vstate.castleLevel >= 5) { l5Tick = t; break; }
 }
-ok("victory (castle L5) is reachable by a healthy kingdom", vstate.victory === true,
+ok("castle ladder reaches level 5 (milestone, not victory)", vstate.castleLevel === 5,
    "castleLevel=" + vstate.castleLevel);
-ok("castle reached exactly level 5", vstate.castleLevel === 5);
-ok("victory reached in a reasonable horizon (< 10000 ticks)", victoryTick >= 0 && victoryTick < 10000,
-   "victoryTick=" + victoryTick);
+ok("reaching castle L5 does NOT flag victory (win moved to aristocrat_home@100%)",
+   vstate.victory !== true, "victory=" + vstate.victory);
+ok("castle L5 reached in a reasonable horizon (< 10000 ticks)", l5Tick >= 0 && l5Tick < 10000,
+   "l5Tick=" + l5Tick);
 ok("quest rotation completed many quests (never jammed)", (vstate._questsCompleted || 0) >= 20,
    "questsCompleted=" + (vstate._questsCompleted || 0));
 // Castle level requirements must be monotone & finite so L5 is not walled off.

@@ -168,27 +168,39 @@ Numeric bars in 2c/3 are QA proposals — the lead freezes the exact "reasonable
 
 ## 5. Characterization-test plan (files + assertions)
 
-### 5a. MODIFY `test/progress.test.js` — the victory rule changes here
+### Detector API — PINNED with EconDev (confirmed)
 
-The current suite section **"5. Reaching level 5 flags victory"** (lines 120–129) asserts
-`castle level 5 flags victory` — **this assertion must be inverted** to the new rule. Plan:
+- **Function:** `Victory.check(state) -> state` — new pure object `Victory` in `progress.js`
+  (after the Castle block). Side effect: sets `state.victory = true` when a town has a BUILT
+  `aristocrat_home` AND `tierHappiness.aristocrats >= CONFIG.victory.aristocratHappiness`.
+  **Latches** (early-returns if `state.victory` already true). Deterministic, reads only state.
+- **Threshold:** `CONFIG.victory.aristocratHappiness` (default **99.5**), added in `progress.js`.
+  Tests assert against `CONFIG.victory.aristocratHappiness`, **not a hardcoded literal**.
+- **Predicate** (matches EconDev's impl):
+  built home `town.buildings.some(b => b && b.typeId === "aristocrat_home" && b.built !== false)`
+  · happiness `typeof town.tierHappiness.aristocrats === "number" && ... >= threshold`.
+- **Empty-home safety:** `tierHappiness.aristocrats` is `null` unless aristocrats actually live
+  there (sim.js:372) → a built-but-empty home cannot false-win → **required test case**.
+- **Castle L5:** EconDev removes the flip at `progress.js:107` and drops the `victory` field from
+  `Castle.upgrade`'s return (→ `{ ok:true, level }`). Tests assert L5 does NOT set `state.victory`
+  AND `Castle.upgrade(...)` return has no truthy `.victory`.
+- **Wiring:** shell adds `Victory.check(state)` after `Quests.tick` in mainloop.js:64 (lead).
+  Tests call `Victory.check(state)` directly (no shell change needed for the pure test).
+
+### 5a. MODIFY `test/progress.test.js` — invert the victory rule
+
+The current section **"5. Reaching level 5 flags victory"** (lines 120–129) asserts
+`castle level 5 flags victory` — **inverted** to the new rule:
 
 - **Rewrite section 5** → "Reaching level 5 does NOT flag victory": fund castle to L5 with no
-  aristocrat_home in state → assert `state.victory !== true` and `state.castleLevel === 5`
-  (L5 stays a milestone). Keeps the existing "castle reaches max level 5" + "no upgrade past
-  max" assertions; only the `victory === true` expectation flips to `!== true`.
-- **ADD section 6** "Aristocrat house at 100% flags victory": build a minimal state with a town
-  containing a **built** `aristocrat_home` and `tierHappiness.aristocrats = 100` (and a control
-  town at 99% that does NOT win) → run the new detector (whatever `progress.js` exposes —
-  coordinate the function name/signature with EconDev) → assert `state.victory === true`.
-- **ADD** "aristocrat house present but happiness < 100 does NOT win" (e.g. 95%, and a case
-  with 100% happiness but the home still `built:false`/scaffold → no win).
-- Keep sections 1–4 (town upgrade / quests / castle upgrade-consumes) unchanged — castle
-  leveling mechanics still exist as a prestige sink; only the L5→victory flip is removed.
-
-**Seam to agree with EconDev:** exact detector API. Options: `Castle`/`Progress` exposes
-`Progress.checkVictory(state)` that scans towns, OR the flag is set inside a tick. QA's test
-must call whatever pure function EconDev provides. Message EconDev to fix this before Phase 2.
+  aristocrat_home → assert `state.victory !== true`, `state.castleLevel === 5`, AND the final
+  `Castle.upgrade` return has no truthy `.victory`. Keep the "reaches max level 5" + "no upgrade
+  past max" assertions.
+- **ADD section 6** "Aristocrat house at 100% flags victory": town with a **built**
+  `aristocrat_home` + `tierHappiness.aristocrats = CONFIG.victory.aristocratHappiness` (or 100) →
+  `Victory.check(state)` → assert `state.victory === true`.
+- Keep sections 1–4 unchanged — castle leveling stays a prestige sink; only the L5→victory flip
+  is removed. Export `Victory` from the sandbox eval alongside `Town/Castle/Quests`.
 
 ### 5b. ADD `test/victory.test.js` (new) — focused new-victory characterization
 
