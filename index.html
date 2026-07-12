@@ -6085,6 +6085,48 @@ var CastleMarket = (function () {
     ctx.stroke();
   }
 
+  // In-DOM confirm dialog. Mirrors the research-editor's sandbox-safe uiConfirm
+  // (pass-1 commit 1fa3698): native confirm()/alert() are BLOCKED inside the
+  // sandboxed Artifact iframe (no allow-modals), so a real dialog element is the
+  // only reliable gate. Non-blocking — runs `onConfirm` only when the user
+  // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
+  // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
+  function uiConfirm(message, onConfirm) {
+    const prev = document.getElementById("uiConfirm");
+    if (prev) prev.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "uiConfirm";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:1000;display:flex;align-items:center;" +
+      "justify-content:center;background:rgba(0,0,0,0.55);";
+    const box = document.createElement("div");
+    box.style.cssText = "background:#2a2118;border:1px solid #c9a24a;border-radius:8px;" +
+      "padding:16px 18px;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,.5);color:#f4ecdd;" +
+      "font:13px system-ui,sans-serif;";
+    const msg = document.createElement("div");
+    msg.textContent = message;
+    msg.style.cssText = "line-height:1.5;margin-bottom:14px;";
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+    const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
+    const confirmNow = () => { close(); onConfirm(); };
+    function onKey(e) {
+      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
+      else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
+    }
+    const cancel = document.createElement("button");
+    cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
+    cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
+    const ok = document.createElement("button");
+    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
+    ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
+    row.appendChild(cancel); row.appendChild(ok);
+    box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
+    overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onKey, true);
+    ok.focus();
+  }
+
   // ---------------------------------------------------------------
   // Build actions
   // ---------------------------------------------------------------
@@ -6112,7 +6154,7 @@ var CastleMarket = (function () {
     return false;
   }
 
-  function place(q, r) {
+  function place(q, r, isPaint) {
     const k = HexMath.key(q, r);
     if (state.mode === "road") {
       if (canPlace(q, r)) {
@@ -6133,8 +6175,30 @@ var CastleMarket = (function () {
     } else if (state.mode === "erase") {
       let changed = false;
       if (state.roads.delete(k)) { Pathing.invalidate(); changed = true; }
-      const ti = state.towns.findIndex(t => t.q === q && t.r === r);
-      if (ti >= 0) { state.towns.splice(ti, 1); changed = true; }
+      // P0: a town center is removed ONLY by a deliberate single click — never
+      // swept by drag-paint erase (isPaint) — and a DEVELOPED city (buildings,
+      // population, or gold) first requires an explicit confirm, so a mis-aimed
+      // click near a road terminus can't silently wipe a whole city. Roads above
+      // still erase on both click and drag (intended paint-erase). Removing a
+      // town invalidates the route cache — a town center is a Pathing endpoint.
+      if (!isPaint) {
+        const ti = state.towns.findIndex(t => t.q === q && t.r === r);
+        if (ti >= 0) {
+          const t = state.towns[ti];
+          const developed = (Array.isArray(t.buildings) && t.buildings.length > 0)
+            || ((typeof Town !== "undefined" && Town.popTotal) ? Town.popTotal(t) > 0 : false)
+            || (t.gold || 0) > 0;
+          const removeTown = () => {
+            const idx = state.towns.indexOf(t);   // re-find: indices may have shifted since the click
+            if (idx >= 0) { state.towns.splice(idx, 1); Pathing.invalidate(); scheduleSave(); }
+          };
+          if (developed) {
+            uiConfirm("Demolish this city? Its buildings, population, and gold will be lost. This cannot be undone.", removeTown);
+          } else {
+            state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
+          }
+        }
+      }
       if (changed) scheduleSave();
     }
   }
@@ -6177,7 +6241,7 @@ var CastleMarket = (function () {
       state.cam.y -= dy / state.zoom;
     } else if (state.mode === "road" || state.mode === "erase") {
       const k = HexMath.key(h.q, h.r);
-      if (k !== lastPaintKey) { lastPaintKey = k; place(h.q, h.r); }
+      if (k !== lastPaintKey) { lastPaintKey = k; place(h.q, h.r, true); }  // P0: isPaint — drag never deletes a town center
     }
   });
 
