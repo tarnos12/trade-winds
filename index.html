@@ -8748,7 +8748,12 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   // done }. For 'return' I mirror the fraction (1-progress) so a cart that reset
   // progress to 0 on the way home walks the SAME path backwards — see integration
   // notes if T8 keeps progress running instead of resetting.
-  function cartPixel(cart) {
+  function cartPixel(cart) { return cartPixelAt(cart, cart && cart.progress); }
+  // Pixel position at fraction `frac` (0..1) along the cart's hex path, walking
+  // cumulative segment lengths — so it follows the path THROUGH EVERY HEX (tile to
+  // tile), never a straight chord across them. drawCarts glides `frac` itself so
+  // the drawn cart always sits on the polyline.
+  function cartPixelAt(cart, frac) {
     const path = cart && cart.path;
     if (!Array.isArray(path) || path.length === 0) return null;
     const pts = [];
@@ -8763,7 +8768,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     // for home, so progress always runs 0→1 along the current path regardless of
     // phase (no mirroring). Parked phases hold progress at 1 → the path's end
     // (loading = seller on the outbound path; unloading = buyer on the reversed path).
-    const f = Math.max(0, Math.min(1, Number(cart.progress) || 0));
+    const f = Math.max(0, Math.min(1, Number(frac) || 0));
     // walk cumulative segment lengths to the fraction f of total length
     let total = 0; const seg = [];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -8821,30 +8826,30 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
-      const target = cartPixel(cart);
-      if (!target) continue;
-      live.add(cart.id);
+      const logical = Math.max(0, Math.min(1, Number(cart.progress) || 0));
+      // Signature changes when the trader turns for home (cart.path is reversed)
+      // or a new trip starts, so we reset instead of gliding across the board.
+      const sig = Array.isArray(cart.path)
+        ? cart.path.length + "|" + cart.path[0] + "|" + cart.path[cart.path.length - 1] : "";
       let rp = cartRender[cart.id];
-      if (!rp) {
-        // first sighting of this cart — nothing to glide from yet, snap once.
-        rp = cartRender[cart.id] = { x: target.x, y: target.y, fx: target.x, fy: target.y, tx: target.x, ty: target.y, t: 1 };
-      } else if (target.x !== rp.tx || target.y !== rp.ty) {
-        // the logical position advanced (a tick moved cart.progress, or the cart
-        // turned for home) — start a fresh glide leg from the current draw spot.
-        rp.fx = rp.x; rp.fy = rp.y;
-        rp.tx = target.x; rp.ty = target.y;
-        rp.t = 0;
+      if (!rp || rp.sig !== sig || logical < rp.tf - 0.02) {
+        // new cart, path reversed, or progress reset → snap the rendered fraction.
+        rp = cartRender[cart.id] = { pf: logical, ff: logical, tf: logical, t: 1, sig: sig, x: 0, y: 0 };
+      } else if (logical !== rp.tf) {
+        // a tick advanced logical progress → glide the FRACTION from where we are to
+        // the new logical fraction over one tick's real duration.
+        rp.ff = rp.pf; rp.tf = logical; rp.t = 0;
       }
-      if (rp.t < 1) {
-        rp.t = Math.min(1, rp.t + frameDt / tickMs);
-        // LINEAR (no easing) → CONSTANT velocity across the leg. Each economy tick
-        // advances cart.progress by a fixed amount (more on a road, half as much
-        // off-road), so equal-duration legs cover equal distance ⇒ the trader flows
-        // at a steady speed, naturally slower off-road and faster on a road. (An
-        // ease here would visibly accelerate/decelerate every tick — the pulsing.)
-        rp.x = rp.fx + (rp.tx - rp.fx) * rp.t;
-        rp.y = rp.fy + (rp.ty - rp.fy) * rp.t;
-      }
+      // LINEAR (no easing) → CONSTANT speed. We interpolate the PATH FRACTION, not
+      // raw x/y, so the drawn cart always sits ON the hex polyline (tile to tile)
+      // instead of cutting a straight chord to a point half a path ahead. Roads
+      // advance cart.progress twice as far per tick as off-road ⇒ faster on roads,
+      // slower off-road, steady in between.
+      rp.pf = (rp.t < 1) ? (rp.t = Math.min(1, rp.t + frameDt / tickMs), rp.ff + (rp.tf - rp.ff) * rp.t) : rp.tf;
+      const pos = cartPixelAt(cart, rp.pf);
+      if (!pos) continue;
+      rp.x = pos.x; rp.y = pos.y;
+      live.add(cart.id);
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
         ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
@@ -10932,8 +10937,11 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
           wanted.add(key);
           let tr = roster.get(key);
           if (!tr) {
+            const def = CONFIG.buildings[b.typeId];
             tr = {
               townId: t.id, bq: b.q, br: b.r, good,
+              amount: Math.max(1, Math.round((def && def.output && def.output.ratePerWorker) || 1)),
+              pts: hexLinePixels(b.q, b.r, t.q, t.r),   // L: tile-to-tile hex path
               t: Math.random(),                 // desynced start along the leg
               dir: Math.random() < 0.5 ? 1 : -1,
               off: (Math.random() - 0.5),       // lateral jitter so co-located porters spread
@@ -10953,6 +10961,45 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
       return null;
     }
 
+    // Tile-to-tile route (L): a hex line from the building hex to the town centre,
+    // as pixel points — so a porter walks the SAME hex path a real cart would,
+    // not a straight diagonal across tiles. Computed once per porter (endpoints
+    // are static). Mirrors Pathing's off-road cube-lerp line.
+    function hexLinePixels(bq, br, cq, cr) {
+      const N = HexMath.dist(bq, br, cq, cr);
+      const pts = [];
+      let last = null;
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        const h = HexMath.hexRound(bq + (cq - bq) * t, br + (cr - br) * t);
+        const k = h.q + "," + h.r;
+        if (k !== last) { pts.push(HexMath.hexToPixel(h.q, h.r, SIZE)); last = k; }
+      }
+      if (pts.length === 0) pts.push(HexMath.hexToPixel(bq, br, SIZE));
+      return pts;
+    }
+
+    // Point at fraction f (0..1) along a pixel polyline, by cumulative length.
+    function pointAlong(pts, f) {
+      if (pts.length === 1) return pts[0];
+      let total = 0; const seg = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const l = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+        seg.push(l); total += l;
+      }
+      if (total === 0) return pts[0];
+      let d = Math.max(0, Math.min(1, f)) * total;
+      for (let i = 0; i < seg.length; i++) {
+        if (d <= seg[i] || i === seg.length - 1) {
+          const t = seg[i] ? d / seg[i] : 0;
+          return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t,
+                   y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+        }
+        d -= seg[i];
+      }
+      return pts[pts.length - 1];
+    }
+
     // Small porter token: faint shadow + little body + the carried good's icon.
     // No wheels and ~half the radius of a trade cart's parcel (size/shape already
     // reads as ambient, not an external caravan) — I: the BODY colour is also now
@@ -10963,26 +11010,16 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     // old plain colour dot so the carried good reads explicitly, matching the
     // external carts' cargo-chip convention (drawGoodChip, renderer.js).
     const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
-    function drawToken(x, y, good) {
+    function drawToken(x, y, good, amount) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      // carried-good icon, small pill above the body so it stays legible at 1/4 scale.
-      const iconPx = Math.max(7, Math.round(SIZE * 0.16));
-      const ico = (typeof goodIcon === "function") ? goodIcon(good) : "";
-      if (ico) {
-        ctx.save();
-        ctx.font = iconPx + "px system-ui, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        const iy = y - r * 1.9;
-        ctx.fillStyle = "rgba(18,12,5,0.55)";
-        ctx.beginPath(); ctx.arc(x, iy, iconPx * 0.62, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#f4ecdd";
-        ctx.fillText(ico, x, iy + 0.5);
-        ctx.restore();
-      }
+      // K: the SAME cargo chip external carts use (drawGoodChip), so an internal
+      // porter reads its carried good exactly like a trade cart — only the body
+      // colour/size distinguishes the two layers.
+      if (typeof drawGoodChip === "function" && good) drawGoodChip(x, y - r * 2.3, good, amount || 1);
     }
 
     function draw(dt) {
@@ -10994,16 +11031,15 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
         else if (tr.t <= 0) { tr.t = 0; tr.dir = 1; }
         const town = townById(tr.townId);
         if (!town) continue;
-        const a = HexMath.hexToPixel(tr.bq, tr.br, SIZE);   // building end
-        const c = HexMath.hexToPixel(town.q, town.r, SIZE); // centre end
-        const f = tr.t * tr.t * (3 - 2 * tr.t);             // smoothstep ease
-        // perpendicular jitter keeps porters from the same building from overlapping
-        const dx = c.x - a.x, dy = c.y - a.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const j = tr.off * SIZE * 0.4;
-        const x = a.x + dx * f + (-dy / len) * j;
-        const y = a.y + dy * f + ( dx / len) * j;
-        drawToken(x, y, tr.good);
+        if (!tr.pts) tr.pts = hexLinePixels(tr.bq, tr.br, town.q, town.r);
+        const f = tr.t * tr.t * (3 - 2 * tr.t);             // eased shuttle turnaround
+        const p = pointAlong(tr.pts, f);                    // L: walk the hex path tile-to-tile
+        // perpendicular jitter (vs the overall building→centre line) so porters
+        // from the same building don't overlap.
+        const a = tr.pts[0], c = tr.pts[tr.pts.length - 1];
+        const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
+        const j = tr.off * SIZE * 0.3;
+        drawToken(p.x + (-dy / len) * j, p.y + (dx / len) * j, tr.good, tr.amount);
       }
     }
 

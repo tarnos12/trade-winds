@@ -53,8 +53,11 @@
           wanted.add(key);
           let tr = roster.get(key);
           if (!tr) {
+            const def = CONFIG.buildings[b.typeId];
             tr = {
               townId: t.id, bq: b.q, br: b.r, good,
+              amount: Math.max(1, Math.round((def && def.output && def.output.ratePerWorker) || 1)),
+              pts: hexLinePixels(b.q, b.r, t.q, t.r),   // L: tile-to-tile hex path
               t: Math.random(),                 // desynced start along the leg
               dir: Math.random() < 0.5 ? 1 : -1,
               off: (Math.random() - 0.5),       // lateral jitter so co-located porters spread
@@ -74,6 +77,45 @@
       return null;
     }
 
+    // Tile-to-tile route (L): a hex line from the building hex to the town centre,
+    // as pixel points — so a porter walks the SAME hex path a real cart would,
+    // not a straight diagonal across tiles. Computed once per porter (endpoints
+    // are static). Mirrors Pathing's off-road cube-lerp line.
+    function hexLinePixels(bq, br, cq, cr) {
+      const N = HexMath.dist(bq, br, cq, cr);
+      const pts = [];
+      let last = null;
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        const h = HexMath.hexRound(bq + (cq - bq) * t, br + (cr - br) * t);
+        const k = h.q + "," + h.r;
+        if (k !== last) { pts.push(HexMath.hexToPixel(h.q, h.r, SIZE)); last = k; }
+      }
+      if (pts.length === 0) pts.push(HexMath.hexToPixel(bq, br, SIZE));
+      return pts;
+    }
+
+    // Point at fraction f (0..1) along a pixel polyline, by cumulative length.
+    function pointAlong(pts, f) {
+      if (pts.length === 1) return pts[0];
+      let total = 0; const seg = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const l = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+        seg.push(l); total += l;
+      }
+      if (total === 0) return pts[0];
+      let d = Math.max(0, Math.min(1, f)) * total;
+      for (let i = 0; i < seg.length; i++) {
+        if (d <= seg[i] || i === seg.length - 1) {
+          const t = seg[i] ? d / seg[i] : 0;
+          return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t,
+                   y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+        }
+        d -= seg[i];
+      }
+      return pts[pts.length - 1];
+    }
+
     // Small porter token: faint shadow + little body + the carried good's icon.
     // No wheels and ~half the radius of a trade cart's parcel (size/shape already
     // reads as ambient, not an external caravan) — I: the BODY colour is also now
@@ -84,26 +126,16 @@
     // old plain colour dot so the carried good reads explicitly, matching the
     // external carts' cargo-chip convention (drawGoodChip, renderer.js).
     const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
-    function drawToken(x, y, good) {
+    function drawToken(x, y, good, amount) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      // carried-good icon, small pill above the body so it stays legible at 1/4 scale.
-      const iconPx = Math.max(7, Math.round(SIZE * 0.16));
-      const ico = (typeof goodIcon === "function") ? goodIcon(good) : "";
-      if (ico) {
-        ctx.save();
-        ctx.font = iconPx + "px system-ui, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        const iy = y - r * 1.9;
-        ctx.fillStyle = "rgba(18,12,5,0.55)";
-        ctx.beginPath(); ctx.arc(x, iy, iconPx * 0.62, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#f4ecdd";
-        ctx.fillText(ico, x, iy + 0.5);
-        ctx.restore();
-      }
+      // K: the SAME cargo chip external carts use (drawGoodChip), so an internal
+      // porter reads its carried good exactly like a trade cart — only the body
+      // colour/size distinguishes the two layers.
+      if (typeof drawGoodChip === "function" && good) drawGoodChip(x, y - r * 2.3, good, amount || 1);
     }
 
     function draw(dt) {
@@ -115,16 +147,15 @@
         else if (tr.t <= 0) { tr.t = 0; tr.dir = 1; }
         const town = townById(tr.townId);
         if (!town) continue;
-        const a = HexMath.hexToPixel(tr.bq, tr.br, SIZE);   // building end
-        const c = HexMath.hexToPixel(town.q, town.r, SIZE); // centre end
-        const f = tr.t * tr.t * (3 - 2 * tr.t);             // smoothstep ease
-        // perpendicular jitter keeps porters from the same building from overlapping
-        const dx = c.x - a.x, dy = c.y - a.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const j = tr.off * SIZE * 0.4;
-        const x = a.x + dx * f + (-dy / len) * j;
-        const y = a.y + dy * f + ( dx / len) * j;
-        drawToken(x, y, tr.good);
+        if (!tr.pts) tr.pts = hexLinePixels(tr.bq, tr.br, town.q, town.r);
+        const f = tr.t * tr.t * (3 - 2 * tr.t);             // eased shuttle turnaround
+        const p = pointAlong(tr.pts, f);                    // L: walk the hex path tile-to-tile
+        // perpendicular jitter (vs the overall building→centre line) so porters
+        // from the same building don't overlap.
+        const a = tr.pts[0], c = tr.pts[tr.pts.length - 1];
+        const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
+        const j = tr.off * SIZE * 0.3;
+        drawToken(p.x + (-dy / len) * j, p.y + (dx / len) * j, tr.good, tr.amount);
       }
     }
 

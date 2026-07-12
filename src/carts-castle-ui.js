@@ -34,7 +34,12 @@
   // done }. For 'return' I mirror the fraction (1-progress) so a cart that reset
   // progress to 0 on the way home walks the SAME path backwards — see integration
   // notes if T8 keeps progress running instead of resetting.
-  function cartPixel(cart) {
+  function cartPixel(cart) { return cartPixelAt(cart, cart && cart.progress); }
+  // Pixel position at fraction `frac` (0..1) along the cart's hex path, walking
+  // cumulative segment lengths — so it follows the path THROUGH EVERY HEX (tile to
+  // tile), never a straight chord across them. drawCarts glides `frac` itself so
+  // the drawn cart always sits on the polyline.
+  function cartPixelAt(cart, frac) {
     const path = cart && cart.path;
     if (!Array.isArray(path) || path.length === 0) return null;
     const pts = [];
@@ -49,7 +54,7 @@
     // for home, so progress always runs 0→1 along the current path regardless of
     // phase (no mirroring). Parked phases hold progress at 1 → the path's end
     // (loading = seller on the outbound path; unloading = buyer on the reversed path).
-    const f = Math.max(0, Math.min(1, Number(cart.progress) || 0));
+    const f = Math.max(0, Math.min(1, Number(frac) || 0));
     // walk cumulative segment lengths to the fraction f of total length
     let total = 0; const seg = [];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -107,30 +112,30 @@
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
-      const target = cartPixel(cart);
-      if (!target) continue;
-      live.add(cart.id);
+      const logical = Math.max(0, Math.min(1, Number(cart.progress) || 0));
+      // Signature changes when the trader turns for home (cart.path is reversed)
+      // or a new trip starts, so we reset instead of gliding across the board.
+      const sig = Array.isArray(cart.path)
+        ? cart.path.length + "|" + cart.path[0] + "|" + cart.path[cart.path.length - 1] : "";
       let rp = cartRender[cart.id];
-      if (!rp) {
-        // first sighting of this cart — nothing to glide from yet, snap once.
-        rp = cartRender[cart.id] = { x: target.x, y: target.y, fx: target.x, fy: target.y, tx: target.x, ty: target.y, t: 1 };
-      } else if (target.x !== rp.tx || target.y !== rp.ty) {
-        // the logical position advanced (a tick moved cart.progress, or the cart
-        // turned for home) — start a fresh glide leg from the current draw spot.
-        rp.fx = rp.x; rp.fy = rp.y;
-        rp.tx = target.x; rp.ty = target.y;
-        rp.t = 0;
+      if (!rp || rp.sig !== sig || logical < rp.tf - 0.02) {
+        // new cart, path reversed, or progress reset → snap the rendered fraction.
+        rp = cartRender[cart.id] = { pf: logical, ff: logical, tf: logical, t: 1, sig: sig, x: 0, y: 0 };
+      } else if (logical !== rp.tf) {
+        // a tick advanced logical progress → glide the FRACTION from where we are to
+        // the new logical fraction over one tick's real duration.
+        rp.ff = rp.pf; rp.tf = logical; rp.t = 0;
       }
-      if (rp.t < 1) {
-        rp.t = Math.min(1, rp.t + frameDt / tickMs);
-        // LINEAR (no easing) → CONSTANT velocity across the leg. Each economy tick
-        // advances cart.progress by a fixed amount (more on a road, half as much
-        // off-road), so equal-duration legs cover equal distance ⇒ the trader flows
-        // at a steady speed, naturally slower off-road and faster on a road. (An
-        // ease here would visibly accelerate/decelerate every tick — the pulsing.)
-        rp.x = rp.fx + (rp.tx - rp.fx) * rp.t;
-        rp.y = rp.fy + (rp.ty - rp.fy) * rp.t;
-      }
+      // LINEAR (no easing) → CONSTANT speed. We interpolate the PATH FRACTION, not
+      // raw x/y, so the drawn cart always sits ON the hex polyline (tile to tile)
+      // instead of cutting a straight chord to a point half a path ahead. Roads
+      // advance cart.progress twice as far per tick as off-road ⇒ faster on roads,
+      // slower off-road, steady in between.
+      rp.pf = (rp.t < 1) ? (rp.t = Math.min(1, rp.t + frameDt / tickMs), rp.ff + (rp.tf - rp.ff) * rp.t) : rp.tf;
+      const pos = cartPixelAt(cart, rp.pf);
+      if (!pos) continue;
+      rp.x = pos.x; rp.y = pos.y;
+      live.add(cart.id);
       const gc = goodColor(cart.goodId);
       if (zoomedOut) {
         ctx.fillStyle = gc; ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
