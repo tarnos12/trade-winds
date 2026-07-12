@@ -134,6 +134,13 @@ destructive confirmations use a **modal-free in-DOM confirm** (`uiConfirm`) inst
 button doesn't work" bug. The editor now has a headless regression harness (`test/editor.test.js`)
 including a sandboxed-iframe case, produced by the QA + Test-Author agent team.
 
+**Research Editor is now in-game.** The start screen has a **🔬 Research Editor** button that opens the
+standalone editor in an isolated overlay `<iframe>` (its own document, so its globals don't collide
+with the game's). The editor is **bundled into `index.html` at build time** — `tools/build.js` gained
+an `ASSETS` step that embeds `tools/research-editor.html` (single source of truth) as a
+`RESEARCH_EDITOR_HTML` string via a `/* BUILD:editor-embed */` marker below `PURE_CORE_END`; `--check`
+guards drift. Works offline and inside the sandboxed Artifact (blob-URL iframe, no native dialogs).
+
 **Modularization (restructuring pass, in progress).** To unlock the parallel agent-team workflow, the
 single-file game is being split into `src/*.js` modules reassembled by a **zero-dependency
 `tools/build.js`** (in-place `/* BUILD:<name> START/END */` marker splice; `build` / `--check` /

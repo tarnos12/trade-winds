@@ -21,13 +21,25 @@
      => index.html is always the complete, runnable file; extraction can
         proceed one module at a time with every step behaviour-identical.
 
+   ASSETS — a second, simpler splice for whole-file embeds (e.g. bundling the
+   standalone tools/research-editor.html into index.html as a JS string
+   constant). Each entry in ASSETS names a BUILD:<name> marker region plus a
+   source file; build.js replaces the region with a single generated line:
+       const <varName> = <JSON.stringify(source file contents)>;
+   Assets are NOT in MANIFEST and are NOT touched by --extract (there is
+   nothing to extract — the source of truth is the asset file itself, not the
+   generated line in index.html). They ARE covered by --check (drift fails
+   the build) and are spliced in the same bottom-up pass as MANIFEST modules
+   so line numbers stay valid regardless of splice order.
+
    USAGE:
-     node tools/build.js            # splice src/*.js into index.html
+     node tools/build.js            # splice src/*.js + ASSETS into index.html
      node tools/build.js --check    # build in-memory; fail if index.html
                                      #   would change (CI / pre-commit guard)
      node tools/build.js --extract  # (re)create src/*.js FROM the marked
                                      #   regions in index.html (bootstrap /
-                                     #   re-sync a module's src to the file)
+                                     #   re-sync a module's src to the file).
+                                     #   Assets are untouched (not in MANIFEST).
 
    Round-trip guarantee: extract then build reproduces index.html
    byte-for-byte (region = the lines strictly between the marker lines;
@@ -63,6 +75,28 @@ const MANIFEST = [
   { name: "ledger",           file: "ledger.js" },            // PP-A city gold ledger (Ledger)
   { name: "castle-market",    file: "castle-market.js" },     // castle material market (CastleMarket)
 ];
+
+// Whole-file embeds: BUILD:<name> region becomes a single generated line
+// `const <varName> = <JSON.stringify(file contents)>;`. Unlike MANIFEST
+// modules, `src` is repo-root-relative (not under src/) and there is no
+// --extract direction — the asset file itself is the source of truth.
+const ASSETS = [
+  { name: "editor-embed", src: "tools/research-editor.html", varName: "RESEARCH_EDITOR_HTML" },
+];
+
+function assetLine(asset) {
+  const txt = fs.readFileSync(path.join(ROOT, asset.src), "utf8");
+  // The asset (a full HTML doc) contains its own "</script>" tag. Embedded
+  // raw inside a JSON string literal that itself sits inside index.html's
+  // outer <script> block, the HTML PARSER (which tokenizes tags before JS
+  // ever runs) would see that literal "</script" text and close the outer
+  // script early, truncating everything after it. Break the tag match by
+  // inserting a backslash before the "/" — "<\/script" is a normal (if
+  // redundant) JS string escape that evaluates back to "</script" at
+  // runtime, so the embedded content is byte-identical once parsed as JS.
+  const json = JSON.stringify(txt).replace(/<\/script/gi, "<\\/script");
+  return "const " + asset.varName + " = " + json + ";";
+}
 
 function markerLines(name) {
   return {
@@ -103,24 +137,41 @@ function buildText(reportSkips) {
   const lines = fs.readFileSync(INDEX, "utf8").split("\n");
   let spliced = 0;
   // Splice from the BOTTOM up so earlier indices stay valid as we mutate.
+  // MANIFEST modules and ASSETS share one splice pass (sorted together by
+  // region start) so their marker regions can be interleaved/nested-free
+  // anywhere in index.html without disturbing each other's line numbers.
   const acts = [];
   for (const mod of MANIFEST) {
     const region = findRegion(lines, mod.name);
     const hasSrc = fs.existsSync(path.join(SRC, mod.file));
     if (region && hasSrc) {
-      acts.push({ mod, region });
+      acts.push({ kind: "module", mod, region });
     } else if (reportSkips) {
       if (region && !hasSrc) console.log("  skip " + mod.name + " (marked, but src/" + mod.file + " missing)");
       else if (!region && hasSrc) console.log("  skip " + mod.name + " (src exists, no markers in index.html)");
       // neither: silently not yet extracted
     }
   }
+  for (const asset of ASSETS) {
+    const region = findRegion(lines, asset.name);
+    const hasSrc = fs.existsSync(path.join(ROOT, asset.src));
+    if (region && hasSrc) {
+      acts.push({ kind: "asset", asset, region });
+    } else if (reportSkips) {
+      if (region && !hasSrc) console.log("  skip " + asset.name + " (marked, but " + asset.src + " missing)");
+      else if (!region && hasSrc) console.log("  skip " + asset.name + " (asset exists, no markers in index.html)");
+    }
+  }
   acts.sort((a, b) => b.region.startIdx - a.region.startIdx);
-  for (const { mod, region } of acts) {
-    const inner = srcInnerLines(mod.file);
+  for (const act of acts) {
+    const { region } = act;
+    const inner = act.kind === "module" ? srcInnerLines(act.mod.file) : [assetLine(act.asset)];
     lines.splice(region.startIdx + 1, region.endIdx - region.startIdx - 1, ...inner);
     spliced++;
-    if (reportSkips) console.log("  splice " + mod.name + " <- src/" + mod.file);
+    if (reportSkips) {
+      if (act.kind === "module") console.log("  splice " + act.mod.name + " <- src/" + act.mod.file);
+      else console.log("  splice " + act.asset.name + " <- " + act.asset.src);
+    }
   }
   return { text: lines.join("\n"), spliced };
 }
