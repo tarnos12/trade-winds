@@ -10134,6 +10134,11 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   });
 
   function openKingdom() {
+    // Panel exclusivity: same precedent as openTechTree's guards above — closing
+    // the Tech Tree here covers both the button and the 'k' hotkey path
+    // (toggleKingdom -> openKingdom) in one place, so Kingdom can't open stacked
+    // underneath an already-open Tech Tree.
+    if (typeof closeTechTree === "function" && techOpen) closeTechTree();
     kingdomOpen = true;
     kingdomEl.classList.remove("hidden");
     kingdomEl.setAttribute("aria-hidden", "false");
