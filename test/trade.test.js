@@ -159,56 +159,84 @@ Pathing.invalidate();
 }
 
 // =========================================================================
-// 2) Core-loop DoD: goods flow surplus→shortfall, prices converge, treasury grows.
-//    A/B against the SAME scenario with no roads (no trade possible).
+// 2) Core-loop DoD under the OFF-ROAD trade model: goods flow surplus→shortfall,
+//    prices converge, treasury grows — WITH roads AND fully OFF-ROAD. Trade
+//    happens either way (Pathing.route never returns null for valid endpoints;
+//    the off-road fallback carries cart.road === false ⇒ offRoadSpeedMult). Roads
+//    stay ADVANTAGEOUS: the road-connected network out-delivers and out-earns the
+//    SAME scenario run entirely off-road over the same tick budget. Prices are
+//    A/B'd against a NO-TRADE baseline (Sim only) instead of the old "no roads =
+//    no trade" baseline (which no longer exists).
 // =========================================================================
 const N = 300;
+// (a) No-trade baseline: Sim only (Trade.tick never called) → no goods move, so the
+//     farm↔mine potato-price gap stays WIDE. Trade (road OR off-road) must shrink it.
+Pathing.invalidate();
+const noTrade = buildState(777, true);
+for (let i = 0; i < N; i++) Sim.tick(noTrade);
+const noTradeGap = potatoGap(noTrade);
+
+// (b) Road-connected run, instrumented for cart flows + potato delivered into the
+//     mine (towns[1]) — summing positive stock deltas around each Trade.tick, since
+//     trades are GRADUAL (a trader parks to load/unload at CONFIG.trade.transferRate
+//     items/sec, not instant). connOffRoadSeen tracks whether any cart fell back
+//     off-road (it must NOT on a fully road-connected network).
 Pathing.invalidate();
 const connected = buildState(777, true);
-// Record which goods flowed and which town they were bought FROM (the seller).
 const flows = new Set();
-// Trades are GRADUAL (a trader parks to load/unload at CONFIG.trade.transferRate
-// items/sec — not instant), so we tally potato actually delivered INTO the mine
-// (towns[1]) across the run by summing positive stock deltas around each Trade.tick.
-let minePotatoDelivered = 0;
+let minePotatoDelivered = 0, connOffRoadSeen = false;
 for (let i = 0; i < N; i++) {
   Sim.tick(connected);
   const before = connected.towns[1].stock.potato || 0;
   Trade.tick(connected);
   const after = connected.towns[1].stock.potato || 0;
   if (after > before) minePotatoDelivered += after - before;
-  for (const c of connected.carts) flows.add(c.goodId + "<-" + c.toId);
+  for (const c of connected.carts) { flows.add(c.goodId + "<-" + c.toId); if (c.road === false) connOffRoadSeen = true; }
 }
+// (c) The SAME scenario with NO roads — trade STILL happens, but every cart travels
+//     off-road (road === false) at half speed.
 Pathing.invalidate();
 const isolated = buildState(777, false);
-run(isolated, N);
+const isoFlows = new Set();
+let isoMinePotatoDelivered = 0, isoOffRoadSeen = false;
+for (let i = 0; i < N; i++) {
+  Sim.tick(isolated);
+  const before = isolated.towns[1].stock.potato || 0;
+  Trade.tick(isolated);
+  const after = isolated.towns[1].stock.potato || 0;
+  if (after > before) isoMinePotatoDelivered += after - before;
+  for (const c of isolated.carts) { isoFlows.add(c.goodId + "<-" + c.toId); if (c.road === false) isoOffRoadSeen = true; }
+}
 
+// Trade earns tariff income BOTH ways — off-road trade is real, not a no-op...
 ok("treasury grows on a connected network", connected.treasury > 0);
-ok("no treasury income without roads", isolated.treasury === 0);
-ok("no carts are ever created without roads", isolated.carts.length === 0);
+ok("trade STILL earns treasury income without roads (off-road trade works)", isolated.treasury > 0);
+ok("carts ARE created without roads (off-road fallback, cart.road === false)", isoOffRoadSeen === true);
+ok("a fully road-connected network uses road carts, not the off-road fallback", connOffRoadSeen === false);
+// ...but ROADS STAY ADVANTAGEOUS: over the same tick budget the connected network
+// runs faster carts ⇒ more completed round-trips ⇒ more tariff income.
+ok("roads are advantageous: connected treasury > off-road treasury (same window)",
+  connected.treasury > isolated.treasury);
 
-// Goods flow surplus→shortfall, observed directly on the carts:
+// Goods flow surplus→shortfall, observed directly on the carts (both networks trade):
 ok("potato is bought FROM the farm (surplus → shortfall cities)", flows.has("potato<-1"));
 ok("iron is bought FROM the mine (surplus → shortfall city)", flows.has("iron<-2"));
+ok("off-road trade routes the same flow (potato bought from the farm, off-road)", isoFlows.has("potato<-1"));
 
-// Potato (food) flow actually reaches the potato-less MINE: with roads, the mine's
-// external trader BUYS potato from the farm and DELIVERS it into the mine's stock
-// (gradually, as it unloads); with no roads it can receive nothing. (Gradual 5/sec
-// transfer throttles throughput, so a tight one-trader economy leans more on local
-// production than under the old instant model — the guarantee is that trade feeds
-// the mine at all, and never leaves it worse off than the isolated baseline.)
-ok("potato is delivered INTO the mine via trade (road-connected only)",
-  minePotatoDelivered > 0);
-ok("the road-connected mine is no worse off than the road-less one",
-  connected.towns[1].happiness >= isolated.towns[1].happiness &&
+// Potato (food) reaches the potato-less MINE EITHER way — but roads DELIVER MORE.
+ok("potato is delivered INTO the mine via road trade", minePotatoDelivered > 0);
+ok("potato is ALSO delivered off-road (trade no longer needs roads)", isoMinePotatoDelivered > 0);
+ok("roads are advantageous: more potato reaches the mine WITH roads than off-road",
+  minePotatoDelivered > isoMinePotatoDelivered);
+ok("the road-connected mine sustains at least as much population as the off-road one",
   popTotal(connected.towns[1]) >= popTotal(isolated.towns[1]));
-// Iron flow lets the MILL's forge keep making iron_tool; the road-less mill stalls.
-ok("iron flow lets the mill out-produce iron_tool vs the road-less baseline",
-  stockOf(connected, 3, "iron_tool") > stockOf(isolated, 3, "iron_tool"));
 
-// Prices converge: the farm↔mine POTATO-price gap is smaller WITH trade than without.
-ok("potato prices converge (connected gap < isolated gap)",
-  potatoGap(connected) < potatoGap(isolated));
+// Prices converge with trade: BOTH the road and off-road runs pull the farm↔mine
+// POTATO gap below the no-trade baseline (moving goods equalizes prices).
+ok("road trade converges the potato price gap below the no-trade baseline",
+  potatoGap(connected) < noTradeGap);
+ok("off-road trade also converges the potato gap below the no-trade baseline",
+  potatoGap(isolated) < noTradeGap);
 
 // Treasury keeps climbing across the run (sampled monotonic-ish growth).
 {
@@ -220,31 +248,70 @@ ok("potato prices converge (connected gap < isolated gap)",
 }
 
 // =========================================================================
-// 3) The crisis: cut the road → route null → trade stops → shortfalls persist,
-//    potato prices DIVERGE again.
+// 3) The crisis, RE-BASELINED for off-road trade: cutting the farm's only road
+//    access hex no longer STOPS trade — Pathing.route falls back to an OFF-ROAD
+//    path (road:false), so the farm keeps trading, just at half cart speed. Roads
+//    stay advantageous: an identical control that KEEPS the road out-delivers the
+//    cut network and holds a TIGHTER potato-price gap over the same window.
 // =========================================================================
 Pathing.invalidate();
 {
-  const st = buildState(4242, true);
-  run(st, 200);
-  ok("connected before the cut", Pathing.route(st, K(0, 0), K(6, 0)) !== null);
-  const gapBefore = potatoGap(st);
-  const treasuryBefore = st.treasury;
+  // Two deterministic runs from the SAME seed to a shared pre-cut state: `cut`
+  // will have its road severed, `keep` is the road-keeping control.
+  const cut = buildState(4242, true);
+  const keep = buildState(4242, true);
+  run(cut, 200); Pathing.invalidate();
+  run(keep, 200); Pathing.invalidate();
 
-  // Cut the farm's only road access hex (1,0) → the farm (sole potato source) is
-  // isolated from all. No potato can reach the mine/mill any more.
-  st.roads.delete(K(1, 0));
+  const rBefore = Pathing.route(cut, K(0, 0), K(6, 0));
+  ok("connected before the cut: a ROAD route (road:true)", rBefore && rBefore.road === true);
+  const treasuryBefore = cut.treasury;
+
+  // Cut the farm's only road access hex (1,0): the farm is severed from the road
+  // NETWORK but NOT from trade — route() now returns the off-road straight-line
+  // fallback (road:false) instead of null.
+  cut.roads.delete(K(1, 0));
   Pathing.invalidate();
-  ok("after cut + invalidate: farm↔mine route is null", Pathing.route(st, K(0, 0), K(6, 0)) === null);
-  ok("after cut: farm↔mill route is null too", Pathing.route(st, K(0, 0), K(3, 1)) === null);
+  const rMine = Pathing.route(cut, K(0, 0), K(6, 0));
+  const rMill = Pathing.route(cut, K(0, 0), K(3, 1));
+  ok("after cut: farm↔mine route is NOT null — it falls back off-road (road:false)",
+    rMine !== null && rMine.road === false);
+  ok("after cut: farm↔mill route also falls back off-road (road:false)",
+    rMill !== null && rMill.road === false);
 
-  run(st, 160);
-  const gapAfter = potatoGap(st);
-  ok("potato prices diverge after the crisis cut (gap widens)", gapAfter > gapBefore);
-  // The cut-off farm can no longer be reached by (or reach) any trader.
-  ok("the isolated farm neither buys nor is bought from",
-    st.carts.every(c => c.fromId !== 1 && c.toId !== 1));
-  ok("treasury never decreases (tariff income only accrues)", st.treasury >= treasuryBefore);
+  // Run the cut network AND the road-keeping control the same 160 ticks, tallying
+  // potato delivered into the mine (towns[1]) in each.
+  Pathing.invalidate();
+  let cutDelivered = 0;
+  for (let i = 0; i < 160; i++) {
+    Sim.tick(cut);
+    const b = cut.towns[1].stock.potato || 0;
+    Trade.tick(cut);
+    const a = cut.towns[1].stock.potato || 0;
+    if (a > b) cutDelivered += a - b;
+  }
+  Pathing.invalidate();
+  let keepDelivered = 0;
+  for (let i = 0; i < 160; i++) {
+    Sim.tick(keep);
+    const b = keep.towns[1].stock.potato || 0;
+    Trade.tick(keep);
+    const a = keep.towns[1].stock.potato || 0;
+    if (a > b) keepDelivered += a - b;
+  }
+
+  // The severed farm KEEPS trading off-road — it is NOT cut out of trade any more.
+  ok("the severed farm STILL trades off-road (it still runs carts as buyer or seller)",
+    cut.carts.some(c => c.fromId === 1 || c.toId === 1));
+  ok("off-road delivery still feeds the mine after the cut (slower, not zero)",
+    cutDelivered > 0);
+  // Roads advantageous: the road-keeping control out-delivers the cut (off-road)
+  // network and holds a tighter farm↔mine potato-price gap.
+  ok("roads advantageous: the road-keeping control out-delivers the cut (off-road) network",
+    keepDelivered > cutDelivered);
+  ok("roads advantageous: the cut network holds a WIDER potato gap than the road control",
+    potatoGap(cut) > potatoGap(keep));
+  ok("treasury never decreases (tariff income only accrues)", cut.treasury >= treasuryBefore);
 }
 
 // =========================================================================

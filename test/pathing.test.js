@@ -57,20 +57,23 @@ Pathing.invalidate();
   ok("same hex: cost 0", r && r.cost === 0);
 }
 
-// --- 3. Two towns with no connecting road: null --------------------------
+// --- 3. Two towns with no connecting road: OFF-ROAD fallback (road:false) -
+// OFFROAD: trade works without roads (carts just travel at half speed). route()
+// now always returns a path; the `road` flag distinguishes road vs off-road.
 Pathing.invalidate();
 {
   // Road island near A, but nothing reaching B(10,0).
   const st = stateWithRoads([[1, 0], [2, 0]]);
   const r = Pathing.route(st, K(0, 0), K(10, 0));
-  ok("no connecting road: null", r === null);
+  ok("no connecting road: off-road fallback (road:false)", r && r.road === false);
+  ok("off-road: path joins the endpoints", r && r.path[0] === K(0, 0) && r.path[r.path.length - 1] === K(10, 0));
 }
-// Two towns, roads only near each, gap in between → null.
+// Two towns, roads only near each, gap in between → off-road fallback.
 Pathing.invalidate();
 {
   const st = stateWithRoads([[1, 0], [9, 0]]);   // A(0,0) touches (1,0); B(10,0) touches (9,0); gap 2..8
   const r = Pathing.route(st, K(0, 0), K(10, 0));
-  ok("gap between road islands: null", r === null);
+  ok("gap between road islands: off-road fallback (road:false)", r && r.road === false);
 }
 
 // --- 4. Adjacent towns with no road at all still connect (neighbour rule) -
@@ -79,9 +82,9 @@ Pathing.invalidate();
 {
   const st = stateWithRoads([]);
   const r = Pathing.route(st, K(0, 0), K(1, 0));
-  ok("adjacent towns: direct link cost 1", r && r.cost === 1 && r.path.length === 2);
+  ok("adjacent towns: direct road link cost 1", r && r.cost === 1 && r.path.length === 2 && r.road === true);
   const r2 = Pathing.route(st, K(0, 0), K(5, 0));
-  ok("non-adjacent, no roads: null", r2 === null);
+  ok("non-adjacent, no roads: off-road fallback (road:false)", r2 && r2.road === false);
 }
 
 // --- 5. Cache: repeat query returns an equal result ----------------------
@@ -92,22 +95,23 @@ Pathing.invalidate();
   const r2 = Pathing.route(st, K(0, 0), K(4, 0));
   ok("cache: repeat equal", JSON.stringify(r1) === JSON.stringify(r2));
   ok("cache: same object reference (memoized)", r1 === r2);
-  // Cache also memoizes negative (null) results.
+  // Off-road routes are memoized too (same object reference).
   const n1 = Pathing.route(st, K(0, 0), K(20, 0));
   const n2 = Pathing.route(st, K(0, 0), K(20, 0));
-  ok("cache: null memoized equal", n1 === null && n2 === null);
+  ok("cache: off-road route memoized", n1 && n1.road === false && n1 === n2);
 }
 
 // --- 6. Invalidation reflects a road being ADDED -------------------------
 Pathing.invalidate();
 {
-  const st = stateWithRoads([[1, 0], [9, 0]]);   // gap 2..8 → unreachable
-  ok("before add: unreachable", Pathing.route(st, K(0, 0), K(10, 0)) === null);
+  const st = stateWithRoads([[1, 0], [9, 0]]);   // gap 2..8 → off-road only
+  const before = Pathing.route(st, K(0, 0), K(10, 0));
+  ok("before add: off-road fallback (road:false)", before && before.road === false);
   // Fill the gap with a continuous road, then invalidate.
   for (let q = 2; q <= 8; q++) st.roads.add(K(q, 0));
   Pathing.invalidate();
   const r = Pathing.route(st, K(0, 0), K(10, 0));
-  ok("after add + invalidate: reachable", r !== null);
+  ok("after add + invalidate: road route (road:true)", r && r.road === true);
   ok("after add: cost = 10", r && r.cost === 10);
 }
 
@@ -115,10 +119,11 @@ Pathing.invalidate();
 Pathing.invalidate();
 {
   const st = stateWithRoads([[1, 0], [2, 0], [3, 0]]);
-  ok("before cut: reachable", Pathing.route(st, K(0, 0), K(4, 0)) !== null);
+  ok("before cut: road route", Pathing.route(st, K(0, 0), K(4, 0)).road === true);
   st.roads.delete(K(2, 0));      // cut the middle of the road
   Pathing.invalidate();
-  ok("after cut + invalidate: null", Pathing.route(st, K(0, 0), K(4, 0)) === null);
+  const after = Pathing.route(st, K(0, 0), K(4, 0));
+  ok("after cut + invalidate: off-road fallback (road:false)", after && after.road === false);
 }
 
 // --- 8. Stale-cache guard: WITHOUT invalidate, the old result persists ----
@@ -131,7 +136,7 @@ Pathing.invalidate();
   const stale = Pathing.route(st, K(0, 0), K(4, 0));
   ok("no-invalidate: stale cached hit returned", stale === before && stale !== null);
   Pathing.invalidate();
-  ok("no-invalidate: after invalidate reflects cut", Pathing.route(st, K(0, 0), K(4, 0)) === null);
+  ok("no-invalidate: after invalidate reflects cut (off-road, road:false)", Pathing.route(st, K(0, 0), K(4, 0)).road === false);
 }
 
 // --- 9. Dijkstra takes the shorter of two branches -----------------------
@@ -172,8 +177,8 @@ Pathing.invalidate();
   // The fix: newGame()/loadGame() must call Pathing.invalidate() on reset.
   Pathing.invalidate();
   const fixed = Pathing.route(game2, K(0, 0), K(4, 0));
-  ok("after invalidate (the fix): game2 correctly reports unreachable (no roads)",
-     fixed === null);
+  ok("after invalidate (the fix): game2 gets an off-road route, not game1's cached road route",
+     fixed !== r1 && fixed && fixed.road === false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

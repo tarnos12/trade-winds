@@ -32,7 +32,30 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     return out;
   }
 
+  // Off-road fallback: a straight hex line between the two endpoints, used when
+  // NO road path connects them. Carts can still trade over open ground — Trade
+  // just halves their speed (road === false ⇒ roads are 2× faster). cost is the
+  // hex distance ×2 so it reflects the ~2× travel time, and the nearest-seller
+  // tiebreak still prefers a road-connected seller when one is comparably close.
+  function offRoadRoute(fromKey, toKey) {
+    const a = parseKey(fromKey), b = parseKey(toKey);
+    const N = HexMath.dist(a.q, a.r, b.q, b.r);
+    const path = [];
+    for (let i = 0; i <= N; i++) {
+      const t = N === 0 ? 0 : i / N;
+      const rr = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
+      const k = HexMath.key(rr.q, rr.r);
+      if (!path.length || path[path.length - 1] !== k) path.push(k);
+    }
+    if (path[0] !== fromKey) path.unshift(fromKey);
+    if (path[path.length - 1] !== toKey) path.push(toKey);
+    return { path, cost: N * 2, road: false };
+  }
+
   // Dijkstra from fromKey to toKey over the road graph. Uniform edge cost 1.
+  // ALWAYS returns a route: a road path (road:true) when one exists, else the
+  // off-road straight-line fallback (road:false). Only null if fromKey/toKey are
+  // unusable. Callers gate trade on the road flag for speed, not on existence.
   Pathing.route = function (state, fromKey, toKey) {
     const ck = fromKey + "|" + toKey;
     if (cache.has(ck)) return cache.get(ck);
@@ -41,7 +64,7 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     let result = null;
 
     if (fromKey === toKey) {
-      result = { path: [fromKey], cost: 0 };
+      result = { path: [fromKey], cost: 0, road: true };
     } else {
       const dist = new Map([[fromKey, 0]]);
       const prev = new Map();
@@ -71,9 +94,12 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
         let cur = toKey;
         while (cur !== undefined) { path.push(cur); cur = prev.get(cur); }
         path.reverse();
-        result = { path, cost: dist.get(toKey) };
+        result = { path, cost: dist.get(toKey), road: true };
       }
     }
+
+    // No ROAD path → fall back to off-road so trade still happens (just slower).
+    if (!result) result = offRoadRoute(fromKey, toKey);
 
     cache.set(ck, result);
     return result;

@@ -39,6 +39,7 @@ Object.assign(CONFIG, {
     // unchanged, and the price model (separate bufferTarget) is untouched. ===
     minStock: 6,               // floor inventory a city keeps of each good it consumes
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
+    offRoadSpeedMult: 0.5,     // OFFROAD: carts with no road route travel at half speed (roads = 2× faster)
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
     castleSellMargin: 1.0,     // PP-A: castle-as-seller unit price = basePrice × this (tunable)
     // === CAPFIX === safety multiplier on the naive unload dwell. A cart whose buyer
@@ -306,6 +307,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         goodId: cargo[0].goodId, qty: cargo[0].qty, unitBuy: cargo[0].unitBuy, agreedGold: totalGold,
         cargo: cargo, totalQty: totalQty,     // PP-A: full multi-good cargo + total units
         path: pick.route.path.slice(),        // buyer → seller hex keys (contract shape)
+        road: pick.route.road !== false,      // OFFROAD: false ⇒ no road link ⇒ half speed
         progress: 0, phase: "outbound", done: false,
       });
     }
@@ -406,8 +408,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         continue;
       }
 
-      // -- Travel (outbound / return) --
-      cart.progress += cartSpeed;
+      // -- Travel (outbound / return) --  OFFROAD: no road link ⇒ half speed.
+      cart.progress += cartSpeed * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 
