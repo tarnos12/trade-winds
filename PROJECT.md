@@ -141,17 +141,22 @@ an `ASSETS` step that embeds `tools/research-editor.html` (single source of trut
 `RESEARCH_EDITOR_HTML` string via a `/* BUILD:editor-embed */` marker below `PURE_CORE_END`; `--check`
 guards drift. Works offline and inside the sandboxed Artifact (blob-URL iframe, no native dialogs).
 
-**Modularization (restructuring pass — Phase 1 COMPLETE).** To unlock the parallel agent-team
-workflow, the single-file game's pure core is split into `src/*.js` modules reassembled by a
+**Modularization (restructuring pass — FULLY MODULAR: Phase 1 + Phase 2 COMPLETE).** To unlock the
+parallel agent-team workflow, the single-file game is split into `src/*.js` modules reassembled by a
 **zero-dependency `tools/build.js`** (in-place `/* BUILD:<name> START/END */` marker splice; `build`
 / `--check` / `--extract`). The shipped `index.html` stays one self-contained, offline, zero-dep file
 — `src/` is the editable source, `index.html` the committed build output (edit `src` → build → commit
-both; `--check` guards drift). **All 16 pure-core modules are now extracted** (config, rng, hexmath,
-mapgen, goods, sim, buildings, pathing, trade, research, research-economy, progress, events,
-kingdom-market, ledger, castle-market) — round-trip byte-for-byte, verified green: 15/15 pure-core
-suites, 95/95 editor harness, clean headless browser boot (no page errors). Plan + module map in
-[`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md). Phase 2 (impure shell: renderer / ui / save / input
-/ mainloop) deferred.
+both; `--check` guards drift). **All 33 modules are now extracted** — 16 pure-core (config, rng,
+hexmath, mapgen, goods, sim, buildings, pathing, trade, research, research-economy, progress, events,
+kingdom-market, ledger, castle-market) + 17 impure-shell (renderer, input, save, mainloop, town-ui,
+carts-castle-ui, techtree-ui, progress-ui, kingdom-events-ui, juice, internal-traders, ppe-chatter,
+audio, start-screen, editor-overlay, tutorial, version-notes). Only the thin browser-IIFE scaffold
+(`(function(){`, `state`, boot tail `})();`) stays inline. Round-trip byte-for-byte (34 regions
+spliced incl. the editor asset); verified green: 15/15 pure-core suites, 95/95 editor harness, and a
+headless browser smoke (start game → run economy 4× → open tech tree / kingdom / research-editor
+overlay) with zero page errors. Plan + per-module map in
+[`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md). The pure core stays test-covered; the shell is
+verified by browser boot (the pure-core suites don't reach it).
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real

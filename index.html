@@ -5367,6 +5367,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   let terrainOrigin = { x: 0, y: 0 };   // world coords of terrainCanvas (0,0)
   let terrainDirty = true;
 
+/* BUILD:renderer START */
   // ---------------------------------------------------------------
   // Geometry helpers (browser-side; use CONFIG.map.hexSize)
   // ---------------------------------------------------------------
@@ -6164,7 +6165,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
     ctx.stroke();
   }
+/* BUILD:renderer END */
 
+/* BUILD:input START */
   // In-DOM confirm dialog. Mirrors the research-editor's sandbox-safe uiConfirm
   // (pass-1 commit 1fa3698): native confirm()/alert() are BLOCKED inside the
   // sandboxed Artifact iframe (no allow-modals), so a real dialog element is the
@@ -6426,7 +6429,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   document.getElementById("btnCenter").addEventListener("click", () => {
     state.cam.x = 0; state.cam.y = 0;
   });
+/* BUILD:input END */
 
+/* BUILD:save START */
   function randomSeed() {
     // avoid Math.random dependency on a specific value; any string works as a seed
     const words = ["harbor", "amber", "clover", "willow", "ember", "cobble", "marsh", "birch", "flint", "haven"];
@@ -6718,7 +6723,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   setInterval(saveGame, 30000);
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); });
   window.addEventListener("beforeunload", saveGame);
+/* BUILD:save END */
 
+/* BUILD:mainloop START */
   // Economy tick: the pure cores defined above in PURE_CORE are used directly —
   // each 500ms step the loop below calls Sim.tick(state) (production/consumption/
   // prices) then Trade.tick(state) (cart dispatch + transactions + tariff). No
@@ -6842,7 +6849,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     PPE.frame(dt);          // === PP-E === map juice: speech bubbles / wanted rows /
                             // gold floaters (read-only overlay, drawn topmost)
   }
+/* BUILD:mainloop END */
 
+/* BUILD:town-ui START */
   // === TOWN-UI START ===  (T6 / slot #4 — town entities + town panel UI, DOM)
   // Builds real Town entities (contract shape) and an HTML panel layered over the
   // canvas. Consumes the pure-core price model via window.Sim.priceFor (the IIFE's
@@ -8337,7 +8346,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
                     get openCat() { return bbOpenCat; },
                     get state() { return state; } };
   // === TOWN-UI END ===
+/* BUILD:town-ui END */
 
+/* BUILD:carts-castle-ui START */
   // === CARTS + CASTLE-UI START === (T9 / slot #4)
   // Reads the shared Phase-3 contract produced by T8 (state.carts, state.treasury,
   // CONFIG.trade) DEFENSIVELY — everything guarded so this slice also runs before
@@ -9421,7 +9432,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   // closure and isn't otherwise reachable). Harmless during normal play.
   window.__cre = { get state() { return state; } };
   // === CARTS + CASTLE-UI END ===
+/* BUILD:carts-castle-ui END */
 
+/* BUILD:techtree-ui START */
   // === RT-B TECH-TREE START === (full-screen tiered tech tree, DOM over canvas)
   // Replaces the old #researchPanel column list. Reads/writes state ONLY through
   // the pure Research module (+ scheduleSave); all balance/rules live in PURE_CORE.
@@ -9873,6 +9886,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     openResearchPanel: openTechTree, closeResearchPanel: closeTechTree, toggleResearchPanel: toggleTechTree,
     get isOpen() { return techOpen; } };
   // === RT-B TECH-TREE END ===
+/* BUILD:techtree-ui END */
+/* BUILD:progress-ui START */
   // === PROGRESS-UI START === (P4-B / slot #3 — prestige HUD, quest banner, victory)
   // Reflects the pure PROGRESS-CORE (Quests.tick / Castle / Town) into the DOM.
   // Owns only its own elements; reads state written by the accumulator each tick.
@@ -9980,6 +9995,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   window.ProgressUI = { updateProgressHud, renderQuestBanner, showVictory,
                         Town, Castle, Quests };
   // === PROGRESS-UI END ===
+/* BUILD:progress-ui END */
+/* BUILD:kingdom-events-ui START */
   // === KINGDOM/EVENTS-UI START === (P4-C / slot #4 — kingdom screen, town alerts,
   // random-event notifications). All DOM + canvas; reads the pure state produced by
   // Events.tick. drawAlerts()/handleEventNotice() are function declarations so the
@@ -10250,7 +10267,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
                        get isOpen() { return kingdomOpen; } };
   window.Events = Events;
   // === KINGDOM/EVENTS-UI END ===
+/* BUILD:kingdom-events-ui END */
 
+/* BUILD:juice START */
   // === JUICE START === (P5-B / slot #3 — cozy micro-animations, canvas overlay)
   // A tiny particle/effects layer driven by the RENDER clock (the rAF `dt`). It
   // ONLY reads state.{carts,towns} + the module-local render caches (cartRender,
@@ -10465,6 +10484,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.Juice = Juice;
   // === JUICE END ===
+/* BUILD:juice END */
+/* BUILD:internal-traders START */
   // === INTERNAL-TRADERS START === (TR-B / slot #4 — ambient within-city porters)
   // A pure render overlay: per city, tiny "porter" carts shuttle between each
   // ACTIVELY-producing building (extractor/processor with workers>0) and the town
@@ -10594,6 +10615,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.InternalTraders = InternalTraders;
   // === INTERNAL-TRADERS END ===
+/* BUILD:internal-traders END */
+/* BUILD:ppe-chatter START */
   // === PP-E START === (map juice — LTT-style ambient city chatter, render-only)
   // Three overlays drawn from drawWithDpr AFTER Juice (topmost):
   //   1. speech bubbles over city centers (shortage / very-happy tier / all fine),
@@ -10864,6 +10887,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.__ppe = PPE;   // debug/verification hook (headless probes read this)
   // === PP-E END ===
+/* BUILD:ppe-chatter END */
+/* BUILD:audio START */
   // === AUDIO START === (P5-C / slot #4 — procedural WebAudio SFX + mute)
   // Self-contained: all cues are synthesized (oscillators + envelopes), zero
   // external assets (CSP blocks them anyway). Lives entirely in the browser IIFE
@@ -11004,7 +11029,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     }
   });
   // === AUDIO END ===
+/* BUILD:audio END */
 
+/* BUILD:start-screen START */
   // === START-SCREEN ===
   // Title / start overlay + boot gating (P5D-B). The rAF render loop keeps
   // running behind the overlay (the map is a paused backdrop), but the economy
@@ -11091,7 +11118,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.StartScreen = StartScreen;
   // === START-SCREEN END ===
+/* BUILD:start-screen END */
 
+/* BUILD:editor-overlay START */
   // === EDITOR-OVERLAY ===
   // Opens the standalone research-tree editor (bundled at build time as
   // RESEARCH_EDITOR_HTML, see the BUILD:editor-embed marker above
@@ -11141,7 +11170,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.EditorOverlay = EditorOverlay;
   // === EDITOR-OVERLAY END ===
+/* BUILD:editor-overlay END */
 
+/* BUILD:tutorial START */
   // === TUTORIAL START === (P5D-C / slot #4 — onboarding coach; state-detected)
   // A cozy, skippable corner coach that walks a fresh player through the core
   // loop. Steps advance by DETECTING real game state (not scripted clicks): a
@@ -11300,7 +11331,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   })();
   window.Tutorial = Tutorial;   // exposed for headless smoke + console
   // === TUTORIAL END ===
+/* BUILD:tutorial END */
 
+/* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
   const GAME_VERSION = "0.21.0";
   const PATCH_NOTES = [
@@ -11454,6 +11487,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     badge.addEventListener("click", () => toggle());
     document.getElementById("pnClose").addEventListener("click", () => toggle(false));
   })();
+/* BUILD:version-notes END */
 
   // ---------------------------------------------------------------
   // Boot

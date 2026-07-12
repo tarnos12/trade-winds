@@ -31,13 +31,18 @@ Everything the headless tests `vm`-eval. Must stay free of DOM / canvas /
 | Progress | `PROGRESS-CORE START` (~4472) | Town leveling, King's quests, prestige, castle levels 1→5. |
 | Events | `EVENTS-CORE START` (~4668) | Cozy random market events. |
 
-## Impure shell (below `PURE_CORE_END` ~5162)
-Renderer (canvas world: terrain pre-render, roads, buildings, carts, overlays,
-research center), UI (all DOM panels — town/building/castle/keep/kingdom, tech
-tree, HUD, start screen ~6867 HTML, tutorial coach), Save (versioned localStorage
-+ stepwise migration; no export/import UI exists — audited 2026-07-12, only
-`localStorage.getItem/setItem(SAVE_KEY)`), input handling, the two-clock main
-loop (rAF render + fixed 500ms×speed economy accumulator).
+## Impure shell (below `PURE_CORE_END`) — now modularized (Phase 2)
+The whole browser layer is one IIFE. The IIFE scaffold + `state` object + boot tail
+stay inline; everything else is a `src/*.js` module wrapped in `/* BUILD:<name> */`
+markers (17 shell modules): `renderer, input, save, mainloop, town-ui,
+carts-castle-ui, techtree-ui, progress-ui, kingdom-events-ui, juice,
+internal-traders, ppe-chatter, audio, start-screen, editor-overlay, tutorial,
+version-notes`. See [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md) for the per-module map.
+Concerns covered: Renderer (canvas world: terrain pre-render, roads, buildings,
+carts, overlays, research center), UI (all DOM panels — town/building/castle/keep/
+kingdom, tech tree, HUD, start screen, tutorial coach), Save (versioned localStorage
++ stepwise migration; only `localStorage.getItem/setItem(SAVE_KEY)`), input handling,
+the two-clock main loop (rAF render + fixed 500ms×speed economy accumulator).
 
 ## CSS / HTML (top of file, ~55–1075)
 Fenced `=== X CSS START/END ===` and `=== X HTML START/END ===` blocks per panel.

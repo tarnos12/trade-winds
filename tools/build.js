@@ -74,6 +74,26 @@ const MANIFEST = [
   { name: "kingdom-market",   file: "kingdom-market.js" },    // KR-A kingdom resource market (Market)
   { name: "ledger",           file: "ledger.js" },            // PP-A city gold ledger (Ledger)
   { name: "castle-market",    file: "castle-market.js" },     // castle material market (CastleMarket)
+  // --- Impure browser shell (Phase 2). These live inside the single browser IIFE
+  //     below PURE_CORE_END; the IIFE scaffold + `state` + boot tail stay INLINE.
+  //     Not covered by the pure-core suites — verified by headless browser boot.
+  { name: "renderer",          file: "renderer.js" },          // canvas world: terrain/roads/buildings/carts/overlays
+  { name: "input",             file: "input.js" },             // uiConfirm + placement + pointer/pan/zoom + mode/speed
+  { name: "save",              file: "save.js" },              // newGame + versioned localStorage save/migrate/load
+  { name: "mainloop",          file: "mainloop.js" },          // resize + two-clock rAF/economy loop + drawWithDpr
+  { name: "town-ui",           file: "town-ui.js" },           // town entities + town/building/house panels (DOM)
+  { name: "carts-castle-ui",   file: "carts-castle-ui.js" },   // cart tokens + castle panel + city cards + market UI
+  { name: "techtree-ui",       file: "techtree-ui.js" },       // full-screen tiered tech tree (DOM over canvas)
+  { name: "progress-ui",       file: "progress-ui.js" },       // prestige HUD + quest banner + victory overlay
+  { name: "kingdom-events-ui", file: "kingdom-events-ui.js" }, // kingdom screen + town alerts + event banners
+  { name: "juice",             file: "juice.js" },             // cozy micro-animation canvas overlay
+  { name: "internal-traders",  file: "internal-traders.js" },  // ambient within-city porter render layer
+  { name: "ppe-chatter",       file: "ppe-chatter.js" },       // LTT-style ambient city-chatter map juice
+  { name: "audio",             file: "audio.js" },             // procedural WebAudio SFX + mute
+  { name: "start-screen",      file: "start-screen.js" },      // New Game / Continue start overlay
+  { name: "editor-overlay",    file: "editor-overlay.js" },    // in-game research-editor iframe overlay
+  { name: "tutorial",          file: "tutorial.js" },          // state-detected onboarding coach
+  { name: "version-notes",     file: "version-notes.js" },     // GAME_VERSION + patch-notes panel
 ];
 
 // Whole-file embeds: BUILD:<name> region becomes a single generated line

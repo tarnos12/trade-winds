@@ -5,13 +5,16 @@ single-file game into `src/*.js` modules with a **zero-dependency** `tools/build
 that regenerates the shipped single-file `index.html`. **Shape only — no behaviour
 change, no features.**
 
-> **STATUS: PHASE 1 COMPLETE (pure core fully modularized).** All 16 pure-core
-> modules in the `MANIFEST` are extracted to `src/*.js` with `/* BUILD:<name> */`
-> markers in `index.html`. Round-trip is byte-for-byte (`--check` OK, 17 regions
-> spliced incl. the editor asset). Verification net green: 15/15 pure-core suites,
-> 95/95 editor harness, clean headless browser boot (no page errors). `index.html`
-> stays one self-contained offline file. Phase 2 (impure shell: renderer / ui /
-> save / input / mainloop) remains deferred.
+> **STATUS: FULLY MODULAR (Phase 1 + Phase 2 COMPLETE).** All 16 pure-core modules
+> **and** all 17 impure-shell modules are extracted to `src/*.js` with
+> `/* BUILD:<name> */` markers in `index.html` — **33 modules + the editor asset =
+> 34 regions spliced**, round-trip byte-for-byte (`--check` OK). The only remaining
+> inline code is the thin browser-IIFE scaffold (`(function(){`, the `state` object,
+> and the boot tail `})();`). Verification net green: 15/15 pure-core suites, 95/95
+> editor harness, and a headless browser smoke that starts a game, runs the economy
+> at 4×, and opens the tech tree / kingdom / research-editor overlay with **zero
+> page errors**. `index.html` stays one self-contained offline file (markers are
+> behaviour-neutral comments; gameplay byte-identical).
 
 ## Hard constraints honoured
 - Shipped `index.html` stays ONE self-contained file (Canvas 2D, zero external deps,
@@ -103,14 +106,39 @@ Notes:
 - `mapgen` folds `makeValueNoise` (a MapGen-only noise helper) in with `MapGen`; `rng`
   (`mulberry32`/`hashSeed`) is its own tiny module since MapGen and the shell both use it.
 
-## Impure shell (Phase 2+ — same mechanism)
+## Impure shell (Phase 2 — DONE, same mechanism)
 
-Below `PURE_CORE_END`: `Renderer`, `UI` (all DOM panels), `Save` (versioned localStorage
-+ migration + JSON import/export), input handling, and the two-clock main loop. Same
-`/* BUILD:<name> START|END */` splice mechanism applies; these are **not** covered by the
-14 pure-core suites, so extract them only after the pure core is done and verify by
-loading `index.html` (script parses + manual smoke / `editor.test.js` where relevant).
-Suggested shell modules: `renderer`, `ui`, `save`, `input`, `mainloop`. Defer to Phase 2.
+The whole browser layer below `PURE_CORE_END` is one IIFE (`(function(){ … })();`).
+Because the marker-splice keeps every region **in place** (a `src/*.js` file is just a
+text mirror of its region, reassembled into the same closure), the shell splits with
+zero behaviour change by construction — the markers are whole-line comments at
+statement boundaries. The IIFE scaffold + `state` object + boot tail stay **inline**;
+everything else is a module, promoting the author's own `// === X START/END ===`
+banner sections to modules so ownership follows the seams they already drew:
+
+| `src/` file | Owns |
+|---|---|
+| `renderer.js` | Canvas world: geometry/camera helpers, terrain pre-render, roads, towns, buildings, chips, placement overlays, castle, research center, hover ghost. |
+| `input.js` | `uiConfirm`, placement (`canPlace`/`place`), pointer/pan/zoom gestures, `setMode`, `setSpeed`. |
+| `save.js` | `newGame`, versioned localStorage save + stepwise migration + `loadGame` + autosave wiring. |
+| `mainloop.js` | `resize`, the two-clock rAF-render / fixed-step-economy loop, `drawWithDpr`. |
+| `town-ui.js` | Town entities + town / building / house panels (DOM). |
+| `carts-castle-ui.js` | Cart tokens, castle panel (Keep/Warehouse), city cards, kingdom-market UI, research pipeline. |
+| `techtree-ui.js` | Full-screen tiered tech tree (DOM over canvas). |
+| `progress-ui.js` | Prestige HUD, quest banner, victory overlay + confetti. |
+| `kingdom-events-ui.js` | Kingdom screen, town alert icons, event banners/toasts. |
+| `juice.js` | Cozy micro-animation canvas overlay. |
+| `internal-traders.js` | Ambient within-city porter render layer. |
+| `ppe-chatter.js` | LTT-style ambient city-chatter map juice. |
+| `audio.js` | Procedural WebAudio SFX + mute. |
+| `start-screen.js` | New Game / Continue start overlay. |
+| `editor-overlay.js` | In-game research-editor iframe overlay. |
+| `tutorial.js` | State-detected onboarding coach. |
+| `version-notes.js` | `GAME_VERSION` + patch-notes panel. |
+
+Verify shell edits by rebuilding and loading `index.html` in a headless browser
+(script parses + smoke: start a game, run the economy, open the panels — zero page
+errors) plus `editor.test.js`. The pure-core suites do **not** cover the shell.
 
 ## Adding a module (procedure for the parallel team)
 
