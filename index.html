@@ -3255,6 +3255,13 @@ Object.assign(CONFIG, {
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
     castleSellMargin: 1.0,     // PP-A: castle-as-seller unit price = basePrice × this (tunable)
+    // === CAPFIX === safety multiplier on the naive unload dwell. A cart whose buyer
+    // is near storageCap delivers slower than dwellFor() assumes; it keeps unloading
+    // (waiting for warehouse room) until fully delivered OR ~this×the naive dwell has
+    // elapsed, then FORCE-DELIVERS any remainder into the buyer's stock (the buyer
+    // already paid; Sim's overstock cap clamps the excess). Money-conserving; prevents
+    // silent cargo loss without minting gold.
+    unloadTimeoutMult: 4,
   },
 });
 
@@ -3549,6 +3556,37 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       if (cart.phase === "unloading") {
         const buyer = byId.get(cart.fromId);
         const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;   // EV3 storage cap
+        // === CAPFIX === The naive dwell (dwellFor(totalQty)) assumes an UNCONSTRAINED
+        // per-tick move, but the actual move is also capped by warehouse room
+        // (capG − buyer.stock). A buyer near storageCap throttles delivery below that
+        // estimate, so the plain `dwell<=0` cutoff used to retire a cart with cargo
+        // STILL aboard — silently destroying the paid-for remainder. Fix: completion is
+        // now `allDone` (primary) OR a generous SAFETY timeout (dwell decremented past
+        // −dwellLimit ≈ 5× the naive total). On the timeout path — only there — the
+        // still-aboard units are FORCE-DELIVERED into the buyer's stock (even above
+        // storageCap): the buyer already paid for them at the outbound settle (the
+        // seller banked that gold), so the goods must land — a gold REFUND here would
+        // MINT money (seller keeps payment + buyer gets gold back). Any over-cap excess
+        // is then clamped by Sim's normal per-tick overstock cap (step 6), identical to
+        // an over-import/over-production, so this conserves gold exactly. Pre-fix
+        // in-flight carts have no dwellLimit ⇒ fall back to the old `dwell<=0` cutoff,
+        // but now force-deliver instead of losing cargo (strict improvement, no save
+        // migration).
+        const finishUnload = () => {
+          const items = Array.isArray(cart.cargo) ? cart.cargo
+            : [{ goodId: cart.goodId, qty: cart.qty, unitBuy: cart.unitBuy, unloaded: cart.unloaded }];
+          if (buyer) {
+            if (!buyer.stock) buyer.stock = {};
+            for (const it of items) {
+              const left = (it.qty || 0) - (it.unloaded || 0);
+              if (left > 1e-9) {   // force-deliver the paid-for remainder (money-conserving); Sim clamps any over-cap excess
+                buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + left;
+                it.unloaded = (it.unloaded || 0) + left;
+              }
+            }
+          }
+          cart.done = true;
+        };
         if (Array.isArray(cart.cargo)) {
           if (buyer) {
             if (!buyer.stock) buyer.stock = {};
@@ -3562,7 +3600,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             }
           }
           const allDone = cart.cargo.every(it => (it.unloaded || 0) >= it.qty);
-          if ((cart.dwell = (cart.dwell || 0) - 1) <= 0 || allDone) cart.done = true;
+          cart.dwell = (cart.dwell || 0) - 1;
+          if (allDone) cart.done = true;                                   // delivered in full
+          else if (cart.dwell <= -(cart.dwellLimit || 0)) finishUnload();  // safety timeout → force-deliver remainder
         } else {
           if (buyer) {
             if (!buyer.stock) buyer.stock = {};
@@ -3573,7 +3613,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               cart.unloaded = (cart.unloaded || 0) + move;
             }
           }
-          if ((cart.dwell = (cart.dwell || 0) - 1) <= 0 || (cart.unloaded || 0) >= cart.qty) cart.done = true;
+          cart.dwell = (cart.dwell || 0) - 1;
+          if ((cart.unloaded || 0) >= cart.qty) cart.done = true;          // delivered in full
+          else if (cart.dwell <= -(cart.dwellLimit || 0)) finishUnload();  // safety timeout → force-deliver remainder
         }
         continue;
       }
@@ -3643,7 +3685,12 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         cart.goodId = cart.cargo[0].goodId; cart.qty = cart.cargo[0].qty; cart.unitBuy = cart.cargo[0].unitBuy;  // re-mirror primary
         cart.phase = "loading"; cart.loaded = 0; cart.dwell = dwellFor(cart.totalQty);
       } else {
-        cart.phase = "unloading"; cart.unloaded = 0; cart.dwell = dwellFor(cart.totalQty || cart.qty);
+        // === CAPFIX === keep the naive dwell for feel, plus a generous safety ceiling
+        // (dwellLimit) so a warehouse-throttled unload waits for room instead of the
+        // cart retiring with cargo aboard. See the unloading block above.
+        cart.phase = "unloading"; cart.unloaded = 0;
+        cart.dwell = dwellFor(cart.totalQty || cart.qty);
+        cart.dwellLimit = cart.dwell * ((CONFIG.trade && CONFIG.trade.unloadTimeoutMult) || 4);
       }
     }
 
