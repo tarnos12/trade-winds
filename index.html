@@ -4793,6 +4793,20 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   function invalidatePathing() {
     if (typeof Pathing !== "undefined" && Pathing.invalidate) Pathing.invalidate();
   }
+  // P1: is hex `key` ("q,r") currently occupied by a town center, one of its
+  // buildings, or the research center? Pure/deterministic (HexMath only). Used to
+  // suppress a bridge "repair" that would otherwise drop a road back onto a hex
+  // the player built on while it was collapsed.
+  function hexOccupied(state, key) {
+    for (const t of (state.towns || [])) {
+      if (!t) continue;
+      if (HexMath.key(t.q, t.r) === key) return true;
+      for (const b of (t.buildings || [])) if (b && HexMath.key(b.q, b.r) === key) return true;
+    }
+    const rc = state.researchCenter;
+    if (rc && HexMath.key(rc.q, rc.r) === key) return true;
+    return false;
+  }
 
   function weightedPick(rng) {
     const defs = CONFIG.events.defs, ids = Object.keys(defs);
@@ -4832,7 +4846,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
     const e = state.event;
     if (!e) return;
     const def = CONFIG.events.defs[e.id];
-    if (def && def.collapseRoad && typeof e.roadKey === "string") { addRoad(state, e.roadKey); invalidatePathing(); }
+    // M3 + P1: restore the collapsed road only if the def marks it collapseRoad,
+    // roadKey is a real string, AND the vacated hex is still empty. If the player
+    // founded a town or built on that hex while the bridge was out, re-adding the
+    // road would double-occupy it (a Pathing road-node under a live building —
+    // carts route through the structure and placement reports a phantom road
+    // there forever). In that case drop the repair; the road stays gone.
+    if (def && def.collapseRoad && typeof e.roadKey === "string" && !hexOccupied(state, e.roadKey)) {
+      addRoad(state, e.roadKey); invalidatePathing();
+    }
     state.event = null;
   }
 
