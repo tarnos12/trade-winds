@@ -17,7 +17,8 @@ their own. You shape the conditions (town placement, production buildings, roads
 on every inter-town transaction, spending it to upgrade the King's castle. Core loop: **observe the
 market → build/upgrade → towns trade themselves → earn tariff → invest (research, castle, new towns)**.
 
-Cozy, no fail state in sandbox; **win = castle level 5** (+ a planned scenario campaign). Full scope,
+Cozy, no fail state in sandbox; **win = an Aristocrat's House at 100% happiness** (forces the full T3
+luxury economy to close; castle L5 is now a mid-game milestone, not the win) (+ a planned scenario campaign). Full scope,
 pillars, and staged roadmap: [`GDD.md`](GDD.md).
 
 ## Stack & structure
@@ -100,6 +101,24 @@ not live teammates (see Team model).
 ---
 
 ## Current status (update every commit)
+
+**v0.22.0 — New victory + aristocrat-economy balance pass (on `main`).** The win is now **an
+Aristocrat's House reaching 100% happiness** (`Victory.check` in `progress.js`, threshold
+`CONFIG.victory.aristocratHappiness = 99.5`; castle L5 no longer flips victory — it's a milestone).
+100% aristocrat happiness requires the full T3 luxury set (`lamp, mead, iron_armor, chairs, pottery,
+brandy, luxury_clothes, gold_ring`), so the win transitively forces the whole top-tier economy — which
+was previously **dead content** (aristocrats never spawned, 6/7 T3 luxuries produced nothing). Run by a
+4-person agent team (Lead + EconDev + Balance + QA) on the now-modular `src/`. Fixes: aristocrat-home
+research regraded off T3 (`bricks/planks`), the home's T3 build cost dropped, slot cap 20→24, manor
+housing 4→6, two luxury processors re-tiered to worker labour (breaks the burgher self-lock), margin
+repairs, and goldsmith `gold_ring` yield 1→3 (the good is triple-sunk). Measured (greedy 20k
+playthrough): **new victory reached at tick ~5431** (was unreachable), all 7 T3 luxuries live, the old
+castle-L1 wall gone (L2@850 vs 8500). **17/17 pure-core suites green** (+`victory.test.js`,
+`aristocrat_economy.test.js`), determinism bit-identical, build `--check` OK, editor 95/95, clean boot.
+**Known follow-up (optional):** post-victory estate happiness *sawtooths* (~56%↔99%) because import
+distribution to the aristocrat city is bursty — the win itself latches so this is post-win polish; a
+trade-smoothing pass (consumer buffers / cart capacity) would make it a stable plateau. Balance-pass
+proposals + frozen contract in [`docs/proposals/`](docs/proposals/).
 
 **v0.21.0 — Research overhaul shipped (on `main`; not yet deployed to gh-pages).** Research is now
 **resource-metered, not gold**: a placeable **Research Center** next to the castle (built from

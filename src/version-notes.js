@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.21.0";
+  const GAME_VERSION = "0.22.0";
   const PATCH_NOTES = [
+    { v: "0.22.0", notes: [
+      "NEW WIN CONDITION: raise an Aristocrat's House to 100% happiness — the castle is now just a milestone",
+      "Winning it means supplying every luxury (rings, brandy, fine clothes, chairs, lamps…), so the whole late economy finally comes alive",
+      "Aristocrats and their luxuries used to be unreachable dead content — rebalanced so a thriving upper class is actually achievable",
+      "Bigger towns (more building slots), roomier manors, and smoother luxury supply chains",
+    ] },
     { v: "0.21.0", notes: [
       "Research is reworked: it no longer costs gold — a project is powered by RESOURCES metered in over time",
       "Build a Research Center on a hex next to the castle to unlock research; its level sets the speed",
