@@ -133,6 +133,31 @@ ok("no NaN after a Sim tick on the migrated save", !hasNaN(st.towns[0].stock) &&
      ["beer", "tools", "jewelry", "furniture", "cloth"].every(g => !(g in t2.stock) && !(g in t2.prices)));
 }
 
+// ---- P4 REGRESSION: a corrupt array ELEMENT (null building) must not freeze the
+// game. saveShapeOk only checks array TYPES, not entries, so a `null` inside a
+// town's buildings[] loads. Sim.tick's production loop now guards `!b` (matching
+// its assignWorkers/target-loop siblings) so the null is skipped instead of
+// deref'ing null.typeId → throw → escaped rAF → permanent freeze (same class as
+// the P2 roads/fog freeze). (loadGame's boundary filter, which physically DROPS
+// the null, lives in the DOM shell outside PURE_CORE and isn't reachable here;
+// this covers the pure-core throw site — the actual crash point.)
+{
+  const town = {
+    id: 1, q: 0, r: 0, level: 2, gold: 100,
+    pop: { peasants: 4, workers: 2, burghers: 1 },
+    stock: { wood: 20 },
+    buildings: [
+      { typeId: "lumberjack", q: 1, r: 0, workers: 1, built: true },
+      null,   // corrupt element — slips past saveShapeOk's type-only check
+    ],
+  };
+  const st = { tick: 0, treasury: 100, towns: [town], carts: [] };
+  ok("P4: Sim.tick does NOT throw on a null building entry", (() => {
+    try { Sim.tick(st); return true; } catch (e) { console.error("    " + e); return false; }
+  })());
+  ok("P4: no NaN after ticking a save with a null building entry", !hasNaN(st.towns[0].stock) && !hasNaN(st.towns[0].pop));
+}
+
 // ---- a clean (already-CC) save is a no-op ----
 {
   const clean = { towns: [{ id: 1, stock: { mead: 5, iron_tool: 3, clothes: 2 }, buildings: [] }], carts: [] };

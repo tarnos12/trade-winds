@@ -2207,7 +2207,7 @@ Sim.tick = function (State) {
     // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
     // consuming its inputs (processors); throughput is throttled by missing inputs.
     for (const b of buildings) {
-      if (b && b.built === false) continue;   // CB-A: unbuilt buildings don't produce
+      if (!b || b.built === false) continue;   // CB-A: unbuilt buildings don't produce; !b guards a null array element (matches assignWorkers/target-loop siblings) so a corrupt entry can't deref null → throw
       const type = CONFIG.buildings[b.typeId];
       if (!type || !type.output) continue;
       const w = b.workers || 0;
@@ -2557,6 +2557,7 @@ Sim.houseIncome = function (town, building) {
   const thisCap = capOf(building, def);
   let totalCap = 0;
   for (const b of (town.buildings || [])) {
+    if (!b) continue;   // guard a null array element (corrupt save) — matches sibling loops
     const d = CONFIG.buildings[b.typeId];
     if (!d || d.kind !== "house" || SIM_TIER_KEY[d.houseTier] !== key) continue;
     totalCap += capOf(b, d);
@@ -2659,7 +2660,7 @@ Buildings.housingCapacity = function (town, state) {
   const cap = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC: 4th tier ===
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
-    if (b && b.built === false) continue;   // BAL2: scaffolds don't house anyone
+    if (!b || b.built === false) continue;   // BAL2: scaffolds don't house anyone; !b guards a null array element (corrupt save)
     const def = CONFIG.buildings[b.typeId];
     if (!def || def.kind !== "house") continue;
     const key = BUILDINGS_TIER_KEY[def.houseTier];
@@ -2856,7 +2857,7 @@ Buildings.basicConsumptionMult = function (town) {
   const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
   const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
   for (const b of list) {
-    if (b && b.built === false) continue;   // BAL2: scaffolds don't house anyone
+    if (!b || b.built === false) continue;   // BAL2: scaffolds don't house anyone; !b guards a null array element (corrupt save)
     const def = CONFIG.buildings[b.typeId];
     if (!def || def.kind !== "house") continue;
     const key = BUILDINGS_TIER_KEY[def.houseTier];
@@ -6598,7 +6599,14 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     // strings so a few garbage entries drop out instead of nuking the whole save
     // (roads are re-layable; no structural invariant depends on a bad element).
     state.roads = new Set((Array.isArray(data.roads) ? data.roads : []).filter(k => typeof k === "string"));
-    state.towns = Array.isArray(data.towns) ? data.towns : [];
+    // P4: SANITIZE town/building entries — same class as the P2 roads/fog fix above.
+    // A corrupt array ELEMENT (a null town, or a null in a town's buildings[]) slips
+    // past saveShapeOk's array-TYPE-only check, then throws in Sim.tick's production
+    // loop (`CONFIG.buildings[b.typeId]` on a null b) INSIDE the shared rAF frame()
+    // before it reschedules → permanent freeze of both render AND economy. Drop the
+    // garbage elements so a few bad entries fall out instead of nuking the whole save.
+    state.towns = (Array.isArray(data.towns) ? data.towns : []).filter(t => t && typeof t === "object");
+    for (const t of state.towns) if (Array.isArray(t.buildings)) t.buildings = t.buildings.filter(b => b && typeof b === "object" && typeof b.typeId === "string");
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
     state.tick = typeof data.tick === "number" ? data.tick : 0;   // BUGFIX: restore the sim tick so cooldownUntil / happyMods untilTick (absolute ticks) stay consistent (old saves lack it → default 0, same as pre-fix behavior)
