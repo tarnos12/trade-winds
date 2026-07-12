@@ -440,6 +440,12 @@ function report() {
       }).join("  "));
     }
     if (!anyHome) p("  (no aristocrat_home built or scaffolded in any town — win path not yet engaged)");
+    // Aristocrat-happiness trajectory (max aristocrat tierHappiness across towns, per
+    // snapshot) — shows whether the win HOLDS near 100% after it latches or decays.
+    p("  aris-happiness trajectory (tick:max%): " + snaps.map(s => {
+      let m = -1; for (const c of s.cities) { const v = c.th[3]; if (v != null && v > m) m = v; }
+      return s.tick + ":" + (m < 0 ? "-" : Math.round(m));
+    }).join("  "));
   }
 
   // --- T3 LUXURY STATUS: the 7 goods exit-criterion 2b requires to be > 0 --------
