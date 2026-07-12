@@ -131,7 +131,13 @@ function build() {
     return out;
   }
   const nodes = [{ q: 0, r: 0 }, ...CENTERS];
-  const links = [[0, 1], [1, 2], [1, 3], [0, 2], [2, 3]]; // castle-A, A-B, A-C, castle-B, B-C (city 4 road pending — collapses the deterministic run; see board)
+  // Phase-2 victory pass: City#4 (the aristocrat/citizen district) is now CONNECTED —
+  // castle-D + A-D + C-D — so its T3-luxury chain + aristocrat_home can build, trade,
+  // and populate. (Pre-2A this "collapsed the deterministic run"; the 2A economy rework
+  // — wider slot caps, worker-tiered pottery/carpentry, un-gated aristocrat research —
+  // makes the 4-city trade network the intended shape.) Determinism is by seed, not by
+  // matching the old 3-city curve.
+  const links = [[0, 1], [1, 2], [1, 3], [0, 2], [2, 3], [0, 4], [1, 4], [3, 4]];
   for (const [i, j] of links) {
     for (const h of hexLine(nodes[i], nodes[j])) {
       // don't road a town center hex

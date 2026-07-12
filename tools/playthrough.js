@@ -23,9 +23,13 @@ const RESEARCH_ORDER = [
   "crop_rotation", "paved_roads", "tax_ledgers", "deep_veins", "larger_carts",
   "royal_census",
   // burgher band (T3 luxury/citizen processors)
+  // Phase-2 order: distillery LAST in the burgher band. brandy (its output) is the
+  // hardest luxury (needs imported pottery + burgher labour); putting the un-gated
+  // goldsmith/luxury_tailor before it means a distillery stall can never block the
+  // gold_ring / luxury_clothes / aristocrat_home critical path.
   "unlock_manor", "unlock_forge", "unlock_pottery_workshop", "unlock_lamp_maker",
-  "unlock_carpentry", "unlock_armory", "unlock_distillery", "unlock_goldsmith",
-  "unlock_luxury_tailor",
+  "unlock_carpentry", "unlock_armory", "unlock_goldsmith", "unlock_luxury_tailor",
+  "unlock_distillery",
   "guild_halls", "warehousing", "extra_caravan", "town_charters", "upg_farm_l3",
   "upg_lumberjack_l3", "upg_sawmill_l3",
   // aristocrat band
@@ -48,46 +52,51 @@ const RESEARCH_ORDER = [
 //   City1 Farmlands  → food + textiles + brew/bake  (peasants + workers)
 //   City2 Metalworks → stone/ore/clay/gold + metal   (peasants + workers + a forge)
 //   City3 Capital    → imports intermediates, makes the luxuries, hosts ALL 4 tiers
+// Phase-2 victory-pass SPECIALIZATION (all 4 cities connected; L4 slot cap 24). The
+// aristocrat win needs all 8 aristocrat goods (lamp, mead, iron_armor, chairs, pottery
+// + brandy, luxury_clothes, gold_ring) to reach ONE fully-housed aristocrat. Design
+// principles: (1) burgher-staffed finishers (goldsmith, armory, distillery, luxury_tailor)
+// only run where burghers actually grow — so concentrate them, don't scatter; (2) the
+// worker-tier T3 (pottery_workshop, carpentry — re-tiered in 2A) can live in a plain
+// worker city; (3) co-locate the PERISHABLE brandy chain (mead + pottery -> distillery)
+// with the aristocrat host so it doesn't depend on long-haul trade; (4) boost the thin
+// raws (clay, oil) that the T3 layer newly demands.
 const PLANS = {
-  // BAL2b: SPECIALIZED cities that trade (the game's core loop) — no city hosts
-  // the whole 4-tier chain; each fits its level-4 slot cap (20).
-  1: [   // breadbasket + textiles + BURGHER CITY. Makes every burgher basic locally
-         // EXCEPT lamp (bread/mead/clothes) and hosts the manor for burgher housing;
-         // lamp is IMPORTED from City3's lamp_maker by trade. BUILDS (20/20): 5 huts,
-         // potato/farm/lumberjack/fishery/shepherd/quarry, 2 cottages, charcoal/mill/
-         // brewery/bakery/tailoring, manor, forge.
-         // NOTE: this list intentionally over-specifies (23 > 20-slot cap) — the cap
-         // truncates the tail (lamp_maker/pottery_workshop don't build; lamp arrives by
-         // trade, pottery isn't a City1 need). That truncation is LOAD-BEARING: the
-         // deterministic run is finely tuned to this exact built set + order; trimming
-         // the list (e.g. dropping forge to make a "clean" 20) collapses the whole run
-         // to castle-L1 / no-victory. Built roster confirmed correct — do not "tidy".
+  // City#1 — BURGHER CAPITAL + metal-luxury finisher. Grows burghers (manor×2), makes
+  // bread/mead/clothes locally, imports iron+gold, and finishes gold_ring (goldsmith)
+  // + luxury_clothes (luxury_tailor). Exports both metal-luxuries to the aristocrat city.
+  1: [
     "hut", "potato_farm", "lumberjack", "fishery", "hut", "farm", "shepherd",
     "quarry", "cottage", "charcoal_burner", "mill", "brewery", "bakery",
-    "tailoring", "hut", "cottage", "farm", "hut", "hut",
-    "manor", "lamp_maker", "pottery_workshop", "forge",
+    "tailoring", "hut", "cottage", "manor", "forge", "goldsmith",
+    "luxury_tailor", "manor", "hut", "cottage",
   ],
-  2: [   // mining district: metals, bricks, tools, oil
+  // City#2 — METALS + CLAY + OIL raw supplier (workers only; no T3). Exports iron, coal,
+  // gold, clay (×2 pits so pottery/brickworks don't starve each other), planks, oil, bricks.
+  2: [
     "hut", "potato_farm", "lumberjack", "fishery", "hut", "quarry", "cottage",
-    "iron_mine", "coal_mine", "gold_mine", "clay_pit", "sawmill", "brickworks",
-    "cottage", "stonetool_maker", "oil_maker", "hut", "cottage", "hut",
+    "iron_mine", "coal_mine", "gold_mine", "clay_pit", "clay_pit", "sawmill",
+    "brickworks", "cottage", "oil_maker", "stonetool_maker", "hut", "cottage", "fishery",
   ],
-  3: [   // second supplier: surplus food/wood/fish/planks + mead for the district,
-         // PLUS lamp for the burgher city. City3 already runs oil_maker (fish→oil),
-         // so adding lamp_maker (oil→lamp) makes it the kingdom's LAMP exporter —
-         // lamp is a burgher BASIC that no other connected city produces, so without
-         // this burghers plateau at 70×3/4=52.5%. Trade carries the surplus lamp to
-         // City1's burghers. (City4, the designed lamp backup, is road-isolated and
-         // connecting it destabilises the whole deterministic economy — see player.js.)
-    "hut", "potato_farm", "lumberjack", "fishery", "hut", "quarry", "farm",
-    "shepherd", "sawmill", "cottage", "charcoal_burner", "mill", "brewery",
-    "oil_maker", "lamp_maker", "hut", "cottage", "hut", "hut",
+  // City#3 — SUPPLIER (no burghers => caps at ~L3/17 slots): food + lamp + the WORKER-tier
+  // T3 (pottery, chairs) + oil. HOUSING-FIRST so it actually reaches L3, with the CRITICAL
+  // producers (oil_maker, lamp_maker, pottery, carpentry) placed EARLY so the L3 slot cap
+  // never truncates them (the mistake that killed lamp/chairs last iteration). Its own
+  // clay_pit feeds pottery locally. Exports lamp, pottery, chairs, oil.
+  3: [
+    "hut", "potato_farm", "lumberjack", "fishery", "hut", "cottage", "oil_maker",
+    "lamp_maker", "sawmill", "clay_pit", "pottery_workshop", "carpentry",
+    "hut", "cottage", "oil_maker", "hut", "quarry",
   ],
-  4: [   // CITIZEN DISTRICT: housing-first so it can LEVEL (L1 pop gate = 8),
-         // then imports intermediates, makes T3, houses the elite
-    "hut", "potato_farm", "lumberjack", "hut", "fishery", "hut", "cottage",
-    "manor", "forge", "pottery_workshop", "lamp_maker", "carpentry",
-    "manor", "goldsmith", "armory", "distillery", "luxury_tailor",
+  // City#4 — ARISTOCRAT CAPITAL: houses the elite AND makes the perishable/burgher-staffed
+  // luxuries in-place so brandy doesn't rot in transit. Local: mead (mill+brewery),
+  // iron_armor (armory, imports iron+coal), pottery (LOCAL clay_pit), brandy (distillery,
+  // mead+pottery both local). Imports the metal-luxuries (gold_ring, luxury_clothes) +
+  // lamp + chairs. manor×2 grows the burghers that staff armory+distillery; aristocrat_home×3.
+  4: [
+    "hut", "potato_farm", "lumberjack", "fishery", "hut", "farm", "cottage",
+    "mill", "brewery", "manor", "clay_pit", "armory", "pottery_workshop",
+    "distillery", "manor", "cottage",
     "aristocrat_home", "aristocrat_home", "aristocrat_home",
   ],
 };
@@ -115,15 +124,20 @@ function run() {
   // Goods currently producible anywhere (some built building outputs them, or
   // they are in a town's stock). Used to gate research on material supply so a
   // material-hungry node never hard-stalls the single-active queue.
+  // Phase-2 fix: "producible" = actually ON A SHELF right now (town stock or the
+  // castle store), NOT merely "a built building CLAIMS to output it". The old
+  // building-output clause let a STARVED producer (e.g. a pottery_workshop with no
+  // clay) mark its good producible, so a material-hungry research node
+  // (unlock_distillery needs pottery) got enqueued and then HARD-STALLED forever on
+  // castleStock it could never fill — blocking every later node behind the single
+  // active queue (goldsmith/luxury_tailor/aristocrat_home). Gating on real supply
+  // skips such a node until the good genuinely flows, keeping the queue moving.
   function producibleGoods() {
     const s = new Set();
     for (const t of state.towns) {
       for (const g in t.stock) if ((t.stock[g] || 0) > 0.5) s.add(g);
-      for (const b of t.buildings) {
-        const def = CONFIG.buildings[b.typeId];
-        if (def && def.output && b.built !== false) s.add(def.output.goodId);
-      }
     }
+    for (const g in (state.castleStock || {})) if ((state.castleStock[g] || 0) > 0.5) s.add(g);
     return s;
   }
   // Pick the next research node from the priority list that is unlockable now
@@ -201,10 +215,16 @@ function run() {
     for (const town of state.towns) {
       // BAL2b: player-style "Give 1k" — an importing district needs trade budget
       // before its tax base exists (real players click Give; 240t = the 2-min cooldown).
-      if ((town.gold || 0) < 300 && state.treasury > 5000) {
+      // Phase-2: an aristocrat/luxury-importing district buys VERY expensive goods
+      // (gold_ring 192g, luxury_clothes 384g each) and has a thin tax base, so the old
+      // 1000g/240t drip left it perpetually insolvent (gold=0) and unable to import its
+      // luxuries. A real player funnels treasury into the estate city; subsidize harder
+      // and more often when a city is well below a working import budget. Deterministic.
+      const giveFloor = 2500, giveAmt = 3000, giveCd = 120;
+      if ((town.gold || 0) < giveFloor && state.treasury > giveAmt + 2000) {
         town._lastGive = town._lastGive || -1e9;
-        if (state.tick - town._lastGive >= 240) {
-          state.treasury -= 1000; town.gold = (town.gold || 0) + 1000; town._lastGive = state.tick;
+        if (state.tick - town._lastGive >= giveCd) {
+          state.treasury -= giveAmt; town.gold = (town.gold || 0) + giveAmt; town._lastGive = state.tick;
         }
       }
       const plan = PLANS[town.id] || [];
