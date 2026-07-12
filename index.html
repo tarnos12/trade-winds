@@ -2702,7 +2702,7 @@ Object.assign(CONFIG, {
     ],
     sawmill: [
       { level: 2, name: "Water Wheel",   unlockedBy: "upg_sawmill_l2", cost: { gold: 220, wood: 25 },           effect: { outputMult: 1.25 } },
-      { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15 }, effect: { outputMult: 1.5, slotPlus: 1 } },
+      { level: 3, name: "Great Sawmill", unlockedBy: "upg_sawmill_l3", cost: { gold: 480, wood: 35, stone: 15, stone_tools: 5 }, effect: { outputMult: 1.5, slotPlus: 1 } },   // === STWIRE: a building that CONSUMES stone_tools (author: "used by some buildings later"). Optional upgrade (sawmill works at L2); delivery just waits if no stone_tools producer exists, and the TRADEFIX purpose-check keeps traders from chasing an unavailable good — no soft-lock. ===
     ],
     // === /RT-A ===
     // === ARISTOFIX: aristocrat_home has NO upgrade ladder (author: Aristocrats have
@@ -4216,14 +4216,14 @@ const RESEARCH_MATERIALS = {
   crop_rotation: { wood: 20, stone: 10 },
   deep_veins:    { stone: 25, iron: 15 },   // === TV2: ore → iron ===
   guild_halls:   { planks: 20, stone: 25 },
-  master_crafts: { planks: 30, iron_tool: 20 },   // === CC: tools → iron_tool ===
+  master_crafts: { planks: 30, iron_tool: 20, stone_tools: 10 },   // === CC: tools → iron_tool === === STWIRE: stone_tools was inert (no consumer anywhere); wire it into this late production capstone. Already gated on iron_tool (a burgher good), so adding the EASIER worker-made stone_tools raises no effective gate / no bootstrap risk. ===
   industrialize: { iron_tool: 30, chairs: 15 },   // === CC: tools/furniture → iron_tool/chairs ===
   // -- logistics branch --
   paved_roads:   { stone: 30, wood: 15 },
   larger_carts:  { planks: 25, wood: 20 },
   extra_caravan: { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
   warehousing:   { planks: 40, stone: 30 },
-  trade_network: { iron_tool: 30, chairs: 20 },   // === CC: tools/furniture → iron_tool/chairs ===
+  trade_network: { iron_tool: 30, chairs: 20, stone_tools: 15 },   // === CC: tools/furniture → iron_tool/chairs === === STWIRE: second stone_tools sink; this logistics capstone already needs iron_tool+chairs (burgher goods), so the worker-made stone_tools is a lower bar — safe, additive demand. ===
   // -- administration branch --
   tax_ledgers:   { grain: 20, wood: 15 },
   tariff_office: { clothes: 15, planks: 20 },      // === CC: cloth → clothes ===
