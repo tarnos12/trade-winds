@@ -141,14 +141,17 @@ an `ASSETS` step that embeds `tools/research-editor.html` (single source of trut
 `RESEARCH_EDITOR_HTML` string via a `/* BUILD:editor-embed */` marker below `PURE_CORE_END`; `--check`
 guards drift. Works offline and inside the sandboxed Artifact (blob-URL iframe, no native dialogs).
 
-**Modularization (restructuring pass, in progress).** To unlock the parallel agent-team workflow, the
-single-file game is being split into `src/*.js` modules reassembled by a **zero-dependency
-`tools/build.js`** (in-place `/* BUILD:<name> START/END */` marker splice; `build` / `--check` /
-`--extract`). The shipped `index.html` stays one self-contained, offline, zero-dep file — `src/` is the
-editable source, `index.html` the committed build output (edit `src` → build → commit both). Phase 1
-done: build system + first 2 pure-core modules (`config`, `hexmath`) extracted, round-trip byte-exact,
-all 14 pure-core suites green. Plan + 16-module fan-out in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md).
-Phase 2 (impure shell) deferred.
+**Modularization (restructuring pass — Phase 1 COMPLETE).** To unlock the parallel agent-team
+workflow, the single-file game's pure core is split into `src/*.js` modules reassembled by a
+**zero-dependency `tools/build.js`** (in-place `/* BUILD:<name> START/END */` marker splice; `build`
+/ `--check` / `--extract`). The shipped `index.html` stays one self-contained, offline, zero-dep file
+— `src/` is the editable source, `index.html` the committed build output (edit `src` → build → commit
+both; `--check` guards drift). **All 16 pure-core modules are now extracted** (config, rng, hexmath,
+mapgen, goods, sim, buildings, pathing, trade, research, research-economy, progress, events,
+kingdom-market, ledger, castle-market) — round-trip byte-for-byte, verified green: 15/15 pure-core
+suites, 95/95 editor harness, clean headless browser boot (no page errors). Plan + module map in
+[`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md). Phase 2 (impure shell: renderer / ui / save / input
+/ mainloop) deferred.
 
 **Next (recommended order):**
 1. **Balance pass** on the Research Center build/upgrade costs + per-level speeds against real

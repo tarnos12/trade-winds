@@ -1255,6 +1255,7 @@ const CONFIG = {
 };
 /* BUILD:config END */
 
+/* BUILD:rng START */
 // Seeded PRNG — mulberry32 (GDD §9.1: MapGen uses mulberry32).
 function mulberry32(a) {
   return function () {
@@ -1275,6 +1276,7 @@ function hashSeed(str) {
   }
   return h >>> 0;
 }
+/* BUILD:rng END */
 
 /* BUILD:hexmath START */
 // Pointy-top axial hex math (GDD §3.1, §9.1).
@@ -1315,6 +1317,7 @@ const HexMath = {
 };
 /* BUILD:hexmath END */
 
+/* BUILD:mapgen START */
 // Value-noise field with fractal Brownian motion (GDD §9.1: noise → biomes).
 function makeValueNoise(seed) {
   function hash(ix, iy) {
@@ -1649,7 +1652,9 @@ const MapGen = {
   },
 };
 // === /TV2 MapGen v2 ========================================================
+/* BUILD:mapgen END */
 
+/* BUILD:goods START */
 // === GOODS-PRICES START ===  (T5 / slot #3 — goods + buildings catalog + local price model)
 // Pure data + pure functions only (GDD §5, §6.1). No DOM, no canvas, no I/O.
 // Added to the shared CONFIG via a NON-DESTRUCTIVE merge so it composes with
@@ -2052,7 +2057,9 @@ Sim.priceFor = function (town, goodId) {
   return next;
 };
 // === GOODS-PRICES END ===
+/* BUILD:goods END */
 
+/* BUILD:sim START */
 // === SIM-CORE START ===  (T4 / slot #2 — production + consumption economy tick)
 // Pure, deterministic economy step (GDD §4.3, §5). No DOM / canvas / I/O — the
 // only inputs are the passed State + the constant CONFIG; the only effect is
@@ -2611,7 +2618,9 @@ Sim.CC_migrateGoods = function (state) {
 };
 // === /CC ===
 // === SIM-CORE END ===
+/* BUILD:sim END */
 
+/* BUILD:buildings START */
 // === BUILDINGS-CORE START ===  (TI-A / slot #2 — placement rules + housing)
 // Pure, deterministic placement/housing helpers for player-placed buildings.
 // No DOM / canvas / Math.random / I/O — reads the game State + CONFIG + HexMath
@@ -3168,7 +3177,9 @@ Buildings.startCenterUpgrade = function (state) {
 };
 // === /RESEARCH CENTER (Slice B) ==============================================
 // === BUILDINGS-CORE END ===
+/* BUILD:buildings END */
 
+/* BUILD:pathing START */
 // === PATHING START ===
 // Pure Dijkstra pathfinder over the road-node graph (GDD §9.1). No DOM/canvas,
 // no Math.random. Nodes are road hex keys in state.roads PLUS the two town
@@ -3251,7 +3262,9 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
   };
 })();
 // === PATHING END ===
+/* BUILD:pathing END */
 
+/* BUILD:trade START */
 // === TRADE START ===  (TR-A — external-buyer trade model; supersedes the T8 sell model)
 // Pure, deterministic trade layer (GDD §6.2–6.3). No DOM / canvas / I/O and NO
 // Math.random — every decision draws from a seeded stream stored on State
@@ -3741,7 +3754,9 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   };
 })();
 // === TRADE END ===
+/* BUILD:trade END */
 
+/* BUILD:research START */
 // === RESEARCH-CORE START ===  (P4-A / slot #2 — research tree data + pure engine)
 // Pure data + pure functions only (GDD §7.1). No DOM, no canvas, no Math.random,
 // no I/O — deterministic so it runs headless and inside the fixed timestep.
@@ -4193,7 +4208,9 @@ const Research = {
 };
 
 // === RESEARCH-CORE END ===
+/* BUILD:research END */
 
+/* BUILD:research-economy START */
 // === RESEARCH-ECONOMY START ===  (CRE — castle research economy)
 // Pure, deterministic layer (no DOM / canvas / Math.random). The King's castle
 // owns up to N traders that BUY the active research node's required MATERIALS
@@ -4559,7 +4576,9 @@ var ResearchEconomy = (function () {
   };
 })();
 // === RESEARCH-ECONOMY END ===
+/* BUILD:research-economy END */
 
+/* BUILD:progress START */
 // === PROGRESS-CORE START ===  (P4-B / slot #3 — town leveling + King's quests + prestige + castle levels)
 // Pure, deterministic progression layer (GDD §3.3, §7.2, §7.4). No DOM / canvas /
 // I/O and no Math.random — Quests.tick reads/mutates only State (state.quest,
@@ -4756,6 +4775,8 @@ Quests.tick = function (state) {
   return state;
 };
 // === PROGRESS-CORE END ===
+/* BUILD:events START */
+/* BUILD:progress END */
 // === EVENTS-CORE START ===  (P4-C / slot #4 — random events: cozy market
 // opportunities, GDD §7.3). Pure + deterministic: no DOM / canvas / Math.random —
 // timing draws from a seeded stream on State (state.eventSeed), mirroring Trade.
@@ -4943,7 +4964,9 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   };
 })();
 // === EVENTS-CORE END ===
+/* BUILD:events END */
 
+/* BUILD:kingdom-market START */
 // === KR-A: kingdom resource market (pure sampling + summaries) ===
 // A small, pure, side-effect-free market observatory. Once per economy tick it
 // samples every good's KINGDOM-WIDE stock total and mean local price into a
@@ -5086,7 +5109,9 @@ Market.summary = function (state) {
   return out;
 };
 // === /KR-A ===
+/* BUILD:kingdom-market END */
 
+/* BUILD:ledger START */
 // === PP-A === CITY LEDGER — bounded per-town gold history + per-tick flow tally.
 // Pure and save-safe (guards every field). town.ledger = {
 //   hist:      [numbers]                       // town.gold sampled once per Sim tick (bounded)
@@ -5155,7 +5180,9 @@ var Ledger = (function () {
   }
   return { ensure, normalizeTown, record, recordTransfer, sample, lastNAverage };
 })();
+/* BUILD:ledger END */
 
+/* BUILD:castle-market START */
 // CASTLE MARKET (buying side). A self-contained layer that runs AFTER
 // ResearchEconomy.tick in the accumulator, sharing the SAME castle-trader fleet
 // (kind:"castle") and cap (CONFIG.researchEconomy.maxTraders). It dispatches royal
@@ -5276,6 +5303,7 @@ var CastleMarket = (function () {
   return { tick, normalize, enabledSellStock, remaining, inFlightCastle };
 })();
 // === /PP-A ===
+/* BUILD:castle-market END */
 
 /* PURE_CORE_END */
 

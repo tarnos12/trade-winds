@@ -1,8 +1,16 @@
 # Module map — where code lives in `index.html`
 
-Single-file project (11,122 lines). Line numbers are approximate anchors from the
-2026-07-11 audit — search the banner text, not the number, since edits shift them.
-Ownership = the fenced section (there is no `/src` tree).
+Single-file project. Line numbers are approximate anchors from the 2026-07-11
+audit — search the banner text, not the number, since edits shift them.
+
+**Pure core is now modularized (Phase 1 done).** Every pure-core subsystem below is
+wrapped in `/* BUILD:<name> START|END */` markers in `index.html` and mirrored 1:1
+in `src/<name>.js` (edit `src/`, run `node tools/build.js`, commit both; `--check`
+guards drift). The shipped `index.html` stays one self-contained offline file — the
+markers are behaviour-neutral comments. The 16 modules (in splice order) are:
+`config, rng, hexmath, mapgen, goods, sim, buildings, pathing, trade, research,
+research-economy, progress, events, kingdom-market, ledger, castle-market`. The
+impure shell below `PURE_CORE_END` is **not** yet modularized (Phase 2 deferred).
 
 ## Pure deterministic core — `PURE_CORE_START` (~1140) … `PURE_CORE_END` (~5162)
 Everything the headless tests `vm`-eval. Must stay free of DOM / canvas /

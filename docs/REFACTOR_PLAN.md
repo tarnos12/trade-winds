@@ -5,6 +5,14 @@ single-file game into `src/*.js` modules with a **zero-dependency** `tools/build
 that regenerates the shipped single-file `index.html`. **Shape only — no behaviour
 change, no features.**
 
+> **STATUS: PHASE 1 COMPLETE (pure core fully modularized).** All 16 pure-core
+> modules in the `MANIFEST` are extracted to `src/*.js` with `/* BUILD:<name> */`
+> markers in `index.html`. Round-trip is byte-for-byte (`--check` OK, 17 regions
+> spliced incl. the editor asset). Verification net green: 15/15 pure-core suites,
+> 95/95 editor harness, clean headless browser boot (no page errors). `index.html`
+> stays one self-contained offline file. Phase 2 (impure shell: renderer / ui /
+> save / input / mainloop) remains deferred.
+
 ## Hard constraints honoured
 - Shipped `index.html` stays ONE self-contained file (Canvas 2D, zero external deps,
   opens from `file://` offline). **No build step is required to RUN.** `build.js` only
@@ -59,7 +67,8 @@ run `build.js`, commit both.
 ## Target module map (pure core), in canonical/concatenation order
 
 `MANIFEST` in `tools/build.js`. Ranges are the current `index.html` anchors (search the
-banner, not the number). `[✓]` = extracted in this PoC.
+banner, not the number). **All 16 rows below are now extracted** (`[✓]`); the two
+`[✓]`-in-PoC annotations are historical.
 
 | # | Module `name` | `src/` file | Region anchor(s) | Top-level exports | Depends on (load-time) |
 |---|---|---|---|---|---|
