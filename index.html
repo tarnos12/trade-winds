@@ -5648,6 +5648,7 @@ var CastleMarket = (function () {
     ctx.strokeStyle = "#5a4326";
     // connect adjacent road hexes (draw each undirected edge once)
     for (const k of state.roads) {
+      if (typeof k !== "string") continue;   // P2: skip a corrupt key rather than throw (a throw here freezes the whole rAF loop)
       const [q, r] = k.split(",").map(Number);
       const p = HexMath.hexToPixel(q, r, SIZE);
       for (const n of HexMath.neighbors(q, r)) {
@@ -5661,6 +5662,7 @@ var CastleMarket = (function () {
     // node dots
     ctx.fillStyle = "#6b5230";
     for (const k of state.roads) {
+      if (typeof k !== "string") continue;   // P2: same guard as the edge pass above
       const [q, r] = k.split(",").map(Number);
       const p = HexMath.hexToPixel(q, r, SIZE);
       ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
@@ -6468,7 +6470,13 @@ var CastleMarket = (function () {
     if (!data || !saveShapeOk(data)) return false;
     try {
     newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
-    state.roads = new Set(Array.isArray(data.roads) ? data.roads : []);
+    // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
+    // would slip past saveShapeOk's array-type check, land in the Set, then throw
+    // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it
+    // reschedules → permanent freeze of both render AND economy. Filter to
+    // strings so a few garbage entries drop out instead of nuking the whole save
+    // (roads are re-layable; no structural invariant depends on a bad element).
+    state.roads = new Set((Array.isArray(data.roads) ? data.roads : []).filter(k => typeof k === "string"));
     state.towns = Array.isArray(data.towns) ? data.towns : [];
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
@@ -6508,6 +6516,7 @@ var CastleMarket = (function () {
       SFX.setMuted(data.muted); syncMuteBtn();
     }
     for (const k of (Array.isArray(data.revealed) ? data.revealed : [])) {
+      if (typeof k !== "string") continue;   // P2: skip a corrupt fog key (same class of bug as roads)
       state.revealed.add(k);
       const hex = state.map.hexes.get(k);
       if (hex) hex.revealed = true;
