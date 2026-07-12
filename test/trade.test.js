@@ -546,5 +546,85 @@ function detState() {
 })();
 // === /TRADEFIX =================================================================
 
+// === CAPFIX: near-cap unload force-delivers + conserves gold ===================
+// Regression for the pass-2 catch: when a cart returns to a buyer whose warehouse
+// for that good is at storageCap, the per-tick unload move is throttled to 0 by
+// the room cap. The fixed dwell timer used to retire the cart with cargo STILL
+// aboard — silently destroying the paid-for remainder. The fix keeps unloading
+// until fully delivered OR a safety timeout (dwell < −dwellLimit), then
+// FORCE-DELIVERS the remainder into the buyer's stock (even above cap; Sim's own
+// overstock clamp handles the excess later). Crucially it does NOT refund gold —
+// the seller was already paid at the outbound settle, so a refund would MINT money.
+// This locks in BOTH properties: (a) the goods are not silently lost, and (b) total
+// kingdom gold is conserved across the whole dispatch→settle→unload cycle including
+// the timeout path. Pure Trade.tick (no Sim), seeded — deterministic.
+Pathing.invalidate();
+(function () {
+  const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+  ok("CAPFIX: unloadTimeoutMult is configured (>= 1)",
+     (CONFIG.trade && CONFIG.trade.unloadTimeoutMult || 0) >= 1);
+  const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1000, stock: { grain: 0 }, demand: { grain: 20 } });
+  const st = ctrlState(1, /*sellerStock*/ 100, /*price*/ 5, [buyer]);
+  // Total kingdom gold = Σ town.gold + treasury + gold carried in-flight (paid at
+  // dispatch, not yet settled). Measured at two CLEAN endpoints (no live carts).
+  const goldTotal = (s) => {
+    let g = s.treasury || 0;
+    for (const t of s.towns) g += (t.gold || 0);
+    for (const c of s.carts) if (!c.done) g += (c.agreedGold || 0);
+    return g;
+  };
+  const before = goldTotal(st);                       // 1000 (no cart yet)
+  Trade.tick(st);                                     // one dispatch; buyer pays agreedGold up front
+  const c = st.carts[0];
+  ok("CAPFIX: a trader is dispatched (setup)", !!c && c.phase === "outbound");
+  const boughtQty = c.qty;                            // units the cart carries (== 10)
+  const sellerFullySupplies = (townById(st, 100).stock.grain || 0) >= boughtQty;
+  // The buyer's warehouse for grain fills to cap while the cart is away (its own
+  // production / another importer), and it stops wanting more — so the RETURN unload
+  // is warehouse-blocked (room 0) and the safety-timeout FORCE-DELIVER path fires.
+  buyer.demand = {};                                  // no further dispatch
+  let guard = 0;
+  while (st.carts.length && guard++ < 300) {
+    buyer.stock.grain = capG;                         // re-pin at cap every tick: room never frees
+    Trade.tick(st);
+  }
+  const after = goldTotal(st);                        // clean endpoint (cart retired)
+  ok("CAPFIX: the timeout path actually ran (cart completed within the guard)", guard < 300);
+  ok("CAPFIX: near-cap unload FORCE-DELIVERS the paid-for remainder (buyer ends above cap, no silent loss)",
+     (buyer.stock.grain || 0) >= capG + boughtQty - 1e-6);
+  ok("CAPFIX: seller fully supplied the cart (setup — clean conservation baseline)", sellerFullySupplies);
+  ok("CAPFIX: total kingdom gold CONSERVED across dispatch→settle→unload incl. the timeout (no minted gold)",
+     Math.abs(after - before) < 1e-6);
+})();
+
+// (legacy single-good cart path) — an in-flight pre-PP-A cart (no `cargo` array)
+// hitting a full buyer must ALSO force-deliver + conserve, not refund. Construct the
+// cart directly in the unloading phase (as a legacy save would carry it).
+Pathing.invalidate();
+(function () {
+  const capG = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+  // Seller already paid at settle in the real flow: model buyer -50 (gold 950),
+  // seller +50. Total system gold across buyer+seller+treasury = 1000.
+  const buyer  = ctrlTown({ id: 1, q: 0, r: 0, gold: 950, stock: { grain: capG } });
+  const seller = ctrlTown({ id: 2, q: 5, r: 0, gold: 50,  stock: {} });
+  const st = { roads: new Set(), towns: [buyer, seller], treasury: 0, tradeSeed: 1,
+    carts: [{ id: 1, kind: "external", fromId: 1, toId: 2, sellerCastle: false,
+      goodId: "grain", qty: 10, unitBuy: 5, agreedGold: 50, unloaded: 0,
+      totalQty: 10, path: [], progress: 1, phase: "unloading",
+      dwell: 4, dwellLimit: 4 * ((CONFIG.trade && CONFIG.trade.unloadTimeoutMult) || 4), done: false }] };
+  const before = buyer.gold + seller.gold + st.treasury;   // 1000
+  let guard = 0;
+  while (st.carts.length && guard++ < 300) {
+    buyer.stock.grain = capG;                         // re-pin at cap: room never frees
+    Trade.tick(st);
+  }
+  const after = buyer.gold + seller.gold + st.treasury;
+  ok("CAPFIX(legacy): single-good cart force-delivers the remainder above cap",
+     (buyer.stock.grain || 0) >= capG + 10 - 1e-6);
+  ok("CAPFIX(legacy): no gold refunded on the legacy path (conserved, delta 0)",
+     Math.abs(after - before) < 1e-6);
+})();
+// === /CAPFIX ===================================================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
