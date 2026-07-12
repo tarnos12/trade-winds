@@ -123,20 +123,21 @@ ok("lamp_maker is worker-staffed with citizen-band research", CONFIG.buildings.l
 ok("charcoal_burner is peasant-staffed with worker-band research", CONFIG.buildings.charcoal_burner.workerTier === "peasant" && CONFIG.buildings.charcoal_burner.researchBand === "worker");
 ok("new processors sit on any land (terrain:null)", ["tailoring", "charcoal_burner", "stonetool_maker", "oil_maker", "forge", "armory", "pottery_workshop", "distillery", "goldsmith", "lamp_maker", "carpentry", "luxury_tailor"].every(id => CONFIG.buildings[id].terrain === null));
 ok("expected house ids present", ["hut", "cottage", "manor"].every(id => CONFIG.buildings[id] && CONFIG.buildings[id].kind === "house"));
-// === CC: aristocrat_home — houseTier 'aristocrat', 1 slot, ladder to +2 capacity. ===
-ok("aristocrat_home present (houseTier aristocrat, capacity 1)",
+// === CC: aristocrat_home — houseTier 'aristocrat'. Item-O 1:1 housing pass set
+//     ALL house base capacity to 2 (aristocrat_home 1 -> 2), still non-upgradable. ===
+ok("aristocrat_home present (houseTier aristocrat, capacity 2)",
   CONFIG.buildings.aristocrat_home && CONFIG.buildings.aristocrat_home.kind === "house"
-  && CONFIG.buildings.aristocrat_home.houseTier === "aristocrat" && CONFIG.buildings.aristocrat_home.houseCapacity === 1);
+  && CONFIG.buildings.aristocrat_home.houseTier === "aristocrat" && CONFIG.buildings.aristocrat_home.houseCapacity === 2);
 ok("aristocrat_home has NO upgrade ladder (1 slot, non-upgradable — author)",
   Buildings.upgradeLadder("aristocrat_home").length === 0
   && !Buildings.upgradeAt("aristocrat_home", 2));
 // === CC: housingCapacity reports the aristocrats bucket. ===
 {
   const t = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 1 }] });
-  ok("housingCapacity returns aristocrats bucket (cap 1)", Buildings.housingCapacity(t).aristocrats === 1);
-  // ARISTOFIX: no ladder — an aristocrat_home always shelters exactly 1, whatever the (spurious) level.
+  ok("housingCapacity returns aristocrats bucket (cap 2)", Buildings.housingCapacity(t).aristocrats === 2);
+  // ARISTOFIX: no ladder — an aristocrat_home always shelters exactly 2, whatever the (spurious) level.
   const t3 = makeTown({ buildings: [{ typeId: "aristocrat_home", q: 6, r: 0, workers: 0, upgradeLevel: 3 }] });
-  ok("aristocrat_home always shelters 1 (non-upgradable)", Buildings.housingCapacity(t3).aristocrats === 1);
+  ok("aristocrat_home always shelters 2 (non-upgradable)", Buildings.housingCapacity(t3).aristocrats === 2);
 }
 
 // ---- BAL: per-building research unlock ----
@@ -277,10 +278,14 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   const occ = Buildings.canPlaceBuilding(st, "farm", 6, 0);
   ok("occupied hex → not ok", occ.ok === false && !!occ.reason);
 
-  // road on the hex (adjacent to center so contiguity would otherwise pass)
+  // ITEM M: a road may SHARE a building hex — roads are a separate layer, so
+  // canPlaceBuilding no longer rejects a road tile (the rejection was removed;
+  // canPlaceTown / canPlaceResearchCenter still block roads). A road hex adjacent
+  // to the city is therefore a VALID building placement now, resolving the owner.
   st.roads.add(HexMath.key(5, -1));
   const onRoad = Buildings.canPlaceBuilding(st, "hut", 5, -1);
-  ok("road hex → not ok", onRoad.ok === false && !!onRoad.reason);
+  ok("road hex is now placeable (item-M: roads share the hex, resolves owner)",
+     onRoad.ok === true && onRoad.town === town);
 
   // town center hex
   const onCenter = Buildings.canPlaceBuilding(st, "hut", 5, 0);

@@ -1153,18 +1153,8 @@
 </div>
 <!-- === RT-B TECH-TREE HTML END === -->
 <!-- === PROGRESS-UI HTML START === (P4-B / slot #3 — King's quest banner + victory notice) -->
-<div id="questBanner" class="hidden" aria-hidden="true">
-  <div class="qb-crown">📜</div>
-  <div class="qb-main">
-    <div class="qb-title">King's Request</div>
-    <div class="qb-desc" id="qbDesc">—</div>
-    <div class="qb-bar"><span id="qbBar" style="width:0%"></span></div>
-  </div>
-  <div class="qb-side">
-    <div class="qb-prog" id="qbProg">0 / 0</div>
-    <div class="qb-reward" id="qbReward">—</div>
-  </div>
-</div>
+<!-- Q: King's Request top-bar banner removed — onboarding moves to the Getting
+     Started missions panel (left). Quests still run under the hood. -->
 <div id="winNotice" class="hidden" aria-hidden="true">
   <!-- === POLISH: victory confetti (CSS-only, decorative, reduced-motion aware) === -->
   <div class="wn-confetti" aria-hidden="true" id="wnConfetti"></div>
@@ -1766,7 +1756,7 @@ Object.assign(CONFIG, {
       output: { goodId: "wood", ratePerWorker: 1 },
       // EV3: starter — GOLD ONLY at level 1 (no resource cost).
       startUnlocked: true,
-      workerSlots: 3, cost: { gold: 100 },
+      workerSlots: 2, cost: { gold: 100 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
@@ -1776,7 +1766,7 @@ Object.assign(CONFIG, {
       // tree) yet still worked by peasants. researchBand overrides the tree lane
       // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
       unlockedBy: "unlock_farm",
-      workerSlots: 3, cost: { gold: 250 },
+      workerSlots: 2, cost: { gold: 250 },
     },
     potato_farm: {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
@@ -1784,7 +1774,7 @@ Object.assign(CONFIG, {
       output: { goodId: "potato", ratePerWorker: 2 },
       // EV3: starter food building — the basic peasant staple. GOLD ONLY.
       startUnlocked: true,
-      workerSlots: 3, cost: { gold: 120 },
+      workerSlots: 2, cost: { gold: 120 },
     },
     // === TV2: renamed from "miner"; sits on iron_deposit, worker-staffed T2 ===
     iron_mine: {
@@ -1792,7 +1782,7 @@ Object.assign(CONFIG, {
       terrain: "iron_deposit", workerTier: "worker",
       output: { goodId: "iron", ratePerWorker: 1 },
       unlockedBy: "unlock_iron_mine",   // RT-A: per-building unlock node
-      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
@@ -1801,7 +1791,7 @@ Object.assign(CONFIG, {
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
       unlockedBy: "unlock_quarry",   // RT-A: per-building unlock node
-      workerSlots: 3, cost: { wood: 35, gold: 80 },
+      workerSlots: 2, cost: { wood: 35, gold: 80 },
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
@@ -1829,21 +1819,21 @@ Object.assign(CONFIG, {
       terrain: "clay_deposit", workerTier: "worker",
       output: { goodId: "clay", ratePerWorker: 1 },
       unlockedBy: "unlock_clay_pit",
-      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     coal_mine: {
       id: "coal_mine", name: "Coal Mine", kind: "extractor",
       terrain: "coal_deposit", workerTier: "worker",
       output: { goodId: "coal", ratePerWorker: 1 },
       unlockedBy: "unlock_coal_mine",
-      workerSlots: 3, cost: { wood: 30, stone: 20, gold: 120 },
+      workerSlots: 2, cost: { wood: 30, stone: 20, gold: 120 },
     },
     gold_mine: {
       id: "gold_mine", name: "Gold Mine", kind: "extractor",
       terrain: "gold_deposit", workerTier: "worker",
       output: { goodId: "gold", ratePerWorker: 1 },
       unlockedBy: "unlock_gold_mine",
-      workerSlots: 3, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
+      workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
     },
     // --- processors (worker labour, any buildable town hex) ---
     sawmill: {
@@ -2008,7 +1998,7 @@ Object.assign(CONFIG, {
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
-      terrain: null, houseTier: "worker", houseCapacity: 3,
+      terrain: null, houseTier: "worker", houseCapacity: 2,   // O: uniform 2 (1:1 with 2-slot workplaces)
       unlockedBy: "unlock_cottage",   // RT-A: per-building unlock node
       // BAL2: NO bricks — bricks need worker-staffed producers, and workers need a
       // cottage first (construction-layer bootstrap deadlock). T1 materials only;
@@ -2017,14 +2007,14 @@ Object.assign(CONFIG, {
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
-      terrain: null, houseTier: "burgher", houseCapacity: 6,   // === BALPV: 4→6 — two manors must staff the 7 burgher-band T3 processors (2 slots each) ===
+      terrain: null, houseTier: "burgher", houseCapacity: 2,   // O: uniform 2 (1:1). NOTE: was 6 for the aristocrat economy — build more manors now.
       unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
       cost: { wood: 40, stone: 30, planks: 10, bricks: 10, gold: 220 },   // === TV2: bricks component ===
     },
     // === CC: aristocrat house — 1 slot (author), upgradable via the ladder. ===
     aristocrat_home: {
       id: "aristocrat_home", name: "Aristocrats Home", kind: "house",
-      terrain: null, houseTier: "aristocrat", houseCapacity: 1,
+      terrain: null, houseTier: "aristocrat", houseCapacity: 2,   // O: uniform 2
       unlockedBy: "unlock_aristocrat_home",
       // === BALPV: dropped chairs:2 + gold_ring:1 — the new 100%-happiness victory
       // already forces the full T3 economy, so the FIRST home must be constructible in
@@ -3034,10 +3024,10 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
       return { ok: false, reason: "Only houses can be built on " + terr };
   }
 
-  // (2) hex must be free: not a road, not the castle, not any town center, not
-  //     any existing building of any town.
+  // (2) hex must be free: not the castle, not any town center, not any existing
+  //     building of any town. M: a ROAD may share the hex — roads are a separate
+  //     layer, so building placement no longer rejects a road tile.
   const key = HexMath.key(q, r);
-  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
   const castle = Buildings.castleHex();
   if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (Array.isArray(state.towns)) {
@@ -6561,6 +6551,56 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     }
   }
 
+  // === N === A→B road tool. In road mode, the FIRST click sets an anchor (A) and
+  // lays a road there; the SECOND click (B) auto-fills a road along the hex line
+  // A→B on every road-eligible hex (paid per hex from the treasury). After B the
+  // road tool DESELECTS (back to pan) unless Shift is held, in which case B
+  // becomes the new A so you can keep chaining segments. Esc / mode-change cancels.
+  let roadAnchor = null;
+  function roadEligible(q, r) {
+    const k = HexMath.key(q, r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return false;
+    if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return false;
+    return !!CONFIG.terrain[hex.terrain].road;
+  }
+  function layRoad(q, r) {
+    const k = HexMath.key(q, r);
+    if (state.roads.has(k) || !roadEligible(q, r)) return false;
+    if ((state.treasury || 0) < Buildings.roadCost()) return false;
+    state.roads.add(k);
+    state.treasury = (state.treasury || 0) - Buildings.roadCost();
+    return true;
+  }
+  function placeRoadPath(a, b) {
+    const N = HexMath.dist(a.q, a.r, b.q, b.r);
+    let laid = 0;
+    for (let i = 0; i <= N; i++) {
+      const t = N === 0 ? 0 : i / N;
+      const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
+      if ((state.treasury || 0) < Buildings.roadCost()) break;   // out of gold — stop
+      if (layRoad(h.q, h.r)) laid++;   // ineligible/water hexes are skipped, not blocking
+    }
+    if (laid) { Pathing.invalidate(); if (typeof updateTreasuryHud === "function") updateTreasuryHud(); SFX.playThrottled("place", 90); }
+    return laid;
+  }
+  function handleRoadClick(q, r, shift) {
+    if (!roadAnchor) {
+      if (!roadEligible(q, r)) return;   // A must be a road-eligible hex
+      layRoad(q, r);                     // lay the anchor hex itself
+      roadAnchor = { q, r };
+      Pathing.invalidate();
+      if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+      SFX.playThrottled("place", 90);
+    } else {
+      placeRoadPath(roadAnchor, { q, r });
+      if (shift) roadAnchor = { q, r };          // chain: B is the next A
+      else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+    }
+    scheduleSave();
+  }
+  function cancelRoadAnchor() { roadAnchor = null; }
+
   // ---------------------------------------------------------------
   // Input: pan (drag / WASD), zoom (wheel), build (click / paint)
   // ---------------------------------------------------------------
@@ -6582,7 +6622,8 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      place(h.q, h.r);
+      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
   });
@@ -6597,8 +6638,9 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     if (panButton) {
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
-    } else if (state.mode === "road" || state.mode === "erase" || state.mode === "eraseRoad") {
-      // === J === eraseRoad drag-paints like "erase"/"road" (roads are safe to
+    } else if (state.mode === "erase" || state.mode === "eraseRoad") {
+      // N: road mode no longer drag-paints — it's the click A→B tool. erase/
+      // === J === eraseRoad drag-paints like "erase" (roads are safe to
       // sweep-delete — no confirmation either way); eraseBuilding is click-only
       // (see place()'s isPaint guard) so a drag can't stack confirm dialogs.
       const k = HexMath.key(h.q, h.r);
@@ -6634,6 +6676,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
     // this guard is focus-independent so it holds regardless.
     if (window.EditorOverlay && window.EditorOverlay.isOpen()) return;
     const k = e.key.toLowerCase();
+    if (k === "escape") cancelRoadAnchor();   // N: cancel a pending A→B road anchor
     if (["w", "a", "s", "d"].includes(k)) keys.add(k);
     if (e.target && e.target.id === "seed") return;
     // === SPEED-UI === Space toggles pause <-> last non-zero speed; 1/2/4 set
@@ -6669,6 +6712,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   const toolButtons = Array.from(document.querySelectorAll("button.tool"));
   function setMode(mode) {
     state.mode = mode;
+    if (mode !== "road") roadAnchor = null;   // N: leaving road mode drops a pending A→B anchor
     toolButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
     canvas.classList.toggle("building", mode !== "pan");
   }
@@ -10307,6 +10351,7 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
   }
 
   function renderQuestBanner() {
+    if (!questBannerEl) return;   // Q: banner removed from the DOM (onboarding → missions)
     const q = state.quest;
     const tmpl = q && Quests.template(q.id);
     if (!tmpl) { questBannerEl.classList.add("hidden"); questBannerEl.setAttribute("aria-hidden", "true"); return; }
@@ -11781,8 +11826,17 @@ const RESEARCH_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.23.0";
+  const GAME_VERSION = "0.24.0";
   const PATCH_NOTES = [
+    { v: "0.24.0", notes: [
+      "Traders now glide smoothly along the tiles they travel, at a steady speed (faster on roads, slower off-road)",
+      "Internal city porters follow the tiles too and show the same carried-item chips as trade caravans",
+      "Draw roads by clicking a start and an end — the whole path fills in; hold Shift to keep chaining",
+      "You can now build on top of a road (roads are their own layer)",
+      "Every workplace has 2 job slots and every house starts at 2 residents — a clean 1:1 balance",
+      "All rates in tooltips and descriptions now read per minute",
+      "Removed the King's Request banner up top — onboarding is moving into the Getting Started missions",
+    ] },
     { v: "0.23.0", notes: [
       "Towns now trade WITHOUT roads too — but a road route makes traders travel twice as fast",
       "FIX: buildings and upgrades no longer starve for materials — construction now gets its share of stock before local production eats it",

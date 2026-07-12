@@ -94,20 +94,19 @@ function stockAfterTick(typeId, good, unlocked) {
 // =========================================================================
 (() => {
   const town = { buildings: [
-    { typeId: "hut", q: 0, r: 1 },       // EC-A: peasant 2
-    { typeId: "cottage", q: 1, r: 0 },   // EC-A: worker 3
-    { typeId: "manor", q: 0, r: 2 },     // EC-A: burgher 4
+    { typeId: "hut", q: 0, r: 1 },       // item-O: peasant 2
+    { typeId: "cottage", q: 1, r: 0 },   // item-O: worker 2
+    { typeId: "manor", q: 0, r: 2 },     // item-O: burgher 2
   ] };
-  // Phase-2 victory pass raised manor houseCapacity 4 -> 6 (more burgher housing so the
-  // burgher band can grow enough to staff/feed the T3 luxury chain). hut(2)/cottage(3)
-  // unchanged. So burgher base = 6, and ×1.15 royal_census => 6.9.
+  // Item-O 1:1 jobs:housing pass set ALL houses to base capacity 2 (hut 2 / cottage
+  // 3->2 / manor 6->2). So every tier base = 2, and ×1.15 royal_census => 2.3 each.
   const base = Buildings.housingCapacity(town);
-  ok("housingCapacity base (no state) unchanged", base.peasants === 2 && base.workers === 3 && base.burghers === 6);
+  ok("housingCapacity base (no state) unchanged", base.peasants === 2 && base.workers === 2 && base.burghers === 2);
   const noState = Buildings.housingCapacity(town, { research: withResearch([]) });
-  ok("housingCapacity with empty research == base", noState.peasants === 2 && noState.workers === 3 && noState.burghers === 6);
+  ok("housingCapacity with empty research == base", noState.peasants === 2 && noState.workers === 2 && noState.burghers === 2);
   const boosted = Buildings.housingCapacity(town, { research: withResearch(["royal_census"]) });
   ok("housingBonus scales all tiers (×1.15)",
-    Math.abs(boosted.peasants - 2.3) < 1e-9 && Math.abs(boosted.workers - 3.45) < 1e-9 && Math.abs(boosted.burghers - 6.9) < 1e-9);
+    Math.abs(boosted.peasants - 2.3) < 1e-9 && Math.abs(boosted.workers - 2.3) < 1e-9 && Math.abs(boosted.burghers - 2.3) < 1e-9);
 })();
 
 // =========================================================================

@@ -21,6 +21,7 @@
   }
 
   function renderQuestBanner() {
+    if (!questBannerEl) return;   // Q: banner removed from the DOM (onboarding → missions)
     const q = state.quest;
     const tmpl = q && Quests.template(q.id);
     if (!tmpl) { questBannerEl.classList.add("hidden"); questBannerEl.setAttribute("aria-hidden", "true"); return; }

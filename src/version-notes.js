@@ -1,6 +1,15 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.23.0";
+  const GAME_VERSION = "0.24.0";
   const PATCH_NOTES = [
+    { v: "0.24.0", notes: [
+      "Traders now glide smoothly along the tiles they travel, at a steady speed (faster on roads, slower off-road)",
+      "Internal city porters follow the tiles too and show the same carried-item chips as trade caravans",
+      "Draw roads by clicking a start and an end — the whole path fills in; hold Shift to keep chaining",
+      "You can now build on top of a road (roads are their own layer)",
+      "Every workplace has 2 job slots and every house starts at 2 residents — a clean 1:1 balance",
+      "All rates in tooltips and descriptions now read per minute",
+      "Removed the King's Request banner up top — onboarding is moving into the Getting Started missions",
+    ] },
     { v: "0.23.0", notes: [
       "Towns now trade WITHOUT roads too — but a road route makes traders travel twice as fast",
       "FIX: buildings and upgrades no longer starve for materials — construction now gets its share of stock before local production eats it",

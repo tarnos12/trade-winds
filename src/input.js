@@ -158,6 +158,56 @@
     }
   }
 
+  // === N === A→B road tool. In road mode, the FIRST click sets an anchor (A) and
+  // lays a road there; the SECOND click (B) auto-fills a road along the hex line
+  // A→B on every road-eligible hex (paid per hex from the treasury). After B the
+  // road tool DESELECTS (back to pan) unless Shift is held, in which case B
+  // becomes the new A so you can keep chaining segments. Esc / mode-change cancels.
+  let roadAnchor = null;
+  function roadEligible(q, r) {
+    const k = HexMath.key(q, r);
+    const hex = state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return false;
+    if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return false;
+    return !!CONFIG.terrain[hex.terrain].road;
+  }
+  function layRoad(q, r) {
+    const k = HexMath.key(q, r);
+    if (state.roads.has(k) || !roadEligible(q, r)) return false;
+    if ((state.treasury || 0) < Buildings.roadCost()) return false;
+    state.roads.add(k);
+    state.treasury = (state.treasury || 0) - Buildings.roadCost();
+    return true;
+  }
+  function placeRoadPath(a, b) {
+    const N = HexMath.dist(a.q, a.r, b.q, b.r);
+    let laid = 0;
+    for (let i = 0; i <= N; i++) {
+      const t = N === 0 ? 0 : i / N;
+      const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
+      if ((state.treasury || 0) < Buildings.roadCost()) break;   // out of gold — stop
+      if (layRoad(h.q, h.r)) laid++;   // ineligible/water hexes are skipped, not blocking
+    }
+    if (laid) { Pathing.invalidate(); if (typeof updateTreasuryHud === "function") updateTreasuryHud(); SFX.playThrottled("place", 90); }
+    return laid;
+  }
+  function handleRoadClick(q, r, shift) {
+    if (!roadAnchor) {
+      if (!roadEligible(q, r)) return;   // A must be a road-eligible hex
+      layRoad(q, r);                     // lay the anchor hex itself
+      roadAnchor = { q, r };
+      Pathing.invalidate();
+      if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+      SFX.playThrottled("place", 90);
+    } else {
+      placeRoadPath(roadAnchor, { q, r });
+      if (shift) roadAnchor = { q, r };          // chain: B is the next A
+      else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+    }
+    scheduleSave();
+  }
+  function cancelRoadAnchor() { roadAnchor = null; }
+
   // ---------------------------------------------------------------
   // Input: pan (drag / WASD), zoom (wheel), build (click / paint)
   // ---------------------------------------------------------------
@@ -179,7 +229,8 @@
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      place(h.q, h.r);
+      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
   });
@@ -194,8 +245,9 @@
     if (panButton) {
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
-    } else if (state.mode === "road" || state.mode === "erase" || state.mode === "eraseRoad") {
-      // === J === eraseRoad drag-paints like "erase"/"road" (roads are safe to
+    } else if (state.mode === "erase" || state.mode === "eraseRoad") {
+      // N: road mode no longer drag-paints — it's the click A→B tool. erase/
+      // === J === eraseRoad drag-paints like "erase" (roads are safe to
       // sweep-delete — no confirmation either way); eraseBuilding is click-only
       // (see place()'s isPaint guard) so a drag can't stack confirm dialogs.
       const k = HexMath.key(h.q, h.r);
@@ -231,6 +283,7 @@
     // this guard is focus-independent so it holds regardless.
     if (window.EditorOverlay && window.EditorOverlay.isOpen()) return;
     const k = e.key.toLowerCase();
+    if (k === "escape") cancelRoadAnchor();   // N: cancel a pending A→B road anchor
     if (["w", "a", "s", "d"].includes(k)) keys.add(k);
     if (e.target && e.target.id === "seed") return;
     // === SPEED-UI === Space toggles pause <-> last non-zero speed; 1/2/4 set
@@ -266,6 +319,7 @@
   const toolButtons = Array.from(document.querySelectorAll("button.tool"));
   function setMode(mode) {
     state.mode = mode;
+    if (mode !== "road") roadAnchor = null;   // N: leaving road mode drops a pending A→B anchor
     toolButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
     canvas.classList.toggle("building", mode !== "pan");
   }

@@ -67,7 +67,7 @@ Object.assign(CONFIG, {
       output: { goodId: "wood", ratePerWorker: 1 },
       // EV3: starter — GOLD ONLY at level 1 (no resource cost).
       startUnlocked: true,
-      workerSlots: 3, cost: { gold: 100 },
+      workerSlots: 2, cost: { gold: 100 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
@@ -77,7 +77,7 @@ Object.assign(CONFIG, {
       // tree) yet still worked by peasants. researchBand overrides the tree lane
       // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
       unlockedBy: "unlock_farm",
-      workerSlots: 3, cost: { gold: 250 },
+      workerSlots: 2, cost: { gold: 250 },
     },
     potato_farm: {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
@@ -85,7 +85,7 @@ Object.assign(CONFIG, {
       output: { goodId: "potato", ratePerWorker: 2 },
       // EV3: starter food building — the basic peasant staple. GOLD ONLY.
       startUnlocked: true,
-      workerSlots: 3, cost: { gold: 120 },
+      workerSlots: 2, cost: { gold: 120 },
     },
     // === TV2: renamed from "miner"; sits on iron_deposit, worker-staffed T2 ===
     iron_mine: {
@@ -93,7 +93,7 @@ Object.assign(CONFIG, {
       terrain: "iron_deposit", workerTier: "worker",
       output: { goodId: "iron", ratePerWorker: 1 },
       unlockedBy: "unlock_iron_mine",   // RT-A: per-building unlock node
-      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
@@ -102,7 +102,7 @@ Object.assign(CONFIG, {
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
       unlockedBy: "unlock_quarry",   // RT-A: per-building unlock node
-      workerSlots: 3, cost: { wood: 35, gold: 80 },
+      workerSlots: 2, cost: { wood: 35, gold: 80 },
     },
     fishery: {
       id: "fishery", name: "Fishery", kind: "extractor",
@@ -130,21 +130,21 @@ Object.assign(CONFIG, {
       terrain: "clay_deposit", workerTier: "worker",
       output: { goodId: "clay", ratePerWorker: 1 },
       unlockedBy: "unlock_clay_pit",
-      workerSlots: 3, cost: { wood: 25, stone: 15, gold: 90 },
+      workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     coal_mine: {
       id: "coal_mine", name: "Coal Mine", kind: "extractor",
       terrain: "coal_deposit", workerTier: "worker",
       output: { goodId: "coal", ratePerWorker: 1 },
       unlockedBy: "unlock_coal_mine",
-      workerSlots: 3, cost: { wood: 30, stone: 20, gold: 120 },
+      workerSlots: 2, cost: { wood: 30, stone: 20, gold: 120 },
     },
     gold_mine: {
       id: "gold_mine", name: "Gold Mine", kind: "extractor",
       terrain: "gold_deposit", workerTier: "worker",
       output: { goodId: "gold", ratePerWorker: 1 },
       unlockedBy: "unlock_gold_mine",
-      workerSlots: 3, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
+      workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
     },
     // --- processors (worker labour, any buildable town hex) ---
     sawmill: {
@@ -309,7 +309,7 @@ Object.assign(CONFIG, {
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
-      terrain: null, houseTier: "worker", houseCapacity: 3,
+      terrain: null, houseTier: "worker", houseCapacity: 2,   // O: uniform 2 (1:1 with 2-slot workplaces)
       unlockedBy: "unlock_cottage",   // RT-A: per-building unlock node
       // BAL2: NO bricks — bricks need worker-staffed producers, and workers need a
       // cottage first (construction-layer bootstrap deadlock). T1 materials only;
@@ -318,14 +318,14 @@ Object.assign(CONFIG, {
     },
     manor: {
       id: "manor", name: "Manor", kind: "house",
-      terrain: null, houseTier: "burgher", houseCapacity: 6,   // === BALPV: 4→6 — two manors must staff the 7 burgher-band T3 processors (2 slots each) ===
+      terrain: null, houseTier: "burgher", houseCapacity: 2,   // O: uniform 2 (1:1). NOTE: was 6 for the aristocrat economy — build more manors now.
       unlockedBy: "unlock_manor",   // RT-A: per-building unlock node
       cost: { wood: 40, stone: 30, planks: 10, bricks: 10, gold: 220 },   // === TV2: bricks component ===
     },
     // === CC: aristocrat house — 1 slot (author), upgradable via the ladder. ===
     aristocrat_home: {
       id: "aristocrat_home", name: "Aristocrats Home", kind: "house",
-      terrain: null, houseTier: "aristocrat", houseCapacity: 1,
+      terrain: null, houseTier: "aristocrat", houseCapacity: 2,   // O: uniform 2
       unlockedBy: "unlock_aristocrat_home",
       // === BALPV: dropped chairs:2 + gold_ring:1 — the new 100%-happiness victory
       // already forces the full T3 economy, so the FIRST home must be constructible in

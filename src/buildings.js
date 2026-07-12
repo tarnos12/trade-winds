@@ -335,10 +335,10 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
       return { ok: false, reason: "Only houses can be built on " + terr };
   }
 
-  // (2) hex must be free: not a road, not the castle, not any town center, not
-  //     any existing building of any town.
+  // (2) hex must be free: not the castle, not any town center, not any existing
+  //     building of any town. M: a ROAD may share the hex — roads are a separate
+  //     layer, so building placement no longer rejects a road tile.
   const key = HexMath.key(q, r);
-  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
   const castle = Buildings.castleHex();
   if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (Array.isArray(state.towns)) {
