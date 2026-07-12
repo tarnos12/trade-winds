@@ -4777,10 +4777,15 @@ var Events = (typeof Events !== "undefined" && Events) || {};
   }
 
   // End the current event, undoing any reversible world change (bridge repair).
+  // M3: gate on the DEF's collapseRoad flag rather than a hardcoded id string —
+  // a loaded event whose id no longer names a def (retired/renamed in a later
+  // version) or a garbage roadKey (bad save) must not leave a road permanently
+  // missing with no repair path.
   function endEvent(state) {
     const e = state.event;
     if (!e) return;
-    if (e.id === "bridge" && e.roadKey != null) { addRoad(state, e.roadKey); invalidatePathing(); }
+    const def = CONFIG.events.defs[e.id];
+    if (def && def.collapseRoad && typeof e.roadKey === "string") { addRoad(state, e.roadKey); invalidatePathing(); }
     state.event = null;
   }
 
@@ -6371,14 +6376,31 @@ var CastleMarket = (function () {
     return { q: rc.q, r: rc.r, built: rc.built, delivered: rc.delivered, level, pendingUpgrade: pending };
   }
 
+  // BUGFIX (save-robustness): a save can be valid JSON with the wrong VALUE
+  // SHAPE for a field (e.g. `roads`/`towns` as an object instead of an array —
+  // corruption, a botched migration, or a future format bug). `new Set(x)` on a
+  // non-iterable `x` and `for...of` over a non-array both throw synchronously
+  // and uncaught here, which used to crash the whole boot (or the Continue
+  // button) with no recovery short of clearing localStorage by hand. Checked
+  // by both loadGame() (last line of defense inside its try/catch, below) and
+  // hasValidSave() (so Continue is never enabled for a save that would throw).
+  function saveShapeOk(data) {
+    return !(
+      (data.towns !== undefined && !Array.isArray(data.towns)) ||
+      (data.carts !== undefined && !Array.isArray(data.carts)) ||
+      (data.roads !== undefined && !Array.isArray(data.roads)) ||
+      (data.revealed !== undefined && !Array.isArray(data.revealed))
+    );
+  }
   function loadGame() {
     let data = null;
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) {}
     data = migrate(data);
-    if (!data) return false;
+    if (!data || !saveShapeOk(data)) return false;
+    try {
     newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
-    state.roads = new Set(data.roads || []);
-    state.towns = data.towns || [];
+    state.roads = new Set(Array.isArray(data.roads) ? data.roads : []);
+    state.towns = Array.isArray(data.towns) ? data.towns : [];
     state.carts = Array.isArray(data.carts) ? data.carts : [];
     state.treasury = typeof data.treasury === "number" ? data.treasury : 0;
     state.tick = typeof data.tick === "number" ? data.tick : 0;   // BUGFIX: restore the sim tick so cooldownUntil / happyMods untilTick (absolute ticks) stay consistent (old saves lack it → default 0, same as pre-fix behavior)
@@ -6416,13 +6438,20 @@ var CastleMarket = (function () {
     if (typeof data.muted === "boolean" && typeof SFX !== "undefined") {
       SFX.setMuted(data.muted); syncMuteBtn();
     }
-    for (const k of (data.revealed || [])) {
+    for (const k of (Array.isArray(data.revealed) ? data.revealed : [])) {
       state.revealed.add(k);
       const hex = state.map.hexes.get(k);
       if (hex) hex.revealed = true;
     }
-    state.cam = data.cam || { x: 0, y: 0 };
-    state.zoom = data.zoom || 1;
+    // L5: validate cam/zoom are finite numbers before use — a malformed value
+    // here doesn't throw (no iteration), but silently NaNs the canvas transform
+    // every frame after a bad load (blank/frozen viewport, no error to see why).
+    const camIn = (data.cam && typeof data.cam === "object") ? data.cam : {};
+    state.cam = {
+      x: (typeof camIn.x === "number" && isFinite(camIn.x)) ? camIn.x : 0,
+      y: (typeof camIn.y === "number" && isFinite(camIn.y)) ? camIn.y : 0,
+    };
+    state.zoom = (typeof data.zoom === "number" && isFinite(data.zoom) && data.zoom > 0) ? data.zoom : 1;
     setMode(data.mode || "pan");
     // === TV2: in-place data migration for old (v1) saves — the map itself
     // regenerates from the seed under the v2 terrain set (accepted in active
@@ -6437,6 +6466,17 @@ var CastleMarket = (function () {
     Sim.CC_migrateGoods(state);
     terrainDirty = true;
     return true;
+    } catch (err) {
+      // H1: any unanticipated throw while applying a malformed-but-valid-JSON
+      // save (bad field shape saveShapeOk() didn't anticipate, a normalize()
+      // helper choking on garbage, etc.) must not brick boot or the Continue
+      // button. newGame() above already replaced most of `state` with a fresh,
+      // valid game before the throw — reset explicitly to guarantee state is
+      // never left half-restored, then report the load as failed like migrate()
+      // rejecting an unknown version.
+      try { newGame(randomSeed()); } catch (e2) {}
+      return false;
+    }
   }
 
   // autosave every 30s + on hide (GDD §9.4)
@@ -10727,7 +10767,10 @@ var CastleMarket = (function () {
   function hasValidSave() {
     let data = null;
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
-    return !!migrate(data);
+    data = migrate(data);
+    // H2: shape-check too (not just saveVersion) so Continue is never enabled
+    // for a save loadGame() would reject/throw on — same guard loadGame() uses.
+    return !!data && saveShapeOk(data);
   }
 
   const StartScreen = (() => {

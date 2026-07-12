@@ -27,7 +27,8 @@ Everything the headless tests `vm`-eval. Must stay free of DOM / canvas /
 Renderer (canvas world: terrain pre-render, roads, buildings, carts, overlays,
 research center), UI (all DOM panels — town/building/castle/keep/kingdom, tech
 tree, HUD, start screen ~6867 HTML, tutorial coach), Save (versioned localStorage
-+ stepwise migration + JSON export/import), input handling, the two-clock main
++ stepwise migration; no export/import UI exists — audited 2026-07-12, only
+`localStorage.getItem/setItem(SAVE_KEY)`), input handling, the two-clock main
 loop (rAF render + fixed 500ms×speed economy accumulator).
 
 ## CSS / HTML (top of file, ~55–1075)
