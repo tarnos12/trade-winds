@@ -1,0 +1,42 @@
+{
+  "name": "trade-winds",
+  "version": "0.33.0",
+  "description": "Trade Winds — a single-file browser economy game, packaged as a desktop app.",
+  "author": "tarnos",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "build:game": "node tools/build.js",
+    "check:game": "node tools/build.js --check",
+    "start": "npm run build:game && electron .",
+    "dist": "npm run build:game && electron-builder --win",
+    "dist:portable": "npm run build:game && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.tarnos.tradewinds",
+    "productName": "Trade Winds",
+    "files": [
+      "index.html",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

@@ -525,6 +525,15 @@
     // ========================================================================
     let overlay = null, scn = null, styleEl = null;
 
+    // Persist the composed scenario so it survives reloads (and, in the desktop
+    // app, is mirrored to disk). Keyed like the other tools' tradewinds.* stores.
+    const BL_KEY = "tradewinds.balance";
+    function saveScn() { try { localStorage.setItem(BL_KEY, JSON.stringify(scn)); } catch (e) {} }
+    function loadScn() {
+      try { const d = JSON.parse(localStorage.getItem(BL_KEY)); if (d && Array.isArray(d.cities)) return d; } catch (e) {}
+      return null;
+    }
+
     function defaultScenario() {
       return {
         cities: [
@@ -1157,13 +1166,13 @@
       if (overlay) overlay.querySelectorAll(".bl-tab").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-tab") === activeTab));
     }
     // Re-render the active tab AND the persistent resource panel on every edit.
-    function refresh() { renderMain(); refreshSide(); }
+    function refresh() { saveScn(); renderMain(); refreshSide(); }
 
     function isOpen() { return !!(overlay && !overlay.classList.contains("hidden")); }
     function close() { if (overlay) overlay.classList.add("hidden"); }
     function open() {
       injectStyle();
-      if (!scn) scn = defaultScenario();
+      if (!scn) scn = loadScn() || defaultScenario();
       if (!overlay) {
         overlay = el("div", { id: "balanceLabOverlay", class: "hidden" });
         const bar = el("div", { id: "blBar" }, [el("span", { text: "🧪 Balance Lab" })]);

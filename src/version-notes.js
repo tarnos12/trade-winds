@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.32.0";
+  const GAME_VERSION = "0.33.0";
   const PATCH_NOTES = [
+    { v: "0.33.0", notes: [
+      "NEW: Trade Winds can now run as a Windows desktop app (Electron) — see DESKTOP.md (npm start / npm run dist)",
+      "Everything auto-saves to one editable JSON file on disk: your game, research tree, missions, and Balance-Lab scenario — no more Export/Import",
+      "The Balance Lab now remembers your composed cities between sessions",
+    ] },
     { v: "0.32.0", notes: [
       "BIG REBALANCE of the whole economy to clean, readable numbers (per minute at full staffing):",
       "Gatherers — Lumberjack & Potato Farm 60/min, Sheep Farm 45, Fishery 30, and all mines (stone/iron/clay/coal/gold) 20",
