@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trade Winds — Mission Editor</title>
+<style>
+  :root {
+    --paper: #f2e6cf;
+    --ink: #3b2f22;
+    --panel: rgba(28, 22, 15, 0.86);
+    --panel-edge: #6b5636;
+    --accent: #c98a3c;
+    --ok: #4f9d5a;
+    --warn: #c98a3c;
+    --err: #a3271f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    background: #14110c;
+    color: var(--paper);
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto 1fr; grid-template-columns: 1fr; height: 100vh; }
+  header {
+    background: linear-gradient(180deg, #3a2f1e, #2a2114);
+    color: var(--paper); padding: 8px 12px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border-bottom: 2px solid var(--panel-edge); z-index: 5;
+  }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: bold; letter-spacing: .5px; white-space: nowrap; color: var(--accent); }
+  header .sep { width: 1px; height: 22px; background: rgba(255,255,255,.2); margin: 0 4px; }
+  button {
+    font-family: inherit; background: #3a2e1d; border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12.5px;
+    color: var(--paper); transition: background .12s, border-color .12s;
+  }
+  button:hover { background: #4d3c24; }
+  button:active { background: #2a2114; }
+  button.primary { background: var(--accent); color: #201607; border-color: #e0a860; font-weight: bold; }
+  button.primary:hover { background: #dba054; }
+  button.danger { background: #6e1815; color: #fce9c0; border-color: var(--err); }
+  button.danger:hover { background: #8a231e; }
+  button:disabled { opacity: .45; cursor: default; }
+  header .status { margin-left: auto; font-size: 12px; color: var(--paper); opacity: .85; white-space: nowrap; }
+  #persistWarn {
+    display: none; font-size: 11.5px; color: var(--warn); border: 1px solid var(--warn);
+    border-radius: 6px; padding: 2px 9px; white-space: nowrap; cursor: default;
+  }
+  #persistWarn.show { display: inline-block; }
+
+  #main { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+  #boardWrap { position: relative; overflow: hidden; background: #14110c; }
+  #board { position: absolute; top: 0; left: 0; cursor: grab; }
+  #board.grabbing { cursor: grabbing; }
+
+  #helpToggle {
+    position: absolute; left: 10px; bottom: 10px; z-index: 5;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+    background: var(--panel); color: var(--paper);
+    border: 1px solid var(--accent); font-weight: bold; font-size: 15px;
+    line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  #helpToggle:hover { background: rgba(201,138,60,0.22); }
+  #boardHint {
+    position: absolute; left: 10px; bottom: 48px;
+    background: var(--panel); color: var(--paper); font-size: 11.5px;
+    border: 1px solid var(--panel-edge);
+    padding: 8px 10px; border-radius: 6px; max-width: 380px; line-height: 1.5;
+    pointer-events: auto; display: none;
+  }
+  #boardHint.open { display: block; }
+  #boardHint .help-hd { display: flex; justify-content: space-between; align-items: center;
+    font-weight: bold; margin: -2px 0 6px; color: var(--accent); }
+  #boardHint .help-close { cursor: pointer; opacity: .7; font-size: 14px; padding: 0 2px; }
+  #boardHint .help-close:hover { opacity: 1; }
+
+  #sidebar { background: var(--panel); border-left: 2px solid var(--panel-edge); display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; border-bottom: 2px solid var(--panel-edge); background: #241c11; }
+  .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; font-weight: bold; padding: 8px 4px; color: var(--paper); opacity: .75; }
+  .tabs button.active { background: rgba(201,138,60,0.14); border-bottom: 3px solid var(--accent); opacity: 1; }
+  .tabpanel { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; display: none; }
+  .tabpanel.active { display: block; }
+  .tabpanel::-webkit-scrollbar-thumb { background: var(--panel-edge); border-radius: 4px; }
+  .tabpanel { scrollbar-width: thin; scrollbar-color: var(--panel-edge) transparent; }
+
+  fieldset { border: 1px solid var(--panel-edge); border-radius: 6px; margin: 0 0 10px 0; padding: 8px; }
+  legend { font-weight: bold; font-size: 12px; padding: 0 4px; color: var(--accent); }
+  label { display: block; font-size: 11.5px; font-weight: bold; margin: 6px 0 2px; color: var(--paper); }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; font-family: inherit; font-size: 12.5px;
+    border: 1px solid var(--panel-edge); border-radius: 4px; padding: 4px 6px;
+    background: #1c160f; color: var(--paper);
+  }
+  input[type=checkbox] { width: auto; accent-color: var(--accent); }
+  textarea { resize: vertical; font-family: "Courier New", monospace; font-size: 11.5px; }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; }
+  .objRow { border: 1px solid var(--panel-edge); border-radius: 5px; padding: 6px; margin-bottom: 6px; background: #1c160f; }
+  .objRow .objHd { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .objRow .objHd select { flex: 1; }
+  .fieldRow { display: flex; gap: 4px; align-items: center; }
+  .fieldRow > * { flex: 1; }
+  .miniBtn { padding: 2px 7px; font-size: 11px; flex: 0 0 auto; }
+  .hint { font-size: 10.5px; color: var(--paper); opacity: .65; margin: 2px 0 6px; line-height: 1.35; }
+  .emptyMsg { font-size: 12.5px; color: var(--paper); opacity: .65; padding: 20px 6px; text-align: center; }
+  .chk { display: flex; align-items: center; gap: 6px; font-weight: normal; margin-top: 8px; }
+
+  #validationList { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  #validationList li { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; border-left: 4px solid; background: #1c160f; }
+  #validationList li.error { border-color: var(--err); }
+  #validationList li.warn { border-color: var(--warn); }
+  #validationList li.ok { border-color: var(--ok); }
+
+  #exportArea, #importArea { width: 100%; height: 220px; }
+  .palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .palette .chip {
+    font-size: 10.5px; background: #1c160f; border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 2px 8px; cursor: default; user-select: text; color: var(--paper);
+  }
+  #toast {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); color: var(--paper); padding: 7px 16px; border-radius: 6px;
+    border: 1px solid var(--accent);
+    font-size: 12.5px; z-index: 20; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🎯 Mission Editor — Trade Winds</h1>
+    <button id="btnAdd">+ Add Mission</button>
+    <button id="btnZoomReset">Reset View</button>
+    <div class="sep"></div>
+    <button id="btnExport" class="primary">Export JSON</button>
+    <button id="btnImport">Import JSON…</button>
+    <button id="btnReloadDefault">Reset to Default</button>
+    <span id="persistWarn" title="This browsing context can't reach localStorage (common inside a sandboxed iframe without allow-same-origin, or some file:// pages). Autosave is disabled — use Export JSON before closing or your edits will be lost.">⚠ Autosave unavailable — Export before closing</span>
+    <div class="status" id="statusLine"></div>
+  </header>
+  <div id="main">
+    <div id="boardWrap">
+      <canvas id="board"></canvas>
+      <div id="boardHint">
+        <div class="help-hd"><span>Help</span><span class="help-close" id="helpClose" title="Close">✕</span></div>
+        <b>Drag</b> a mission card to move it into another grid slot.<br>
+        <b>Connect prerequisites:</b> click one of the 8 handle circles on a source card to arm it, then click any handle (or the body) of another card — this makes the source a <b>prerequisite of</b> the target (arrow points source → target). Click empty space or press <b>Esc</b> to cancel.<br>
+        <b>Delete</b> a card or a prerequisite line: click it, then press <b>Delete</b>.<br>
+        Edit a mission's name, icon, the <b>retroactive</b> flag and its <b>objectives</b> in the Inspector on the right.<br>
+        Scroll to zoom, drag empty space to pan.
+      </div>
+      <button id="helpToggle" title="Help" aria-expanded="false">?</button>
+      <div id="toast"></div>
+    </div>
+    <div id="sidebar">
+      <div class="tabs">
+        <button class="tabbtn active" data-tab="inspector">Inspector</button>
+        <button class="tabbtn" data-tab="palette">Reference</button>
+        <button class="tabbtn" data-tab="validate">Validate</button>
+        <button class="tabbtn" data-tab="io">Import / Export</button>
+      </div>
+      <div class="tabpanel active" id="tab-inspector"></div>
+      <div class="tabpanel" id="tab-palette"></div>
+      <div class="tabpanel" id="tab-validate"></div>
+      <div class="tabpanel" id="tab-io"></div>
+    </div>
+  </div>
+</div>
+<datalist id="buildingList"></datalist>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   Trade Winds — MISSION EDITOR
+   A research-editor-style GRID + FLOWCHART authoring tool for the game's
+   data-driven mission engine (brief item U). Missions are cards on a grid;
+   flowchart edges express prerequisites (edge A→B: A is a prereq of B).
+
+   THE SCHEMA (the contract shared with the game's mission engine):
+     {
+       "version": 1,
+       "missions": [
+         { "id": "m1", "name": "...", "icon": "🏗",
+           "pos": { "col": 0, "row": 0 },
+           "retroactive": true,            // DEFAULT true
+           "prereqs": ["m0"],              // ids that must be COMPLETE first
+           "objectives": [
+             { "type": "construct",  "building": "any", "count": 1 },
+             { "type": "upgrade",    "building": "any", "count": 1 },
+             { "type": "trade_good", "good": "potato",  "count": 20 },
+             { "type": "earn_tax",   "amount": 500 }
+           ] }
+       ]
+     }
+
+   The whole document is autosaved to localStorage["tradewinds.missions"] in
+   EXACTLY this schema (plus a harmless editor-only `_editorMeta` key the game
+   loader ignores) so the running game picks up the authored set. Sandbox-safe:
+   no native confirm/alert — see uiConfirm() below.
+   ===================================================================== */
+
+// Goods ids (CONFIG.goods) + emoji — copied verbatim from index.html /
+// research-editor so trade_good objectives offer the real catalog.
+const GOODS_IDS = [
+  "wood","stone","iron","clay","grain","potato","fish","wool",
+  "planks","iron_tool","flour","mead","clothes","stone_tools","oil","coal","gold","bricks",
+  "bread","pottery","lamp","iron_armor","chairs","gold_ring","brandy","luxury_clothes",
+];
+const BUILDING_IDS = [
+  "lumberjack","farm","potato_farm","iron_mine","quarry","fishery","shepherd",
+  "clay_pit","coal_mine","gold_mine",
+  "sawmill","mill","bakery","brewery","brickworks","tailoring","charcoal_burner",
+  "stonetool_maker","oil_maker","forge","armory","pottery_workshop","distillery",
+  "goldsmith","lamp_maker","carpentry","luxury_tailor",
+  "hut","cottage","manor","aristocrat_home",
+];
+const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
+  quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀",
+  clay_pit: "🟫", coal_mine: "⬛", gold_mine: "🪙", brickworks: "🧱",
+  cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️",
+  tailoring: "🧵", charcoal_burner: "🪮", stonetool_maker: "⚒️", oil_maker: "🛢️",
+  forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
+  lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
+const GOOD_ICON = {
+  wood: "🪵", stone: "🪨", iron: "🔩", clay: "🟫", grain: "🌾", potato: "🥔",
+  fish: "🐟", wool: "🧶", planks: "🪚", flour: "🌸", coal: "⬛", gold: "🪙", bricks: "🧱",
+  iron_tool: "🔨", mead: "🍺", clothes: "👕", stone_tools: "⚒️", oil: "🛢️",
+  bread: "🍞", pottery: "🏺", lamp: "🪔", iron_armor: "🛡️", chairs: "🪑",
+  gold_ring: "💍", brandy: "🥃", luxury_clothes: "👗",
+};
+const goodIcon = id => GOOD_ICON[id] || "📦";
+const buildingGlyph = id => TT_BUILDING_GLYPH[id] || "🏭";
+
+// The four objective types (exactly these). `fields` drives the inspector row.
+const OBJECTIVE_TYPES = ["construct", "upgrade", "trade_good", "earn_tax"];
+const OBJ_LABEL = { construct: "Construct buildings", upgrade: "Upgrade buildings",
+  trade_good: "Trade a good", earn_tax: "Earn tax/tariff" };
+
+// 8 connector anchor points per card (4 edge mid-points + 4 corners).
+const CARD_SIDES = ["top-left", "top", "top-right", "right", "bottom-right", "bottom", "bottom-left", "left"];
+const SIDE_OPTIONS = ["auto", "top", "bottom", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right"];
+
+function sidePoint(r, side) {
+  switch (side) {
+    case "top":          return { x: r.x + r.w / 2, y: r.y };
+    case "bottom":       return { x: r.x + r.w / 2, y: r.y + r.h };
+    case "left":         return { x: r.x,           y: r.y + r.h / 2 };
+    case "top-left":     return { x: r.x,           y: r.y };
+    case "top-right":    return { x: r.x + r.w,     y: r.y };
+    case "bottom-left":  return { x: r.x,           y: r.y + r.h };
+    case "bottom-right": return { x: r.x + r.w,     y: r.y + r.h };
+    case "right":
+    default:             return { x: r.x + r.w,     y: r.y + r.h / 2 };
+  }
+}
+
+/* =====================================================================
+   DEFAULT mission set — a small illustrative flowchart that exercises each
+   objective type, themed on the game's onboarding. The game bundles its own
+   authoritative default (EngineDev); this is the editor's starting canvas and
+   round-trips through the schema exactly.
+   ===================================================================== */
+const DEFAULT_MISSIONS = [
+  { id: "m1", name: "First Building",   icon: "🏗", pos: { col: 0, row: 1 }, retroactive: true, prereqs: [],
+    objectives: [ { type: "construct", building: "any", count: 1 } ] },
+  { id: "m2", name: "Woodcutter's Camp", icon: "🪓", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
+    objectives: [ { type: "construct", building: "lumberjack", count: 2 } ] },
+  { id: "m3", name: "Feed the People",   icon: "🥔", pos: { col: 1, row: 2 }, retroactive: true, prereqs: ["m1"],
+    objectives: [ { type: "trade_good", good: "potato", count: 20 } ] },
+  { id: "m4", name: "Master Craft",      icon: "⬆️", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
+    objectives: [ { type: "upgrade", building: "any", count: 1 } ] },
+  { id: "m5", name: "Royal Coffers",     icon: "💰", pos: { col: 2, row: 2 }, retroactive: true, prereqs: ["m3"],
+    objectives: [ { type: "earn_tax", amount: 500 } ] },
+  { id: "m6", name: "Industrialist",     icon: "🏭", pos: { col: 3, row: 1 }, retroactive: true, prereqs: ["m4", "m5"],
+    objectives: [ { type: "construct", building: "any", count: 5 }, { type: "earn_tax", amount: 1000 } ] },
+];
+
+/* ===================================================================== */
+
+const CARD_W = 172, CARD_H = 92;
+const COL_STEP = CARD_W + 44;
+const ROW_STEP = CARD_H + 52;
+const PAD = 40;                 // world-space padding around the grid origin
+const GRID_MIN_COLS = 8, GRID_MIN_ROWS = 6, GRID_SLACK = 2;
+const HANDLE_DRAW_R = 5;
+const HANDLE_PICK_R = 13;
+
+const C_BG = "#14110c";
+const C_CARD_BG = "#1c160f";
+const C_EDGE = "#6b5636";
+const C_ACCENT = "#c98a3c";
+const C_PAPER = "#f2e6cf";
+const C_DONE = "#4f9d5a";
+const C_ERR = "#a3271f";
+const C_EDGELINE = "#3a2f1e";
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+/* --------------------------- objective helpers ------------------------ */
+
+function freshObjective(type) {
+  switch (type) {
+    case "upgrade":    return { type: "upgrade",   building: "any", count: 1 };
+    case "trade_good": return { type: "trade_good", good: "potato", count: 10 };
+    case "earn_tax":   return { type: "earn_tax",  amount: 500 };
+    case "construct":
+    default:           return { type: "construct", building: "any", count: 1 };
+  }
+}
+
+// Normalize one objective to a clean, schema-shaped object (used on import and
+// when coercing an unknown/partial objective). Drops fields foreign to the type.
+function normalizeObjective(o) {
+  o = o || {};
+  const type = OBJECTIVE_TYPES.includes(o.type) ? o.type : "construct";
+  if (type === "earn_tax") return { type, amount: Math.max(0, +o.amount || 0) };
+  if (type === "trade_good") return { type, good: String(o.good || "potato"), count: Math.max(0, +o.count || 0) };
+  // construct / upgrade
+  return { type, building: String(o.building || "any"), count: Math.max(0, +o.count || 0) };
+}
+
+// A compact token drawn on the card summarising one objective.
+function objectiveToken(o) {
+  if (o.type === "earn_tax") return "💰" + (o.amount || 0);
+  if (o.type === "trade_good") return goodIcon(o.good) + (o.count || 0);
+  const glyph = (o.building && o.building !== "any") ? buildingGlyph(o.building) : "🏗";
+  const prefix = o.type === "upgrade" ? "⬆️" : "";
+  return prefix + glyph + "×" + (o.count || 0);
+}
+
+/* --------------------------- document / persistence ------------------- */
+
+function freshMissions() { return deepClone(DEFAULT_MISSIONS).map(normalizeMission); }
+
+function normalizeMission(m) {
+  m = m || {};
+  return {
+    id: String(m.id || "m"),
+    name: m.name != null ? String(m.name) : "",
+    icon: m.icon != null ? String(m.icon) : "",
+    pos: { col: Math.max(0, (m.pos && m.pos.col) | 0), row: Math.max(0, (m.pos && m.pos.row) | 0) },
+    // Retroactive defaults to TRUE — only an explicit `false` turns it off.
+    retroactive: m.retroactive === false ? false : true,
+    prereqs: Array.isArray(m.prereqs) ? m.prereqs.map(String) : [],
+    objectives: Array.isArray(m.objectives) ? m.objectives.map(normalizeObjective) : [],
+  };
+}
+
+// The game reads localStorage["tradewinds.missions"] directly, so the editor's
+// autosave IS the game schema. Editor-only routing hints ride in `_editorMeta`,
+// which a game loader (reading only `.missions`) ignores — mirrors the research
+// editor's round-trip contract.
+const STORAGE_KEY = "tradewinds.missions";
+
+function buildDoc() {
+  return {
+    version: 1,
+    missions: doc.missions.map(cloneMissionForExport),
+    _editorMeta: { edgeSides: deepClone(doc.edgeSides || {}) },
+  };
+}
+function cloneMissionForExport(m) {
+  const out = {
+    id: m.id,
+    name: m.name || "",
+    icon: m.icon || "",
+    pos: { col: m.pos.col, row: m.pos.row },
+    retroactive: m.retroactive === false ? false : true,
+    prereqs: (m.prereqs || []).slice(),
+    objectives: (m.objectives || []).map(normalizeObjective),
+  };
+  return out;
+}
+
+function saveLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildDoc())); } catch (e) { /* quota / private-mode */ }
+}
+function clearLocal() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+}
+function storageWritable() {
+  try { const k = STORAGE_KEY + "__probe"; localStorage.setItem(k, "1"); localStorage.removeItem(k); return true; }
+  catch (e) { return false; }
+}
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.missions)) return null;
+    return {
+      missions: d.missions.map(normalizeMission),
+      edgeSides: (d._editorMeta && d._editorMeta.edgeSides && typeof d._editorMeta.edgeSides === "object")
+        ? deepClone(d._editorMeta.edgeSides) : {},
+    };
+  } catch (e) { return null; }
+}
+
+let doc = loadLocal() || { missions: freshMissions(), edgeSides: {} };
+let selectedId = null;
+let selectedEdge = null; // { parentId, childId }
+let camera = { x: 40, y: 40, zoom: 1 };
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+const boardWrap = document.getElementById("boardWrap");
+
+function resizeCanvas() {
+  const r = boardWrap.getBoundingClientRect();
+  canvas.width = Math.max(200, r.width) * devicePixelRatio;
+  canvas.height = Math.max(200, r.height) * devicePixelRatio;
+  canvas.style.width = r.width + "px";
+  canvas.style.height = r.height + "px";
+  draw();
+}
+window.addEventListener("resize", resizeCanvas);
+
+/* --------------------------- lookups ---------------------------------- */
+
+function findMission(id) { return doc.missions.find(m => m.id === id); }
+
+/* --------------------------- grid / layout ---------------------------- */
+
+function gridExtent() {
+  let maxCol = GRID_MIN_COLS - 1, maxRow = GRID_MIN_ROWS - 1;
+  for (const m of doc.missions) {
+    maxCol = Math.max(maxCol, m.pos.col);
+    maxRow = Math.max(maxRow, m.pos.row);
+  }
+  return { maxCol: maxCol + GRID_SLACK, maxRow: maxRow + GRID_SLACK };
+}
+
+function slotWorldPos(col, row) {
+  return { x: PAD + col * COL_STEP, y: PAD + row * ROW_STEP };
+}
+function slotFromWorldPos(wx, wy) {
+  let col = Math.round((wx - PAD) / COL_STEP);
+  let row = Math.round((wy - PAD) / ROW_STEP);
+  return { col: Math.max(0, col), row: Math.max(0, row) };
+}
+function slotOccupants(col, row, excludeId) {
+  return doc.missions.filter(m => m.id !== excludeId && m.pos.col === col && m.pos.row === row);
+}
+function findFreeSlot() {
+  const ext = gridExtent();
+  for (let row = 0; row <= ext.maxRow; row++)
+    for (let col = 0; col <= ext.maxCol; col++)
+      if (slotOccupants(col, row, null).length === 0) return { col, row };
+  return { col: 0, row: ext.maxRow + 1 };
+}
+
+/* --------------------------- camera / coords -------------------------- */
+
+function screenToWorld(sx, sy) { return { x: (sx - camera.x) / camera.zoom, y: (sy - camera.y) / camera.zoom }; }
+
+/* --------------------------- drag / link state ------------------------ */
+
+let dragMode = null; // 'pan' | 'move' | null
+let dragStart = null;
+let dragNode = null;
+let dragMoved = false;
+let dragPreview = null;
+let armed = null;          // { nodeId, side }
+let hoverCursor = null;
+let hoverHandleKey = null;
+let camStart = null;
+
+function nodePixelRect(m) {
+  const p = slotWorldPos(m.pos.col, m.pos.row);
+  return { x: p.x, y: p.y, w: CARD_W, h: CARD_H };
+}
+function cardRectFor(m) {
+  if (dragMode === "move" && dragNode === m && dragPreview) {
+    return { x: dragPreview.x, y: dragPreview.y, w: CARD_W, h: CARD_H };
+  }
+  return nodePixelRect(m);
+}
+function nodeAtWorld(wx, wy) {
+  for (let i = doc.missions.length - 1; i >= 0; i--) {
+    const r = cardRectFor(doc.missions[i]);
+    if (wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h) return doc.missions[i];
+  }
+  return null;
+}
+function handleAtWorld(wx, wy) {
+  let best = null, bestD = HANDLE_PICK_R;
+  for (const m of doc.missions) {
+    const r = cardRectFor(m);
+    for (const side of CARD_SIDES) {
+      const p = sidePoint(r, side);
+      const d = Math.hypot(wx - p.x, wy - p.y);
+      if (d <= bestD) { bestD = d; best = { node: m, side, point: p }; }
+    }
+  }
+  return best;
+}
+
+// Add source→target: edge A→B means A is a PREREQUISITE of B (B.prereqs += A).
+function connect(source, target, parentSide, childSide) {
+  if (source.id === target.id) { toast("A mission can't be its own prerequisite."); return; }
+  target.prereqs = target.prereqs || [];
+  const existed = target.prereqs.includes(source.id);
+  if (!existed) target.prereqs.push(source.id);
+  if (parentSide) setEdgeSide(source.id, target.id, "parentSide", parentSide);
+  if (childSide) setEdgeSide(source.id, target.id, "childSide", childSide);
+  toast(existed
+    ? `Already a prerequisite — re-anchored "${source.id}" → "${target.id}".`
+    : `"${source.id}" is now a prerequisite of "${target.id}".`);
+  renderValidation();
+}
+
+function handleConnectClick(hh) {
+  if (!armed) {
+    armed = { nodeId: hh.node.id, side: hh.side };
+    hoverCursor = hh.point;
+    toast(`Source armed: "${hh.node.id}". Click a target card (or its handle) — Esc / empty space cancels.`);
+    draw();
+    return;
+  }
+  if (hh.node.id === armed.nodeId) { armed.side = hh.side; draw(); return; }
+  const source = findMission(armed.nodeId);
+  if (source) connect(source, hh.node, armed.side, hh.side);
+  armed = null; hoverCursor = null;
+  draw(); renderInspector();
+}
+
+/* --------------------------- edges ------------------------------------ */
+
+function allEdges() {
+  const edges = [];
+  for (const child of doc.missions) {
+    for (const pid of (child.prereqs || [])) {
+      const parent = findMission(pid);
+      if (parent) edges.push({ parentId: pid, childId: child.id, parent, child });
+    }
+  }
+  return edges;
+}
+
+function edgeSideKey(parentId, childId) { return parentId + "→" + childId; }
+function sideCenterFor(node, side) { return sidePoint(cardRectFor(node), side); }
+function cardCenter(node) { const r = cardRectFor(node); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+
+function autoSideFacing(fromNode, toNode) {
+  const a = cardRectFor(fromNode), b = cardRectFor(toNode);
+  const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+  const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+  if (Math.abs(dy) >= Math.abs(dx)) return dy < 0 ? "top" : "bottom";
+  return dx < 0 ? "left" : "right";
+}
+function resolvedSides(parent, child) {
+  const hint = doc.edgeSides[edgeSideKey(parent.id, child.id)] || {};
+  return {
+    parentSide: hint.parentSide || autoSideFacing(parent, child),
+    childSide: hint.childSide || autoSideFacing(child, parent),
+  };
+}
+function anchorPointFor(node, side, i, n) {
+  const r = cardRectFor(node);
+  if (side.indexOf("-") !== -1) return sidePoint(r, side);
+  const inset = 14;
+  const frac = n <= 1 ? 0.5 : i / (n - 1);
+  if (side === "top" || side === "bottom") {
+    return { x: r.x + inset + frac * (r.w - 2 * inset), y: side === "top" ? r.y : r.y + r.h };
+  }
+  return { x: side === "left" ? r.x : r.x + r.w, y: r.y + inset + frac * (r.h - 2 * inset) };
+}
+function edgeAnchorMap() {
+  const groups = new Map();
+  for (const e of allEdges()) {
+    const s = resolvedSides(e.parent, e.child);
+    const push = (node, side, endpoint, other) => {
+      const key = node.id + "|" + side;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ e, endpoint, node, side, other });
+    };
+    push(e.parent, s.parentSide, "a", cardCenter(e.child));
+    push(e.child, s.childSide, "b", cardCenter(e.parent));
+  }
+  const map = new Map();
+  for (const [key, arr] of groups) {
+    const side = key.slice(key.indexOf("|") + 1);
+    const horizontal = side === "top" || side === "bottom";
+    arr.sort((x, y) => horizontal ? x.other.x - y.other.x : x.other.y - y.other.y);
+    arr.forEach((item, i) => {
+      const pt = anchorPointFor(item.node, side, i, arr.length);
+      const ek = edgeSideKey(item.e.parentId, item.e.childId);
+      if (!map.has(ek)) map.set(ek, {});
+      map.get(ek)[item.endpoint] = pt;
+    });
+  }
+  return map;
+}
+function setEdgeSide(parentId, childId, endpoint, value) {
+  const key = edgeSideKey(parentId, childId);
+  if (value === "auto") {
+    if (doc.edgeSides[key]) {
+      delete doc.edgeSides[key][endpoint];
+      if (!Object.keys(doc.edgeSides[key]).length) delete doc.edgeSides[key];
+    }
+    draw();
+    return;
+  }
+  doc.edgeSides[key] = doc.edgeSides[key] || {};
+  doc.edgeSides[key][endpoint] = value;
+  draw();
+}
+function purgeEdgeSidesFor(nodeId) {
+  for (const key in doc.edgeSides) {
+    const arrow = key.indexOf("→");
+    const pid = key.slice(0, arrow), cid = key.slice(arrow + 1);
+    if (pid === nodeId || cid === nodeId) delete doc.edgeSides[key];
+  }
+}
+function distToSegment(px, py, ax, ay, bx, by) {
+  const abx = bx - ax, aby = by - ay, apx = px - ax, apy = py - ay;
+  const ab2 = abx * abx + aby * aby;
+  let t = ab2 > 0 ? (apx * abx + apy * aby) / ab2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + abx * t, cy = ay + aby * t;
+  return Math.hypot(px - cx, py - cy);
+}
+function edgeAtWorld(wx, wy) {
+  const edges = allEdges();
+  const anchors = edgeAnchorMap();
+  const thresh = 7 / camera.zoom;
+  for (const e of edges) {
+    const sides = resolvedSides(e.parent, e.child);
+    const slot = anchors.get(edgeSideKey(e.parentId, e.childId)) || {};
+    const a = slot.a || sideCenterFor(e.parent, sides.parentSide);
+    const b = slot.b || sideCenterFor(e.child, sides.childSide);
+    if (distToSegment(wx, wy, a.x, a.y, b.x, b.y) <= thresh) return e;
+  }
+  return null;
+}
+
+/* --------------------------- drawing ---------------------------------- */
+
+function draw() {
+  const w = canvas.width, h = canvas.height;
+  ctx.save();
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.fillStyle = C_BG;
+  ctx.fillRect(0, 0, w / devicePixelRatio, h / devicePixelRatio);
+  ctx.translate(camera.x, camera.y);
+  ctx.scale(camera.zoom, camera.zoom);
+
+  drawGrid();
+  drawEdges();
+  drawNodes();
+  drawLinkPreview();
+
+  ctx.restore();
+}
+
+function hexAlpha(hex, a) {
+  const v = hex.replace("#", "");
+  const r = parseInt(v.substring(0, 2), 16), g = parseInt(v.substring(2, 4), 16), b = parseInt(v.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function drawGrid() {
+  const ext = gridExtent();
+  const w = PAD + (ext.maxCol + 1) * COL_STEP;
+  const hgt = PAD + (ext.maxRow + 1) * ROW_STEP;
+  ctx.fillStyle = "rgba(120,120,140,0.06)";
+  roundRect(4, 4, w, hgt, 12);
+  ctx.fill();
+  ctx.fillStyle = hexAlpha(C_EDGE, 0.35);
+  for (let row = 0; row <= ext.maxRow; row++) {
+    for (let col = 0; col <= ext.maxCol; col++) {
+      const p = slotWorldPos(col, row);
+      ctx.beginPath();
+      ctx.arc(p.x + CARD_W / 2, p.y + CARD_H / 2, 2, 0, 7);
+      ctx.fill();
+    }
+  }
+}
+
+function drawEdges() {
+  const anchors = edgeAnchorMap();
+  for (const e of allEdges()) {
+    const sides = resolvedSides(e.parent, e.child);
+    const slot = anchors.get(edgeSideKey(e.parentId, e.childId)) || {};
+    const a = slot.a || sideCenterFor(e.parent, sides.parentSide);
+    const b = slot.b || sideCenterFor(e.child, sides.childSide);
+    const isSel = selectedEdge && selectedEdge.parentId === e.parentId && selectedEdge.childId === e.childId;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineCap = "round";
+    ctx.lineWidth = isSel ? 6 : 5;
+    ctx.strokeStyle = isSel ? C_ACCENT : C_EDGELINE;
+    ctx.stroke();
+    // arrowhead at the child end (points source → target)
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-10, -6); ctx.lineTo(-10, 6); ctx.closePath();
+    ctx.fillStyle = isSel ? C_ACCENT : C_EDGELINE;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawLinkPreview() {
+  if (armed && hoverCursor) {
+    const src = findMission(armed.nodeId);
+    if (!src) return;
+    const a = sidePoint(cardRectFor(src), armed.side);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(hoverCursor.x, hoverCursor.y);
+    ctx.strokeStyle = C_ACCENT;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawNodes() {
+  for (const m of doc.missions) drawCard(m, cardRectFor(m));
+}
+
+function drawCard(node, r) {
+  const isSel = node.id === selectedId;
+  const isRoot = (node.prereqs || []).length === 0;
+  ctx.save();
+  roundRect(r.x, r.y, r.w, r.h, 9);
+  ctx.fillStyle = C_CARD_BG;
+  ctx.fill();
+  if (isRoot) { ctx.fillStyle = "rgba(79,157,90,0.16)"; ctx.fill(); }
+  ctx.lineWidth = isSel ? 3 : 2;
+  ctx.strokeStyle = isSel ? C_ACCENT : (isRoot ? C_DONE : C_EDGE);
+  if (isSel) { ctx.shadowColor = "rgba(201,138,60,.55)"; ctx.shadowBlur = 10; }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // big mission icon (right)
+  ctx.font = "34px 'Segoe UI Emoji', Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha = 0.95;
+  ctx.fillText(node.icon || "🎯", r.x + r.w - 28, r.y + r.h / 2 - 6);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  // name (top-left)
+  ctx.fillStyle = C_PAPER;
+  ctx.font = "bold 13px Georgia, serif";
+  ctx.textBaseline = "top";
+  wrapText(node.name || node.id, r.x + 10, r.y + 8, r.w - 52, 15, 2);
+
+  // id + retroactive tag
+  ctx.font = "10.5px Georgia, serif";
+  ctx.fillStyle = hexAlpha(C_PAPER, 0.6);
+  ctx.fillText(node.id, r.x + 10, r.y + 40);
+  ctx.fillStyle = node.retroactive === false ? hexAlpha(C_ACCENT, 0.9) : hexAlpha(C_DONE, 0.85);
+  ctx.textAlign = "right";
+  ctx.fillText(node.retroactive === false ? "⏱ from activation" : "↺ retroactive", r.x + r.w - 10, r.y + r.h - 14);
+  ctx.textAlign = "left";
+
+  // objective tokens (bottom-left), truncated to fit
+  ctx.textBaseline = "alphabetic";
+  const objs = node.objectives || [];
+  if (objs.length) {
+    ctx.font = "16px 'Segoe UI Emoji', Georgia, serif";
+    ctx.fillStyle = hexAlpha(C_PAPER, 0.92);
+    const maxW = r.w - 20;
+    let text = objs.map(objectiveToken).join("  ");
+    if (ctx.measureText(text).width > maxW) {
+      while (text.length > 1 && ctx.measureText(text + "…").width > maxW) text = text.slice(0, -1);
+      text += "…";
+    }
+    ctx.fillText(text, r.x + 10, r.y + r.h - 30);
+  } else {
+    ctx.font = "11px Georgia, serif";
+    ctx.fillStyle = hexAlpha(C_ERR, 0.85);
+    ctx.fillText("no objectives", r.x + 10, r.y + r.h - 30);
+  }
+
+  // 8 connection handles
+  for (const side of CARD_SIDES) {
+    const hp = sidePoint(r, side);
+    const isArmed = armed && armed.nodeId === node.id && armed.side === side;
+    const isHover = hoverHandleKey === node.id + "|" + side;
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, (isArmed || isHover) ? HANDLE_DRAW_R + 3 : HANDLE_DRAW_R, 0, 7);
+    ctx.fillStyle = isArmed ? "#ffffff" : C_ACCENT;
+    ctx.fill();
+    ctx.strokeStyle = (isArmed || isHover) ? C_ACCENT : C_EDGE;
+    ctx.lineWidth = (isArmed || isHover) ? 2 : 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.textBaseline = "alphabetic";
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function wrapText(text, x, y, maxW, lh, maxLines) {
+  const words = String(text).split(/\s+/);
+  let line = "", lines = [];
+  for (const wd of words) {
+    const test = line ? line + " " + wd : wd;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
+    else line = test;
+    if (lines.length >= maxLines - 1) break;
+  }
+  lines.push(line);
+  for (let i = 0; i < Math.min(lines.length, maxLines); i++) ctx.fillText(lines[i], x, y + i * lh);
+}
+
+/* --------------------------- mouse / interaction ---------------------- */
+
+function canvasMousePos(ev) {
+  const r = canvas.getBoundingClientRect();
+  return { sx: ev.clientX - r.left, sy: ev.clientY - r.top };
+}
+
+canvas.addEventListener("mousedown", (ev) => {
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  dragStart = { sx, sy };
+  dragMoved = false;
+
+  // Connection handles take priority (arm / complete a link).
+  const hh = handleAtWorld(w.x, w.y);
+  if (hh) { handleConnectClick(hh); return; }
+
+  // If a source is armed, a click on a card body completes the link (auto sides);
+  // a click on empty space cancels.
+  if (armed) {
+    const tgt = nodeAtWorld(w.x, w.y);
+    const source = findMission(armed.nodeId);
+    if (tgt && source && tgt.id !== source.id) { connect(source, tgt, null, null); }
+    else toast("Connection cancelled.");
+    armed = null; hoverCursor = null; draw(); renderInspector();
+    return;
+  }
+
+  const node = nodeAtWorld(w.x, w.y);
+  if (node) {
+    dragMode = "move";
+    dragNode = node;
+    const rect = cardRectFor(node);
+    dragPreview = { x: rect.x, y: rect.y, offX: w.x - rect.x, offY: w.y - rect.y };
+    return;
+  }
+  const e = edgeAtWorld(w.x, w.y);
+  if (e) {
+    selectedEdge = { parentId: e.parentId, childId: e.childId };
+    selectedId = null;
+    renderInspector();
+    draw();
+    return;
+  }
+  selectedEdge = null;
+  dragMode = "pan";
+  camStart = { x: camera.x, y: camera.y };
+  canvas.classList.add("grabbing");
+});
+
+window.addEventListener("mousemove", (ev) => {
+  if (!dragMode) return;
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  if (!dragMoved && dragStart && Math.hypot(sx - dragStart.sx, sy - dragStart.sy) > 3) dragMoved = true;
+  if (dragMode === "pan") {
+    camera.x = camStart.x + (sx - dragStart.sx);
+    camera.y = camStart.y + (sy - dragStart.sy);
+    draw();
+  } else if (dragMode === "move" && dragNode) {
+    dragPreview.x = w.x - dragPreview.offX;
+    dragPreview.y = w.y - dragPreview.offY;
+    draw();
+  }
+});
+
+// Hover feedback for handles + armed rubber-band (skipped during a drag).
+canvas.addEventListener("mousemove", (ev) => {
+  if (dragMode) return;
+  const { sx, sy } = canvasMousePos(ev);
+  const w = screenToWorld(sx, sy);
+  const hh = handleAtWorld(w.x, w.y);
+  const key = hh ? hh.node.id + "|" + hh.side : null;
+  let dirty = false;
+  if (key !== hoverHandleKey) { hoverHandleKey = key; dirty = true; }
+  if (armed) { hoverCursor = w; dirty = true; }
+  canvas.style.cursor = (hh || armed) ? "crosshair" : "";
+  if (dirty) draw();
+});
+canvas.addEventListener("mouseleave", () => {
+  if (hoverHandleKey !== null) { hoverHandleKey = null; draw(); }
+});
+
+window.addEventListener("mouseup", (ev) => {
+  if (!dragMode) return;
+  canvas.classList.remove("grabbing");
+  if (dragMode === "move" && dragNode) {
+    if (!dragMoved) {
+      selectNode(dragNode.id);
+    } else {
+      const centerX = dragPreview.x + CARD_W / 2, centerY = dragPreview.y + CARD_H / 2;
+      const slot = slotFromWorldPos(centerX - CARD_W / 2, centerY - CARD_H / 2);
+      const occ = slotOccupants(slot.col, slot.row, dragNode.id);
+      if (occ.length > 0) toast("Slot occupied — move cancelled.");
+      else dragNode.pos = { col: slot.col, row: slot.row };
+      selectNode(dragNode.id);
+    }
+  }
+  dragMode = null; dragNode = null; dragPreview = null;
+  draw();
+  renderInspector();
+});
+
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const { sx, sy } = canvasMousePos(ev);
+  const w0 = screenToWorld(sx, sy);
+  const factor = ev.deltaY < 0 ? 1.1 : 0.9;
+  camera.zoom = Math.max(0.25, Math.min(2.5, camera.zoom * factor));
+  const w1 = screenToWorld(sx, sy);
+  camera.x += (w1.x - w0.x) * camera.zoom;
+  camera.y += (w1.y - w0.y) * camera.zoom;
+  draw();
+}, { passive: false });
+
+window.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && armed) { armed = null; hoverCursor = null; toast("Connection cancelled."); draw(); return; }
+  if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+  if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (selectedEdge) {
+    const child = findMission(selectedEdge.childId);
+    if (child) child.prereqs = (child.prereqs || []).filter(p => p !== selectedEdge.parentId);
+    delete doc.edgeSides[edgeSideKey(selectedEdge.parentId, selectedEdge.childId)];
+    selectedEdge = null;
+    draw(); renderValidation();
+    return;
+  }
+  if (selectedId) {
+    const node = findMission(selectedId);
+    if (node) uiConfirm(`Delete mission "${node.id}"? This also removes it from other missions' prerequisites.`, () => deleteMission(node.id));
+  }
+});
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+// Sandbox-safe confirmation — the editor runs inside a sandboxed iframe
+// (allow-scripts allow-same-origin, WITHOUT allow-modals) where native
+// confirm()/alert() are blocked and silently return undefined. This renders an
+// in-DOM dialog instead. Stable ids (#uiConfirmOk / #uiConfirmCancel) let
+// headless tests click through it.
+function uiConfirm(message, onConfirm) {
+  const prev = document.getElementById("uiConfirm");
+  if (prev) prev.remove();
+  const overlay = el("div", { id: "uiConfirm" });
+  overlay.style.cssText = "position:fixed;inset:0;z-index:100;display:flex;align-items:center;" +
+    "justify-content:center;background:rgba(0,0,0,0.55);";
+  const boxEl = el("div", {});
+  boxEl.style.cssText = "background:var(--panel);border:1px solid var(--accent);border-radius:8px;" +
+    "padding:16px 18px;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,.5);color:var(--paper);";
+  boxEl.appendChild(el("div", { text: message, style: "font-size:13px;line-height:1.5;margin-bottom:14px;" }));
+  const row = el("div", { style: "display:flex;gap:8px;justify-content:flex-end;" });
+  const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
+  const confirmNow = () => { close(); onConfirm(); };
+  function onKey(e) {
+    if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
+    else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.stopPropagation(); }
+  }
+  const cancel = el("button", { id: "uiConfirmCancel", text: "Cancel", onclick: close });
+  const ok = el("button", { id: "uiConfirmOk", class: "danger", text: "Confirm", onclick: confirmNow });
+  row.appendChild(cancel); row.appendChild(ok);
+  boxEl.appendChild(row);
+  overlay.appendChild(boxEl);
+  overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", onKey, true);
+  ok.focus();
+}
+
+/* --------------------------- selection -------------------------------- */
+
+function selectNode(id) { selectedId = id; selectedEdge = null; renderInspector(); draw(); }
+
+function renameMission(node, newId) {
+  newId = (newId || "").trim();
+  const oldId = node.id;
+  if (!newId) { toast("Id cannot be empty."); return false; }
+  if (newId !== oldId && doc.missions.some(m => m.id === newId)) { toast(`Id "${newId}" already exists.`); return false; }
+  if (newId === oldId) return true;
+  node.id = newId;
+  for (const m of doc.missions) m.prereqs = (m.prereqs || []).map(p => (p === oldId ? newId : p));
+  const renamed = {};
+  for (const key in doc.edgeSides) {
+    const arrow = key.indexOf("→");
+    let pid = key.slice(0, arrow), cid = key.slice(arrow + 1);
+    if (pid === oldId) pid = newId;
+    if (cid === oldId) cid = newId;
+    renamed[edgeSideKey(pid, cid)] = doc.edgeSides[key];
+  }
+  doc.edgeSides = renamed;
+  if (selectedId === oldId) selectedId = newId;
+  return true;
+}
+
+function addMission() {
+  let n = 1;
+  while (doc.missions.some(m => m.id === "m_new_" + n)) n++;
+  const id = "m_new_" + n;
+  const node = normalizeMission({ id, name: "New Mission", icon: "🎯", pos: findFreeSlot(),
+    retroactive: true, prereqs: [], objectives: [freshObjective("construct")] });
+  doc.missions.push(node);
+  selectNode(id);
+  renderValidation();
+}
+
+function pruneDanglingPrereqs() {
+  const ids = new Set(doc.missions.map(m => m.id));
+  for (const m of doc.missions) m.prereqs = (m.prereqs || []).filter(p => ids.has(p));
+}
+
+function deleteMission(id) {
+  const idx = doc.missions.findIndex(m => m.id === id);
+  if (idx < 0) return;
+  doc.missions.splice(idx, 1);
+  pruneDanglingPrereqs();
+  purgeEdgeSidesFor(id);
+  if (selectedId === id) selectedId = null;
+  draw(); renderInspector(); renderValidation();
+}
+
+/* --------------------------- DOM helpers ------------------------------ */
+
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    if (k === "class") e.className = attrs[k];
+    else if (k === "text") e.textContent = attrs[k];
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
+    else if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+  }
+  (children || []).forEach(c => e.appendChild(c));
+  return e;
+}
+function optionsFor(list, current, allowBlank) {
+  const frag = document.createDocumentFragment();
+  if (allowBlank) frag.appendChild(el("option", { value: "", text: "(none)" }));
+  for (const v of list) frag.appendChild(el("option", { value: v, text: v, selected: v === current ? "selected" : undefined }));
+  return frag;
+}
+
+/* --------------------------- inspector -------------------------------- */
+
+function renderInspector() {
+  const root = document.getElementById("tab-inspector");
+  root.innerHTML = "";
+  if (selectedEdge) { renderEdgeInspector(root); return; }
+  if (!selectedId) {
+    root.appendChild(el("div", { class: "emptyMsg", text: "Select a mission card or a prerequisite line on the board to edit it, or click “+ Add Mission” above." }));
+    return;
+  }
+  const node = findMission(selectedId);
+  if (!node) { root.appendChild(el("div", { class: "emptyMsg", text: "Mission not found (deleted?)." })); return; }
+  renderMissionInspector(root, node);
+}
+
+function renderEdgeInspector(root) {
+  const p = findMission(selectedEdge.parentId), c = findMission(selectedEdge.childId);
+  const key = edgeSideKey(selectedEdge.parentId, selectedEdge.childId);
+  const hint = doc.edgeSides[key] || {};
+  const fs = el("fieldset", {});
+  fs.appendChild(el("legend", { text: "Selected prerequisite edge" }));
+  fs.appendChild(el("div", { class: "hint", text: `"${selectedEdge.parentId}" is a prerequisite of "${selectedEdge.childId}" — it must be COMPLETE before "${selectedEdge.childId}" activates. Pick which side/corner of each card this line attaches to; "auto" faces the other card.` }));
+  const row = el("div", { class: "row" });
+  const pWrap = el("div", {});
+  pWrap.appendChild(el("label", { text: `"${selectedEdge.parentId}" side (source)` }));
+  const pSel = el("select", {});
+  pSel.appendChild(optionsFor(SIDE_OPTIONS, hint.parentSide || "auto"));
+  pSel.addEventListener("change", () => setEdgeSide(selectedEdge.parentId, selectedEdge.childId, "parentSide", pSel.value));
+  pWrap.appendChild(pSel); row.appendChild(pWrap);
+  const cWrap = el("div", {});
+  cWrap.appendChild(el("label", { text: `"${selectedEdge.childId}" side (target)` }));
+  const cSel = el("select", {});
+  cSel.appendChild(optionsFor(SIDE_OPTIONS, hint.childSide || "auto"));
+  cSel.addEventListener("change", () => setEdgeSide(selectedEdge.parentId, selectedEdge.childId, "childSide", cSel.value));
+  cWrap.appendChild(cSel); row.appendChild(cWrap);
+  fs.appendChild(row);
+  fs.appendChild(el("button", { class: "danger", text: "Delete edge (or press Delete)", onclick: () => {
+    if (c) c.prereqs = (c.prereqs || []).filter(x => x !== selectedEdge.parentId);
+    delete doc.edgeSides[key];
+    selectedEdge = null; draw(); renderInspector(); renderValidation();
+  } }));
+  root.appendChild(fs);
+}
+
+function renderMissionInspector(root, node) {
+  const form = el("div", {});
+
+  // --- identity ---
+  const fsId = el("fieldset", {});
+  fsId.appendChild(el("legend", { text: "Mission" }));
+  fsId.appendChild(el("label", { text: "id (unique)" }));
+  const idInput = el("input", { type: "text", value: node.id });
+  idInput.addEventListener("change", () => { if (!renameMission(node, idInput.value)) idInput.value = node.id; renderInspector(); draw(); renderValidation(); });
+  fsId.appendChild(idInput);
+
+  const row1 = el("div", { class: "row" });
+  const nameWrap = el("div", { style: "flex:3" });
+  nameWrap.appendChild(el("label", { text: "name" }));
+  const nameInput = el("input", { type: "text", value: node.name || "" });
+  nameInput.addEventListener("input", () => { node.name = nameInput.value; draw(); });
+  nameWrap.appendChild(nameInput);
+  row1.appendChild(nameWrap);
+  const iconWrap = el("div", { style: "flex:1" });
+  iconWrap.appendChild(el("label", { text: "icon" }));
+  const iconInput = el("input", { type: "text", value: node.icon || "", maxlength: "4", placeholder: "🎯" });
+  iconInput.addEventListener("input", () => { node.icon = iconInput.value; draw(); });
+  iconWrap.appendChild(iconInput);
+  row1.appendChild(iconWrap);
+  fsId.appendChild(row1);
+
+  // retroactive checkbox — CHECKED (true) by default
+  const retroLabel = el("label", { class: "chk" });
+  const retroCheck = el("input", { type: "checkbox" });
+  retroCheck.checked = node.retroactive !== false;
+  retroCheck.addEventListener("change", () => { node.retroactive = retroCheck.checked; draw(); renderValidation(); });
+  retroLabel.appendChild(retroCheck);
+  retroLabel.appendChild(document.createTextNode(" retroactive — count progress from the start of the game (unchecked: count only from when this mission activates)"));
+  fsId.appendChild(retroLabel);
+
+  const row2 = el("div", { class: "row" });
+  const colWrap = el("div", {});
+  colWrap.appendChild(el("label", { text: "pos.col" }));
+  const colInput = el("input", { type: "number", value: node.pos.col, min: "0" });
+  colInput.addEventListener("change", () => {
+    const c = Math.max(0, parseInt(colInput.value, 10) || 0);
+    if (slotOccupants(c, node.pos.row, node.id).length) { toast("Slot occupied."); colInput.value = node.pos.col; return; }
+    node.pos.col = c; draw();
+  });
+  colWrap.appendChild(colInput); row2.appendChild(colWrap);
+  const rowWrap = el("div", {});
+  rowWrap.appendChild(el("label", { text: "pos.row" }));
+  const rowInput = el("input", { type: "number", value: node.pos.row, min: "0" });
+  rowInput.addEventListener("change", () => {
+    const rr = Math.max(0, parseInt(rowInput.value, 10) || 0);
+    if (slotOccupants(node.pos.col, rr, node.id).length) { toast("Slot occupied."); rowInput.value = node.pos.row; return; }
+    node.pos.row = rr; draw();
+  });
+  rowWrap.appendChild(rowInput); row2.appendChild(rowWrap);
+  fsId.appendChild(row2);
+  form.appendChild(fsId);
+
+  // --- prerequisites ---
+  const fsPre = el("fieldset", {});
+  fsPre.appendChild(el("legend", { text: "Prerequisites" }));
+  fsPre.appendChild(el("div", { class: "hint", text: "Missions that must be COMPLETE before this one activates. Arm a source card's handle then click this card to add one. Empty = a root mission." }));
+  if ((node.prereqs || []).length === 0) {
+    fsPre.appendChild(el("div", { class: "hint", text: "(none — root mission)" }));
+  } else {
+    for (const pid of node.prereqs) {
+      const rowP = el("div", { class: "fieldRow" });
+      rowP.appendChild(el("div", { text: pid, style: "flex:1" }));
+      rowP.appendChild(el("button", { class: "miniBtn", text: "×", onclick: () => {
+        node.prereqs = node.prereqs.filter(x => x !== pid);
+        delete doc.edgeSides[edgeSideKey(pid, node.id)];
+        draw(); renderInspector(); renderValidation();
+      } }));
+      fsPre.appendChild(rowP);
+    }
+  }
+  form.appendChild(fsPre);
+
+  // --- objectives ---
+  const fsObj = el("fieldset", {});
+  fsObj.appendChild(el("legend", { text: "Objectives" }));
+  fsObj.appendChild(el("div", { class: "hint", text: "The mission is COMPLETE when ALL objectives are satisfied. Pick a type, then fill its fields." }));
+  node.objectives = node.objectives || [];
+  const objList = el("div", {});
+  function renderObjRows() {
+    objList.innerHTML = "";
+    if (node.objectives.length === 0) objList.appendChild(el("div", { class: "hint", text: "(no objectives yet — add at least one)" }));
+    node.objectives.forEach((o, idx) => objList.appendChild(objectiveRow(o, idx)));
+  }
+  function objectiveRow(o, idx) {
+    const wrap = el("div", { class: "objRow" });
+    const hd = el("div", { class: "objHd" });
+    const typeSel = el("select", {});
+    OBJECTIVE_TYPES.forEach(t => typeSel.appendChild(el("option", { value: t, text: OBJ_LABEL[t], selected: t === o.type ? "selected" : undefined })));
+    typeSel.addEventListener("change", () => {
+      node.objectives[idx] = freshObjective(typeSel.value);
+      renderObjRows(); draw(); renderValidation();
+    });
+    hd.appendChild(typeSel);
+    hd.appendChild(el("button", { class: "miniBtn", text: "×", title: "Remove objective", onclick: () => {
+      node.objectives.splice(idx, 1); renderObjRows(); draw(); renderValidation();
+    } }));
+    wrap.appendChild(hd);
+    wrap.appendChild(objectiveFields(o, idx));
+    return wrap;
+  }
+  function objectiveFields(o, idx) {
+    const fr = el("div", { class: "fieldRow" });
+    if (o.type === "earn_tax") {
+      const w = el("div", {});
+      w.appendChild(el("label", { text: "amount (gold of tax/tariff)" }));
+      const amt = el("input", { type: "number", value: o.amount != null ? o.amount : 0, min: "0" });
+      amt.addEventListener("input", () => { o.amount = Math.max(0, parseFloat(amt.value) || 0); draw(); });
+      w.appendChild(amt);
+      fr.appendChild(w);
+      return fr;
+    }
+    if (o.type === "trade_good") {
+      const gw = el("div", { style: "flex:2" });
+      gw.appendChild(el("label", { text: "good" }));
+      const gsel = el("select", {});
+      gsel.appendChild(optionsFor(GOODS_IDS, o.good));
+      gsel.addEventListener("change", () => { o.good = gsel.value; draw(); renderValidation(); });
+      gw.appendChild(gsel);
+      fr.appendChild(gw);
+      const cw = el("div", { style: "flex:1" });
+      cw.appendChild(el("label", { text: "count" }));
+      const cnt = el("input", { type: "number", value: o.count != null ? o.count : 0, min: "0" });
+      cnt.addEventListener("input", () => { o.count = Math.max(0, parseFloat(cnt.value) || 0); draw(); });
+      cw.appendChild(cnt);
+      fr.appendChild(cw);
+      return fr;
+    }
+    // construct / upgrade
+    const bw = el("div", { style: "flex:2" });
+    bw.appendChild(el("label", { text: "building (typeId or \"any\")" }));
+    const bin = el("input", { type: "text", value: o.building || "any", list: "buildingList" });
+    bin.addEventListener("input", () => { o.building = bin.value || "any"; draw(); renderValidation(); });
+    bin.addEventListener("change", () => { if (!bin.value.trim()) { bin.value = "any"; o.building = "any"; draw(); } });
+    bw.appendChild(bin);
+    fr.appendChild(bw);
+    const cw = el("div", { style: "flex:1" });
+    cw.appendChild(el("label", { text: "count" }));
+    const cnt = el("input", { type: "number", value: o.count != null ? o.count : 0, min: "0" });
+    cnt.addEventListener("input", () => { o.count = Math.max(0, parseFloat(cnt.value) || 0); draw(); });
+    cw.appendChild(cnt);
+    fr.appendChild(cw);
+    return fr;
+  }
+  renderObjRows();
+  fsObj.appendChild(objList);
+  fsObj.appendChild(el("button", { class: "miniBtn", text: "+ add objective", onclick: () => {
+    node.objectives.push(freshObjective("construct")); renderObjRows(); draw(); renderValidation();
+  } }));
+  form.appendChild(fsObj);
+
+  // --- actions ---
+  const fsAct = el("fieldset", {});
+  fsAct.appendChild(el("legend", { text: "Actions" }));
+  fsAct.appendChild(el("button", { class: "danger", text: "Delete this mission", onclick: () => {
+    uiConfirm(`Delete mission "${node.id}"? This also removes it from other missions' prerequisites.`, () => deleteMission(node.id));
+  } }));
+  form.appendChild(fsAct);
+
+  root.appendChild(form);
+}
+
+/* --------------------------- reference tab ---------------------------- */
+
+function renderPalette() {
+  const root = document.getElementById("tab-palette");
+  root.innerHTML = "";
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Objective types" }),
+    el("div", { class: "hint", text: "construct — build N buildings (building = a typeId or \"any\"). upgrade — complete N building upgrades (typeId or \"any\"). trade_good — N units of a good delivered by trade. earn_tax — cumulative tariff/tax income reaches `amount`." }),
+  ]));
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: `Good ids (CONFIG.goods) — ${GOODS_IDS.length}` }),
+    el("div", { class: "palette" }, GOODS_IDS.map(g => el("span", { class: "chip", text: g }))),
+  ]));
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: `Building ids (CONFIG.buildings) — ${BUILDING_IDS.length}` }),
+    el("div", { class: "palette" }, BUILDING_IDS.map(b => el("span", { class: "chip", text: b }))),
+  ]));
+}
+
+/* --------------------------- validation ------------------------------- */
+
+function computeValidation() {
+  const issues = [];
+  const ids = doc.missions.map(m => m.id);
+  const idCount = {};
+  for (const id of ids) idCount[id] = (idCount[id] || 0) + 1;
+  for (const id in idCount) if (idCount[id] > 1) issues.push({ level: "error", msg: `Duplicate id "${id}" (${idCount[id]}×).` });
+
+  for (const m of doc.missions) {
+    if (!m.id) issues.push({ level: "error", msg: "A mission has an empty id." });
+    for (const p of (m.prereqs || [])) {
+      if (p === m.id) issues.push({ level: "error", msg: `"${m.id}" lists itself as a prerequisite.` });
+      else if (!ids.includes(p)) issues.push({ level: "error", msg: `"${m.id}" has a prereq "${p}" that doesn't exist.` });
+    }
+    if (!(m.objectives || []).length) issues.push({ level: "warn", msg: `"${m.id}" has no objectives — it completes immediately.` });
+    (m.objectives || []).forEach((o, i) => {
+      if (!OBJECTIVE_TYPES.includes(o.type)) { issues.push({ level: "error", msg: `"${m.id}" objective ${i + 1} has unknown type "${o.type}".` }); return; }
+      if (o.type === "earn_tax") {
+        if (!(o.amount > 0)) issues.push({ level: "warn", msg: `"${m.id}" earn_tax objective ${i + 1} has amount ${o.amount} (should be > 0).` });
+      } else if (o.type === "trade_good") {
+        if (!GOODS_IDS.includes(o.good)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} references unknown good "${o.good}".` });
+        if (!(o.count > 0)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} has count ${o.count} (should be > 0).` });
+      } else { // construct / upgrade
+        if (o.building !== "any" && !BUILDING_IDS.includes(o.building)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} references unknown building "${o.building}".` });
+        if (!(o.count > 0)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} has count ${o.count} (should be > 0).` });
+      }
+    });
+  }
+
+  // slot collisions
+  const slotMap = {};
+  for (const m of doc.missions) {
+    const key = m.pos.col + "|" + m.pos.row;
+    (slotMap[key] = slotMap[key] || []).push(m.id);
+  }
+  for (const key in slotMap) if (slotMap[key].length > 1) issues.push({ level: "error", msg: `Slot collision at col ${key.split("|")[0]} row ${key.split("|")[1]}: ${slotMap[key].join(", ")}.` });
+
+  // cycle detection over prereqs
+  const graph = {};
+  for (const m of doc.missions) graph[m.id] = m.prereqs || [];
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = {}; for (const id of Object.keys(graph)) color[id] = WHITE;
+  let cyc = null;
+  function dfs(u, stack) {
+    color[u] = GRAY; stack.push(u);
+    for (const v of (graph[u] || [])) {
+      if (!(v in graph)) continue;
+      if (color[v] === GRAY) { cyc = stack.slice(stack.indexOf(v)).concat(v); return true; }
+      if (color[v] === WHITE && dfs(v, stack)) return true;
+    }
+    stack.pop(); color[u] = BLACK; return false;
+  }
+  for (const id of Object.keys(graph)) { if (color[id] === WHITE && dfs(id, [])) break; }
+  if (cyc) issues.push({ level: "error", msg: `Prerequisite cycle: ${cyc.join(" → ")}.` });
+
+  return issues;
+}
+
+function renderValidation() {
+  const root = document.getElementById("tab-validate");
+  root.innerHTML = "";
+  const issues = computeValidation();
+  root.appendChild(el("div", { class: "hint", text: `${doc.missions.length} missions, ${allEdges().length} prerequisite edges.` }));
+  const errCount = issues.filter(i => i.level === "error").length;
+  const warnCount = issues.filter(i => i.level === "warn").length;
+  const list = el("ul", { id: "validationList" });
+  if (issues.length === 0) list.appendChild(el("li", { class: "ok", text: "No issues found — this mission set is game-valid." }));
+  else for (const it of issues) list.appendChild(el("li", { class: it.level === "error" ? "error" : "warn", text: it.msg }));
+  root.appendChild(list);
+  document.getElementById("statusLine").textContent =
+    `${doc.missions.length} missions · ${errCount} error${errCount === 1 ? "" : "s"} · ${warnCount} warning${warnCount === 1 ? "" : "s"}`;
+}
+
+/* --------------------------- export / import -------------------------- */
+
+function renderIo() {
+  const root = document.getElementById("tab-io");
+  root.innerHTML = "";
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Export" }),
+    el("div", { class: "hint", text: "Matches { version:1, missions:[ { id, name, icon, pos, retroactive, prereqs, objectives } ] } exactly. An extra _editorMeta key (edge routing hints) rides along for this tool's own round-trip — a game loader reading only `.missions` ignores it. This same JSON is autosaved to localStorage[\"tradewinds.missions\"], which the running game reads." }),
+    el("button", { class: "primary", text: "Refresh preview", onclick: () => { area.value = JSON.stringify(buildDoc(), null, 2); } }),
+    el("button", { text: "Download missions.json", onclick: downloadExport }),
+  ]));
+  const area = el("textarea", { id: "exportArea" });
+  area.value = JSON.stringify(buildDoc(), null, 2);
+  root.appendChild(area);
+
+  root.appendChild(el("fieldset", {}, [
+    el("legend", { text: "Import" }),
+    el("div", { class: "hint", text: "Paste a JSON document with the same shape and click Load. Replaces the current mission set." }),
+    el("button", { class: "primary", text: "Load JSON below", onclick: () => doImport(document.getElementById("importArea").value) }),
+  ]));
+  root.appendChild(el("textarea", { id: "importArea", placeholder: "Paste JSON here…" }));
+}
+
+function downloadExport() {
+  const data = JSON.stringify(buildDoc(), null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "missions.json";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast("Downloaded missions.json");
+}
+
+function normalizeImported(parsed) {
+  if (!parsed || !Array.isArray(parsed.missions)) throw new Error("JSON must have a `missions` array.");
+  const missions = parsed.missions.map(normalizeMission);
+  const edgeSides = (parsed._editorMeta && parsed._editorMeta.edgeSides && typeof parsed._editorMeta.edgeSides === "object")
+    ? deepClone(parsed._editorMeta.edgeSides) : {};
+  return { missions, edgeSides };
+}
+
+function doImport(text) {
+  try {
+    const parsed = JSON.parse(text);
+    doc = normalizeImported(parsed);
+    selectedId = null; selectedEdge = null;
+    draw(); renderInspector(); renderValidation(); renderIo();
+    toast("Imported mission set.");
+  } catch (e) {
+    toast("Import failed: " + e.message);
+  }
+}
+
+/* --------------------------- tabs / buttons --------------------------- */
+
+document.querySelectorAll(".tabbtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tabpanel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "io") renderIo();
+    if (btn.dataset.tab === "validate") renderValidation();
+    if (btn.dataset.tab === "palette") renderPalette();
+  });
+});
+
+document.getElementById("btnAdd").addEventListener("click", addMission);
+
+function fitView() {
+  const ext = gridExtent();
+  const worldW = PAD + (ext.maxCol + 1) * COL_STEP;
+  const worldH = PAD + (ext.maxRow + 1) * ROW_STEP;
+  const vw = canvas.width / devicePixelRatio, vh = canvas.height / devicePixelRatio;
+  const zoom = Math.max(0.3, Math.min(1.2, Math.min((vw - 40) / worldW, (vh - 40) / worldH)));
+  camera.zoom = zoom;
+  camera.x = (vw - worldW * zoom) / 2;
+  camera.y = 20;
+  if (camera.x < 10) camera.x = 10;
+}
+document.getElementById("btnZoomReset").addEventListener("click", () => { fitView(); draw(); });
+
+document.getElementById("btnExport").addEventListener("click", () => {
+  downloadExport();
+  document.querySelector('.tabbtn[data-tab="io"]').click();
+});
+document.getElementById("btnImport").addEventListener("click", () => {
+  document.querySelector('.tabbtn[data-tab="io"]').click();
+  setTimeout(() => document.getElementById("importArea").focus(), 50);
+});
+document.getElementById("btnReloadDefault").addEventListener("click", () => {
+  uiConfirm("Reset to the default mission set shipped with the game? This discards your locally-saved edits.", () => {
+    clearLocal();
+    doc = { missions: freshMissions(), edgeSides: {} };
+    selectedId = null; selectedEdge = null;
+    fitView();
+    draw(); renderInspector(); renderValidation(); renderPalette();
+    saveLocal();
+  });
+});
+
+(function wireHelp() {
+  const toggle = document.getElementById("helpToggle");
+  const hint = document.getElementById("boardHint");
+  const close = document.getElementById("helpClose");
+  const setOpen = (open) => { hint.classList.toggle("open", open); toggle.setAttribute("aria-expanded", open ? "true" : "false"); };
+  toggle.addEventListener("click", () => setOpen(!hint.classList.contains("open")));
+  close.addEventListener("click", () => setOpen(false));
+})();
+
+/* --------------------------- init ------------------------------------- */
+
+// Fill the shared building datalist (used by construct/upgrade objective inputs).
+(function fillBuildingList() {
+  const dl = document.getElementById("buildingList");
+  dl.appendChild(el("option", { value: "any" }));
+  BUILDING_IDS.forEach(b => dl.appendChild(el("option", { value: b })));
+})();
+
+resizeCanvas();
+fitView();
+renderInspector();
+renderValidation();
+renderPalette();
+draw();
+
+// Autosave: periodic write + flush on hide/close. The document IS the game
+// schema at localStorage["tradewinds.missions"], so the running game picks up
+// authored edits directly.
+setInterval(saveLocal, 1200);
+window.addEventListener("beforeunload", saveLocal);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveLocal(); });
+
+if (!storageWritable()) document.getElementById("persistWarn").classList.add("show");
+</script>
+</body>
+</html>

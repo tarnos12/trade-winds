@@ -142,6 +142,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (!Array.isArray(state.carts)) state.carts = [];
     if (typeof state.treasury !== "number") state.treasury = 0;
     if (typeof state.tradeSeed !== "number") state.tradeSeed = 0;
+    if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // MISSION-STATS: counter shape
     const cfg = CONFIG.trade;
     const towns = state.towns || [];
     const byId = new Map(towns.map(t => [t.id, t]));
@@ -370,6 +371,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               if (left > 1e-9) {   // force-deliver the paid-for remainder (money-conserving); Sim clamps any over-cap excess
                 buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + left;
                 it.unloaded = (it.unloaded || 0) + left;
+                if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, it.goodId, left);   // MISSION-STATS: units delivered
               }
             }
           }
@@ -384,6 +386,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               if (move > 0) {
                 buyer.stock[item.goodId] = (buyer.stock[item.goodId] || 0) + move;
                 item.unloaded = (item.unloaded || 0) + move;
+                if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, item.goodId, move);   // MISSION-STATS: units delivered
               }
             }
           }
@@ -399,6 +402,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (move > 0) {
               buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + move;
               cart.unloaded = (cart.unloaded || 0) + move;
+              if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, cart.goodId, move);   // MISSION-STATS: units delivered
             }
           }
           cart.dwell = (cart.dwell || 0) - 1;
@@ -458,6 +462,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
               state.treasury += tariff;                                             // → player's treasury
+              if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
               if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value - tariff);  // PP-A ledger
             }
           }

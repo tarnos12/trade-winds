@@ -72,6 +72,240 @@ CONFIG.needs.extraNeeds = Needs.allExtra();
 // singular workerTier/houseTier -> plural pop bucket key (mirrors BUILDINGS_TIER_KEY).
 const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
 
+// === MISSION-STATS (U) === deterministic, save-persisted lifetime counters that
+// the mission engine (Tutorial) reads to evaluate objectives. PURE data — no RNG,
+// no DOM, no time; every increment is driven by a real game event (a build/upgrade
+// completing, a trade unloading, a tariff banked). `ensureStats` initialises the
+// shape and migrates old saves (which have no `state.stats`) defensively, so it is
+// safe to call at the top of any tick. Owned by EngineDev; shared read contract in
+// docs/proposals/MISSION_EDITOR_BRIEF.md.
+Sim.ensureStats = function (state) {
+  if (!state) return { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} }, taxEarned: 0 };
+  let st = state.stats;
+  if (!st || typeof st !== "object") st = {};
+  if (!st.constructed || typeof st.constructed !== "object") st.constructed = { total: 0, byType: {} };
+  if (typeof st.constructed.total !== "number") st.constructed.total = 0;
+  if (!st.constructed.byType || typeof st.constructed.byType !== "object") st.constructed.byType = {};
+  if (!st.upgraded || typeof st.upgraded !== "object") st.upgraded = { total: 0, byType: {} };
+  if (typeof st.upgraded.total !== "number") st.upgraded.total = 0;
+  if (!st.upgraded.byType || typeof st.upgraded.byType !== "object") st.upgraded.byType = {};
+  if (!st.traded || typeof st.traded !== "object") st.traded = { byGood: {} };
+  if (!st.traded.byGood || typeof st.traded.byGood !== "object") st.traded.byGood = {};
+  if (typeof st.taxEarned !== "number") st.taxEarned = 0;
+  state.stats = st;
+  return st;
+};
+// Increment the "building constructed" counter (built false→true). typeId optional.
+Sim.statConstructed = function (state, typeId) {
+  const st = Sim.ensureStats(state);
+  st.constructed.total += 1;
+  if (typeId) st.constructed.byType[typeId] = (st.constructed.byType[typeId] || 0) + 1;
+};
+// Increment the "building upgrade applied" counter (upgradeLevel incremented).
+Sim.statUpgraded = function (state, typeId) {
+  const st = Sim.ensureStats(state);
+  st.upgraded.total += 1;
+  if (typeId) st.upgraded.byType[typeId] = (st.upgraded.byType[typeId] || 0) + 1;
+};
+// Add `units` of good `gid` delivered into a buyer's stock by a trade unload.
+Sim.statTraded = function (state, gid, units) {
+  if (!(units > 0) || !gid) return;
+  const st = Sim.ensureStats(state);
+  st.traded.byGood[gid] = (st.traded.byGood[gid] || 0) + units;
+};
+// Add `amount` of tariff/tax banked into the treasury.
+Sim.statTaxEarned = function (state, amount) {
+  if (!(amount > 0)) return;
+  const st = Sim.ensureStats(state);
+  st.taxEarned += amount;
+};
+// === /MISSION-STATS ===
+
+// === MISSION-ENGINE (U) === PURE, browser-free evaluator for the data-driven
+// mission system. It reads the lifetime `state.stats` counters (above) and a
+// mission-set (the DEFAULT below or the player's authored JSON) and reports, per
+// mission, whether it is active/complete and each objective's progress. No DOM, no
+// RNG, no time — deterministic and testable in the vm sandbox alongside Sim/Trade.
+// The DOM runtime (Tutorial, in the browser shell) owns activation snapshots +
+// rendering; ALL evaluation logic lives here so it can be unit-tested headless.
+//
+// Schema + objective types are the contract in docs/proposals/MISSION_EDITOR_BRIEF.md.
+var MissionEngine = (typeof MissionEngine !== "undefined" && MissionEngine) || {};
+
+// Schema version this engine speaks.
+MissionEngine.VERSION = 1;
+
+// Accept EITHER a bare stats object ({constructed,upgraded,traded,taxEarned}) OR a
+// full game state ({stats:{…}}) anywhere a "stats" arg is taken — callers in the
+// pure tests pass stats directly; the DOM runtime passes state. `null`/missing → {}.
+MissionEngine.statsOf = function (x) {
+  if (!x || typeof x !== "object") return {};
+  return (x.stats && typeof x.stats === "object") ? x.stats : x;
+};
+
+// The lifetime counter value an objective reads out of `state.stats` (raw, pre-baseline).
+MissionEngine.readLifetime = function (obj, statsOrState) {
+  if (!obj) return 0;
+  const stats = MissionEngine.statsOf(statsOrState);
+  const c = stats.constructed || {}, u = stats.upgraded || {};
+  const cBy = c.byType || {}, uBy = u.byType || {};
+  const tr = (stats.traded && stats.traded.byGood) || {};
+  switch (obj.type) {
+    case "construct": return (obj.building && obj.building !== "any") ? (cBy[obj.building] || 0) : (c.total || 0);
+    case "upgrade":   return (obj.building && obj.building !== "any") ? (uBy[obj.building] || 0) : (u.total || 0);
+    case "trade_good": return tr[obj.good] || 0;
+    case "earn_tax":   return stats.taxEarned || 0;
+    default: return 0;
+  }
+};
+
+// The target an objective must reach (count for most; amount for earn_tax).
+MissionEngine.objectiveTarget = function (obj) {
+  if (!obj) return 0;
+  return obj.type === "earn_tax" ? (obj.amount || 0) : (obj.count || 0);
+};
+
+// One objective's progress given the lifetime stats and its baseline (the counter
+// value snapshotted at mission activation; 0 for retroactive objectives). Returns
+// { type, cur, target, met } where cur is clamped at ≥0 (never negative). `stats`
+// may be a bare stats object or a full state (see statsOf).
+MissionEngine.objectiveProgress = function (obj, stats, baseline) {
+  const life = MissionEngine.readLifetime(obj, stats);
+  const target = MissionEngine.objectiveTarget(obj);
+  const cur = Math.max(0, life - (baseline || 0));
+  return { type: obj ? obj.type : null, cur: cur, target: target, met: cur >= target };
+};
+
+// Is a single objective satisfied? Convenience over objectiveProgress.
+MissionEngine.objectiveMet = function (obj, stats, baseline) {
+  return MissionEngine.objectiveProgress(obj, stats, baseline).met;
+};
+
+// Is a whole mission complete? ALL objectives met under the given per-objective
+// `baseline` array (retroactive missions ignore baseline → read from 0). Note this
+// checks the mission's OWN objectives only, NOT prereq gating — use evaluate() for
+// prereq-aware activation/completion across a set. `stats` may be stats or state.
+MissionEngine.missionComplete = function (mission, stats, baseline) {
+  if (!mission || !Array.isArray(mission.objectives)) return false;
+  const retro = mission.retroactive !== false;
+  return mission.objectives.every((obj, i) => {
+    const base = retro ? 0 : ((baseline && typeof baseline[i] === "number") ? baseline[i] : MissionEngine.readLifetime(obj, stats));
+    return MissionEngine.objectiveMet(obj, stats, base);
+  });
+};
+
+// Normalise a mission-set into a safe { version, missions:[...] } shape. Rejects a
+// malformed set (returns null) so callers can fall back to the DEFAULT.
+MissionEngine.normalize = function (set) {
+  if (!set || typeof set !== "object" || !Array.isArray(set.missions)) return null;
+  const missions = [];
+  for (const m of set.missions) {
+    if (!m || typeof m !== "object" || typeof m.id !== "string") continue;
+    missions.push({
+      id: m.id,
+      name: typeof m.name === "string" ? m.name : m.id,
+      icon: typeof m.icon === "string" ? m.icon : "🎯",
+      pos: (m.pos && typeof m.pos === "object") ? { col: m.pos.col | 0, row: m.pos.row | 0 } : { col: 0, row: 0 },
+      retroactive: m.retroactive !== false,             // DEFAULT true
+      prereqs: Array.isArray(m.prereqs) ? m.prereqs.filter(x => typeof x === "string") : [],
+      objectives: Array.isArray(m.objectives) ? m.objectives.filter(o => o && typeof o.type === "string") : [],
+    });
+  }
+  return { version: set.version | 0 || MissionEngine.VERSION, missions: missions };
+};
+
+// Evaluate a whole mission-set against the lifetime stats.
+//   opts.baselines : { [missionId]: number[] } — per-objective lifetime value
+//                    snapshotted when the mission ACTIVATED. Used only for
+//                    non-retroactive missions; retroactive missions read from 0.
+//                    When a non-retroactive mission has no baseline yet (not
+//                    activated), its objectives read from the CURRENT lifetime
+//                    (progress 0), so it cannot complete until the runtime snapshots.
+// Returns { byId, missions:[{id,name,icon,active,complete,prereqsMet,objectives:[…]}],
+//           activeIds, completeIds, allComplete }.
+// Completion propagates through prereqs via a bounded fixpoint (missions form a DAG).
+MissionEngine.evaluate = function (missionSet, statsOrState, opts) {
+  opts = opts || {};
+  const stats = MissionEngine.statsOf(statsOrState);
+  const set = MissionEngine.normalize(missionSet) || { missions: [] };
+  const missions = set.missions;
+  const baselines = opts.baselines || {};
+  const res = {};
+  for (const m of missions) res[m.id] = { id: m.id, name: m.name, icon: m.icon, prereqsMet: false, complete: false, active: false, objectives: [] };
+
+  for (let iter = 0; iter <= missions.length; iter++) {
+    let changed = false;
+    for (const m of missions) {
+      const r = res[m.id];
+      const prereqsMet = (m.prereqs || []).every(pid => res[pid] ? res[pid].complete : false);
+      const retro = m.retroactive !== false;
+      const mb = baselines[m.id];
+      const objs = (m.objectives || []).map((obj, i) => {
+        let base = 0;
+        if (!retro) base = (mb && typeof mb[i] === "number") ? mb[i] : MissionEngine.readLifetime(obj, stats);
+        return MissionEngine.objectiveProgress(obj, stats, base);
+      });
+      const allMet = objs.length > 0 ? objs.every(o => o.met) : true;
+      const complete = prereqsMet && allMet;
+      const active = prereqsMet && !complete;
+      if (r.prereqsMet !== prereqsMet || r.complete !== complete || r.active !== active) changed = true;
+      r.prereqsMet = prereqsMet; r.complete = complete; r.active = active; r.objectives = objs;
+    }
+    if (!changed) break;
+  }
+
+  const list = missions.map(m => res[m.id]);
+  return {
+    byId: res,
+    missions: list,
+    activeIds: list.filter(r => r.active).map(r => r.id),
+    completeIds: list.filter(r => r.complete).map(r => r.id),
+    allComplete: missions.length > 0 && list.every(r => r.complete),
+  };
+};
+
+// The bundled DEFAULT mission set — the original 5-mission onboarding arc ported to
+// typed objectives (construct/upgrade/trade_good/earn_tax). Steps that don't map to
+// a counter (found town, lay road, unlock tech, victory) use the CLOSEST objective.
+// All retroactive (default) so a returning player's lifetime progress counts; the
+// prereq chain m1→m2→m3→m4→m5 preserves the original ordered progression.
+MissionEngine.DEFAULT = {
+  version: 1,
+  missions: [
+    { id: "m1", name: "Found Your Realm", icon: "🏰", pos: { col: 0, row: 0 }, retroactive: true, prereqs: [],
+      objectives: [
+        { type: "construct", building: "any", count: 1 },   // place your first building
+        { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
+      ] },
+    { id: "m2", name: "A Growing Town", icon: "🌾", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
+      objectives: [
+        { type: "construct", building: "sawmill", count: 1 }, // build a workshop (processor)
+        { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
+      ] },
+    { id: "m3", name: "Trade Routes", icon: "🛣", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
+      objectives: [
+        { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
+        { type: "earn_tax",   amount: 200 },                // your first tariffs
+      ] },
+    { id: "m4", name: "The King's Works", icon: "🔬", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
+      objectives: [
+        { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
+        { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
+      ] },
+    { id: "m5", name: "The Good Life", icon: "👑", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
+      objectives: [
+        { type: "construct", building: "manor",          count: 1 },  // raise a citizen (burgher) class
+        { type: "construct", building: "aristocrat_home", count: 1 }, // the top of the economy
+        { type: "earn_tax",  amount: 2000 },                          // a thriving kingdom
+      ] },
+  ],
+};
+
+// Alias: the Lead/QA referred to this pure module as `Missions`; expose both names
+// (same object) so tests can capture either from the vm sandbox.
+var Missions = MissionEngine;
+// === /MISSION-ENGINE ===
+
 // Advance the whole economy by one tick. Mutates every town in State.towns:
 //   worker assignment → production → consumption → happiness → population → prices.
 //
@@ -90,6 +324,7 @@ Sim.tick = function (State) {
   // Global tick counter (drives happyMods expiry). One increment per economy
   // step, shared by every town — EC-C pushes {delta, untilTick: State.tick+n}.
   State.tick = ((typeof State.tick === "number" && isFinite(State.tick)) ? State.tick : 0) + 1;
+  Sim.ensureStats(State);   // MISSION-STATS: guarantee the counter shape exists (migrate old saves)
   const N = CONFIG.needs;
   const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
   const clamp0 = (x) => (x > 0 ? x : 0);
@@ -200,8 +435,8 @@ Sim.tick = function (State) {
         let done = true;
         for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
         if (done) {
-          if (t.kind === "build") b.built = true;
-          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; }
+          if (t.kind === "build") { b.built = true; Sim.statConstructed(State, b.typeId); }   // MISSION-STATS: construction complete (built false→true)
+          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; Sim.statUpgraded(State, b.typeId); }   // MISSION-STATS: upgrade applied
         }
       }
     }

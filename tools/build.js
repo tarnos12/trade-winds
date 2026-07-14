@@ -102,6 +102,7 @@ const MANIFEST = [
 // --extract direction — the asset file itself is the source of truth.
 const ASSETS = [
   { name: "editor-embed", src: "tools/research-editor.html", varName: "RESEARCH_EDITOR_HTML" },
+  { name: "mission-editor-embed", src: "tools/mission-editor.html", varName: "MISSION_EDITOR_HTML" },
 ];
 
 function assetLine(asset) {

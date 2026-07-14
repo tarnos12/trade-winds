@@ -887,6 +887,10 @@
       upgradeLevel: 1, pendingUpgrade: null,
       // === /RU-A ===
     });
+    // U/MISSION-STATS: an INSTANT (gold-only) building is placed built:true and so
+    // never hits the sim delivery's false→true flip that counts construction — count
+    // it here so "construct a building" mission objectives credit instant builds too.
+    if (Buildings.isInstant(def) && typeof Sim !== "undefined" && Sim.statConstructed) Sim.statConstructed(state, placing.typeId);
     if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();
     SFX.play("place");

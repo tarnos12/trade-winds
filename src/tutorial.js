@@ -1,119 +1,105 @@
-  // === TUTORIAL START === (P5D-C / slot #4 — onboarding as GUIDED MISSIONS)
-  // The left "Getting Started" panel is a set of themed MISSIONS, each a small
-  // cluster of objectives that teach one area of the game. Objectives advance by
-  // DETECTING real game state (no click scripting): a poll runs each ~750ms and
-  // each econ tick. A mission completes when all its steps are done; finishing the
-  // last mission triggers a celebration. Persistence is a localStorage flag
-  // ({done, mission, step}) so returning players are never re-nagged; it migrates
-  // the old flat {done, step} shape. All transient tracking is module-local or in
-  // the single `state.tutorial` field.
+  // === TUTORIAL START === (U — reworked from the hardcoded 5-mission coach into a
+  // DATA-DRIVEN MISSION ENGINE runtime). The left "Getting Started" panel now runs a
+  // MISSION SET (the bundled MissionEngine.DEFAULT, or the player's authored JSON in
+  // localStorage["tradewinds.missions"] written by the mission editor). Missions have
+  // typed objectives (construct/upgrade/trade_good/earn_tax) evaluated against the
+  // pure `state.stats` lifetime counters via MissionEngine (PURE_CORE) — no click
+  // scripting. A mission ACTIVATES only when its prereqs are complete; non-retroactive
+  // missions snapshot a per-objective baseline at activation so progress counts "from
+  // now", while retroactive missions (the default) count lifetime. A poll runs each
+  // ~750ms and each econ tick. Progress lives on `state.missions` (save-persisted) and
+  // is mirrored to localStorage["tradewinds.tutorial"] as a {done,skipped}+progress
+  // gate so returning players aren't re-nagged. Keeps the window.Tutorial API
+  // (startFresh/resume/startPolling/hide/isActive/tick).
   const Tutorial = (function () {
-    const LS_KEY = "tradewinds.tutorial";
+    const LS_KEY = "tradewinds.tutorial";        // done/skip gate + progress mirror
+    const MISSIONS_KEY = "tradewinds.missions";  // EditorDev writes the authored set here; we READ it
 
-    // helpers ---------------------------------------------------------------
-    function townsHaveKind(s, kind) {
-      for (const t of s.towns || []) {
-        for (const b of (t.buildings || [])) {
-          const def = CONFIG.buildings[b.typeId];
-          if (def && def.kind === kind && b.built !== false) return true;
-        }
+    // ---- mission-set loading -------------------------------------------------
+    let cachedSet = null;
+    function loadAuthored() {
+      try {
+        const raw = localStorage.getItem(MISSIONS_KEY);
+        if (!raw) return null;
+        const norm = MissionEngine.normalize(JSON.parse(raw));
+        return (norm && norm.missions.length) ? norm : null;   // ignore empty/malformed → DEFAULT
+      } catch (e) { return null; }
+    }
+    // The live mission set: the player's authored set if valid, else the DEFAULT.
+    function currentSet() {
+      if (cachedSet) return cachedSet;
+      cachedSet = loadAuthored() || MissionEngine.normalize(MissionEngine.DEFAULT);
+      return cachedSet;
+    }
+    function reloadSet() { cachedSet = null; return currentSet(); }
+
+    // ---- progress state ------------------------------------------------------
+    // Authoritative live progress is state.missions; a light gate is mirrored to LS.
+    function freshProg() { return { done: false, skipped: false, activated: {}, baselines: {}, completed: {} }; }
+    function migrateProg(j) {
+      // old tutorial shape: {done, mission, step} / {done, step}. New: full prog obj.
+      if (!j || typeof j !== "object") return freshProg();
+      if ("mission" in j || "step" in j) { const p = freshProg(); p.done = !!j.done; return p; }  // legacy → keep only the done gate
+      const p = freshProg();
+      p.done = !!j.done; p.skipped = !!j.skipped;
+      if (j.activated && typeof j.activated === "object") p.activated = j.activated;
+      if (j.baselines && typeof j.baselines === "object") p.baselines = j.baselines;
+      if (j.completed && typeof j.completed === "object") p.completed = j.completed;
+      return p;
+    }
+    function loadProgFromLS() {
+      try { return migrateProg(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) { return freshProg(); }
+    }
+    // Ensure state.missions exists + is well-shaped (migrate old saves defensively).
+    function ensureProg(state) {
+      if (!state.missions || typeof state.missions !== "object") state.missions = loadProgFromLS();
+      const p = state.missions;
+      if (!p.activated || typeof p.activated !== "object") p.activated = {};
+      if (!p.baselines || typeof p.baselines !== "object") p.baselines = {};
+      if (!p.completed || typeof p.completed !== "object") p.completed = {};
+      p.done = !!p.done; p.skipped = !!p.skipped;
+      return p;
+    }
+    function persist(state) {
+      const p = state && state.missions ? state.missions : freshProg();
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({
+          done: !!p.done, skipped: !!p.skipped,
+          activated: p.activated, baselines: p.baselines, completed: p.completed,
+        }));
+      } catch (e) { /* private mode / quota — ignore */ }
+    }
+
+    // Stats accessor (guarded for the headless smoke that has no Sim).
+    function stateStats(state) {
+      return (typeof Sim !== "undefined" && Sim.ensureStats) ? Sim.ensureStats(state)
+        : (state.stats || { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} }, taxEarned: 0 });
+    }
+
+    // Clamp each stored baseline to the CURRENT lifetime counter. A baseline is a
+    // past snapshot, so it can never legitimately exceed the live counter; clamping
+    // makes the runtime self-heal if the lifetime stats reset (e.g. a save that did
+    // not yet persist state.stats) — a non-retro mission then degrades to counting
+    // from 0 rather than showing negative/stuck progress. Correct saves are unaffected
+    // (stored ≤ lifetime already).
+    function clampBaselines(set, stats, baselines) {
+      const out = {};
+      for (const m of set.missions) {
+        const arr = baselines[m.id];
+        if (!Array.isArray(arr)) continue;
+        out[m.id] = m.objectives.map((o, i) => {
+          const stored = typeof arr[i] === "number" ? arr[i] : 0;
+          return Math.min(stored, MissionEngine.readLifetime(o, stats));
+        });
       }
-      return false;
-    }
-    function townsHaveBuilding(s, typeId) {
-      for (const t of s.towns || [])
-        for (const b of (t.buildings || [])) if (b.typeId === typeId && b.built !== false) return true;
-      return false;
-    }
-    function popTotal(t) {
-      const p = t.pop || {};
-      return (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);
+      return out;
     }
 
-    // MISSIONS — ordered; each teaches one area. `done(s)` polls real state.
-    const MISSIONS = [
-      { icon: "🏰", name: "Found Your Realm", steps: [
-        { title: "Found your first town",
-          tip: "Open the 🏗 Build menu at the bottom, choose City, then click a revealed land hex.",
-          done: s => (s.towns || []).length >= 1 },
-        { title: "Place a resource building",
-          tip: "From the build bar, place a Farm on fertile land or a Lumberjack in forest, next to your city.",
-          done: s => townsHaveKind(s, "extractor") },
-        { title: "Build a house",
-          tip: "Add a Hut from the build bar — housing grows the people who staff your buildings.",
-          done: s => townsHaveKind(s, "house") },
-      ] },
-      { icon: "🌾", name: "A Growing Town", steps: [
-        { title: "Reach 10 people in a town",
-          tip: "Keep basics supplied (food, wood) so your population grows. Hover a tile to see what it needs.",
-          done: s => (s.towns || []).some(t => popTotal(t) >= 10) },
-        { title: "Build a workshop",
-          tip: "Place a processor like a Sawmill or Mill — it turns raw goods into more valuable ones.",
-          done: s => townsHaveKind(s, "processor") },
-        { title: "Grow a town to level 2",
-          tip: "A happy, populated town can be upgraded (⬆ in its panel) for more build slots.",
-          done: s => (s.towns || []).some(t => (t.level || 1) >= 2) },
-      ] },
-      { icon: "🛣", name: "Trade Routes", steps: [
-        { title: "Found a second town",
-          tip: "Towns trade goods between each other automatically. Found another city a little away.",
-          done: s => (s.towns || []).length >= 2 },
-        { title: "Lay a road",
-          tip: "Pick the 🛣 Road tool, click a start then an end — roads let traders move twice as fast.",
-          done: s => (s.roads && s.roads.size > 0) },
-        { title: "Earn your first tariff",
-          tip: "When towns trade you skim a tariff. Watch the 👑 treasury climb.",
-          done: s => (s.treasury || 0) > startTreasury },
-      ] },
-      { icon: "🔬", name: "The King's Works", steps: [
-        { title: "Build a Research Center",
-          tip: "Place a Research Center on a hex next to the castle — it powers the tech tree.",
-          done: s => !!(s.researchCenter && s.researchCenter.built !== false) },
-        { title: "Unlock a technology",
-          tip: "Open the 🔬 tech tree and start a project; deliver its materials to complete it.",
-          done: s => (s.research && (s.research.unlocked || []).length > baseUnlocked) },
-        { title: "Upgrade the castle",
-          tip: "Spend prestige + gold to raise the King's castle a level — a milestone on the road to victory.",
-          done: s => (s.castleLevel || 1) >= 2 },
-      ] },
-      { icon: "👑", name: "The Good Life", steps: [
-        { title: "Raise a Citizen class",
-          tip: "Supply citizens' goods (lamps, bread, mead, clothes) so burghers appear and grow.",
-          done: s => (s.towns || []).some(t => (t.pop && t.pop.burghers) >= 1) },
-        { title: "Build an Aristocrat's House",
-          tip: "Research and build an Aristocrat's House — the top of the economy.",
-          done: s => townsHaveBuilding(s, "aristocrat_home") },
-        { title: "Win: an Aristocrat's House at 100% happiness",
-          tip: "Supply every luxury so an aristocrat estate reaches 100% happiness — that wins the game.",
-          done: s => !!s.victory },
-      ] },
-    ];
-    // Flattened view (compat for any consumer/smoke that read Tutorial.STEPS).
-    const STEPS = MISSIONS.reduce((a, m) => a.concat(m.steps), []);
-    const TOTAL_MISSIONS = MISSIONS.length;
-
-    let startTreasury = 0;   // baseline for the tariff step (captured at start)
-    let baseUnlocked = 0;    // baseline research-unlocked count (captured at start)
+    // ---- runtime state + DOM -------------------------------------------------
     let active = false;
     let celebrating = false;
     let polling = false;
     let elRoot = null, elStep = null, elList = null, elBtn = null, elHead = null;
-
-    function migrateFlag(j) {
-      // old shape {done, step:flat} or new {done, mission, step}
-      if (!j || typeof j !== "object") return { done: false, mission: 0, step: 0 };
-      if (typeof j.mission === "number") return { done: !!j.done, mission: j.mission | 0, step: j.step | 0 };
-      return { done: !!j.done, mission: 0, step: 0 };   // flat → restart missions unless finished
-    }
-    function loadFlag() {
-      try { return migrateFlag(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) { return { done: false, mission: 0, step: 0 }; }
-    }
-    function saveFlag() {
-      try {
-        const t = state.tutorial || {};
-        localStorage.setItem(LS_KEY, JSON.stringify({ done: !!t.done, mission: t.mission | 0, step: t.step | 0 }));
-      } catch (e) { /* private mode / quota — ignore */ }
-    }
 
     function ensureEls() {
       if (elRoot) return;
@@ -127,113 +113,193 @@
     function show() { if (elRoot) { elRoot.classList.remove("hidden"); elRoot.setAttribute("aria-hidden", "false"); } }
     function hide() { if (elRoot) { elRoot.classList.add("hidden"); elRoot.setAttribute("aria-hidden", "true"); elRoot.classList.remove("celebrate"); } }
 
-    function render() {
-      if (!elRoot || !state.tutorial) return;
-      const mi = Math.min(state.tutorial.mission | 0, TOTAL_MISSIONS);
-      const m = MISSIONS[mi];
-      if (elHead) elHead.textContent = celebrating || !m
-        ? "👑 Getting Started"
-        : m.icon + " Mission " + (mi + 1) + "/" + TOTAL_MISSIONS + " · " + m.name;
+    // ---- labels --------------------------------------------------------------
+    function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+    function prettyBuilding(id) {
+      if (!id || id === "any") return "buildings";
+      const d = (typeof CONFIG !== "undefined" && CONFIG.buildings) ? CONFIG.buildings[id] : null;
+      return (d && d.name) || id;
+    }
+    function prettyGood(id) {
+      const g = (typeof CONFIG !== "undefined" && CONFIG.goods) ? CONFIG.goods[id] : null;
+      return (g && g.name) || id;
+    }
+    function objLabel(obj) {
+      switch (obj.type) {
+        case "construct": return (obj.building && obj.building !== "any") ? "Build " + prettyBuilding(obj.building) : "Construct buildings";
+        case "upgrade":   return (obj.building && obj.building !== "any") ? "Upgrade " + prettyBuilding(obj.building) : "Complete upgrades";
+        case "trade_good": return "Trade " + prettyGood(obj.good);
+        case "earn_tax":   return "Earn tariffs 👑";
+        default: return obj.type;
+      }
+    }
 
+    // ---- render --------------------------------------------------------------
+    function render(state, ev, set) {
+      if (!elRoot) return;
       if (celebrating) {
-        elStep.innerHTML = '<div class="tut-cheer">🎉 You\'ve mastered Trade Winds!</div>' +
-          '<div class="tut-tip">Every mission complete — the winds are yours to shape.</div>';
+        if (elHead) elHead.textContent = "👑 Getting Started";
+        elStep.innerHTML = '<div class="tut-cheer">🎉 Every mission complete!</div>' +
+          '<div class="tut-tip">The winds are yours to shape.</div>';
         elList.innerHTML = "";
         return;
       }
-      if (!m) return;
-      const si = Math.min(state.tutorial.step | 0, m.steps.length);
-      const cur = m.steps[si] || m.steps[m.steps.length - 1];
-      elStep.innerHTML = '<div class="tut-now">▶ ' + cur.title + "</div>" +
-                         '<div class="tut-tip">' + cur.tip + "</div>";
+      const activeMissions = set.missions.filter(m => ev.byId[m.id] && ev.byId[m.id].active);
+
+      if (elHead) {
+        if (activeMissions.length === 1) elHead.textContent = activeMissions[0].icon + " " + activeMissions[0].name;
+        else if (activeMissions.length === 0) elHead.textContent = "👑 Getting Started";
+        else elHead.textContent = "🎯 Missions · " + activeMissions.length + " active";
+      }
+
+      if (!activeMissions.length) {
+        const done = ev.allComplete || (state.missions && state.missions.done);
+        elStep.innerHTML = done
+          ? '<div class="tut-now">▶ All missions complete</div><div class="tut-tip">Nothing left on the board — keep building your realm.</div>'
+          : '<div class="tut-now">▶ No missions available</div><div class="tut-tip">Complete a mission’s prerequisites to unlock the next.</div>';
+        elList.innerHTML = "";
+        return;
+      }
+
+      const primary = activeMissions[0];
+      const pr = ev.byId[primary.id];
+      const met = pr.objectives.filter(o => o.met).length;
+      elStep.innerHTML = '<div class="tut-now">▶ ' + esc(primary.name) + "</div>" +
+        '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>";
+
       let html = "";
-      for (let k = 0; k < m.steps.length; k++) {
-        const isDone = k < si;
-        const isCur = k === si;
-        const cls = isDone ? "done" : (isCur ? "cur" : "");
-        const mk = isDone ? "✓" : (isCur ? "▶" : "○");
-        html += '<li class="' + cls + '"><span class="mk">' + mk + "</span><span>" + m.steps[k].title + "</span></li>";
+      for (const m of activeMissions) {
+        const r = ev.byId[m.id];
+        if (activeMissions.length > 1)
+          html += '<li class="tut-mhead"><span class="mk">' + m.icon + "</span><span><b>" + esc(m.name) + "</b></span></li>";
+        m.objectives.forEach((obj, i) => {
+          const o = r.objectives[i];
+          const cls = o.met ? "done" : "cur";
+          const mk = o.met ? "✓" : "▶";
+          html += '<li class="' + cls + '"><span class="mk">' + mk + "</span><span>" +
+            esc(objLabel(obj)) + ' <b>' + Math.min(o.cur, o.target) + "/" + o.target + "</b></span></li>";
+        });
       }
       elList.innerHTML = html;
     }
 
-    // Poll: advance through satisfied steps/missions; celebrate at the very end.
-    function tick() {
-      if (!active || !state.tutorial || state.tutorial.done) return;
-      const t = state.tutorial;
-      let advanced = false, missionUp = false;
-      // guard against runaway loops with a bounded walk
-      for (let guard = 0; guard < STEPS.length + TOTAL_MISSIONS + 2; guard++) {
-        const m = MISSIONS[t.mission | 0];
-        if (!m) break;
-        if (t.step < m.steps.length && m.steps[t.step].done(state)) { t.step++; advanced = true; continue; }
-        if (t.step >= m.steps.length) {           // mission finished → next mission
-          t.mission++; t.step = 0; advanced = true; missionUp = true;
-          if ((t.mission | 0) >= TOTAL_MISSIONS) { celebrate(); return; }
-          continue;
+    // ---- evaluation pass -----------------------------------------------------
+    // Activate newly-eligible missions (snapshot non-retro baselines), detect
+    // completions, celebrate at the end, then render. Pure w.r.t. game state except
+    // for the mission-progress bookkeeping it owns (state.missions).
+    function refresh(state) {
+      if (!state) return;
+      const stats = stateStats(state);
+      const set = currentSet();
+      const p = ensureProg(state);
+
+      let ev = MissionEngine.evaluate(set, stats, { baselines: clampBaselines(set, stats, p.baselines) });
+
+      // Activation: a mission's prereqs are complete but it hasn't been activated —
+      // mark it and (non-retroactive only) snapshot its per-objective baseline NOW.
+      let snapshotted = false;
+      for (const m of set.missions) {
+        const r = ev.byId[m.id];
+        if (r && r.prereqsMet && !p.activated[m.id]) {
+          p.activated[m.id] = true;
+          if (m.retroactive === false) p.baselines[m.id] = m.objectives.map(o => MissionEngine.readLifetime(o, stats));
+          snapshotted = true;
         }
-        break;   // current step not yet satisfied
       }
-      if (advanced) {
-        saveFlag(); render();
-        if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup"); } catch (e) {} }
+      if (snapshotted) ev = MissionEngine.evaluate(set, stats, { baselines: clampBaselines(set, stats, p.baselines) });
+
+      // Completion edge-detection (sfx on newly-finished missions).
+      let missionUp = false;
+      for (const id of ev.completeIds) {
+        if (!p.completed[id]) { p.completed[id] = true; missionUp = true; }
       }
+
+      if (ev.allComplete && !p.done) { persist(state); celebrate(state); return; }
+
+      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup"); } catch (e) {} }
+      persist(state);
+      render(state, ev, set);
     }
 
-    function celebrate() {
-      const t = state.tutorial;
-      t.done = true; t.mission = TOTAL_MISSIONS; t.step = 0;
-      saveFlag();
+    function celebrate(state) {
+      const p = ensureProg(state);
+      p.done = true;
+      persist(state);
       celebrating = true; active = false;
       if (elRoot) elRoot.classList.add("celebrate");
-      render();
+      render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet());
       if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
       setTimeout(() => { celebrating = false; hide(); }, 5200);
     }
 
     function onSkip() {
-      state.tutorial = state.tutorial || { mission: 0, step: 0, done: false };
-      state.tutorial.done = true;
-      state.tutorial.mission = TOTAL_MISSIONS; state.tutorial.step = 0;
-      saveFlag();
+      const state = (typeof window !== "undefined" && window.state) || (typeof globalThis !== "undefined" && globalThis.state) || null;
+      if (state) { const p = ensureProg(state); p.done = true; p.skipped = true; persist(state); }
+      else { try { localStorage.setItem(LS_KEY, JSON.stringify({ done: true, skipped: true, activated: {}, baselines: {}, completed: {} })); } catch (e) {} }
       active = false; celebrating = false;
       hide();
     }
 
-    function captureBaselines() {
-      startTreasury = state.treasury || 0;
-      baseUnlocked = (state.research && (state.research.unlocked || []).length) || 0;
+    // Resolve the live game state for the poll (browser shell global).
+    function liveState(s) {
+      if (s) return s;
+      if (typeof window !== "undefined" && window.state) return window.state;
+      if (typeof globalThis !== "undefined" && globalThis.state) return globalThis.state;
+      return null;
     }
 
-    // Fresh game: start from mission 0 unless the player already finished/skipped.
+    // ---- public API ----------------------------------------------------------
+    // Fresh game: reset this playthrough's mission progress unless the player has
+    // already finished/skipped the missions (LS gate), then run from the roots.
     function startFresh() {
       ensureEls();
-      const flag = loadFlag();
-      if (flag.done) { state.tutorial = { mission: TOTAL_MISSIONS, step: 0, done: true }; active = false; hide(); return; }
-      state.tutorial = { mission: 0, step: 0, done: false };
-      captureBaselines();
+      reloadSet();
+      const gate = loadProgFromLS();
+      if (gate.done) {
+        const st = liveState(null);
+        if (st) { st.missions = freshProg(); st.missions.done = true; }
+        active = false; celebrating = false; hide(); return;
+      }
+      const st = liveState(null);
+      if (st) st.missions = freshProg();     // new playthrough → clear baselines/activation
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
-      saveFlag(); show(); render(); tick();
+      if (st) refresh(st); else show();
     }
 
-    // Loaded game: resume an in-progress mission run; leave finished/skipped alone.
+    // Loaded game: resume the saved mission progress; leave finished/skipped alone.
     function resume() {
       ensureEls();
-      const flag = loadFlag();
-      if (flag.done || (flag.mission <= 0 && flag.step <= 0)) {
-        state.tutorial = { mission: flag.mission, step: flag.step, done: !!flag.done }; active = false; hide(); return;
-      }
-      state.tutorial = { mission: Math.min(flag.mission, TOTAL_MISSIONS), step: flag.step | 0, done: false };
-      captureBaselines();
+      reloadSet();
+      const st = liveState(null);
+      const p = st ? ensureProg(st) : loadProgFromLS();
+      if (p.done) { active = false; celebrating = false; hide(); return; }
       celebrating = false; active = true;
-      show(); render(); tick();
+      if (elRoot) elRoot.classList.remove("celebrate");
+      if (st) { show(); refresh(st); } else show();
     }
 
-    function startPolling() { if (polling) return; polling = true; setInterval(tick, 750); }
+    // Poll tick — advance/redraw when active. Called by mainloop (with state) and by
+    // the internal interval (no arg → resolves the shell global).
+    function tick(s) {
+      const st = liveState(s);
+      if (!active || !st) return;
+      const p = st.missions;
+      if (p && p.done) { active = false; return; }
+      refresh(st);
+    }
 
-    return { STEPS, MISSIONS, startFresh, resume, tick, startPolling, hide,
-             isActive: () => active };
+    function startPolling() { if (polling) return; polling = true; setInterval(() => tick(), 750); }
+
+    return {
+      // engine surface (also on MissionEngine in PURE_CORE for headless tests)
+      currentSet, reloadSet, DEFAULT: MissionEngine.DEFAULT,
+      // back-compat aliases for any consumer that read the old flat views
+      get MISSIONS() { return currentSet().missions; },
+      // public API
+      startFresh, resume, tick, startPolling, hide,
+      isActive: () => active,
+    };
   })();
   window.Tutorial = Tutorial;   // exposed for headless smoke + console
   // === TUTORIAL END ===

@@ -130,7 +130,7 @@
   window.addEventListener("keydown", (e) => {
     // Editor overlay open: don't let 'm' leak into the game underneath (see
     // the matching guard/comment on the speed/WASD handler above).
-    if (window.EditorOverlay && window.EditorOverlay.isOpen()) return;
+    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen())) return;
     if (e.key === "m" || e.key === "M") {
       const el = document.activeElement;
       if (el && el.tagName === "INPUT") return;   // don't hijack the seed field

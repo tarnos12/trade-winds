@@ -46,4 +46,38 @@
     return { open, close, isOpen };
   })();
   window.EditorOverlay = EditorOverlay;
+
+  // === MISSION-EDITOR-OVERLAY === mirror of EditorOverlay for the standalone
+  // mission editor (bundled as MISSION_EDITOR_HTML, BUILD:mission-editor-embed).
+  // Same sandboxed-iframe + blob-URL approach so the editor's localStorage
+  // autosave to "tradewinds.missions" (read by the MissionEngine) keeps working.
+  const MissionEditorOverlay = (() => {
+    const overlay = document.getElementById("missionEditorOverlay");
+    const frame = document.getElementById("meFrame");
+    const btnOpen = document.getElementById("ssMissions");
+    const btnClose = document.getElementById("meClose");
+    let blobUrl = null;
+    function open() {
+      if (typeof MISSION_EDITOR_HTML === "undefined" || !overlay || !frame) return;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      const blob = new Blob([MISSION_EDITOR_HTML], { type: "text/html" });
+      blobUrl = URL.createObjectURL(blob);
+      frame.onload = () => frame.focus();
+      frame.src = blobUrl;
+      overlay.classList.remove("hidden");
+    }
+    function close() {
+      if (!overlay || !frame) return;
+      overlay.classList.add("hidden");
+      frame.src = "about:blank";
+      frame.removeAttribute("src");
+      if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+    }
+    function isOpen() { return !!overlay && !overlay.classList.contains("hidden"); }
+    if (btnOpen) btnOpen.addEventListener("click", open);
+    if (btnClose) btnClose.addEventListener("click", close);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && isOpen()) close(); });
+    return { open, close, isOpen };
+  })();
+  window.MissionEditorOverlay = MissionEditorOverlay;
   // === EDITOR-OVERLAY END ===

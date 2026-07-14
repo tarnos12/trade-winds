@@ -100,6 +100,8 @@
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
         market: state.market,              // KR-A: bounded market history ring (≤600/good)
+        stats: state.stats,                // U: lifetime counters for mission objectives (Sim.ensureStats migrates)
+        missions: state.missions,          // U: mission progress (activated/baselines/completed)
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (err) { /* private mode / quota — ignore */ }

@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.24.0";
+  const GAME_VERSION = "0.25.0";
   const PATCH_NOTES = [
+    { v: "0.25.0", notes: [
+      "NEW: a Mission Editor (🎯 on the start screen) — design your own missions on a grid and connect them into a flowchart",
+      "Missions are now data-driven with typed goals: construct a building, upgrade a building, trade a good, or earn tariffs",
+      "Each mission can be retroactive (counts progress you already made) or start fresh from when it unlocks",
+      "The Getting Started panel runs your authored missions (or the built-in set) and tracks each goal's progress",
+    ] },
     { v: "0.24.0", notes: [
       "Traders now glide smoothly along the tiles they travel, at a steady speed (faster on roads, slower off-road)",
       "Internal city porters follow the tiles too and show the same carried-item chips as trade caravans",

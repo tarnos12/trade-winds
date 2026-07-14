@@ -441,6 +441,14 @@ Buildings.chargeBuilding = function (state, town, typeId) {
   if (!def || !town) return;
   const cost = def.cost || {};
   state.treasury = (state.treasury || 0) - (cost.gold || 0);
+  // === MISSION-STATS === an INSTANT (gold-only/free) building is placed built:true
+  // and NEVER trips the Sim delivery flip that counts a construction, so count it
+  // HERE at placement — otherwise "construct" mission objectives (incl. the early
+  // hut/farm/lumberjack, all instant) could never complete. Non-instant buildings
+  // are placed built:false and counted by Sim when their materials finish delivering,
+  // so this branch (instant only) never double-counts. chargeBuilding is a placement
+  // (player-action) hook, not part of the seeded pure tick, so determinism is intact.
+  if (Buildings.isInstant(def) && typeof Sim !== "undefined" && Sim.statConstructed) Sim.statConstructed(state, typeId);
 };
 
 // Deduct the founding cost from the treasury (call once when a city is placed).
