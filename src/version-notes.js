@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.25.1";
+  const GAME_VERSION = "0.26.0";
   const PATCH_NOTES = [
+    { v: "0.26.0", notes: [
+      "Internal city porters only move when there's a real reason (a good that isn't already maxed out)",
+      "New debug panel (top-right) lists recent sound effects and where each came from",
+      "Cities can now be upgraded on gold alone — no population requirement",
+      "Removed the Collapsed Bridge event that cut your roads",
+      "Rendering is capped at 60 FPS (the economy clock is unaffected)",
+    ] },
     { v: "0.25.0", notes: [
       "NEW: a Mission Editor (🎯 on the start screen) — design your own missions on a grid and connect them into a flowchart",
       "Missions are now data-driven with typed goals: construct a building, upgrade a building, trade a good, or earn tariffs",
