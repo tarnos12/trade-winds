@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.26.0";
+  const GAME_VERSION = "0.27.0";
   const PATCH_NOTES = [
+    { v: "0.27.0", notes: [
+      "NEW: a Balance Lab (🧪 on the start screen) — compose cities from real buildings and populations and see production vs. consumption update live",
+      "Run a scenario through the real economy engine to get a self-sustained verdict: is every city happy and net-positive on gold?",
+      "Production buildings now show their current output speed, the same way houses show their consumption",
+      "Transporter overview explains what each hauler is carrying and why it may sit idle (they deliver construction materials)",
+    ] },
     { v: "0.26.0", notes: [
       "Internal city porters only move when there's a real reason (a good that isn't already maxed out)",
       "New debug panel (top-right) lists recent sound effects and where each came from",

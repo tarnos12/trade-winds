@@ -310,7 +310,27 @@
     const tu = ppTransporterUse(t);
     const fleet = (typeof Trade !== "undefined" && Trade.externalFleet) ? Trade.externalFleet(t) : 1;
     const live = ppLiveCarts(t);
-    const transTip = `${tu.n} Transporters — Distribute resources inside the city. Upgrade the city to increase their number.`;
+    // AD: transporters are internal haulers that deliver CONSTRUCTION & UPGRADE
+    // materials from town stock to build sites — so the bar reads 0% (idle) when
+    // nothing is being built/upgraded (not a bug). Spell that out + list what's
+    // being delivered where on hover.
+    let transTip = `${tu.n} Transporters — internal haulers that carry construction & upgrade materials from the town's stock to sites being built or upgraded. (They idle when nothing is under construction.)`;
+    const deliv = [];
+    for (const b of (t.buildings || [])) {
+      if (!b) continue;
+      const bn = (CONFIG.buildings[b.typeId] && CONFIG.buildings[b.typeId].name) || b.typeId;
+      if (b.built === false && Buildings.constructionNeed) {
+        const nd = Buildings.constructionNeed(b);
+        const parts = Object.keys(nd).map(g => Math.ceil(nd[g]) + goodIcon(g));
+        if (parts.length) deliv.push("🔨 " + bn + " ← " + parts.join(" "));
+      }
+      if (b.pendingUpgrade && Buildings.upgradeConstructionNeed) {
+        const nd = Buildings.upgradeConstructionNeed(b);
+        const parts = Object.keys(nd).map(g => Math.ceil(nd[g]) + goodIcon(g));
+        if (parts.length) deliv.push("⬆ " + bn + " ← " + parts.join(" "));
+      }
+    }
+    transTip += deliv.length ? "\n\nDelivering now:\n" + deliv.join("\n") : "\n\nIdle — nothing under construction or upgrading.";
     let tradTip = `${fleet} Traders — Buy resources from other cities. Upgrade the city to increase their number.`;
     for (let k = 0; k < fleet; k++) {
       const c = live[k];
@@ -1259,7 +1279,16 @@
     // --- output / inputs / housing ---
     if (def.output) {
       const c = goodColor(def.output.goodId);
+      // AC: current production SPEED at this building's actual staffing + upgrades —
+      // ratePerWorker × workers × upgrade outputMult, per minute (the analog of the
+      // per-resident consumption houses show). The per-worker base stays below it.
+      const workers = b.workers || 0;
+      const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
+      const curOut = (def.output.ratePerWorker || 0) * workers * outMult;
       html += `<div class="tp-sec">Output</div>
+        <div class="tp-row"><span class="k">Producing now</span><span class="v">${workers > 0
+          ? fmt(perMin(curOut)) + " " + goodIcon(def.output.goodId) + "/min"
+          : "<span class=\"tp-dim\">idle — no workers</span>"}</span></div>
         <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perMin(def.output.ratePerWorker))}/wkr/min</span></div>`;
     }
     if (def.inputs && Object.keys(def.inputs).length) {
