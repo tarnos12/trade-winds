@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.33.0";
+  const GAME_VERSION = "0.33.1";
   const PATCH_NOTES = [
+    { v: "0.33.1", notes: [
+      "Fixed the mystery intermittent sound: the King\u2019s-Quest fanfare was still firing even though its banner was removed, so quests completed invisibly with a random jingle \u2014 that cue is gone (quests still pay their rewards)",
+    ] },
     { v: "0.33.0", notes: [
       "NEW: Trade Winds can now run as a Windows desktop app (Electron) — see DESKTOP.md (npm start / npm run dist)",
       "Everything auto-saves to one editable JSON file on disk: your game, research tree, missions, and Balance-Lab scenario — no more Export/Import",

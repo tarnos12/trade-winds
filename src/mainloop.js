@@ -26,7 +26,6 @@
   let econAcc = 0;
   let renderAcc = 0;                 // AB: render-frame accumulator (60fps cap)
   const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
-  let _prevQuestReward = null;   // AUDIO (P5-C): tracks quest-complete edge for the fanfare cue
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
 
   const fpsEl = document.getElementById("fps");
@@ -64,11 +63,12 @@
         // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
         if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
         Research.tick(state); Quests.tick(state); Victory.check(state);
-        // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
-        if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
-          _prevQuestReward = state.lastQuestReward;
-          SFX.play("quest", "quest done");
-        }
+        // W-fix: the King's-Quest fanfare was ORPHANED — task Q removed the quest
+        // banner (onboarding moved to the Getting Started missions), so these
+        // quests now complete invisibly. The lone fanfare with nothing on screen
+        // was the "weird intermittent sound". The new mission system keeps its
+        // own audible cues (Tutorial: "mission done" / "all missions ✓"), which
+        // DO have visible UI. So: no cue here. (Quests still pay their rewards.)
         if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
           Events.tick(state);
           if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
