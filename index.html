@@ -12388,8 +12388,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.27.0";
+  const GAME_VERSION = "0.28.0";
   const PATCH_NOTES = [
+    { v: "0.28.0", notes: [
+      "Balance Lab redesigned into a proper editor: build each city from Houses / Gatherers / Production buttons, with count steppers and level pickers",
+      "A ⚠ idle badge warns when a workplace can't be staffed (e.g. a Fishery with no peasants) — the same rules as the real game",
+      "Persistent Resources panel on the right: one row per good showing its producers by level (e.g. Potato Farm: 5×L1) and net /min",
+      "Charts, the carrying-capacity table and the ground-truth simulation now live on their own Charts & sim tab",
+    ] },
     { v: "0.27.0", notes: [
       "NEW: a Balance Lab (🧪 on the start screen) — compose cities from real buildings and populations and see production vs. consumption update live",
       "Balance Lab now shows Carrying Capacity: how many people and downstream buildings ONE producer feeds (e.g. 1 Lumberjack → 40 peasants or 2 Sawmills), since cities specialise and trade",
@@ -12681,6 +12687,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       };
       const prod = {}; // per tick
       const cons = {}; // per tick (population needs + processor inputs)
+      const used = []; // staffed producer instances: {goodId, typeId, level}
       for (const b of buildings) {
         const def = CONFIG.buildings[b.typeId];
         if (!def || !def.output || !def.workerTier || !(def.workerSlots > 0)) continue;
@@ -12692,6 +12699,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         if (w <= 0) continue;
         const rate = def.output.ratePerWorker * w * (eff.outputMult || 1);
         prod[def.output.goodId] = (prod[def.output.goodId] || 0) + rate;
+        used.push({ goodId: def.output.goodId, typeId: b.typeId, level: b.upgradeLevel || 1 });
         // processor input draw (nominal — assumes inputs are supplied). Mirrors
         // Sim's per-tick input consumption inputs[g] × workers.
         if (def.inputs) for (const gid in def.inputs) cons[gid] = (cons[gid] || 0) + def.inputs[gid] * w;
@@ -12738,7 +12746,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
       return {
         id: city.id, name: city.name || ("City#" + city.id),
-        pop: pop, cap: cap, prod: prodMin, cons: consMin,
+        pop: pop, cap: cap, prod: prodMin, cons: consMin, used: used,
         income: income, deficitCost: deficitCost, net: income - deficitCost,
       };
     }
@@ -12749,11 +12757,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const perGood = {};
       const perCity = [];
       const detail = []; // internal per-city breakdown (used by the UI)
+      const gg = () => ({ prod: 0, cons: 0, byLevel: {}, producer: null });
       for (const city of cities) {
         const c = analyzeCity(city);
         detail.push(c);
-        for (const g in c.prod) { (perGood[g] = perGood[g] || { prod: 0, cons: 0 }).prod += c.prod[g]; }
-        for (const g in c.cons) { (perGood[g] = perGood[g] || { prod: 0, cons: 0 }).cons += c.cons[g]; }
+        for (const g in c.prod) { (perGood[g] = perGood[g] || gg()).prod += c.prod[g]; }
+        for (const g in c.cons) { (perGood[g] = perGood[g] || gg()).cons += c.cons[g]; }
+        // staffed producers, grouped by level → "2×L1, 1×L3" (only ones being used)
+        for (const u of c.used || []) {
+          const pg = (perGood[u.goodId] = perGood[u.goodId] || gg());
+          pg.byLevel[u.level] = (pg.byLevel[u.level] || 0) + 1;
+          if (!pg.producer) pg.producer = (CONFIG.buildings[u.typeId] && CONFIG.buildings[u.typeId].name) || u.typeId;
+        }
         perCity.push({ id: c.id, name: c.name, income: c.income, deficitCost: c.deficitCost, net: c.net });
       }
       for (const g in perGood) perGood[g].net = perGood[g].prod - perGood[g].cons;
@@ -13133,30 +13148,54 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       styleEl = document.createElement("style");
       styleEl.textContent = [
         "#balanceLabOverlay #blBody{flex:1 1 auto;display:flex;min-height:0;overflow:hidden;font-size:13px}",
-        "#balanceLabOverlay .bl-col{flex:1 1 0;min-width:0;overflow:auto;padding:14px}",
-        "#balanceLabOverlay .bl-left{border-right:1px solid var(--panel-edge);max-width:46%}",
+        // main (tabbed) area + persistent right resource panel
+        "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:14px}",
+        "#balanceLabOverlay .bl-side{flex:0 0 320px;width:320px;overflow:auto;padding:12px 14px;border-left:1px solid var(--panel-edge);background:rgba(0,0,0,.14)}",
         "#balanceLabOverlay h3{color:var(--accent);margin:0 0 8px;font-size:14px}",
         "#balanceLabOverlay h4{color:var(--paper);margin:14px 0 6px;font-size:12.5px;opacity:.85}",
-        "#balanceLabOverlay .bl-city{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:10px;margin-bottom:12px}",
+        // top tab bar (Cities / Charts)
+        "#balanceLabOverlay .bl-tabs{display:flex;gap:4px;margin-left:14px}",
+        "#balanceLabOverlay .bl-tab{background:transparent;border:1px solid transparent;border-radius:7px 7px 0 0;color:var(--paper);opacity:.6;padding:5px 13px;cursor:pointer;font-family:inherit;font-size:12.5px}",
+        "#balanceLabOverlay .bl-tab.active{opacity:1;background:var(--panel);border-color:var(--panel-edge);border-bottom-color:var(--panel);color:var(--accent);font-weight:bold}",
+        // city card
+        "#balanceLabOverlay .bl-city{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:11px;margin-bottom:12px}",
         "#balanceLabOverlay .bl-city-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}",
         "#balanceLabOverlay .bl-city-hd input.nm{flex:1;font-weight:bold;color:var(--accent);background:#1c160f;border:1px solid var(--panel-edge);border-radius:5px;padding:4px 7px}",
-        "#balanceLabOverlay .bl-brow{display:flex;align-items:center;gap:6px;margin:4px 0}",
+        "#balanceLabOverlay .bl-city-hd .bl-cap{font-size:10.5px;opacity:.6;white-space:nowrap}",
+        "#balanceLabOverlay .bl-brow{display:flex;align-items:center;gap:7px;margin:3px 0;padding:3px 6px;background:#1c160f;border:1px solid var(--panel-edge);border-radius:6px}",
+        "#balanceLabOverlay .bl-brow .bn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+        "#balanceLabOverlay .bl-brow .bl-idle{color:#e0a860;font-size:10.5px;white-space:nowrap}",
+        "#balanceLabOverlay .bl-brow .stp{background:#2c2418;border:1px solid var(--panel-edge);color:var(--paper);width:20px;height:20px;border-radius:5px;cursor:pointer;font-size:13px;line-height:1;padding:0}",
+        "#balanceLabOverlay .bl-brow .stp:hover{border-color:var(--accent);color:var(--accent)}",
+        "#balanceLabOverlay .bl-brow .cnt{min-width:20px;text-align:center;font-variant-numeric:tabular-nums;font-weight:bold}",
         "#balanceLabOverlay select,#balanceLabOverlay input[type=number]{background:#1c160f;color:var(--paper);border:1px solid var(--panel-edge);border-radius:5px;padding:3px 5px;font-family:inherit;font-size:12px}",
         "#balanceLabOverlay input[type=number]{width:52px}",
-        "#balanceLabOverlay .bl-brow select.ty{flex:1;min-width:0}",
         "#balanceLabOverlay button.bl-btn{background:#3a2e1d;color:var(--paper);border:1px solid var(--panel-edge);border-radius:5px;padding:4px 9px;font-family:inherit;font-size:12px;cursor:pointer}",
         "#balanceLabOverlay button.bl-btn:hover{border-color:var(--accent);color:var(--accent)}",
         "#balanceLabOverlay button.bl-x{background:transparent;border:0;color:#c86;cursor:pointer;font-size:14px;padding:0 4px}",
         "#balanceLabOverlay .bl-run{background:var(--accent);color:#201607;border-color:#e0a860;font-weight:bold}",
-        "#balanceLabOverlay .bl-pop{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}",
-        "#balanceLabOverlay .bl-pop label{display:flex;flex-direction:column;font-size:10px;opacity:.7;gap:2px}",
+        // per-card add tabs (Houses / Gatherers / Production) + add chips
+        "#balanceLabOverlay .bl-cardtabs{display:flex;gap:4px;margin:9px 0 6px;border-bottom:1px solid var(--panel-edge)}",
+        "#balanceLabOverlay .bl-ct{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--paper);opacity:.55;padding:4px 8px;cursor:pointer;font-family:inherit;font-size:11.5px}",
+        "#balanceLabOverlay .bl-ct.active{opacity:1;color:var(--accent);border-bottom-color:var(--accent);font-weight:bold}",
+        "#balanceLabOverlay .bl-chips{display:flex;flex-wrap:wrap;gap:5px}",
+        "#balanceLabOverlay .bl-chip{background:#26201400;background:#26201a;border:1px solid var(--panel-edge);border-radius:14px;color:var(--paper);padding:3px 10px;cursor:pointer;font-family:inherit;font-size:11.5px;white-space:nowrap}",
+        "#balanceLabOverlay .bl-chip:hover{border-color:var(--accent);color:var(--accent)}",
+        "#balanceLabOverlay .bl-chip .req{opacity:.5;font-size:10px}",
+        // resource panel rows (right side)
+        "#balanceLabOverlay .bl-res{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--panel-edge)}",
+        "#balanceLabOverlay .bl-res-nm{font-weight:bold;color:var(--paper)}",
+        "#balanceLabOverlay .bl-res-net{font-variant-numeric:tabular-nums;font-weight:bold;text-align:right;white-space:nowrap}",
+        "#balanceLabOverlay .bl-res-lv{grid-column:1 / -1;font-size:10.5px;opacity:.65;display:flex;flex-wrap:wrap;gap:6px}",
+        "#balanceLabOverlay .bl-res-lv .none{color:#e0a860;opacity:.9}",
+        "#balanceLabOverlay .green{color:#7fc45f}#balanceLabOverlay .red{color:#e08a6a}",
+        // charts tab
         "#balanceLabOverlay .bl-good{display:grid;grid-template-columns:88px 1fr 128px;gap:8px;align-items:center;margin:3px 0}",
         "#balanceLabOverlay .bl-good .lbl{text-align:right;opacity:.85;font-variant-numeric:tabular-nums}",
         "#balanceLabOverlay .bl-bar{position:relative;height:16px;background:#150f09;border:1px solid var(--panel-edge);border-radius:4px;overflow:hidden}",
         "#balanceLabOverlay .bl-bar .p{position:absolute;left:0;top:0;bottom:50%;background:#6ea84f}",
         "#balanceLabOverlay .bl-bar .c{position:absolute;left:0;top:50%;bottom:0;background:#b06b4f}",
         "#balanceLabOverlay .bl-num{font-variant-numeric:tabular-nums;font-size:11px;text-align:right}",
-        "#balanceLabOverlay .green{color:#7fc45f}#balanceLabOverlay .red{color:#e08a6a}",
         "#balanceLabOverlay table.bl-tbl{width:100%;border-collapse:collapse;font-size:12px}",
         "#balanceLabOverlay table.bl-tbl th,#balanceLabOverlay table.bl-tbl td{padding:4px 6px;border-bottom:1px solid var(--panel-edge);text-align:right;font-variant-numeric:tabular-nums}",
         "#balanceLabOverlay table.bl-tbl th:first-child,#balanceLabOverlay table.bl-tbl td:first-child{text-align:left}",
@@ -13180,80 +13219,139 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       document.head.appendChild(styleEl);
     }
 
-    // ---------- composer (left column) ----------
-    function renderComposer(host) {
+    // ---------- building catalog, grouped by kind (Houses / Gatherers / Production)
+    const CAT_TABS = [
+      { key: "houses", label: "🏠 Houses" },
+      { key: "gatherers", label: "⛏ Gatherers" },
+      { key: "production", label: "🏭 Production" },
+    ];
+    function catalog() {
+      const c = { houses: [], gatherers: [], production: [] };
+      for (const e of buildingEntries()) {
+        if (e.def.kind === "house") c.houses.push(e);
+        else if (e.def.kind === "extractor") c.gatherers.push(e);
+        else if (e.def.kind === "processor") c.production.push(e);
+      }
+      return c;
+    }
+    function tierWord(def) {
+      return ({ peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" })[def.workerTier] || def.workerTier || "workers";
+    }
+    function chipTitle(d) {
+      if (d.kind === "house") return (d.name || d.id) + " — adds housing (" + (d.houseTier || "residents") + ")";
+      const inp = d.inputs ? "needs " + Object.keys(d.inputs).map(g => d.inputs[g] + "× " + g).join(", ") + "; " : "";
+      const out = d.output ? "makes " + d.output.goodId : "";
+      return (d.name || d.id) + " — " + inp + out + " · staffed by " + tierWord(d);
+    }
+    // Add one building of typeId to a city (bump an existing L1 row, else new row).
+    function addBuilding(city, typeId) {
+      city.buildings = city.buildings || [];
+      const row = city.buildings.find(b => b.typeId === typeId && (b.level || 1) === 1);
+      if (row) row.count = (row.count || 0) + 1;
+      else city.buildings.push({ typeId: typeId, count: 1, level: 1 });
+    }
+
+    // ---------- CITIES tab: the card editor ----------
+    function renderCities(host) {
       host.innerHTML = "";
-      host.appendChild(el("h3", { text: "Composer — define your cities" }));
-      host.appendChild(el("div", { class: "bl-note", html: "Add buildings (type × count × upgrade level) and set tier populations. Max pop is derived from placed houses; edit to override." }));
-
-      const entries = buildingEntries();
-      scn.cities.forEach((city, ci) => host.appendChild(renderCityCard(city, ci, entries)));
-
+      host.appendChild(el("div", { class: "bl-note", text: "Build each city with the Houses / Gatherers / Production buttons. A workplace only runs if the city has the people to staff it — watch for ⚠ idle." }));
+      const cat = catalog();
+      scn.cities.forEach((city, ci) => host.appendChild(renderCityCard(city, ci, cat)));
       const addCity = el("button", { class: "bl-btn", text: "＋ Add city", onclick: () => {
         const id = (scn.cities.reduce((m, c) => Math.max(m, +c.id || 0), 0) || 0) + 1;
         scn.cities.push({ id: id, name: "City #" + id, pop: null, buildings: [] });
-        renderAll();
+        refresh();
       } });
       host.appendChild(el("div", { class: "bl-add" }, [addCity]));
     }
 
-    function renderCityCard(city, ci, entries) {
-      const cap = cityCapacity(expandBuildings(city));
+    function renderCityCard(city, ci, cat) {
+      const detail = analyzeCity(city);          // real staffing => `used` + capacity
+      const staffed = {};                        // "typeId@level" -> staffed count
+      for (const u of detail.used) { const k = u.typeId + "@" + u.level; staffed[k] = (staffed[k] || 0) + 1; }
+      const cap = detail.cap;
+
       const card = el("div", { class: "bl-city" });
       const nm = el("input", { class: "nm", value: city.name || ("City #" + city.id) });
-      nm.addEventListener("input", () => { city.name = nm.value; refreshAnalysis(); });
-      const del = el("button", { class: "bl-x", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); renderAll(); } });
-      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, del]));
+      nm.addEventListener("input", () => { city.name = nm.value; refreshSide(); });
+      const capTxt = TIER_KEYS.filter(k => (cap[k] || 0) > 0).map(k => Math.round(cap[k]) + " " + k.slice(0, 3)).join(" · ") || "no housing";
+      const del = el("button", { class: "bl-x", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
+      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, el("span", { class: "bl-cap", text: "👥 " + capTxt }), del]));
 
+      // current buildings -- name (+level), idle warning, count stepper
+      if (!(city.buildings || []).length) card.appendChild(el("div", { class: "bl-note", text: "Empty -- add buildings below." }));
       (city.buildings || []).forEach((b, bi) => {
-        const row = el("div", { class: "bl-brow" });
-        const sel = el("select", { class: "ty" });
-        for (const e of entries) sel.appendChild(el("option", { value: e.id, text: (e.def.name || e.id) + " (" + e.def.kind + ")", selected: e.id === b.typeId ? "selected" : null }));
-        sel.value = b.typeId;
-        sel.addEventListener("change", () => { b.typeId = sel.value; if (b.level > maxLevelFor(b.typeId)) b.level = maxLevelFor(b.typeId); renderAll(); });
-        const cnt = el("input", { type: "number", min: "0", step: "1", value: String(b.count), title: "count" });
-        cnt.addEventListener("input", () => { b.count = Math.max(0, Math.round(+cnt.value || 0)); refreshAnalysis(); });
-        const lvlSel = el("select", { title: "upgrade level" });
+        const def = CONFIG.buildings[b.typeId] || {};
         const mx = maxLevelFor(b.typeId);
-        for (let L = 1; L <= mx; L++) lvlSel.appendChild(el("option", { value: String(L), text: "L" + L, selected: L === b.level ? "selected" : null }));
-        lvlSel.value = String(b.level);
-        lvlSel.disabled = mx === 1;
-        lvlSel.addEventListener("change", () => { b.level = +lvlSel.value; refreshAnalysis(); });
-        const rm = el("button", { class: "bl-x", text: "✕", onclick: () => { city.buildings.splice(bi, 1); renderAll(); } });
-        row.appendChild(sel); row.appendChild(cnt); row.appendChild(el("span", { text: "×" })); row.appendChild(lvlSel); row.appendChild(rm);
+        const row = el("div", { class: "bl-brow" });
+        row.appendChild(el("span", { class: "bn", text: (def.name || b.typeId) + (mx > 1 ? " L" + (b.level || 1) : "") }));
+
+        if (def.output && def.workerSlots > 0) {   // idle if placed > staffed
+          const st = staffed[b.typeId + "@" + (b.level || 1)] || 0;
+          if (st < b.count) row.appendChild(el("span", { class: "bl-idle", text: "⚠ " + (b.count - st) + " idle · needs " + tierWord(def) }));
+        }
+        if (mx > 1) {
+          const lvlSel = el("select", { title: "upgrade level" });
+          for (let L = 1; L <= mx; L++) lvlSel.appendChild(el("option", { value: String(L), text: "L" + L, selected: L === (b.level || 1) ? "selected" : null }));
+          lvlSel.value = String(b.level || 1);
+          lvlSel.addEventListener("change", () => { b.level = +lvlSel.value; refresh(); });
+          row.appendChild(lvlSel);
+        }
+        row.appendChild(el("button", { class: "stp", text: "−", title: "one fewer", onclick: () => { b.count = (b.count || 0) - 1; if (b.count <= 0) city.buildings.splice(bi, 1); refresh(); } }));
+        row.appendChild(el("span", { class: "cnt", text: String(b.count) }));
+        row.appendChild(el("button", { class: "stp", text: "+", title: "one more", onclick: () => { b.count = (b.count || 0) + 1; refresh(); } }));
         card.appendChild(row);
       });
 
-      // add-building row
-      const addSel = el("select", { class: "ty" });
-      for (const e of entries) addSel.appendChild(el("option", { value: e.id, text: (e.def.name || e.id) + " (" + e.def.kind + ")" }));
-      const addBtn = el("button", { class: "bl-btn", text: "＋ building", onclick: () => {
-        city.buildings = city.buildings || [];
-        city.buildings.push({ typeId: addSel.value, count: 1, level: 1 });
-        renderAll();
-      } });
-      card.appendChild(el("div", { class: "bl-add" }, [addSel, addBtn]));
+      // add-tabs: Houses / Gatherers / Production
+      const active = city._addTab || "houses";
+      const tabRow = el("div", { class: "bl-cardtabs" });
+      for (const t of CAT_TABS) tabRow.appendChild(el("button", { class: "bl-ct" + (t.key === active ? " active" : ""), text: t.label,
+        onclick: () => { city._addTab = t.key; refresh(); } }));
+      card.appendChild(tabRow);
 
-      // populations
-      const popWrap = el("div", { class: "bl-pop" });
-      popWrap.appendChild(el("span", { class: "bl-note", text: "Population (max from houses in parens):" }));
-      for (const k of TIER_KEYS) {
-        const cur = (city.pop && typeof city.pop[k] === "number") ? city.pop[k] : Math.round(cap[k] || 0);
-        const inp = el("input", { type: "number", min: "0", step: "1", value: String(Math.round(cur)) });
-        inp.addEventListener("input", () => {
-          city.pop = city.pop || {};
-          for (const t of TIER_KEYS) if (city.pop[t] == null) city.pop[t] = Math.round(cap[t] || 0);
-          city.pop[k] = Math.max(0, Math.round(+inp.value || 0));
-          refreshAnalysis();
-        });
-        popWrap.appendChild(el("label", {}, [k.slice(0, 4) + " (" + Math.round(cap[k] || 0) + ")", inp]));
+      const chips = el("div", { class: "bl-chips" });
+      for (const e of cat[active]) {
+        const d = e.def;
+        const chip = el("button", { class: "bl-chip", title: chipTitle(d), onclick: () => { addBuilding(city, e.id); refresh(); } });
+        chip.appendChild(el("span", { text: "＋ " + (d.name || e.id) }));
+        if (d.kind !== "house" && d.workerTier) chip.appendChild(el("span", { class: "req", text: " ·" + tierWord(d).slice(0, 3) }));
+        chips.appendChild(chip);
       }
-      const reset = el("button", { class: "bl-btn", text: "⟲ max", title: "reset to housing capacity", onclick: () => { city.pop = null; renderAll(); } });
-      popWrap.appendChild(reset);
-      card.appendChild(popWrap);
+      card.appendChild(chips);
       return card;
     }
 
+    // ---------- right RESOURCE panel (persistent) ----------
+    let sideHost = null;
+    function refreshSide() {
+      if (!sideHost) return;
+      const res = analyze(scn);
+      sideHost.innerHTML = "";
+      sideHost.appendChild(el("h3", { text: "📦 Resources" }));
+      sideHost.appendChild(el("div", { class: "bl-note", text: "Net /min across all cities. Buildings listed are the ones actually staffed." }));
+      const goods = Object.keys(res.perGood).filter(g => (res.perGood[g].prod > 1e-6 || res.perGood[g].cons > 1e-6));
+      goods.sort((a, b) => (res.perGood[b].prod - res.perGood[b].cons) - (res.perGood[a].prod - res.perGood[a].cons));
+      if (!goods.length) { sideHost.appendChild(el("div", { class: "bl-note", text: "Add buildings & population to see resources." })); return; }
+      for (const g of goods) {
+        const pg = res.perGood[g];
+        const net = pg.prod - pg.cons;
+        const row = el("div", { class: "bl-res" });
+        row.appendChild(el("span", { class: "bl-res-nm", text: goodName(g) }));
+        row.appendChild(el("span", { class: "bl-res-net " + (net >= -1e-6 ? "green" : "red"), text: (net >= 0 ? "+" : "") + fmt(net) + "/min" }));
+        const lv = el("span", { class: "bl-res-lv" });
+        const levels = Object.keys(pg.byLevel || {}).map(Number).sort((a, b) => a - b);
+        if (levels.length) {
+          lv.appendChild(el("span", { text: (pg.producer || "producer") + ":" }));
+          for (const L of levels) lv.appendChild(el("span", { text: pg.byLevel[L] + "×L" + L }));
+        } else {
+          lv.appendChild(el("span", { class: "none", text: "no producer -- imported" }));
+        }
+        row.appendChild(lv);
+        row.title = "produces " + fmt(pg.prod) + " - consumes " + fmt(pg.cons) + "/min";
+        sideHost.appendChild(row);
+      }
+    }
     // ---------- carrying-capacity / support-ratio panel ----------
     // Scenario-independent reference: "1 producer feeds N consumers" across the
     // whole kingdom (cities specialise + trade). Reads ratios() straight from
@@ -13261,8 +13359,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     function renderRatios(host) {
       const rows = ratios();
       const det = el("details", { class: "bl-ratios" });
-      det.open = true;
-      const sum = el("summary", { text: "📐 Carrying capacity — 1 producer supports…" });
+      det.open = false;
+      const sum = el("summary", { text: "📐 Carrying capacity — 1 producer supports… (tap to expand)" });
       det.appendChild(sum);
       det.appendChild(el("div", { class: "bl-note", text: "Kingdom-wide, at base level & full staffing. Cities specialise and trade, so this is what ONE building feeds no matter where it sits." }));
       for (const r of rows) {
@@ -13288,24 +13386,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       host.appendChild(det);
     }
 
-    // ---------- analysis (right column) ----------
-    let analysisHost = null;
-    function refreshAnalysis() {
-      if (!analysisHost) return;
+    // ---------- CHARTS tab (bars + per-city gold + carrying capacity + sim) ----------
+    function renderCharts(host) {
       const res = analyze(scn);
-      analysisHost.innerHTML = "";
-      analysisHost.appendChild(el("h3", { text: "Live analysis — production vs consumption" }));
-      analysisHost.appendChild(el("div", { class: "bl-note", text: "Rates per minute (2 ticks = 1s). Production is labour-limited by your populations. Green = surplus, red = deficit." }));
-
-      renderRatios(analysisHost);
-
-      // per-good bars (kingdom-wide)
+      host.innerHTML = "";
+      host.appendChild(el("h3", { text: "Production vs consumption" }));
+      host.appendChild(el("div", { class: "bl-note", text: "Per minute, kingdom-wide. Green bar = production, red = consumption; number = net." }));
       const goods = Object.keys(res.perGood).filter(g => (res.perGood[g].prod > 1e-6 || res.perGood[g].cons > 1e-6));
       goods.sort((a, b) => (res.perGood[b].prod + res.perGood[b].cons) - (res.perGood[a].prod + res.perGood[a].cons));
       let scaleMax = 1;
       for (const g of goods) scaleMax = Math.max(scaleMax, res.perGood[g].prod, res.perGood[g].cons);
-      analysisHost.appendChild(el("h4", { text: "Per good (kingdom-wide, /min)" }));
-      if (!goods.length) analysisHost.appendChild(el("div", { class: "bl-note", text: "No production or consumption yet — add buildings and population." }));
+      if (!goods.length) host.appendChild(el("div", { class: "bl-note", text: "No production or consumption yet -- add buildings and population." }));
       for (const g of goods) {
         const pg = res.perGood[g];
         const surplus = pg.prod - pg.cons;
@@ -13313,14 +13404,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         const p = el("div", { class: "p" }); p.style.width = (100 * pg.prod / scaleMax) + "%";
         const c = el("div", { class: "c" }); c.style.width = (100 * pg.cons / scaleMax) + "%";
         bar.appendChild(p); bar.appendChild(c);
-        const numTxt = (surplus >= 0 ? "+" : "") + fmt(surplus);
-        const num = el("div", { class: "bl-num " + (surplus >= -1e-6 ? "green" : "red"), text: numTxt });
-        num.title = "prod " + fmt(pg.prod) + " − cons " + fmt(pg.cons);
-        analysisHost.appendChild(el("div", { class: "bl-good" }, [el("div", { class: "lbl", text: goodName(g) }), bar, num]));
+        const num = el("div", { class: "bl-num " + (surplus >= -1e-6 ? "green" : "red"), text: (surplus >= 0 ? "+" : "") + fmt(surplus) });
+        num.title = "prod " + fmt(pg.prod) + " - cons " + fmt(pg.cons);
+        host.appendChild(el("div", { class: "bl-good" }, [el("div", { class: "lbl", text: goodName(g) }), bar, num]));
       }
 
-      // per-city gold
-      analysisHost.appendChild(el("h4", { text: "Per city — house income vs import cost (/min gold)" }));
+      host.appendChild(el("h4", { text: "Per city -- house income vs import cost (/min gold)" }));
       const tbl = el("table", { class: "bl-tbl" });
       tbl.appendChild(el("tr", {}, [el("th", { text: "City" }), el("th", { text: "Income" }), el("th", { text: "Import cost" }), el("th", { text: "Net" })]));
       for (const c of res.perCity) {
@@ -13331,17 +13420,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           el("td", { class: c.net >= -1e-6 ? "green" : "red", text: (c.net >= 0 ? "+" : "") + fmt(c.net) }),
         ]));
       }
-      analysisHost.appendChild(tbl);
-      analysisHost.appendChild(el("div", { class: "bl-note", html: "Income assumes needs are met (happiness 100 → ×1.6 tax). Import cost values each local deficit at its base price. Net &lt; 0 means tax can't fund the imports." }));
+      host.appendChild(tbl);
 
-      // run panel
+      renderRatios(host);
+
       const runWrap = el("div", {});
       runWrap.appendChild(el("h4", { text: "Ground-truth simulation" }));
       const ticksInp = el("input", { type: "number", min: "100", step: "500", value: "3000", title: "ticks" });
       const runBtn = el("button", { class: "bl-btn bl-run", text: "▶ Run sim" });
       const out = el("div", {});
       runBtn.addEventListener("click", () => {
-        runBtn.disabled = true; runBtn.textContent = "running…";
+        runBtn.disabled = true; runBtn.textContent = "running...";
         out.innerHTML = "";
         setTimeout(() => {
           let r;
@@ -13353,9 +13442,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       });
       runWrap.appendChild(el("div", { class: "bl-add" }, [el("span", { class: "bl-note", text: "Ticks:" }), ticksInp, runBtn]));
       runWrap.appendChild(out);
-      analysisHost.appendChild(runWrap);
+      host.appendChild(runWrap);
     }
-
     function renderSimResult(out, r) {
       out.innerHTML = "";
       const v = r.verdict;
@@ -13394,13 +13482,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
     }
 
-    // ---------- top-level render ----------
-    function renderAll() {
-      if (!overlay) return;
-      const left = overlay.querySelector(".bl-left");
-      renderComposer(left);
-      refreshAnalysis();
+    // ---------- tabs + top-level render ----------
+    let mainHost = null, activeTab = "cities";
+    const MAIN_TABS = [ { key: "cities", label: "🏙 Cities" }, { key: "charts", label: "📈 Charts & sim" } ];
+
+    function renderMain() {
+      if (!mainHost) return;
+      if (activeTab === "charts") renderCharts(mainHost);
+      else renderCities(mainHost);
+      if (overlay) overlay.querySelectorAll(".bl-tab").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-tab") === activeTab));
     }
+    // Re-render the active tab AND the persistent resource panel on every edit.
+    function refresh() { renderMain(); refreshSide(); }
 
     function isOpen() { return !!(overlay && !overlay.classList.contains("hidden")); }
     function close() { if (overlay) overlay.classList.add("hidden"); }
@@ -13409,24 +13502,28 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (!scn) scn = defaultScenario();
       if (!overlay) {
         overlay = el("div", { id: "balanceLabOverlay", class: "hidden" });
-        const bar = el("div", { id: "blBar" }, [el("span", { text: "🧪 Balance Lab — economy tester" })]);
-        const resetBtn = el("button", { class: "bl-btn", text: "↺ Reset to example", onclick: () => { scn = defaultScenario(); renderAll(); } });
+        const bar = el("div", { id: "blBar" }, [el("span", { text: "🧪 Balance Lab" })]);
+        const tabs = el("div", { class: "bl-tabs" });
+        for (const t of MAIN_TABS) tabs.appendChild(el("button", { class: "bl-tab", "data-tab": t.key, text: t.label, onclick: () => { activeTab = t.key; renderMain(); } }));
+        bar.appendChild(tabs);
+        const resetBtn = el("button", { class: "bl-btn", text: "↺ Reset", onclick: () => { scn = defaultScenario(); refresh(); } });
         const closeBtn = el("button", { id: "blClose", type: "button", text: "✕ Close", onclick: close });
         const right = el("div", {}, [resetBtn, closeBtn]);
-        right.style.display = "flex"; right.style.gap = "8px"; right.style.alignItems = "center";
+        right.style.display = "flex"; right.style.gap = "8px"; right.style.alignItems = "center"; right.style.marginLeft = "auto";
         bar.appendChild(right);
         const body = el("div", { id: "blBody" });
-        const leftCol = el("div", { class: "bl-col bl-left" });
-        analysisHost = el("div", { class: "bl-col bl-right" });
-        body.appendChild(leftCol); body.appendChild(analysisHost);
+        mainHost = el("div", { class: "bl-main" });
+        sideHost = el("div", { class: "bl-side" });
+        body.appendChild(mainHost); body.appendChild(sideHost);
         overlay.appendChild(bar); overlay.appendChild(body);
         document.body.appendChild(overlay);
         document.addEventListener("keydown", e => { if (e.key === "Escape" && isOpen()) close(); });
       }
-      renderAll();
+      refresh();
       overlay.classList.remove("hidden");
     }
 
+    return { open: open, close: close, isOpen: isOpen, analyze: analyze, simulate: simulate, ratios: ratios };
     return { open: open, close: close, isOpen: isOpen, analyze: analyze, simulate: simulate, ratios: ratios };
   })();
   if (typeof window !== "undefined") window.BalanceLab = BalanceLab;

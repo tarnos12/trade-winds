@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.27.0";
+  const GAME_VERSION = "0.28.0";
   const PATCH_NOTES = [
+    { v: "0.28.0", notes: [
+      "Balance Lab redesigned into a proper editor: build each city from Houses / Gatherers / Production buttons, with count steppers and level pickers",
+      "A ⚠ idle badge warns when a workplace can't be staffed (e.g. a Fishery with no peasants) — the same rules as the real game",
+      "Persistent Resources panel on the right: one row per good showing its producers by level (e.g. Potato Farm: 5×L1) and net /min",
+      "Charts, the carrying-capacity table and the ground-truth simulation now live on their own Charts & sim tab",
+    ] },
     { v: "0.27.0", notes: [
       "NEW: a Balance Lab (🧪 on the start screen) — compose cities from real buildings and populations and see production vs. consumption update live",
       "Balance Lab now shows Carrying Capacity: how many people and downstream buildings ONE producer feeds (e.g. 1 Lumberjack → 40 peasants or 2 Sawmills), since cities specialise and trade",
