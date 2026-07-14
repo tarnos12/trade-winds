@@ -51,14 +51,19 @@
         if (!spec || !spec.typeId || !CONFIG.buildings[spec.typeId]) continue;
         const count = Math.max(0, Math.round(spec.count || 0));
         const level = Math.max(1, Math.round(spec.level || 1));
-        for (let i = 0; i < count; i++) list.push({ typeId: spec.typeId, upgradeLevel: level, built: true });
+        // A PAUSED building stays in the list but is inert: paused workplaces
+        // don't produce/consume, paused houses add no capacity (their people —
+        // and thus their consumption and labour — vanish). Carried through so
+        // the staffing + capacity math below can honour it.
+        for (let i = 0; i < count; i++) list.push({ typeId: spec.typeId, upgradeLevel: level, built: true, paused: !!spec.paused });
       }
       return list;
     }
 
     // Housing capacity per tier for a city (real math), incl. baseWorkers peasants.
+    // Paused houses are excluded — pausing a house empties it.
     function cityCapacity(buildings) {
-      const town = { buildings: buildings, pop: {} };
+      const town = { buildings: buildings.filter(b => !b.paused), pop: {} };
       const cap = Buildings.housingCapacity(town);
       const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
       cap.peasants = (cap.peasants || 0) + (base.peasants || 0);
@@ -94,6 +99,7 @@
       const cons = {}; // per tick (population needs + processor inputs)
       const used = []; // staffed producer instances: {goodId, typeId, level}
       for (const b of buildings) {
+        if (b.paused) continue;                        // paused: no output, no input draw, frees no labour it isn't using
         const def = CONFIG.buildings[b.typeId];
         if (!def || !def.output || !def.workerTier || !(def.workerSlots > 0)) continue;
         const eff = Buildings.upgradeEffect(b);
@@ -554,7 +560,9 @@
       styleEl.textContent = [
         "#balanceLabOverlay #blBody{flex:1 1 auto;display:flex;min-height:0;overflow:hidden;font-size:13px}",
         // main (tabbed) area + persistent right resource panel
-        "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:14px}",
+        "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:12px}",
+        // cities laid out as a compact responsive grid (many per row)
+        "#balanceLabOverlay .bl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:10px;align-items:start}",
         "#balanceLabOverlay .bl-side{flex:0 0 320px;width:320px;overflow:auto;padding:12px 14px;border-left:1px solid var(--panel-edge);background:rgba(0,0,0,.14)}",
         "#balanceLabOverlay h3{color:var(--accent);margin:0 0 8px;font-size:14px}",
         "#balanceLabOverlay h4{color:var(--paper);margin:14px 0 6px;font-size:12.5px;opacity:.85}",
@@ -620,6 +628,27 @@
         "#balanceLabOverlay ul.bl-rt-list li{font-size:11.5px;display:flex;gap:5px;align-items:baseline}",
         "#balanceLabOverlay .bl-rt-n{color:var(--accent);font-weight:bold;font-variant-numeric:tabular-nums}",
         "#balanceLabOverlay .bl-rt-each{opacity:.5;font-size:10.5px;font-variant-numeric:tabular-nums}",
+        // --- compact editor extras: city level, slots, per-building flows, tier labels, pause ---
+        "#balanceLabOverlay .bl-city{padding:9px 10px}",
+        "#balanceLabOverlay .bl-city-hd{margin-bottom:4px}",
+        "#balanceLabOverlay select.bl-lvl{font-size:11px;padding:2px 4px;font-weight:bold;color:var(--accent)}",
+        "#balanceLabOverlay .bl-city-sub{display:flex;gap:10px;align-items:baseline;margin-bottom:7px;font-size:10.5px}",
+        "#balanceLabOverlay .bl-slots{font-variant-numeric:tabular-nums;color:var(--paper);opacity:.8}",
+        "#balanceLabOverlay .bl-slots.over{color:#e08a6a;opacity:1;font-weight:bold}",
+        "#balanceLabOverlay .bl-cap{opacity:.6}",
+        "#balanceLabOverlay .bl-brow{margin:3px 0 0}",
+        "#balanceLabOverlay .bl-brow.paused{opacity:.55}",
+        "#balanceLabOverlay .bl-brow .stp.on{background:#3a2e1d;border-color:var(--accent);color:var(--accent)}",
+        "#balanceLabOverlay .bl-idle.paused{color:#9aa0a6}",
+        "#balanceLabOverlay .bl-flows{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:10px;font-variant-numeric:tabular-nums;margin:1px 0 2px 26px;opacity:.9}",
+        "#balanceLabOverlay .bl-flows.off{opacity:.35;filter:grayscale(1)}",
+        "#balanceLabOverlay .bl-tierlbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.45;margin:6px 0 2px}",
+        "#balanceLabOverlay .bl-chipwrap{margin-top:2px}",
+        "#balanceLabOverlay .bl-chips{margin-bottom:2px}",
+        "#balanceLabOverlay .bl-chip{padding:2px 8px;font-size:11px}",
+        "#balanceLabOverlay .bl-chip:disabled{opacity:.3;cursor:not-allowed;border-color:var(--panel-edge);color:var(--paper)}",
+        "#balanceLabOverlay .bl-cardtabs{margin:7px 0 4px}",
+        "#balanceLabOverlay .stp:disabled{opacity:.3;cursor:not-allowed}",
       ].join("\n");
       document.head.appendChild(styleEl);
     }
@@ -630,17 +659,48 @@
       { key: "gatherers", label: "⛏ Gatherers" },
       { key: "production", label: "🏭 Production" },
     ];
+    // Buildings are ordered by the tier that lives/works in them (peasant →
+    // worker → burgher → aristocrat) and grouped under that label, so Houses
+    // read Hut → Cottage → Manor → Aristocrat Home, and workplaces cluster by
+    // who staffs them. Within a tier we keep the authored CONFIG order.
+    const TIER_ORDER = { peasant: 0, worker: 1, burgher: 2, aristocrat: 3 };
+    function entryTier(def) { return def.houseTier || def.workerTier || ""; }
+    function tierRank(def) { const t = entryTier(def); return TIER_ORDER[t] != null ? TIER_ORDER[t] : 9; }
+    function tierLabel(t) { return ({ peasant: "Peasant", worker: "Worker", burgher: "Burgher", aristocrat: "Aristocrat" })[t] || "Other"; }
     function catalog() {
       const c = { houses: [], gatherers: [], production: [] };
-      for (const e of buildingEntries()) {
-        if (e.def.kind === "house") c.houses.push(e);
-        else if (e.def.kind === "extractor") c.gatherers.push(e);
-        else if (e.def.kind === "processor") c.production.push(e);
+      for (const id in CONFIG.buildings) {           // CONFIG insertion order = authored progression
+        const def = CONFIG.buildings[id], e = { id: id, def: def };
+        if (def.kind === "house") c.houses.push(e);
+        else if (def.kind === "extractor") c.gatherers.push(e);
+        else if (def.kind === "processor") c.production.push(e);
       }
+      const byTier = (a, b) => tierRank(a.def) - tierRank(b.def);   // stable sort keeps config order within a tier
+      c.houses.sort(byTier); c.gatherers.sort(byTier); c.production.sort(byTier);
       return c;
     }
     function tierWord(def) {
       return ({ peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" })[def.workerTier] || def.workerTier || "workers";
+    }
+    // Per-ONE-building flows at a given level & full staffing, /min. Workplaces:
+    // +output, −inputs. Houses: −basics its residents eat (houseCapacity × need).
+    // Returns [{ good, perMin, sign }] (sign +1 produce, −1 consume).
+    function buildingFlows(typeId, level) {
+      const def = CONFIG.buildings[typeId]; if (!def) return [];
+      const out = [];
+      if (def.kind === "house" && def.houseTier) {
+        const cap = def.houseCapacity || 0;
+        const spec = CONFIG.needs.tiers[WORKER_TIER_OF_POP[def.houseTier]];
+        if (spec) for (const g in spec.perCapita) out.push({ good: g, perMin: spec.perCapita[g] * cap * TICKS_PER_MIN, sign: -1 });
+        return out;
+      }
+      if (def.workerTier && def.workerSlots > 0) {
+        const eff = Buildings.upgradeEffect({ typeId: typeId, upgradeLevel: level || 1 });
+        const w = def.workerSlots + (eff.slotPlus || 0);
+        if (def.output) out.push({ good: def.output.goodId, perMin: def.output.ratePerWorker * w * (eff.outputMult || 1) * TICKS_PER_MIN, sign: 1 });
+        if (def.inputs) for (const g in def.inputs) out.push({ good: g, perMin: def.inputs[g] * w * TICKS_PER_MIN, sign: -1 });
+      }
+      return out;
     }
     function chipTitle(d) {
       if (d.kind === "house") return (d.name || d.id) + " — adds housing (" + (d.houseTier || "residents") + ")";
@@ -648,20 +708,28 @@
       const out = d.output ? "makes " + d.output.goodId : "";
       return (d.name || d.id) + " — " + inp + out + " · staffed by " + tierWord(d);
     }
+    // Slots used (each building instance = 1 slot) and the cap for a city's level.
+    function slotsUsed(city) { return (city.buildings || []).reduce((s, b) => s + (b.count || 0), 0); }
+    function slotCapOf(city) { return Buildings.slotCap(Math.max(1, Math.min(4, city.level || 1))); }
     // Add one building of typeId to a city (bump an existing L1 row, else new row).
+    // Respects the city-level slot cap, like the real game. Returns false if full.
     function addBuilding(city, typeId) {
       city.buildings = city.buildings || [];
+      if (slotsUsed(city) >= slotCapOf(city)) return false;   // no free slots at this level
       const row = city.buildings.find(b => b.typeId === typeId && (b.level || 1) === 1);
       if (row) row.count = (row.count || 0) + 1;
       else city.buildings.push({ typeId: typeId, count: 1, level: 1 });
+      return true;
     }
 
     // ---------- CITIES tab: the card editor ----------
     function renderCities(host) {
       host.innerHTML = "";
-      host.appendChild(el("div", { class: "bl-note", text: "Build each city with the Houses / Gatherers / Production buttons. A workplace only runs if the city has the people to staff it — watch for ⚠ idle." }));
+      host.appendChild(el("div", { class: "bl-note", text: "Build each city with the Houses / Gatherers / Production buttons. Workplaces only run if the city has people to staff them — watch for ⚠ idle." }));
       const cat = catalog();
-      scn.cities.forEach((city, ci) => host.appendChild(renderCityCard(city, ci, cat)));
+      const grid = el("div", { class: "bl-grid" });
+      scn.cities.forEach((city, ci) => grid.appendChild(renderCityCard(city, ci, cat)));
+      host.appendChild(grid);
       const addCity = el("button", { class: "bl-btn", text: "＋ Add city", onclick: () => {
         const id = (scn.cities.reduce((m, c) => Math.max(m, +c.id || 0), 0) || 0) + 1;
         scn.cities.push({ id: id, name: "City #" + id, pop: null, buildings: [] });
@@ -680,18 +748,36 @@
       const nm = el("input", { class: "nm", value: city.name || ("City #" + city.id) });
       nm.addEventListener("input", () => { city.name = nm.value; refreshSide(); });
       const capTxt = TIER_KEYS.filter(k => (cap[k] || 0) > 0).map(k => Math.round(cap[k]) + " " + k.slice(0, 3)).join(" · ") || "no housing";
+      const lvl = Math.max(1, Math.min(4, city.level || 1));
+      const slotCap = Buildings.slotCap(lvl);
+      const usedSlots = (city.buildings || []).reduce((s, b) => s + (b.count || 0), 0);
+      const full = usedSlots >= slotCap;
+
+      const lvlSel = el("select", { class: "bl-lvl", title: "city level (caps building slots)" });
+      for (let L = 1; L <= 4; L++) lvlSel.appendChild(el("option", { value: String(L), text: "City L" + L, selected: L === lvl ? "selected" : null }));
+      lvlSel.value = String(lvl);
+      lvlSel.addEventListener("change", () => { city.level = +lvlSel.value; refresh(); });
       const del = el("button", { class: "bl-x", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
-      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, el("span", { class: "bl-cap", text: "👥 " + capTxt }), del]));
+      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, lvlSel, del]));
+      card.appendChild(el("div", { class: "bl-city-sub" }, [
+        el("span", { class: "bl-slots" + (usedSlots > slotCap ? " over" : ""), title: "buildings used / slots at this city level", text: "🏗 " + usedSlots + "/" + slotCap }),
+        el("span", { class: "bl-cap", text: "👥 " + capTxt }),
+      ]));
 
       // current buildings -- name (+level), idle warning, count stepper
       if (!(city.buildings || []).length) card.appendChild(el("div", { class: "bl-note", text: "Empty -- add buildings below." }));
       (city.buildings || []).forEach((b, bi) => {
         const def = CONFIG.buildings[b.typeId] || {};
         const mx = maxLevelFor(b.typeId);
-        const row = el("div", { class: "bl-brow" });
+        const row = el("div", { class: "bl-brow" + (b.paused ? " paused" : "") });
+        // pause toggle (⏸ running → ▶ paused). Paused: no production; a paused house empties.
+        row.appendChild(el("button", { class: "stp" + (b.paused ? " on" : ""), text: b.paused ? "▶" : "⏸",
+          title: b.paused ? "resume" : "pause (stop producing / empty the house)", onclick: () => { b.paused = !b.paused; refresh(); } }));
         row.appendChild(el("span", { class: "bn", text: (def.name || b.typeId) + (mx > 1 ? " L" + (b.level || 1) : "") }));
 
-        if (def.output && def.workerSlots > 0) {   // idle if placed > staffed
+        if (b.paused) {
+          row.appendChild(el("span", { class: "bl-idle paused", text: "⏸ paused" }));
+        } else if (def.output && def.workerSlots > 0) {   // idle if placed > staffed
           const st = staffed[b.typeId + "@" + (b.level || 1)] || 0;
           if (st < b.count) row.appendChild(el("span", { class: "bl-idle", text: "⚠ " + (b.count - st) + " idle · needs " + tierWord(def) }));
         }
@@ -702,10 +788,25 @@
           lvlSel.addEventListener("change", () => { b.level = +lvlSel.value; refresh(); });
           row.appendChild(lvlSel);
         }
-        row.appendChild(el("button", { class: "stp", text: "−", title: "one fewer", onclick: () => { b.count = (b.count || 0) - 1; if (b.count <= 0) city.buildings.splice(bi, 1); refresh(); } }));
+        // count stepper — floors at 0 (kept so you can see an empty building), never auto-removes.
+        // + is blocked when the city is out of slots for its level.
+        row.appendChild(el("button", { class: "stp", text: "−", title: "one fewer (0 = empty, kept)", onclick: () => { b.count = Math.max(0, (b.count || 0) - 1); refresh(); } }));
         row.appendChild(el("span", { class: "cnt", text: String(b.count) }));
-        row.appendChild(el("button", { class: "stp", text: "+", title: "one more", onclick: () => { b.count = (b.count || 0) + 1; refresh(); } }));
+        const incBtn = el("button", { class: "stp", text: "+", title: full ? "city is full — raise its level" : "one more", onclick: () => { if (slotsUsed(city) < slotCapOf(city)) { b.count = (b.count || 0) + 1; refresh(); } } });
+        if (full) incBtn.disabled = true;
+        row.appendChild(incBtn);
+        // explicit remove
+        row.appendChild(el("button", { class: "bl-x", text: "✕", title: "remove this building", onclick: () => { city.buildings.splice(bi, 1); refresh(); } }));
         card.appendChild(row);
+
+        // per-building produce/consume line (e.g. Sawmill: wood −480 · planks +240)
+        const flows = buildingFlows(b.typeId, b.level || 1);
+        if (flows.length) {
+          const fl = el("div", { class: "bl-flows" + (b.paused || b.count <= 0 ? " off" : "") });
+          for (const f of flows) fl.appendChild(el("span", { class: f.sign > 0 ? "green" : "red",
+            text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin) }));
+          card.appendChild(fl);
+        }
       });
 
       // add-tabs: Houses / Gatherers / Production
@@ -715,15 +816,24 @@
         onclick: () => { city._addTab = t.key; refresh(); } }));
       card.appendChild(tabRow);
 
-      const chips = el("div", { class: "bl-chips" });
+      // add-chips grouped by worker tier (Peasant → Worker → Burgher → Aristocrat)
+      const wrap = el("div", { class: "bl-chipwrap" });
+      let lastTier = null, chips = null;
       for (const e of cat[active]) {
-        const d = e.def;
-        const chip = el("button", { class: "bl-chip", title: chipTitle(d), onclick: () => { addBuilding(city, e.id); refresh(); } });
+        const d = e.def, t = entryTier(d);
+        if (t !== lastTier) {
+          lastTier = t;
+          wrap.appendChild(el("div", { class: "bl-tierlbl", text: tierLabel(t) }));
+          chips = el("div", { class: "bl-chips" });
+          wrap.appendChild(chips);
+        }
+        const chip = el("button", { class: "bl-chip", title: full ? "city is full — raise its level to build more" : chipTitle(d), onclick: () => { if (addBuilding(city, e.id)) refresh(); } });
         chip.appendChild(el("span", { text: "＋ " + (d.name || e.id) }));
-        if (d.kind !== "house" && d.workerTier) chip.appendChild(el("span", { class: "req", text: " ·" + tierWord(d).slice(0, 3) }));
+        if (full) chip.disabled = true;
         chips.appendChild(chip);
       }
-      card.appendChild(chips);
+      if (full) card.appendChild(el("div", { class: "bl-note", text: "🏗 City is full (" + usedSlots + "/" + slotCap + " slots) — raise the city level to build more." }));
+      card.appendChild(wrap);
       return card;
     }
 

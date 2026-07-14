@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.28.0";
+  const GAME_VERSION = "0.29.0";
   const PATCH_NOTES = [
+    { v: "0.29.0", notes: [
+      "Balance Lab cities are now compact cards in a grid, ordered by tier: Houses read Hut → Cottage → Manor → Aristocrat Home, workplaces group by who staffs them",
+      "Each building shows its own produce/consume line per minute (e.g. Sawmill: wood −480, planks +240)",
+      "Pause any building: a paused workplace stops producing; a paused house empties out — losing its people, their consumption AND their labour",
+      "Buildings drop to 0 without vanishing (a ✕ removes them), so you can see a city with an empty building",
+      "Each city has a level that caps its building slots, exactly like the game (8 / 12 / 17 / 24)",
+    ] },
     { v: "0.28.0", notes: [
       "Balance Lab redesigned into a proper editor: build each city from Houses / Gatherers / Production buttons, with count steppers and level pickers",
       "A ⚠ idle badge warns when a workplace can't be staffed (e.g. a Fishery with no peasants) — the same rules as the real game",
