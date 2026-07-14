@@ -843,17 +843,22 @@
   .ss-foot { margin-top: 20px; font-size: 11px; opacity: 0.45; }
   /* === START-SCREEN END === */
   /* === EDITOR-OVERLAY === */
-  #editorOverlay, #missionEditorOverlay {
+  #editorOverlay, #missionEditorOverlay, #balanceLabOverlay {
     position: fixed; inset: 0; z-index: 2000;
     display: flex; flex-direction: column;
     background: #14110c;
   }
-  #editorOverlay.hidden, #missionEditorOverlay.hidden { display: none; }
-  #eoBar, #meBar {
+  #editorOverlay.hidden, #missionEditorOverlay.hidden, #balanceLabOverlay.hidden { display: none; }
+  #eoBar, #meBar, #blBar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--panel-edge);
     font-weight: bold; color: var(--accent); flex: 0 0 auto;
   }
+  #blClose {
+    font-size: 13px; padding: 6px 14px; border-radius: 7px; font-weight: bold;
+    background: transparent; color: var(--paper); border: 1px solid var(--panel-edge); cursor: pointer;
+  }
+  #blClose:hover { border-color: var(--accent); color: var(--accent); }
   #eoClose, #meClose {
     font-size: 13px; padding: 6px 14px; border-radius: 7px; font-weight: bold;
     background: transparent; color: var(--paper); border: 1px solid var(--panel-edge); cursor: pointer;
@@ -946,6 +951,7 @@
     <div class="ss-tools">
       <button id="ssEditor" class="ss-btn-secondary" type="button">🔬 Research Editor</button>
       <button id="ssMissions" class="ss-btn-secondary" type="button">🎯 Mission Editor</button>
+      <button id="ssBalanceLab" class="ss-btn-secondary" type="button">🧪 Balance Lab</button>
     </div>
     <div class="ss-foot">A Let&nbsp;Them&nbsp;Trade–inspired economy game · single file · offline</div>
   </div>
@@ -6957,7 +6963,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // the open-time race, but focus can bounce back to the parent document
     // (e.g. a trusted click on #eoBar chrome) while the overlay stays open —
     // this guard is focus-independent so it holds regardless.
-    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen())) return;
+    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen()) || (window.BalanceLab && window.BalanceLab.isOpen())) return;
     const k = e.key.toLowerCase();
     if (k === "escape") cancelRoadAnchor();   // N: cancel a pending A→B road anchor
     if (["w", "a", "s", "d"].includes(k)) keys.add(k);
@@ -10940,7 +10946,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.addEventListener("keydown", (e) => {
     // Editor overlay open: don't let 'k' leak into the game underneath (see
     // the matching guard/comment on the speed/WASD handler above).
-    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen())) return;
+    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen()) || (window.BalanceLab && window.BalanceLab.isOpen())) return;
     if (e.key === "k" || e.key === "K") {
       const el = document.activeElement;
       if (el && el.tagName === "INPUT") return;     // don't hijack the seed field
@@ -11851,7 +11857,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.addEventListener("keydown", (e) => {
     // Editor overlay open: don't let 'm' leak into the game underneath (see
     // the matching guard/comment on the speed/WASD handler above).
-    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen())) return;
+    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen()) || (window.BalanceLab && window.BalanceLab.isOpen())) return;
     if (e.key === "m" || e.key === "M") {
       const el = document.activeElement;
       if (el && el.tagName === "INPUT") return;   // don't hijack the seed field
@@ -12033,6 +12039,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     return { open, close, isOpen };
   })();
   window.MissionEditorOverlay = MissionEditorOverlay;
+
+  // Balance Lab (Y/AE) is a self-contained module (window.BalanceLab) that builds
+  // its own overlay; just hook the start-screen button to open it.
+  (function () {
+    const btn = document.getElementById("ssBalanceLab");
+    if (btn) btn.addEventListener("click", () => { if (window.BalanceLab && window.BalanceLab.open) window.BalanceLab.open(); });
+  })();
   // === EDITOR-OVERLAY END ===
 /* BUILD:editor-overlay END */
 
@@ -12536,6 +12549,45 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     document.getElementById("pnClose").addEventListener("click", () => toggle(false));
   })();
 /* BUILD:version-notes END */
+
+/* BUILD:balance-lab START */
+  // === BALANCE-LAB START === (Y/AE — economy balance + scenario tester)
+  // A self-contained in-game tool: define cities (buildings × count × level) and
+  // populations, then either (a) read a LIVE production-vs-consumption graph that
+  // updates as you change values, or (b) RUN the scenario through the real Sim +
+  // Trade for N ticks to check self-sustainability (every city happy AND net-
+  // positive gold). Uses the REAL CONFIG / Sim / Buildings / Trade / Pathing math
+  // (no duplicated formulas) so it reflects the actual game. Builds its own
+  // full-screen overlay DOM on open() and appends it to <body> — no pre-placed
+  // markup needed beyond the 🧪 button that calls BalanceLab.open().
+  //
+  // (STUB — the full implementation is authored by the Balance-Lab dev; this stub
+  // keeps the module boundary + window.BalanceLab API stable so the build splices
+  // cleanly and the button wiring works before the tool lands.)
+  const BalanceLab = (function () {
+    let overlay = null;
+    function isOpen() { return !!(overlay && !overlay.classList.contains("hidden")); }
+    function close() { if (overlay) { overlay.classList.add("hidden"); } }
+    function open() {
+      // Placeholder overlay until the full tool is implemented.
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "balanceLabOverlay";
+        overlay.className = "hidden";
+        overlay.innerHTML = '<div id="blBar"><span>🧪 Balance Lab</span>' +
+          '<button id="blClose" type="button">✕ Close</button></div>' +
+          '<div id="blBody" style="padding:24px;color:var(--paper)">Balance Lab is being built…</div>';
+        document.body.appendChild(overlay);
+        overlay.querySelector("#blClose").addEventListener("click", close);
+        document.addEventListener("keydown", e => { if (e.key === "Escape" && isOpen()) close(); });
+      }
+      overlay.classList.remove("hidden");
+    }
+    return { open, close, isOpen };
+  })();
+  window.BalanceLab = BalanceLab;
+  // === BALANCE-LAB END ===
+/* BUILD:balance-lab END */
 
   // ---------------------------------------------------------------
   // Boot

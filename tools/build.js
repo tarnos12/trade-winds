@@ -94,6 +94,7 @@ const MANIFEST = [
   { name: "editor-overlay",    file: "editor-overlay.js" },    // in-game research-editor iframe overlay
   { name: "tutorial",          file: "tutorial.js" },          // state-detected onboarding coach
   { name: "version-notes",     file: "version-notes.js" },     // GAME_VERSION + patch-notes panel
+  { name: "balance-lab",       file: "balance-lab.js" },       // Y/AE economy balance + scenario tester
 ];
 
 // Whole-file embeds: BUILD:<name> region becomes a single generated line

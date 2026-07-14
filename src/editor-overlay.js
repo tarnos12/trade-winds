@@ -80,4 +80,11 @@
     return { open, close, isOpen };
   })();
   window.MissionEditorOverlay = MissionEditorOverlay;
+
+  // Balance Lab (Y/AE) is a self-contained module (window.BalanceLab) that builds
+  // its own overlay; just hook the start-screen button to open it.
+  (function () {
+    const btn = document.getElementById("ssBalanceLab");
+    if (btn) btn.addEventListener("click", () => { if (window.BalanceLab && window.BalanceLab.open) window.BalanceLab.open(); });
+  })();
   // === EDITOR-OVERLAY END ===

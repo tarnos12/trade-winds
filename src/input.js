@@ -281,7 +281,7 @@
     // the open-time race, but focus can bounce back to the parent document
     // (e.g. a trusted click on #eoBar chrome) while the overlay stays open —
     // this guard is focus-independent so it holds regardless.
-    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen())) return;
+    if ((window.EditorOverlay && window.EditorOverlay.isOpen()) || (window.MissionEditorOverlay && window.MissionEditorOverlay.isOpen()) || (window.BalanceLab && window.BalanceLab.isOpen())) return;
     const k = e.key.toLowerCase();
     if (k === "escape") cancelRoadAnchor();   // N: cancel a pending A→B road anchor
     if (["w", "a", "s", "d"].includes(k)) keys.add(k);
