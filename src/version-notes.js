@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.30.0";
+  const GAME_VERSION = "0.31.0";
   const PATCH_NOTES = [
+    { v: "0.31.0", notes: [
+      "Balance Lab: hover (or click to pin) any resource on the right to see a formatted breakdown of exactly where it's produced and consumed across all cities, summed",
+      "House cards now split resident needs into a Basic vs Luxury table so an 8-good tier stays readable",
+      "Every per-building number on a card now clearly reads /min; good names are tidied (e.g. Iron Armor)",
+    ] },
     { v: "0.30.0", notes: [
       "Balance Lab visual overhaul: each city is a cleaner card with a titled header, quiet slot/population pills, and the delete button tucked into a corner",
       "Building rows tidied — a single − count + segmented control, quiet pause/remove icons, and each building's produce/consume line reads as a subtle second row",

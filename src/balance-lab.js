@@ -38,7 +38,7 @@
       for (const e of ladder) if (e.level > m) m = e.level;
       return m;
     }
-    function goodName(gid) { return gid; }
+    function goodName(gid) { return String(gid).replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }
 
     // ---- expand a scenario city's building list into concrete building objects
     // Each entry -> `count` plain building objects { typeId, upgradeLevel, built:true }
@@ -614,6 +614,21 @@
         // per-row produce/consume flows (subtle secondary line)
         "#balanceLabOverlay .bl-flows{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:10px;font-variant-numeric:tabular-nums;margin:4px 0 1px 28px;opacity:.85}",
         "#balanceLabOverlay .bl-flows.off{opacity:.32;filter:grayscale(1)}",
+        // house needs, split Basic | Luxury as a compact 2-column table
+        "#balanceLabOverlay .bl-needs{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:4px 0 1px 28px;font-size:10px;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay .bl-needs.off{opacity:.32;filter:grayscale(1)}",
+        "#balanceLabOverlay .bl-needcol{display:flex;flex-direction:column;gap:1px}",
+        "#balanceLabOverlay .bl-needcol .bl-needhd{font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;margin-bottom:1px}",
+        // resource tooltip
+        "#balanceLabOverlay #blResTip{position:fixed;z-index:60;width:236px;max-width:82vw;background:var(--panel);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.55);font-size:11.5px;pointer-events:none}",
+        "#balanceLabOverlay #blResTip.hidden{display:none}",
+        "#balanceLabOverlay #blResTip .rt-title{font-weight:bold;color:var(--accent);text-transform:capitalize;font-size:13px;margin-bottom:6px}",
+        "#balanceLabOverlay #blResTip .rt-sec{margin:5px 0}",
+        "#balanceLabOverlay #blResTip .rt-h{font-weight:bold;font-size:10.5px;margin-bottom:2px;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay #blResTip .rt-row{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums;line-height:1.5}",
+        "#balanceLabOverlay #blResTip .rt-src{opacity:.85;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+        "#balanceLabOverlay #blResTip .rt-none{opacity:.45;font-size:10.5px}",
+        "#balanceLabOverlay #blResTip .rt-net{margin-top:6px;padding-top:6px;border-top:1px solid var(--panel-edge);font-weight:bold;text-align:right;font-variant-numeric:tabular-nums}",
         // footer add-zone (Houses / Gatherers / Production + chips)
         "#balanceLabOverlay .bl-city-foot{margin-top:6px;padding:9px 10px 11px;background:rgba(0,0,0,.20);border-top:1px solid var(--panel-edge)}",
         "#balanceLabOverlay .bl-cardtabs{display:flex;gap:2px;margin:0 0 7px;border-bottom:1px solid var(--panel-edge)}",
@@ -719,7 +734,10 @@
       if (def.kind === "house" && def.houseTier) {
         const cap = def.houseCapacity || 0;
         const spec = CONFIG.needs.tiers[WORKER_TIER_OF_POP[def.houseTier]];
-        if (spec) for (const g in spec.perCapita) out.push({ good: g, perMin: spec.perCapita[g] * cap * TICKS_PER_MIN, sign: -1 });
+        if (spec) for (const g in spec.perCapita) {
+          const isBasic = (spec.basic || []).indexOf(g) >= 0;   // basic vs luxury (extra)
+          out.push({ good: g, perMin: spec.perCapita[g] * cap * TICKS_PER_MIN, sign: -1, cls: isBasic ? "basic" : "luxury" });
+        }
         return out;
       }
       if (def.workerTier && def.workerSlots > 0) {
@@ -830,14 +848,29 @@
         row.appendChild(el("button", { class: "bl-icon rm", text: "✕", title: "remove this building", onclick: () => { city.buildings.splice(bi, 1); refresh(); } }));
         item.appendChild(row);
 
-        // produce/consume line for the WHOLE row (per-building × count) — a subtle
-        // secondary line inside the item, e.g. wood −1,440 · planks +720.
+        // produce/consume for the WHOLE row (per-building × count), a subtle
+        // secondary line inside the item. Workplaces: a flat line. Houses: a
+        // compact Basic | Luxury table (a tier can need ~8 goods).
         const flows = buildingFlows(b.typeId, b.level || 1);
-        if (flows.length) {
-          const n = b.count || 0;
-          const fl = el("div", { class: "bl-flows" + (b.paused || n <= 0 ? " off" : "") });
+        const n = b.count || 0;
+        const off = b.paused || n <= 0;
+        if (flows.length && def.kind === "house") {
+          const basic = flows.filter(f => f.cls === "basic"), lux = flows.filter(f => f.cls === "luxury");
+          const cell = (f) => el("span", { class: "red", text: goodName(f.good) + " −" + fmt(f.perMin * n) + "/min" });
+          const colOf = (label, arr) => {
+            const col = el("div", { class: "bl-needcol" });
+            col.appendChild(el("div", { class: "bl-needhd", text: label }));
+            for (const f of arr) col.appendChild(cell(f));
+            return col;
+          };
+          const tbl = el("div", { class: "bl-needs" + (off ? " off" : "") });
+          tbl.appendChild(colOf("Basic", basic));
+          if (lux.length) tbl.appendChild(colOf("Luxury", lux));
+          item.appendChild(tbl);
+        } else if (flows.length) {
+          const fl = el("div", { class: "bl-flows" + (off ? " off" : "") });
           for (const f of flows) fl.appendChild(el("span", { class: f.sign > 0 ? "green" : "red",
-            text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin * n) }));
+            text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin * n) + "/min" }));
           item.appendChild(fl);
         }
         body.appendChild(item);
@@ -876,9 +909,83 @@
     }
 
     // ---------- right RESOURCE panel (persistent) ----------
-    let sideHost = null;
+    let sideHost = null, resTip = null, resTipPin = null;
+
+    // Where a good is produced/consumed across ALL cities, summed by source.
+    // Production + processor inputs come from staffed workplaces (via
+    // buildingFlows); people consumption is summed per tier (basic ×bcm). Houses
+    // are NOT double-counted — their draw IS the people consumption.
+    function goodBreakdown(gid) {
+      const prod = {}, cons = {};
+      for (const city of (scn.cities || [])) {
+        const d = analyzeCity(city);
+        const staffed = {};
+        for (const u of d.used) { const k = u.typeId + "@" + u.level; staffed[k] = (staffed[k] || 0) + 1; }
+        for (const key in staffed) {
+          const at = key.lastIndexOf("@");
+          const typeId = key.slice(0, at), lvl = +key.slice(at + 1);
+          const def = CONFIG.buildings[typeId]; if (!def) continue;
+          for (const f of buildingFlows(typeId, lvl)) {
+            if (f.good !== gid) continue;
+            const amt = f.perMin * staffed[key];
+            if (f.sign > 0) prod[def.name] = (prod[def.name] || 0) + amt;
+            else cons[def.name] = (cons[def.name] || 0) + amt;
+          }
+        }
+        const town = { buildings: expandBuildings(city).filter(b => !b.paused), pop: d.pop };
+        const bcm = Buildings.basicConsumptionMult(town);
+        for (const tk in CONFIG.needs.tiers) {
+          const n = d.pop[tk] || 0; if (n <= 0) continue;
+          const spec = CONFIG.needs.tiers[tk];
+          if (spec.perCapita[gid] > 0) {
+            const isBasic = spec.basic.indexOf(gid) >= 0;
+            const amt = spec.perCapita[gid] * n * (isBasic ? ((bcm && bcm[tk]) || 1) : 1) * TICKS_PER_MIN;
+            const label = tk.charAt(0).toUpperCase() + tk.slice(1) + (isBasic ? " · basic" : " · luxury");
+            cons[label] = (cons[label] || 0) + amt;
+          }
+        }
+      }
+      return { prod: prod, cons: cons };
+    }
+
+    function hideResTip() { if (resTip) resTip.classList.add("hidden"); }
+    function showResTip(gid, anchor) {
+      if (!overlay) return;
+      if (!resTip) { resTip = el("div", { id: "blResTip", class: "hidden" }); overlay.appendChild(resTip); }
+      const bd = goodBreakdown(gid);
+      const sum = o => Object.keys(o).reduce((a, k) => a + o[k], 0);
+      const pTot = sum(bd.prod), cTot = sum(bd.cons), net = pTot - cTot;
+      const rows = (obj, sign, cls) => {
+        const entries = Object.keys(obj).map(k => [k, obj[k]]).sort((a, b) => b[1] - a[1]);
+        if (!entries.length) return [el("div", { class: "rt-none", text: sign > 0 ? "— none (all imported)" : "— none" })];
+        return entries.map(e => el("div", { class: "rt-row" }, [
+          el("span", { class: "rt-src", text: e[0] }),
+          el("span", { class: cls, text: (sign > 0 ? "+" : "−") + fmt(e[1]) }),
+        ]));
+      };
+      resTip.innerHTML = "";
+      resTip.appendChild(el("div", { class: "rt-title", text: goodName(gid) }));
+      const ps = el("div", { class: "rt-sec" });
+      ps.appendChild(el("div", { class: "rt-h green", text: "Produced  +" + fmt(pTot) + "/min" }));
+      rows(bd.prod, 1, "green").forEach(r => ps.appendChild(r));
+      resTip.appendChild(ps);
+      const cs = el("div", { class: "rt-sec" });
+      cs.appendChild(el("div", { class: "rt-h red", text: "Consumed  −" + fmt(cTot) + "/min" }));
+      rows(bd.cons, -1, "red").forEach(r => cs.appendChild(r));
+      resTip.appendChild(cs);
+      resTip.appendChild(el("div", { class: "rt-net " + (net >= -1e-6 ? "green" : "red"), text: "Net  " + (net >= 0 ? "+" : "") + fmt(net) + "/min" }));
+      resTip.classList.remove("hidden");
+      // position just left of the resources panel, vertically near the row
+      const sr = sideHost.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+      const tw = resTip.offsetWidth, th = resTip.offsetHeight;
+      let left = sr.left - tw - 10; if (left < 8) left = 8;
+      let top = ar.top; if (top + th > window.innerHeight - 8) top = window.innerHeight - th - 8; if (top < 8) top = 8;
+      resTip.style.left = left + "px"; resTip.style.top = top + "px";
+    }
+
     function refreshSide() {
       if (!sideHost) return;
+      resTipPin = null; hideResTip();
       const res = analyze(scn);
       sideHost.innerHTML = "";
       sideHost.appendChild(el("h3", { text: "📦 Resources" }));
@@ -901,7 +1008,11 @@
           lv.appendChild(el("span", { class: "none", text: "no producer -- imported" }));
         }
         row.appendChild(lv);
-        row.title = "produces " + fmt(pg.prod) + " - consumes " + fmt(pg.cons) + "/min";
+        // hover = preview breakdown; click = pin it open (click again to dismiss)
+        row.style.cursor = "pointer";
+        row.addEventListener("mouseenter", () => { if (!resTipPin) showResTip(g, row); });
+        row.addEventListener("mouseleave", () => { if (!resTipPin) hideResTip(); });
+        row.addEventListener("click", () => { if (resTipPin === g) { resTipPin = null; hideResTip(); } else { resTipPin = g; showResTip(g, row); } });
         sideHost.appendChild(row);
       }
     }
