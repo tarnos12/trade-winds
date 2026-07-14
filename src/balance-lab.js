@@ -558,67 +558,116 @@
       if (styleEl) return;
       styleEl = document.createElement("style");
       styleEl.textContent = [
+        // ============================ LAYOUT ============================
         "#balanceLabOverlay #blBody{flex:1 1 auto;display:flex;min-height:0;overflow:hidden;font-size:13px}",
         // main (tabbed) area + persistent right resource panel
-        "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:12px}",
+        "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:14px 16px}",
         // cities laid out as a compact responsive grid (many per row)
-        "#balanceLabOverlay .bl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:10px;align-items:start}",
-        "#balanceLabOverlay .bl-side{flex:0 0 288px;width:288px;overflow:auto;padding:12px 14px;border-left:1px solid var(--panel-edge);background:rgba(0,0,0,.14)}",
-        "#balanceLabOverlay h3{color:var(--accent);margin:0 0 8px;font-size:14px}",
-        "#balanceLabOverlay h4{color:var(--paper);margin:14px 0 6px;font-size:12.5px;opacity:.85}",
+        "#balanceLabOverlay .bl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:12px;align-items:start}",
+        "#balanceLabOverlay .bl-side{flex:0 0 292px;width:292px;overflow:auto;padding:14px 16px;border-left:1px solid var(--panel-edge);background:linear-gradient(180deg,rgba(0,0,0,.20),rgba(0,0,0,.10))}",
+        "#balanceLabOverlay h3{color:var(--accent);margin:0 0 4px;font-size:14px;letter-spacing:.2px}",
+        "#balanceLabOverlay h4{color:var(--accent);margin:18px 0 7px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;opacity:.9;font-weight:bold}",
         // top tab bar (Cities / Charts)
-        "#balanceLabOverlay .bl-tabs{display:flex;gap:4px;margin-left:14px}",
-        "#balanceLabOverlay .bl-tab{background:transparent;border:1px solid transparent;border-radius:7px 7px 0 0;color:var(--paper);opacity:.6;padding:5px 13px;cursor:pointer;font-family:inherit;font-size:12.5px}",
+        "#balanceLabOverlay .bl-tabs{display:flex;gap:4px;margin-left:16px}",
+        "#balanceLabOverlay .bl-tab{background:transparent;border:1px solid transparent;border-radius:8px 8px 0 0;color:var(--paper);opacity:.55;padding:6px 15px;cursor:pointer;font-family:inherit;font-size:12.5px;transition:opacity .12s,color .12s}",
+        "#balanceLabOverlay .bl-tab:hover{opacity:.85}",
         "#balanceLabOverlay .bl-tab.active{opacity:1;background:var(--panel);border-color:var(--panel-edge);border-bottom-color:var(--panel);color:var(--accent);font-weight:bold}",
-        // city card
-        "#balanceLabOverlay .bl-city{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:11px;margin-bottom:12px}",
-        "#balanceLabOverlay .bl-city-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}",
-        "#balanceLabOverlay .bl-city-hd input.nm{flex:1;font-weight:bold;color:var(--accent);background:#1c160f;border:1px solid var(--panel-edge);border-radius:5px;padding:4px 7px}",
-        "#balanceLabOverlay .bl-city-hd .bl-cap{font-size:10.5px;opacity:.6;white-space:nowrap}",
-        "#balanceLabOverlay .bl-brow{display:flex;align-items:center;gap:7px;margin:3px 0;padding:3px 6px;background:#1c160f;border:1px solid var(--panel-edge);border-radius:6px}",
-        "#balanceLabOverlay .bl-brow .bn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-        "#balanceLabOverlay .bl-brow .bl-idle{color:#e0a860;font-size:10.5px;white-space:nowrap}",
-        "#balanceLabOverlay .bl-brow .stp{background:#2c2418;border:1px solid var(--panel-edge);color:var(--paper);width:20px;height:20px;border-radius:5px;cursor:pointer;font-size:13px;line-height:1;padding:0}",
-        "#balanceLabOverlay .bl-brow .stp:hover{border-color:var(--accent);color:var(--accent)}",
-        "#balanceLabOverlay .bl-brow .cnt{min-width:20px;text-align:center;font-variant-numeric:tabular-nums;font-weight:bold}",
+
+        // ============================ CITY CARD ============================
+        // A real card: header (title+level+delete) / metadata strip / body / footer add-zone.
+        "#balanceLabOverlay .bl-city{background:var(--panel);border:1px solid var(--panel-edge);border-radius:11px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.28)}",
+        "#balanceLabOverlay .bl-city:hover{border-color:#7d6640}",
+        // header
+        "#balanceLabOverlay .bl-city-hd{display:flex;align-items:center;gap:6px;padding:9px 10px 7px}",
+        "#balanceLabOverlay .bl-city-hd input.nm{flex:1;min-width:0;font-weight:bold;font-size:14px;color:var(--accent);background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;font-family:inherit}",
+        "#balanceLabOverlay .bl-city-hd input.nm:hover{background:#1c160f}",
+        "#balanceLabOverlay .bl-city-hd input.nm:focus{background:#1c160f;border-color:var(--panel-edge);outline:none}",
+        "#balanceLabOverlay select.bl-lvl{flex:0 0 auto;font-size:11px;padding:3px 5px;font-weight:bold;color:var(--accent);background:#1c160f;border:1px solid var(--panel-edge);border-radius:6px}",
+        "#balanceLabOverlay .bl-delcity{flex:0 0 auto;background:transparent;border:0;color:var(--paper);opacity:.32;font-size:14px;cursor:pointer;padding:3px 5px;border-radius:6px;line-height:1;transition:opacity .12s,color .12s,background .12s}",
+        "#balanceLabOverlay .bl-delcity:hover{opacity:1;color:#e08a6a;background:rgba(224,138,106,.14)}",
+        // metadata strip (quiet stat pills)
+        "#balanceLabOverlay .bl-city-sub{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:0 10px 8px}",
+        "#balanceLabOverlay .bl-stat{display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.24);border:1px solid var(--panel-edge);border-radius:6px;padding:2px 8px;font-size:10.5px;color:var(--paper);opacity:.85;font-variant-numeric:tabular-nums;white-space:nowrap}",
+        "#balanceLabOverlay .bl-stat.over{color:#e08a6a;opacity:1;font-weight:bold;border-color:#b06b4f;background:rgba(176,107,79,.16)}",
+        // body (building line items)
+        "#balanceLabOverlay .bl-city-body{padding:0 10px 2px}",
+        "#balanceLabOverlay .bl-item{background:#1c160f;border:1px solid var(--panel-edge);border-radius:8px;padding:5px 7px;margin:6px 0}",
+        "#balanceLabOverlay .bl-item.paused{opacity:.58}",
+        "#balanceLabOverlay .bl-brow{display:flex;align-items:center;gap:6px}",
+        "#balanceLabOverlay .bl-brow .bn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--paper)}",
+        "#balanceLabOverlay .bl-brow select{font-size:11px;padding:2px 4px}",
+        // idle badge
+        "#balanceLabOverlay .bl-idle{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#e0a860;font-size:10px;white-space:nowrap;background:rgba(224,168,96,.12);border:1px solid rgba(224,168,96,.34);border-radius:10px;padding:1px 7px}",
+        "#balanceLabOverlay .bl-idle.paused{color:#9aa0a6;background:rgba(154,160,166,.10);border-color:rgba(154,160,166,.30)}",
+        // quiet icon buttons (pause / remove) — subordinate to the +/- you use most
+        "#balanceLabOverlay .bl-icon{flex:0 0 auto;background:transparent;border:0;color:var(--paper);opacity:.42;cursor:pointer;font-size:12px;width:22px;height:22px;border-radius:5px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:opacity .12s,color .12s,background .12s}",
+        "#balanceLabOverlay .bl-icon:hover{opacity:1;color:var(--accent);background:rgba(201,138,60,.15)}",
+        "#balanceLabOverlay .bl-icon.on{opacity:1;color:var(--accent)}",
+        "#balanceLabOverlay .bl-icon.rm:hover{color:#e08a6a;background:rgba(224,138,106,.15)}",
+        // segmented count stepper (the primary control)
+        "#balanceLabOverlay .bl-step{display:inline-flex;align-items:stretch;flex:0 0 auto;border:1px solid var(--panel-edge);border-radius:7px;overflow:hidden;background:#241d12}",
+        "#balanceLabOverlay .bl-step .stp{background:transparent;border:0;color:var(--paper);width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .1s,color .1s}",
+        "#balanceLabOverlay .bl-step .stp.minus:hover{color:#e08a6a;background:rgba(224,138,106,.18)}",
+        "#balanceLabOverlay .bl-step .stp.plus:hover{color:#7fc45f;background:rgba(127,196,95,.18)}",
+        "#balanceLabOverlay .bl-step .stp:disabled{opacity:.3;cursor:not-allowed;background:transparent;color:var(--paper)}",
+        "#balanceLabOverlay .bl-step .cnt{min-width:24px;text-align:center;font-variant-numeric:tabular-nums;font-weight:bold;line-height:22px;padding:0 4px;border-left:1px solid var(--panel-edge);border-right:1px solid var(--panel-edge);color:var(--paper)}",
+        // per-row produce/consume flows (subtle secondary line)
+        "#balanceLabOverlay .bl-flows{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:10px;font-variant-numeric:tabular-nums;margin:4px 0 1px 28px;opacity:.85}",
+        "#balanceLabOverlay .bl-flows.off{opacity:.32;filter:grayscale(1)}",
+        // footer add-zone (Houses / Gatherers / Production + chips)
+        "#balanceLabOverlay .bl-city-foot{margin-top:6px;padding:9px 10px 11px;background:rgba(0,0,0,.20);border-top:1px solid var(--panel-edge)}",
+        "#balanceLabOverlay .bl-cardtabs{display:flex;gap:2px;margin:0 0 7px;border-bottom:1px solid var(--panel-edge)}",
+        "#balanceLabOverlay .bl-ct{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--paper);opacity:.5;padding:4px 8px;margin-bottom:-1px;cursor:pointer;font-family:inherit;font-size:11px;transition:opacity .12s,color .12s}",
+        "#balanceLabOverlay .bl-ct:hover{opacity:.85}",
+        "#balanceLabOverlay .bl-ct.active{opacity:1;color:var(--accent);border-bottom-color:var(--accent);font-weight:bold}",
+        // tier labels as small section dividers
+        "#balanceLabOverlay .bl-tierlbl{display:flex;align-items:center;gap:7px;font-size:8.5px;text-transform:uppercase;letter-spacing:.7px;opacity:.5;color:var(--paper);margin:8px 0 3px;font-weight:bold}",
+        "#balanceLabOverlay .bl-tierlbl::after{content:'';flex:1;height:1px;background:var(--panel-edge);opacity:.55}",
+        "#balanceLabOverlay .bl-chipwrap>.bl-tierlbl:first-child{margin-top:1px}",
+        "#balanceLabOverlay .bl-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px}",
+        "#balanceLabOverlay .bl-chip{display:inline-flex;align-items:center;background:#26201a;border:1px solid var(--panel-edge);border-radius:13px;color:var(--paper);padding:3px 10px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap;line-height:1.25;transition:border-color .12s,color .12s,background .12s}",
+        "#balanceLabOverlay .bl-chip:hover{border-color:var(--accent);color:var(--accent);background:#2c2418}",
+        "#balanceLabOverlay .bl-chip:disabled{opacity:.32;cursor:not-allowed;border-color:var(--panel-edge);color:var(--paper);background:#221c15}",
+        "#balanceLabOverlay .bl-chip .req{opacity:.5;font-size:10px}",
+
+        // ============================ SHARED CONTROLS ============================
         "#balanceLabOverlay select,#balanceLabOverlay input[type=number]{background:#1c160f;color:var(--paper);border:1px solid var(--panel-edge);border-radius:5px;padding:3px 5px;font-family:inherit;font-size:12px}",
-        "#balanceLabOverlay input[type=number]{width:52px}",
-        "#balanceLabOverlay button.bl-btn{background:#3a2e1d;color:var(--paper);border:1px solid var(--panel-edge);border-radius:5px;padding:4px 9px;font-family:inherit;font-size:12px;cursor:pointer}",
+        "#balanceLabOverlay select:focus,#balanceLabOverlay input[type=number]:focus{outline:none;border-color:var(--accent)}",
+        "#balanceLabOverlay input[type=number]{width:56px}",
+        "#balanceLabOverlay button.bl-btn{background:#3a2e1d;color:var(--paper);border:1px solid var(--panel-edge);border-radius:6px;padding:5px 11px;font-family:inherit;font-size:12px;cursor:pointer;transition:border-color .12s,color .12s}",
         "#balanceLabOverlay button.bl-btn:hover{border-color:var(--accent);color:var(--accent)}",
         "#balanceLabOverlay button.bl-x{background:transparent;border:0;color:#c86;cursor:pointer;font-size:14px;padding:0 4px}",
         "#balanceLabOverlay .bl-run{background:var(--accent);color:#201607;border-color:#e0a860;font-weight:bold}",
-        // per-card add tabs (Houses / Gatherers / Production) + add chips
-        "#balanceLabOverlay .bl-cardtabs{display:flex;gap:4px;margin:9px 0 6px;border-bottom:1px solid var(--panel-edge)}",
-        "#balanceLabOverlay .bl-ct{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--paper);opacity:.55;padding:4px 8px;cursor:pointer;font-family:inherit;font-size:11.5px}",
-        "#balanceLabOverlay .bl-ct.active{opacity:1;color:var(--accent);border-bottom-color:var(--accent);font-weight:bold}",
-        "#balanceLabOverlay .bl-chips{display:flex;flex-wrap:wrap;gap:5px}",
-        "#balanceLabOverlay .bl-chip{background:#26201400;background:#26201a;border:1px solid var(--panel-edge);border-radius:14px;color:var(--paper);padding:3px 10px;cursor:pointer;font-family:inherit;font-size:11.5px;white-space:nowrap}",
-        "#balanceLabOverlay .bl-chip:hover{border-color:var(--accent);color:var(--accent)}",
-        "#balanceLabOverlay .bl-chip .req{opacity:.5;font-size:10px}",
-        // resource panel rows (right side)
-        "#balanceLabOverlay .bl-res{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--panel-edge)}",
-        "#balanceLabOverlay .bl-res-nm{font-weight:bold;color:var(--paper)}",
-        "#balanceLabOverlay .bl-res-net{font-variant-numeric:tabular-nums;font-weight:bold;text-align:right;white-space:nowrap}",
-        "#balanceLabOverlay .bl-res-lv{grid-column:1 / -1;font-size:10.5px;opacity:.65;display:flex;flex-wrap:wrap;gap:6px}",
-        "#balanceLabOverlay .bl-res-lv .none{color:#e0a860;opacity:.9}",
+        "#balanceLabOverlay .bl-run:hover{color:#201607;filter:brightness(1.06)}",
         "#balanceLabOverlay .green{color:#7fc45f}#balanceLabOverlay .red{color:#e08a6a}",
-        // charts tab
+
+        // ============================ RESOURCE PANEL ============================
+        "#balanceLabOverlay .bl-res{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:baseline;padding:8px 3px;border-bottom:1px solid rgba(107,86,54,.42)}",
+        "#balanceLabOverlay .bl-res:hover{background:rgba(255,255,255,.02)}",
+        "#balanceLabOverlay .bl-res-nm{font-weight:bold;color:var(--paper);text-transform:capitalize}",
+        "#balanceLabOverlay .bl-res-net{font-variant-numeric:tabular-nums;font-weight:bold;text-align:right;white-space:nowrap}",
+        "#balanceLabOverlay .bl-res-lv{grid-column:1 / -1;font-size:10.5px;opacity:.62;display:flex;flex-wrap:wrap;gap:5px}",
+        "#balanceLabOverlay .bl-res-lv .none{color:#e0a860;opacity:.9}",
+
+        // ============================ CHARTS TAB ============================
         "#balanceLabOverlay .bl-good{display:grid;grid-template-columns:88px 1fr 128px;gap:8px;align-items:center;margin:3px 0}",
-        "#balanceLabOverlay .bl-good .lbl{text-align:right;opacity:.85;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay .bl-good .lbl{text-align:right;opacity:.85;font-variant-numeric:tabular-nums;text-transform:capitalize}",
         "#balanceLabOverlay .bl-bar{position:relative;height:16px;background:#150f09;border:1px solid var(--panel-edge);border-radius:4px;overflow:hidden}",
         "#balanceLabOverlay .bl-bar .p{position:absolute;left:0;top:0;bottom:50%;background:#6ea84f}",
         "#balanceLabOverlay .bl-bar .c{position:absolute;left:0;top:50%;bottom:0;background:#b06b4f}",
         "#balanceLabOverlay .bl-num{font-variant-numeric:tabular-nums;font-size:11px;text-align:right}",
         "#balanceLabOverlay table.bl-tbl{width:100%;border-collapse:collapse;font-size:12px}",
-        "#balanceLabOverlay table.bl-tbl th,#balanceLabOverlay table.bl-tbl td{padding:4px 6px;border-bottom:1px solid var(--panel-edge);text-align:right;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay table.bl-tbl th,#balanceLabOverlay table.bl-tbl td{padding:5px 7px;border-bottom:1px solid var(--panel-edge);text-align:right;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay table.bl-tbl th{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.4px;opacity:.9}",
         "#balanceLabOverlay table.bl-tbl th:first-child,#balanceLabOverlay table.bl-tbl td:first-child{text-align:left}",
-        "#balanceLabOverlay .bl-verdict{padding:10px 12px;border-radius:8px;margin:8px 0;font-weight:bold}",
+        "#balanceLabOverlay table.bl-tbl tr:hover td{background:rgba(255,255,255,.02)}",
+        "#balanceLabOverlay .bl-verdict{padding:10px 13px;border-radius:8px;margin:10px 0;font-weight:bold}",
         "#balanceLabOverlay .bl-verdict.ok{background:#20301a;border:1px solid #6ea84f;color:#a8dd88}",
         "#balanceLabOverlay .bl-verdict.bad{background:#331d17;border:1px solid #b06b4f;color:#e6a488}",
-        "#balanceLabOverlay .bl-note{font-size:11px;opacity:.6;margin:6px 0}",
-        "#balanceLabOverlay ul.bl-list{margin:4px 0;padding-left:18px;font-size:11.5px}",
-        "#balanceLabOverlay .bl-add{display:flex;gap:6px;margin-top:8px}",
-        "#balanceLabOverlay details.bl-ratios{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:8px 12px;margin:6px 0 14px}",
+        "#balanceLabOverlay .bl-note{font-size:11px;opacity:.6;margin:6px 0;line-height:1.4}",
+        "#balanceLabOverlay ul.bl-list{margin:4px 0;padding-left:18px;font-size:11.5px;line-height:1.5}",
+        "#balanceLabOverlay .bl-add{display:flex;gap:8px;align-items:center;margin-top:8px}",
+        "#balanceLabOverlay details.bl-ratios{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:9px 13px;margin:6px 0 14px}",
         "#balanceLabOverlay details.bl-ratios summary{cursor:pointer;color:var(--accent);font-size:12.5px;font-weight:bold;list-style:none}",
         "#balanceLabOverlay details.bl-ratios summary::-webkit-details-marker{display:none}",
         "#balanceLabOverlay .bl-rt-good{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:9px 0 2px;padding-top:6px;border-top:1px solid var(--panel-edge)}",
@@ -628,30 +677,6 @@
         "#balanceLabOverlay ul.bl-rt-list li{font-size:11.5px;display:flex;gap:5px;align-items:baseline}",
         "#balanceLabOverlay .bl-rt-n{color:var(--accent);font-weight:bold;font-variant-numeric:tabular-nums}",
         "#balanceLabOverlay .bl-rt-each{opacity:.5;font-size:10.5px;font-variant-numeric:tabular-nums}",
-        // --- compact editor extras: city level, slots, per-building flows, tier labels, pause ---
-        "#balanceLabOverlay .bl-city{padding:9px 10px}",
-        "#balanceLabOverlay .bl-city-hd{margin-bottom:4px}",
-        "#balanceLabOverlay select.bl-lvl{font-size:11px;padding:2px 4px;font-weight:bold;color:var(--accent)}",
-        "#balanceLabOverlay .bl-city-hd .nm{flex:1}",
-        "#balanceLabOverlay .bl-delcity{margin-left:auto;font-size:15px;opacity:.55}",
-        "#balanceLabOverlay .bl-delcity:hover{opacity:1}",
-        "#balanceLabOverlay .bl-city-sub{display:flex;gap:10px;align-items:center;margin-bottom:7px;font-size:10.5px}",
-        "#balanceLabOverlay .bl-slots{font-variant-numeric:tabular-nums;color:var(--paper);opacity:.8}",
-        "#balanceLabOverlay .bl-slots.over{color:#e08a6a;opacity:1;font-weight:bold}",
-        "#balanceLabOverlay .bl-cap{opacity:.6}",
-        "#balanceLabOverlay .bl-brow{margin:3px 0 0}",
-        "#balanceLabOverlay .bl-brow.paused{opacity:.55}",
-        "#balanceLabOverlay .bl-brow .stp.on{background:#3a2e1d;border-color:var(--accent);color:var(--accent)}",
-        "#balanceLabOverlay .bl-idle.paused{color:#9aa0a6}",
-        "#balanceLabOverlay .bl-flows{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:10px;font-variant-numeric:tabular-nums;margin:1px 0 2px 26px;opacity:.9}",
-        "#balanceLabOverlay .bl-flows.off{opacity:.35;filter:grayscale(1)}",
-        "#balanceLabOverlay .bl-tierlbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.45;margin:6px 0 2px}",
-        "#balanceLabOverlay .bl-chipwrap{margin-top:2px}",
-        "#balanceLabOverlay .bl-chips{margin-bottom:2px}",
-        "#balanceLabOverlay .bl-chip{padding:2px 8px;font-size:11px}",
-        "#balanceLabOverlay .bl-chip:disabled{opacity:.3;cursor:not-allowed;border-color:var(--panel-edge);color:var(--paper)}",
-        "#balanceLabOverlay .bl-cardtabs{margin:7px 0 4px}",
-        "#balanceLabOverlay .stp:disabled{opacity:.3;cursor:not-allowed}",
       ].join("\n");
       document.head.appendChild(styleEl);
     }
@@ -760,22 +785,25 @@
       for (let L = 1; L <= 4; L++) lvlSel.appendChild(el("option", { value: String(L), text: "City L" + L, selected: L === lvl ? "selected" : null }));
       lvlSel.value = String(lvl);
       lvlSel.addEventListener("change", () => { city.level = +lvlSel.value; refresh(); });
-      const del = el("button", { class: "bl-x bl-delcity", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
-      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, del]));
+      const del = el("button", { class: "bl-delcity", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
+      // header: title + level + a quiet delete tucked in the corner
+      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, lvlSel, del]));
+      // metadata strip: slots + housing capacity as quiet stat pills
       card.appendChild(el("div", { class: "bl-city-sub" }, [
-        lvlSel,
-        el("span", { class: "bl-slots" + (usedSlots > slotCap ? " over" : ""), title: "buildings used / slots at this city level", text: "🏗 " + usedSlots + "/" + slotCap }),
-        el("span", { class: "bl-cap", text: "👥 " + capTxt }),
+        el("span", { class: "bl-stat" + (usedSlots > slotCap ? " over" : ""), title: "buildings used / slots at this city level", text: "🏗 " + usedSlots + "/" + slotCap }),
+        el("span", { class: "bl-stat", title: "housing capacity by tier", text: "👥 " + capTxt }),
       ]));
 
-      // current buildings -- name (+level), idle warning, count stepper
-      if (!(city.buildings || []).length) card.appendChild(el("div", { class: "bl-note", text: "Empty -- add buildings below." }));
+      // body: building line items (name +level · idle · flows)
+      const body = el("div", { class: "bl-city-body" });
+      if (!(city.buildings || []).length) body.appendChild(el("div", { class: "bl-note", text: "Empty — add buildings below." }));
       (city.buildings || []).forEach((b, bi) => {
         const def = CONFIG.buildings[b.typeId] || {};
         const mx = maxLevelFor(b.typeId);
-        const row = el("div", { class: "bl-brow" + (b.paused ? " paused" : "") });
+        const item = el("div", { class: "bl-item" + (b.paused ? " paused" : "") });
+        const row = el("div", { class: "bl-brow" });
         // pause toggle (⏸ running → ▶ paused). Paused: no production; a paused house empties.
-        row.appendChild(el("button", { class: "stp" + (b.paused ? " on" : ""), text: b.paused ? "▶" : "⏸",
+        row.appendChild(el("button", { class: "bl-icon" + (b.paused ? " on" : ""), text: b.paused ? "▶" : "⏸",
           title: b.paused ? "resume" : "pause (stop producing / empty the house)", onclick: () => { b.paused = !b.paused; refresh(); } }));
         row.appendChild(el("span", { class: "bn", text: (def.name || b.typeId) + (mx > 1 ? " L" + (b.level || 1) : "") }));
 
@@ -792,35 +820,39 @@
           lvlSel.addEventListener("change", () => { b.level = +lvlSel.value; refresh(); });
           row.appendChild(lvlSel);
         }
-        // count stepper — floors at 0 (kept so you can see an empty building), never auto-removes.
-        // + is blocked when the city is out of slots for its level.
-        row.appendChild(el("button", { class: "stp", text: "−", title: "one fewer (0 = empty, kept)", onclick: () => { b.count = Math.max(0, (b.count || 0) - 1); refresh(); } }));
-        row.appendChild(el("span", { class: "cnt", text: String(b.count) }));
-        const incBtn = el("button", { class: "stp", text: "+", title: full ? "city is full — raise its level" : "one more", onclick: () => { if (slotsUsed(city) < slotCapOf(city)) { b.count = (b.count || 0) + 1; refresh(); } } });
+        // count stepper as a clean segmented control — floors at 0 (kept so you can
+        // see an empty building), never auto-removes. + is blocked when out of slots.
+        const decBtn = el("button", { class: "stp minus", text: "−", title: "one fewer (0 = empty, kept)", onclick: () => { b.count = Math.max(0, (b.count || 0) - 1); refresh(); } });
+        const incBtn = el("button", { class: "stp plus", text: "+", title: full ? "city is full — raise its level" : "one more", onclick: () => { if (slotsUsed(city) < slotCapOf(city)) { b.count = (b.count || 0) + 1; refresh(); } } });
         if (full) incBtn.disabled = true;
-        row.appendChild(incBtn);
-        // explicit remove
-        row.appendChild(el("button", { class: "bl-x", text: "✕", title: "remove this building", onclick: () => { city.buildings.splice(bi, 1); refresh(); } }));
-        card.appendChild(row);
+        row.appendChild(el("div", { class: "bl-step" }, [decBtn, el("span", { class: "cnt", text: String(b.count) }), incBtn]));
+        // explicit remove — a quiet icon that doesn't compete with the stepper
+        row.appendChild(el("button", { class: "bl-icon rm", text: "✕", title: "remove this building", onclick: () => { city.buildings.splice(bi, 1); refresh(); } }));
+        item.appendChild(row);
 
-        // produce/consume line for the WHOLE row (per-building × count), e.g.
-        // 3× Sawmill → wood −1,440 · planks +720.
+        // produce/consume line for the WHOLE row (per-building × count) — a subtle
+        // secondary line inside the item, e.g. wood −1,440 · planks +720.
         const flows = buildingFlows(b.typeId, b.level || 1);
         if (flows.length) {
           const n = b.count || 0;
           const fl = el("div", { class: "bl-flows" + (b.paused || n <= 0 ? " off" : "") });
           for (const f of flows) fl.appendChild(el("span", { class: f.sign > 0 ? "green" : "red",
             text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin * n) }));
-          card.appendChild(fl);
+          item.appendChild(fl);
         }
+        body.appendChild(item);
       });
+      card.appendChild(body);
 
+      // footer add-zone: category sub-tabs + tier-grouped add chips
+      const foot = el("div", { class: "bl-city-foot" });
       // add-tabs: Houses / Gatherers / Production
       const active = city._addTab || "houses";
       const tabRow = el("div", { class: "bl-cardtabs" });
       for (const t of CAT_TABS) tabRow.appendChild(el("button", { class: "bl-ct" + (t.key === active ? " active" : ""), text: t.label,
         onclick: () => { city._addTab = t.key; refresh(); } }));
-      card.appendChild(tabRow);
+      foot.appendChild(tabRow);
+      if (full) foot.appendChild(el("div", { class: "bl-note", text: "🏗 City is full (" + usedSlots + "/" + slotCap + " slots) — raise the city level to build more." }));
 
       // add-chips grouped by worker tier (Peasant → Worker → Burgher → Aristocrat)
       const wrap = el("div", { class: "bl-chipwrap" });
@@ -838,8 +870,8 @@
         if (full) chip.disabled = true;
         chips.appendChild(chip);
       }
-      if (full) card.appendChild(el("div", { class: "bl-note", text: "🏗 City is full (" + usedSlots + "/" + slotCap + " slots) — raise the city level to build more." }));
-      card.appendChild(wrap);
+      foot.appendChild(wrap);
+      card.appendChild(foot);
       return card;
     }
 

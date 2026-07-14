@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.29.0";
+  const GAME_VERSION = "0.30.0";
   const PATCH_NOTES = [
+    { v: "0.30.0", notes: [
+      "Balance Lab visual overhaul: each city is a cleaner card with a titled header, quiet slot/population pills, and the delete button tucked into a corner",
+      "Building rows tidied — a single − count + segmented control, quiet pause/remove icons, and each building's produce/consume line reads as a subtle second row",
+      "Add buttons grouped under Peasant / Worker / Burgher / Aristocrat section dividers; per-row flows scale with the number of buildings",
+    ] },
     { v: "0.29.0", notes: [
       "Balance Lab cities are now compact cards in a grid, ordered by tier: Houses read Hut → Cottage → Manor → Aristocrat Home, workplaces group by who staffs them",
       "Each building shows its own produce/consume line per minute (e.g. Sawmill: wood −480, planks +240)",
