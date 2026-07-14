@@ -72,7 +72,7 @@ Town.canUpgrade = function (town) {
   if (!town) return { ok: false, reason: "No town" };
   const req = Town.upgradeReq(town);
   if (!req) return { ok: false, reason: "Max level" };
-  if (Town.popTotal(town) < req.pop) return { ok: false, reason: "Needs " + req.pop + " population" };
+  // Z: population requirement removed — a town upgrades on gold alone.
   if ((town.gold || 0) < req.gold) return { ok: false, reason: "Needs " + req.gold + " g" };
   return { ok: true };
 };

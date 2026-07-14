@@ -23,9 +23,8 @@ Object.assign(CONFIG, {
       fair:   { id: "fair", name: "Kingdom Fair", icon: "🎪",
         desc: "Tariff-free trading — carts pay no tariff.",
         weight: 2, durationTicks: 40, tariffFree: true },
-      bridge: { id: "bridge", name: "Collapsed Bridge", icon: "🌉",
-        desc: "A road washed out — trade reroutes until it is repaired.",
-        weight: 1, durationTicks: 40, collapseRoad: true },
+      // AA: "Collapsed Bridge" (road-cutting) event removed — it was the only
+      // collapseRoad event; the road-cut machinery below is now dead but harmless.
     },
   },
 });

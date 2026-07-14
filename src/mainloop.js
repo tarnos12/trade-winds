@@ -24,6 +24,8 @@
   // ---------------------------------------------------------------
   let lastTime = performance.now();
   let econAcc = 0;
+  let renderAcc = 0;                 // AB: render-frame accumulator (60fps cap)
+  const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
   let _prevQuestReward = null;   // AUDIO (P5-C): tracks quest-complete edge for the fanfare cue
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
 
@@ -76,18 +78,26 @@
       }
     }
 
-    applyKeyPan(dt);
-    drawWithDpr(dt);
+    // AB: cap RENDER to ~60fps. The economy loop above is time-based (accumulates
+    // real dt) so it's unaffected; here we accumulate real time and only draw when a
+    // 60Hz frame is due — on a 144Hz display this skips the draw work on most rAF
+    // callbacks while animation still advances by the accumulated `rdt`.
+    renderAcc += dt;
+    if (renderAcc >= RENDER_MS - 0.5) {
+      const rdt = renderAcc; renderAcc = 0;
+      applyKeyPan(rdt);
+      drawWithDpr(rdt);
 
-    // FPS meter
-    fpsFrames++; fpsTimer += dt;
-    if (fpsTimer >= 500) {
-      fpsSmoothed = Math.round(fpsFrames * 1000 / fpsTimer);
-      fpsFrames = 0; fpsTimer = 0;
-      fpsEl.textContent = fpsSmoothed;
-      fpsEl.className = "fps" + (fpsSmoothed < 50 ? " warn" : "");
-      statEl.textContent =
-        `${state.map.hexes.size} hexes · ${state.towns.length} towns · ${state.roads.size} roads · z${state.zoom.toFixed(2)}`;
+      // FPS meter (rendered frames)
+      fpsFrames++; fpsTimer += rdt;
+      if (fpsTimer >= 500) {
+        fpsSmoothed = Math.round(fpsFrames * 1000 / fpsTimer);
+        fpsFrames = 0; fpsTimer = 0;
+        fpsEl.textContent = fpsSmoothed;
+        fpsEl.className = "fps" + (fpsSmoothed < 50 ? " warn" : "");
+        statEl.textContent =
+          `${state.map.hexes.size} hexes · ${state.towns.length} towns · ${state.roads.size} roads · z${state.zoom.toFixed(2)}`;
+      }
     }
     requestAnimationFrame(frame);
   }

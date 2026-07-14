@@ -49,9 +49,9 @@ function mkTown(over) {
   const noGold = mkTown({ level: 1, gold: 0, pop: { peasants: req.pop, workers: 0, burghers: 0 } });
   ok("canUpgrade fails without gold", Town.canUpgrade(noGold).ok === false);
 
-  // Enough gold but not pop → blocked.
+  // Z: population requirement removed — enough gold upgrades regardless of pop.
   const noPop = mkTown({ level: 1, gold: req.gold, pop: { peasants: 1, workers: 0, burghers: 0 } });
-  ok("canUpgrade fails without pop", Town.canUpgrade(noPop).ok === false);
+  ok("canUpgrade passes on gold even with low pop (pop gate removed)", Town.canUpgrade(noPop).ok === true);
 
   // Both met → allowed.
   const ready = mkTown({ level: 1, gold: req.gold + 50, pop: { peasants: req.pop, workers: 0, burghers: 0 } });
