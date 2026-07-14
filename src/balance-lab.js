@@ -563,7 +563,7 @@
         "#balanceLabOverlay .bl-main{flex:1 1 auto;min-width:0;overflow:auto;padding:12px}",
         // cities laid out as a compact responsive grid (many per row)
         "#balanceLabOverlay .bl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:10px;align-items:start}",
-        "#balanceLabOverlay .bl-side{flex:0 0 320px;width:320px;overflow:auto;padding:12px 14px;border-left:1px solid var(--panel-edge);background:rgba(0,0,0,.14)}",
+        "#balanceLabOverlay .bl-side{flex:0 0 288px;width:288px;overflow:auto;padding:12px 14px;border-left:1px solid var(--panel-edge);background:rgba(0,0,0,.14)}",
         "#balanceLabOverlay h3{color:var(--accent);margin:0 0 8px;font-size:14px}",
         "#balanceLabOverlay h4{color:var(--paper);margin:14px 0 6px;font-size:12.5px;opacity:.85}",
         // top tab bar (Cities / Charts)
