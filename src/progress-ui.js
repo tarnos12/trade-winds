@@ -84,7 +84,7 @@
     winNoticeEl.classList.remove("hidden");
     winNoticeEl.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => winNoticeEl.classList.add("in"));
-    if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
+    if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "victory"); } catch (e) {} }
   }
   document.getElementById("wnClose").addEventListener("click", () => {
     winNoticeEl.classList.remove("in");

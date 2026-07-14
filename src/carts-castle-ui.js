@@ -323,7 +323,7 @@
     if (state.warehouse[goodId] <= 0) delete state.warehouse[goodId];
     state.treasury = (state.treasury || 0) + price * unit;   // player earns gold
     afterCastleTrade();
-    SFX.playThrottled("trade", 120);
+    SFX.playThrottled("trade", 120, "cart arrive");
   }
   function afterCastleTrade() {
     renderCastlePanel(true);   // PP-C: force — the pointer is over the panel
@@ -557,7 +557,7 @@
         // BALPV: castle L5 is a milestone, not the win — victory now fires from
         // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
         scheduleSave();
-        SFX.play("levelup");
+        SFX.play("levelup", "castle upgrade");
       }
       return;
     }

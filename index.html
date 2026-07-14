@@ -860,6 +860,19 @@
   }
   #eoClose:hover, #meClose:hover { border-color: var(--accent); color: var(--accent); }
   #eoFrame, #meFrame { flex: 1 1 auto; width: 100%; border: 0; background: #14110c; }
+  /* DEBUG (X): recent-sounds panel */
+  #sfxDebug {
+    position: fixed; right: 8px; top: 92px; z-index: 30; width: 172px;
+    background: rgba(20,17,12,0.82); border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 6px 8px; font-size: 11px; color: var(--paper);
+    pointer-events: none; user-select: none;
+  }
+  #sfxDebug .sfxd-head { font-weight: bold; color: var(--accent); margin-bottom: 3px; font-size: 10.5px; letter-spacing: .3px; }
+  #sfxDebug ul { list-style: none; margin: 0; padding: 0; }
+  #sfxDebug li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  #sfxDebug li .snd { color: var(--accent); flex: 0 0 auto; }
+  #sfxDebug li .src { opacity: .8; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sfxDebug li.sfxd-empty { opacity: .5; }
   /* === EDITOR-OVERLAY END === */
   /* === TUTORIAL CSS START === (P5D-C / slot #4 — onboarding coach) */
   #tutorial {
@@ -995,6 +1008,12 @@
     <button id="btnMute" title="Toggle sound effects (M)">🔊 Sound</button>
   </div>
   <span id="eventChip" title="Active kingdom event"></span>
+</div>
+
+<!-- DEBUG (X): recent sounds + their source, right side below the toolbar -->
+<div id="sfxDebug" aria-hidden="true">
+  <div class="sfxd-head">🔎 Recent sounds</div>
+  <ul id="sfxDebugList"><li class="sfxd-empty">(none yet)</li></ul>
 </div>
 
 <!-- === CITY-CARDS === kingdom-gold chip + live city cards row (EC-C) -->
@@ -7362,7 +7381,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // (a throttle in SFX keeps a busy economy from machine-gunning).
         const _treasBefore = state.treasury || 0;
         Trade.tick(state);
-        if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
+        if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550, "tariff income");
         // KR-A: sample the kingdom-wide market AFTER production + trade so the
         // reading reflects this tick's stock/price movement (guarded; pure).
         if (typeof Market !== "undefined" && Market.tick) Market.tick(state);
@@ -7382,7 +7401,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
         if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
           _prevQuestReward = state.lastQuestReward;
-          SFX.play("quest");
+          SFX.play("quest", "quest done");
         }
         if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
           Events.tick(state);
@@ -8431,7 +8450,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (!activeTown) return;
     if (e.target.closest("[data-town-upgrade]")) {
       const res = Town.upgrade(activeTown);
-      if (res.ok) { scheduleSave(); renderTownPanel(true); SFX.play("levelup"); }
+      if (res.ok) { scheduleSave(); renderTownPanel(true); SFX.play("levelup", "town upgrade"); }
       return;
     }
     if (e.target.closest("[data-pp-give]")) {
@@ -9351,7 +9370,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (state.warehouse[goodId] <= 0) delete state.warehouse[goodId];
     state.treasury = (state.treasury || 0) + price * unit;   // player earns gold
     afterCastleTrade();
-    SFX.playThrottled("trade", 120);
+    SFX.playThrottled("trade", 120, "cart arrive");
   }
   function afterCastleTrade() {
     renderCastlePanel(true);   // PP-C: force — the pointer is over the panel
@@ -9585,7 +9604,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // BALPV: castle L5 is a milestone, not the win — victory now fires from
         // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
         scheduleSave();
-        SFX.play("levelup");
+        SFX.play("levelup", "castle upgrade");
       }
       return;
     }
@@ -10684,7 +10703,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     winNoticeEl.classList.remove("hidden");
     winNoticeEl.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => winNoticeEl.classList.add("in"));
-    if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
+    if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "victory"); } catch (e) {} }
   }
   document.getElementById("wnClose").addEventListener("click", () => {
     winNoticeEl.classList.remove("in");
@@ -10960,7 +10979,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       let extra = "";
       if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
       showToast(label + extra + " has begun!");
-      SFX.play("event");
+      SFX.play("event", (def ? def.name : notice.id) + " begins");
     } else {
       showToast(label + " has ended.");
     }
@@ -11248,6 +11267,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           if (!(b.workers > 0)) continue;
           const good = producerGood(b);
           if (!good) continue;
+          // V: only run a porter when there's a REASON to haul — the building's
+          // output good has room in the town (stock below cap). A maxed-out good is
+          // over-produced and its output is wasted, so the porter idles instead of
+          // shuttling pointlessly (the "potato farm forever moving 2 potato" case).
+          const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+          if (((t.stock && t.stock[good]) || 0) >= cap - 1e-6) continue;
           const key = t.id + ":" + b.q + "," + b.r;
           wanted.add(key);
           let tr = roster.get(key);
@@ -11729,20 +11754,31 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
     }
 
-    function play(name) {
+    // === DEBUG (X): recent-sounds ring buffer. Every audible play is logged with
+    // a short SOURCE label (passed by the caller) so the on-screen debug panel can
+    // show what's firing and from where — used to hunt down mystery cues.
+    const _recent = [];
+    function logPlay(name, source) {
+      _recent.push({ name: name, source: source || name,
+                     t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+      if (_recent.length > 14) _recent.shift();
+    }
+
+    function play(name, source) {
       if (muted || !unlocked || !ctx) return;     // silent pre-gesture / muted
       if (ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} }
+      logPlay(name, source);                       // DEBUG (X): record the audible cue
       try { render(name); }
       catch (e) { if (!warned) { warned = true; /* audio disabled for session */ } }
     }
 
     // --- light rate limits so a busy economy / road-drag can't machine-gun ---
     const nextAt = Object.create(null);
-    function playThrottled(name, minGapMs) {
+    function playThrottled(name, minGapMs, source) {
       const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
       if (nextAt[name] && now < nextAt[name]) return;
       nextAt[name] = now + (minGapMs || 120);
-      play(name);
+      play(name, source);
     }
 
     function setMuted(m) {
@@ -11756,6 +11792,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       play, playThrottled, unlock, toggle,
       setMuted,
       isMuted: () => muted,
+      recent: () => _recent.slice(),   // DEBUG (X): recent { name, source, t }
       get ready() { return unlocked; },
       get available() { return !!AC; },
     };
@@ -11779,6 +11816,29 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     muteBtn.addEventListener("click", () => { SFX.unlock(); SFX.toggle(); syncMuteBtn(); });
     syncMuteBtn();
   }
+
+  // DEBUG (X): live "recent sounds" panel below the toolbar — polls SFX.recent()
+  // and lists the last cues (newest first) with the SOURCE label the caller passed,
+  // so a mystery sound can be traced to its origin at a glance.
+  (function sfxDebugPanel() {
+    const listEl = document.getElementById("sfxDebugList");
+    if (!listEl || !SFX.recent) return;
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    let lastSig = "";
+    setInterval(() => {
+      const rec = SFX.recent();
+      if (!rec.length) { if (lastSig !== "empty") { listEl.innerHTML = '<li class="sfxd-empty">(none yet)</li>'; lastSig = "empty"; } return; }
+      const sig = rec.length + "|" + rec[rec.length - 1].t;
+      if (sig === lastSig) return;
+      lastSig = sig;
+      let html = "";
+      for (let i = rec.length - 1; i >= Math.max(0, rec.length - 8); i--) {
+        const r = rec[i];
+        html += '<li><span class="snd">' + esc(r.name) + '</span><span class="src" title="' + esc(r.source) + '">' + esc(r.source) + "</span></li>";
+      }
+      listEl.innerHTML = html;
+    }, 250);
+  })();
   window.addEventListener("keydown", (e) => {
     // Editor overlay open: don't let 'm' leak into the game underneath (see
     // the matching guard/comment on the speed/WASD handler above).
@@ -12186,7 +12246,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
       if (ev.allComplete && !p.done) { persist(state); celebrate(state); return; }
 
-      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup"); } catch (e) {} }
+      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
       persist(state);
       render(state, ev, set);
     }
@@ -12198,7 +12258,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       celebrating = true; active = false;
       if (elRoot) elRoot.classList.add("celebrate");
       render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet());
-      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
+      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
       setTimeout(() => { celebrating = false; hide(); }, 5200);
     }
 

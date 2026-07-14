@@ -988,7 +988,7 @@
     if (!activeTown) return;
     if (e.target.closest("[data-town-upgrade]")) {
       const res = Town.upgrade(activeTown);
-      if (res.ok) { scheduleSave(); renderTownPanel(true); SFX.play("levelup"); }
+      if (res.ok) { scheduleSave(); renderTownPanel(true); SFX.play("levelup", "town upgrade"); }
       return;
     }
     if (e.target.closest("[data-pp-give]")) {

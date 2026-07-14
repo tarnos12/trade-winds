@@ -216,7 +216,7 @@
 
       if (ev.allComplete && !p.done) { persist(state); celebrate(state); return; }
 
-      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup"); } catch (e) {} }
+      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
       persist(state);
       render(state, ev, set);
     }
@@ -228,7 +228,7 @@
       celebrating = true; active = false;
       if (elRoot) elRoot.classList.add("celebrate");
       render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet());
-      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest"); } catch (e) {} }
+      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
       setTimeout(() => { celebrating = false; hide(); }, 5200);
     }
 

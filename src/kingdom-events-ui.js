@@ -250,7 +250,7 @@
       let extra = "";
       if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
       showToast(label + extra + " has begun!");
-      SFX.play("event");
+      SFX.play("event", (def ? def.name : notice.id) + " begins");
     } else {
       showToast(label + " has ended.");
     }

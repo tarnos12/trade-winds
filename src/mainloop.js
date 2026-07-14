@@ -45,7 +45,7 @@
         // (a throttle in SFX keeps a busy economy from machine-gunning).
         const _treasBefore = state.treasury || 0;
         Trade.tick(state);
-        if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550);
+        if ((state.treasury || 0) > _treasBefore + 1e-6) SFX.playThrottled("trade", 550, "tariff income");
         // KR-A: sample the kingdom-wide market AFTER production + trade so the
         // reading reflects this tick's stock/price movement (guarded; pure).
         if (typeof Market !== "undefined" && Market.tick) Market.tick(state);
@@ -65,7 +65,7 @@
         // AUDIO (P5-C): a new lastQuestReward object means a quest just completed.
         if (state.lastQuestReward && state.lastQuestReward !== _prevQuestReward) {
           _prevQuestReward = state.lastQuestReward;
-          SFX.play("quest");
+          SFX.play("quest", "quest done");
         }
         if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
           Events.tick(state);

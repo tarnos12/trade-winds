@@ -77,20 +77,31 @@
       }
     }
 
-    function play(name) {
+    // === DEBUG (X): recent-sounds ring buffer. Every audible play is logged with
+    // a short SOURCE label (passed by the caller) so the on-screen debug panel can
+    // show what's firing and from where — used to hunt down mystery cues.
+    const _recent = [];
+    function logPlay(name, source) {
+      _recent.push({ name: name, source: source || name,
+                     t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+      if (_recent.length > 14) _recent.shift();
+    }
+
+    function play(name, source) {
       if (muted || !unlocked || !ctx) return;     // silent pre-gesture / muted
       if (ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} }
+      logPlay(name, source);                       // DEBUG (X): record the audible cue
       try { render(name); }
       catch (e) { if (!warned) { warned = true; /* audio disabled for session */ } }
     }
 
     // --- light rate limits so a busy economy / road-drag can't machine-gun ---
     const nextAt = Object.create(null);
-    function playThrottled(name, minGapMs) {
+    function playThrottled(name, minGapMs, source) {
       const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
       if (nextAt[name] && now < nextAt[name]) return;
       nextAt[name] = now + (minGapMs || 120);
-      play(name);
+      play(name, source);
     }
 
     function setMuted(m) {
@@ -104,6 +115,7 @@
       play, playThrottled, unlock, toggle,
       setMuted,
       isMuted: () => muted,
+      recent: () => _recent.slice(),   // DEBUG (X): recent { name, source, t }
       get ready() { return unlocked; },
       get available() { return !!AC; },
     };
@@ -127,6 +139,29 @@
     muteBtn.addEventListener("click", () => { SFX.unlock(); SFX.toggle(); syncMuteBtn(); });
     syncMuteBtn();
   }
+
+  // DEBUG (X): live "recent sounds" panel below the toolbar — polls SFX.recent()
+  // and lists the last cues (newest first) with the SOURCE label the caller passed,
+  // so a mystery sound can be traced to its origin at a glance.
+  (function sfxDebugPanel() {
+    const listEl = document.getElementById("sfxDebugList");
+    if (!listEl || !SFX.recent) return;
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    let lastSig = "";
+    setInterval(() => {
+      const rec = SFX.recent();
+      if (!rec.length) { if (lastSig !== "empty") { listEl.innerHTML = '<li class="sfxd-empty">(none yet)</li>'; lastSig = "empty"; } return; }
+      const sig = rec.length + "|" + rec[rec.length - 1].t;
+      if (sig === lastSig) return;
+      lastSig = sig;
+      let html = "";
+      for (let i = rec.length - 1; i >= Math.max(0, rec.length - 8); i--) {
+        const r = rec[i];
+        html += '<li><span class="snd">' + esc(r.name) + '</span><span class="src" title="' + esc(r.source) + '">' + esc(r.source) + "</span></li>";
+      }
+      listEl.innerHTML = html;
+    }, 250);
+  })();
   window.addEventListener("keydown", (e) => {
     // Editor overlay open: don't let 'm' leak into the game underneath (see
     // the matching guard/comment on the speed/WASD handler above).

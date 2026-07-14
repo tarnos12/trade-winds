@@ -49,6 +49,12 @@
           if (!(b.workers > 0)) continue;
           const good = producerGood(b);
           if (!good) continue;
+          // V: only run a porter when there's a REASON to haul — the building's
+          // output good has room in the town (stock below cap). A maxed-out good is
+          // over-produced and its output is wasted, so the porter idles instead of
+          // shuttling pointlessly (the "potato farm forever moving 2 potato" case).
+          const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+          if (((t.stock && t.stock[good]) || 0) >= cap - 1e-6) continue;
           const key = t.id + ":" + b.q + "," + b.r;
           wanted.add(key);
           let tr = roster.get(key);
