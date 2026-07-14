@@ -171,6 +171,70 @@
       return { perGood: perGood, perCity: perCity, _detail: detail };
     }
 
+    // ---- PUBLIC: ratios() — kingdom-wide CARRYING CAPACITY ------------------
+    // Scenario-INDEPENDENT (pure CONFIG math). Because cities specialise and
+    // TRADE with each other, the useful balance question isn't "is one city
+    // self-sufficient" but "how many consumers does ONE producer feed across
+    // the kingdom". For every produced good it answers exactly that:
+    //   "1 Lumberjack (240 wood/min) supports 48 peasants AND 10 Sawmills."
+    // Each producer/consumer is measured at BASE level (L1), full staffing, per
+    // minute (×120). effWorkers = workerSlots (+ any L1 slotPlus). A consumer is
+    // either a PEOPLE tier (perCapita need) or a PROCESSOR building (input draw).
+    function ratios(opts) {
+      const level = (opts && opts.level) || 1;
+      function effWorkers(def, typeId) {
+        const eff = Buildings.upgradeEffect({ typeId: typeId, upgradeLevel: level });
+        return (def.workerSlots || 0) + (eff.slotPlus || 0);
+      }
+      function outPerMin(id, def) {
+        if (!def.output || !def.workerTier || !(def.workerSlots > 0)) return 0;
+        const eff = Buildings.upgradeEffect({ typeId: id, upgradeLevel: level });
+        return def.output.ratePerWorker * effWorkers(def, id) * (eff.outputMult || 1) * TICKS_PER_MIN;
+      }
+      const out = [];
+      for (const gid in CONFIG.goods) {
+        // producers of this good
+        const producers = [];
+        for (const id in CONFIG.buildings) {
+          const def = CONFIG.buildings[id];
+          if (def.output && def.output.goodId === gid) {
+            const perMin = outPerMin(id, def);
+            if (perMin > 0) producers.push({ typeId: id, name: def.name || id, perMin: perMin });
+          }
+        }
+        if (!producers.length) continue; // only rank goods something can produce
+        producers.sort((a, b) => b.perMin - a.perMin);
+        const ref = producers[0].perMin; // 1 primary producer's output/min
+
+        // consumers: people tiers (perCapita need) + processor buildings (input)
+        const consumers = [];
+        for (const tk in CONFIG.needs.tiers) {
+          const pc = CONFIG.needs.tiers[tk].perCapita || {};
+          if (pc[gid] > 0) {
+            const each = pc[gid] * TICKS_PER_MIN; // per person, /min
+            consumers.push({ kind: "people", key: tk, name: tk, eachPerMin: each,
+                             supportedPerProducer: each > 0 ? ref / each : 0 });
+          }
+        }
+        for (const id in CONFIG.buildings) {
+          const def = CONFIG.buildings[id];
+          if (def.inputs && def.inputs[gid] > 0 && def.workerSlots > 0) {
+            const each = def.inputs[gid] * effWorkers(def, id) * TICKS_PER_MIN; // per building, /min
+            consumers.push({ kind: "building", key: id, name: def.name || id, eachPerMin: each,
+                             supportedPerProducer: each > 0 ? ref / each : 0 });
+          }
+        }
+        if (!consumers.length) continue; // nothing draws it — no ratio to show
+        consumers.sort((a, b) => b.eachPerMin - a.eachPerMin);
+        out.push({ good: gid, producers: producers, primaryPerMin: ref,
+                   primaryKind: (CONFIG.buildings[producers[0].typeId] || {}).kind, consumers: consumers });
+      }
+      // Order raw chains (extractors) first, then processors — so foundational
+      // goods (wood/potato/fish/stone) lead over luxuries; ties by output desc.
+      out.sort((a, b) => (kindRank(a.primaryKind) - kindRank(b.primaryKind)) || (b.primaryPerMin - a.primaryPerMin));
+      return out;
+    }
+
     // ========================================================================
     // GROUND-TRUTH SIMULATION — build a scratch multi-city state and run the
     // REAL Sim.tick + Trade.tick. Deterministic (fixed seeds, no Math.random).
@@ -513,6 +577,16 @@
         "#balanceLabOverlay .bl-note{font-size:11px;opacity:.6;margin:6px 0}",
         "#balanceLabOverlay ul.bl-list{margin:4px 0;padding-left:18px;font-size:11.5px}",
         "#balanceLabOverlay .bl-add{display:flex;gap:6px;margin-top:8px}",
+        "#balanceLabOverlay details.bl-ratios{background:var(--panel);border:1px solid var(--panel-edge);border-radius:9px;padding:8px 12px;margin:6px 0 14px}",
+        "#balanceLabOverlay details.bl-ratios summary{cursor:pointer;color:var(--accent);font-size:12.5px;font-weight:bold;list-style:none}",
+        "#balanceLabOverlay details.bl-ratios summary::-webkit-details-marker{display:none}",
+        "#balanceLabOverlay .bl-rt-good{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:9px 0 2px;padding-top:6px;border-top:1px solid var(--panel-edge)}",
+        "#balanceLabOverlay .bl-rt-mk{font-weight:bold;color:var(--paper)}",
+        "#balanceLabOverlay .bl-rt-out{font-size:11.5px;color:#7fc45f;font-variant-numeric:tabular-nums;white-space:nowrap}",
+        "#balanceLabOverlay ul.bl-rt-list{margin:2px 0 4px;padding-left:14px;list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px}",
+        "#balanceLabOverlay ul.bl-rt-list li{font-size:11.5px;display:flex;gap:5px;align-items:baseline}",
+        "#balanceLabOverlay .bl-rt-n{color:var(--accent);font-weight:bold;font-variant-numeric:tabular-nums}",
+        "#balanceLabOverlay .bl-rt-each{opacity:.5;font-size:10.5px;font-variant-numeric:tabular-nums}",
       ].join("\n");
       document.head.appendChild(styleEl);
     }
@@ -591,6 +665,40 @@
       return card;
     }
 
+    // ---------- carrying-capacity / support-ratio panel ----------
+    // Scenario-independent reference: "1 producer feeds N consumers" across the
+    // whole kingdom (cities specialise + trade). Reads ratios() straight from
+    // CONFIG so it's the same no matter what the composer holds.
+    function renderRatios(host) {
+      const rows = ratios();
+      const det = el("details", { class: "bl-ratios" });
+      det.open = true;
+      const sum = el("summary", { text: "📐 Carrying capacity — 1 producer supports…" });
+      det.appendChild(sum);
+      det.appendChild(el("div", { class: "bl-note", text: "Kingdom-wide, at base level & full staffing. Cities specialise and trade, so this is what ONE building feeds no matter where it sits." }));
+      for (const r of rows) {
+        const prod = r.producers[0];
+        const head = el("div", { class: "bl-rt-good" }, [
+          el("span", { class: "bl-rt-mk", text: "1 " + prod.name }),
+          el("span", { class: "bl-rt-out", text: "→ " + fmt(prod.perMin) + " " + goodName(r.good) + "/min" }),
+        ]);
+        det.appendChild(head);
+        const ul = el("ul", { class: "bl-rt-list" });
+        for (const c of r.consumers) {
+          const n = c.supportedPerProducer;
+          const nTxt = n >= 100 ? fmt(Math.round(n)) : fmt(Math.round(n * 10) / 10);
+          const label = c.kind === "people" ? c.name : (c.name + "s");
+          ul.appendChild(el("li", {}, [
+            el("span", { class: "bl-rt-n", text: nTxt + "×" }),
+            el("span", { class: "bl-rt-c", text: label }),
+            el("span", { class: "bl-rt-each", text: "(" + fmt(c.eachPerMin) + "/min each)" }),
+          ]));
+        }
+        det.appendChild(ul);
+      }
+      host.appendChild(det);
+    }
+
     // ---------- analysis (right column) ----------
     let analysisHost = null;
     function refreshAnalysis() {
@@ -599,6 +707,8 @@
       analysisHost.innerHTML = "";
       analysisHost.appendChild(el("h3", { text: "Live analysis — production vs consumption" }));
       analysisHost.appendChild(el("div", { class: "bl-note", text: "Rates per minute (2 ticks = 1s). Production is labour-limited by your populations. Green = surplus, red = deficit." }));
+
+      renderRatios(analysisHost);
 
       // per-good bars (kingdom-wide)
       const goods = Object.keys(res.perGood).filter(g => (res.perGood[g].prod > 1e-6 || res.perGood[g].cons > 1e-6));
@@ -728,7 +838,7 @@
       overlay.classList.remove("hidden");
     }
 
-    return { open: open, close: close, isOpen: isOpen, analyze: analyze, simulate: simulate };
+    return { open: open, close: close, isOpen: isOpen, analyze: analyze, simulate: simulate, ratios: ratios };
   })();
   if (typeof window !== "undefined") window.BalanceLab = BalanceLab;
   if (typeof globalThis !== "undefined") { try { globalThis.BalanceLab = BalanceLab; } catch (e) {} }

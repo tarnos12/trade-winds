@@ -316,6 +316,46 @@ group("4. income scales with pop, INDEPENDENT of good prices", () => {
 });
 
 // ---------------------------------------------------------------------------
+// GUARD 5 — ratios(): kingdom-wide carrying capacity. Scenario-independent,
+// pure CONFIG math. "1 producer (X/min) supports N consumers." Verifies the
+// producer output, per-consumer draw, and the supported-per-producer count all
+// match hand-computed CONFIG numbers, for BOTH a people consumer and a
+// processor-building consumer.
+group("5. ratios() carrying-capacity matches CONFIG-derived numbers", () => {
+  if (typeof BalanceLab.ratios !== "function") { ok("ratios() is exposed", false, "not a function"); return; }
+  const rows = BalanceLab.ratios();
+  ok("ratios() returns a non-empty array", Array.isArray(rows) && rows.length > 0, "len=" + (rows && rows.length));
+
+  const wood = rows.find(r => r.good === "wood");
+  ok("wood row present", !!wood);
+  if (wood) {
+    // Lumberjack: ratePerWorker 1 × 2 slots × 120 = 240/min
+    const LJ = CONFIG.buildings.lumberjack;
+    const expProd = LJ.output.ratePerWorker * LJ.workerSlots * PER_MIN;
+    ok("1 Lumberjack makes 240 wood/min", near(wood.primaryPerMin, expProd, 1e-6), "got=" + wood.primaryPerMin + " exp=" + expProd);
+
+    // People consumer: peasant wood perCapita 0.05 × 120 = 6/min ⇒ 240/6 = 40 peasants
+    const peas = wood.consumers.find(c => c.kind === "people" && c.key === "peasants");
+    ok("peasant wood draw = 6/min each", peas && near(peas.eachPerMin, TIER.peasants.perCapita.wood * PER_MIN, 1e-6), peas && peas.eachPerMin);
+    ok("1 Lumberjack supports 40 peasants", peas && near(peas.supportedPerProducer, expProd / (TIER.peasants.perCapita.wood * PER_MIN), 1e-6), peas && peas.supportedPerProducer);
+
+    // Processor consumer: sawmill draws inputs.wood(2) × 2 slots × 120 = 480/min ⇒ 240/480 = 0.5 sawmill
+    const SAW = CONFIG.buildings.sawmill;
+    const saw = wood.consumers.find(c => c.kind === "building" && c.key === "sawmill");
+    const expSaw = SAW.inputs.wood * SAW.workerSlots * PER_MIN;
+    ok("Sawmill wood draw = 480/min each", saw && near(saw.eachPerMin, expSaw, 1e-6), saw && saw.eachPerMin);
+    ok("1 Lumberjack supports 0.5 Sawmill", saw && near(saw.supportedPerProducer, expProd / expSaw, 1e-6), saw && saw.supportedPerProducer);
+  }
+
+  // Every consumer's supportedPerProducer must equal primaryPerMin / eachPerMin (definitional).
+  let consistent = true;
+  for (const r of rows) for (const c of r.consumers) {
+    if (c.eachPerMin > 0 && !near(c.supportedPerProducer, r.primaryPerMin / c.eachPerMin, 1e-6)) consistent = false;
+  }
+  ok("supportedPerProducer == primaryPerMin / eachPerMin for every consumer", consistent);
+});
+
+// ---------------------------------------------------------------------------
 console.log("\n============================================");
 console.log("Balance Lab QA: " + pass + " passed, " + fail + " failed");
 if (failures.length) { console.log("Failures:"); for (const f of failures) console.log("  - " + f); }

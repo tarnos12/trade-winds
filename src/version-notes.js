@@ -3,6 +3,7 @@
   const PATCH_NOTES = [
     { v: "0.27.0", notes: [
       "NEW: a Balance Lab (🧪 on the start screen) — compose cities from real buildings and populations and see production vs. consumption update live",
+      "Balance Lab now shows Carrying Capacity: how many people and downstream buildings ONE producer feeds (e.g. 1 Lumberjack → 40 peasants or 2 Sawmills), since cities specialise and trade",
       "Run a scenario through the real economy engine to get a self-sustained verdict: is every city happy and net-positive on gold?",
       "Production buildings now show their current output speed, the same way houses show their consumption",
       "Transporter overview explains what each hauler is carrying and why it may sit idle (they deliver construction materials)",
