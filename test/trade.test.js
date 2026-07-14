@@ -58,17 +58,24 @@ function homes() {
 // Every town has a LUMBERJACK for its own firewood (wood is a basic need now, and
 // nothing else produces it), so the food (potato) flow is the clean differentiator.
 // The farm exports GRAIN (for the mill's brewery) AND POTATO (food for the mine).
+// Two potato_farms so the farm's potato SURPLUS out-supplies the larger mine below —
+// keeping cart THROUGHPUT (not production) the binding constraint that makes the road
+// advantage observable post-rebalance (per-capita draws dropped ~4.8×).
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
+  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
   stock: { grain: 80, potato: 80, wood: 80, mead: 20 } }); }   // === CC: beer→mead ===
 // === TV2: the mine floods IRON (80 stock, 0 self-demand → a permanent surplus
 // the neighbours buy). Peasant-only housing, so its happiness (and pop) tracks
 // the POTATO food flow: connected ⇒ fed & happy, road-less ⇒ food-starved. ===
 function peasantHomes(n) { const a = []; for (let i = 0; i < n; i++) a.push({ typeId: "hut" }); return a; }
+// Post-rebalance the mine's peasant potato draw is much smaller, so a mine that a single
+// off-road cart cycle could keep fed no longer shows any road advantage. Doubling the
+// mine's peasants (24, housed by 12 huts) makes potato demand outstrip one cart cycle, so
+// the FASTER road carts deliver more and hold a tighter price gap than the off-road cut.
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
-  pop: { peasants: 12, workers: 0, burghers: 0 },
-  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(6)],
+  pop: { peasants: 24, workers: 0, burghers: 0 },
+  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(12)],
   stock: { iron: 80, wood: 80 } }); }
 // === CC: the mill's FORGE (wood + iron → iron_tool) is CITIZEN(burgher)-tier, so
 // the mill houses burghers (manors) and keeps their needs stocked so they persist

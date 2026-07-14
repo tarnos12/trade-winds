@@ -209,9 +209,13 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const startPop = totalPop(t);
   for (let i = 0; i < 60; i++) Sim.tick({ towns: [t] });
   ok("missing basic food (potato) holds happiness below 70", t.happiness < 70);
-  // basicSat is demand-weighted: potato (0.10/cap) outweighs wood (0.05/cap), so
-  // wood-only satisfies 0.05/0.15 = 1/3 of basics ⇒ happiness ≈ 70×1/3 ≈ 23.
-  ok("only the wood third of basics met ⇒ happiness near ~23", Math.abs(t.happiness - 23.3) < 5);
+  // basicSat is demand-weighted. Post-rebalance potato and wood weigh EQUALLY
+  // (both perCapita 0.020833/cap), so wood-only satisfies 0.5 of the basics ⇒
+  // happiness ≈ 70×1/2 = 35 (was ~23 when potato 0.10 outweighed wood 0.05).
+  const rP = CONFIG.needs.tiers.peasants.perCapita;
+  const woodOnlyHappy = CONFIG.needs.basicHappy * (rP.wood / (rP.wood + rP.potato)); // = 35
+  ok("only the wood share of basics met ⇒ happiness near the derived value (~35)",
+     Math.abs(t.happiness - woodOnlyHappy) < 5);
   ok("sustained missing-basic shrinks population below the fed peak", totalPop(t) < startPop);
   ok("population never goes negative", totalPop(t) >= 0);
   ok("food scarcity pushes potato price up toward ceiling", t.prices.potato > CONFIG.goods.potato.basePrice);
@@ -716,8 +720,8 @@ function place(typeId, q, r, over) {
     for (let i = 0; i < 300; i++) Sim.tick({ towns: [full] });
     ok("CC: happiness ~70 ⇒ population at FULL housing cap", Math.abs(full.happiness - 70) < 2.5 && Math.abs(full.pop.peasants - 4) < 0.5);
 
-    // Only wood produced (no potato) ⇒ basicSat = wood third ⇒ happiness ~23 ⇒
-    // capFrac ~ 0.33 ⇒ target ~1, strictly below the full-cap town.
+    // Only wood produced (no potato) ⇒ basicSat = wood half (potato & wood now weigh
+    // equally) ⇒ happiness ~35 ⇒ capFrac ~ 0.5 ⇒ target ~2, strictly below the full-cap town.
     const partial = town({ pop: { peasants: 4, workers: 0, burghers: 0 },
       stock: { wood: 1e5 /* no potato source */ },
       buildings: [place("lumberjack", 1, 1, { built: true }), place("hut", 0, 2), place("hut", 1, 2)] });

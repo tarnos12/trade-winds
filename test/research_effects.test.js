@@ -211,10 +211,15 @@ function runTrade(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tic
   function bigBuyerState(unlocked) {
     const roads = new Set();
     for (const [q, r] of ROAD_LINE) roads.add(K(q, r));
-    const huts = []; for (let i = 0; i < 120; i++) huts.push({ typeId: "hut", q: i, r: 2 }); // EC-A hut cap 2 → 120 huts house ~240
+    // Post-rebalance the per-capita potato draw dropped ~4.8× (0.10 → 0.020833), so the
+    // buy target (bufferTarget × demand) for the old 200-peasant city fell BELOW cart
+    // capacity, making capacity non-binding. Scale the hungry city up (600 peasants,
+    // 300 huts) so its potato shortfall again exceeds cart capacity and capacity is the
+    // binding constraint the cartCapacity research relaxes.
+    const huts = []; for (let i = 0; i < 300; i++) huts.push({ typeId: "hut", q: i, r: 2 }); // EC-A hut cap 2 → 300 huts house ~600
     const towns = [
       mkTradeTown({ id: 1, q: 0, r: 0, buildings: [{ typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }], stock: { potato: 5000, wood: 5000 } }),
-      mkTradeTown({ id: 2, q: 6, r: 0, pop: { peasants: 200, workers: 0, burghers: 0 }, buildings: huts, stock: { potato: 0, wood: 5000 } }),
+      mkTradeTown({ id: 2, q: 6, r: 0, pop: { peasants: 600, workers: 0, burghers: 0 }, buildings: huts, stock: { potato: 0, wood: 5000 } }),
     ];
     const st = { roads, towns, carts: [], treasury: 0, tradeSeed: 7 };
     if (unlocked) st.research = withResearch(unlocked);

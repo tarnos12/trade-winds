@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.31.0";
+  const GAME_VERSION = "0.32.0";
   const PATCH_NOTES = [
+    { v: "0.32.0", notes: [
+      "BIG REBALANCE of the whole economy to clean, readable numbers (per minute at full staffing):",
+      "Gatherers — Lumberjack & Potato Farm 60/min, Sheep Farm 45, Fishery 30, and all mines (stone/iron/clay/coal/gold) 20",
+      "Every processor now refines ~10/min at a 2:1 input ratio (e.g. Sawmill: 20 wood → 10 planks)",
+      "People are hungrier per head but far fewer are needed: each person eats 2.5/min of every basic and 1.5/min of every luxury",
+      "Net effect: 1 Potato Farm feeds 24 peasants, 1 Fishery 20, 1 Sheep Farm 30 — and high tiers now truly depend on inter-city trade",
+    ] },
     { v: "0.31.0", notes: [
       "Balance Lab: hover (or click to pin) any resource on the right to see a formatted breakdown of exactly where it's produced and consumed across all cities, summed",
       "House cards now split resident needs into a Basic vs Luxury table so an 8-good tier stays readable",

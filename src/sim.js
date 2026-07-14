@@ -20,13 +20,13 @@ Object.assign(CONFIG, {
     //   tier's population GROWTH (all luxuries must be available to grow).
     tiers: {
       peasants:    { basic: ["potato", "wood"], extra: ["fish", "wool"],
-                     perCapita: { potato: 0.10, wood: 0.05, fish: 0.05, wool: 0.03 } },
+                     perCapita: { potato: 0.020833, wood: 0.020833, fish: 0.0125, wool: 0.0125 } },
       workers:     { basic: ["fish", "coal"], extra: ["clothes", "bread", "mead"],
-                     perCapita: { fish: 0.05, coal: 0.05, clothes: 0.03, bread: 0.03, mead: 0.05 } },
+                     perCapita: { fish: 0.020833, coal: 0.020833, clothes: 0.0125, bread: 0.0125, mead: 0.0125 } },
       burghers:    { basic: ["lamp", "bread", "mead", "clothes"], extra: ["chairs", "pottery", "gold_ring"],
-                     perCapita: { lamp: 0.03, bread: 0.04, mead: 0.04, clothes: 0.03, chairs: 0.02, pottery: 0.02, gold_ring: 0.01 } },
+                     perCapita: { lamp: 0.020833, bread: 0.020833, mead: 0.020833, clothes: 0.020833, chairs: 0.0125, pottery: 0.0125, gold_ring: 0.0125 } },
       aristocrats: { basic: ["lamp", "mead", "iron_armor", "chairs", "pottery"], extra: ["brandy", "luxury_clothes", "gold_ring"],
-                     perCapita: { lamp: 0.03, mead: 0.04, iron_armor: 0.02, chairs: 0.02, pottery: 0.02, brandy: 0.02, luxury_clothes: 0.01, gold_ring: 0.01 } },
+                     perCapita: { lamp: 0.020833, mead: 0.020833, iron_armor: 0.020833, chairs: 0.020833, pottery: 0.020833, brandy: 0.0125, luxury_clothes: 0.0125, gold_ring: 0.0125 } },
     },
     // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
     //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.

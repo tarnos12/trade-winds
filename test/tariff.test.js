@@ -39,22 +39,33 @@ function mkTown(over) {
 }
 // Housing so each city keeps a real population across the run (Sim caps pop at
 // housing now: base peasants are 0). No houses ⇒ pop → 0 ⇒ no demand ⇒ no trade ⇒
-// treasury stays 0. 6 huts (cap 12) + 2 cottages (cap 6) shelter mkTown's pop.
+// treasury stays 0. 8 huts (cap 16) + 3 cottages (cap 6) shelter each town's pop.
 function homes() {
   const a = [];
-  for (let i = 0; i < 6; i++) a.push({ typeId: "hut" });
-  for (let i = 0; i < 2; i++) a.push({ typeId: "cottage" });
+  for (let i = 0; i < 8; i++) a.push({ typeId: "hut" });
+  for (let i = 0; i < 3; i++) a.push({ typeId: "cottage" });
   return a;
 }
+function peasantHomes(n) { const a = []; for (let i = 0; i < n; i++) a.push({ typeId: "hut" }); return a; }
+// Post-rebalance production is ~8-24× slower, so the old bare farm/mine/mill towns
+// (no local basic-need producers) collapsed to ZERO population before any surplus
+// could accumulate — so NO trade fired and treasury stayed 0. Give each town its own
+// basic-need producers (potato/wood/fish/coal chains) so populations PERSIST, exactly
+// as trade.test.js does, keeping the grain/iron surplus flows the tariff scaling probes.
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "farm", workers: 3 }, ...homes()],
-  stock: { grain: 40, iron: 0 } }); }
+  pop: { peasants: 12, workers: 6, burghers: 0 },
+  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
+  stock: { grain: 80, potato: 80, wood: 80, mead: 20 } }); }
 function mineTown() { return mkTown({ id: 2, q: 6, r: 0,
-  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, ...homes()],
-  stock: { iron: 40, grain: 15 } }); }
+  pop: { peasants: 24, workers: 0, burghers: 0 },
+  buildings: [{ typeId: "iron_mine", workers: 3 }, { typeId: "iron_mine", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...peasantHomes(12)],
+  stock: { iron: 80, wood: 80 } }); }
 function millTown() { return mkTown({ id: 3, q: 3, r: 1,
-  buildings: [{ typeId: "mill", workers: 2 }, ...homes()],
-  stock: { grain: 30, iron: 0 } }); }
+  pop: { peasants: 8, workers: 8, burghers: 8 },
+  buildings: [{ typeId: "brewery", workers: 2 }, { typeId: "forge", workers: 2 }, { typeId: "lumberjack", workers: 3 },
+              ...homes(), { typeId: "manor" }, { typeId: "manor" }],
+  stock: { grain: 15, iron: 12, wood: 80, potato: 80,
+           fish: 80, coal: 80, mead: 80, bread: 80, clothes: 80, lamp: 80, chairs: 80, pottery: 80, gold_ring: 80 } }); }
 const ROAD_LINE = [[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]];
 
 // `over` lets a test tweak the state (tariffRate, research) before the run.
