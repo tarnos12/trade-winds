@@ -8330,10 +8330,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       upgradeLevel: 1, pendingUpgrade: null,
       // === /RU-A ===
     });
-    // U/MISSION-STATS: an INSTANT (gold-only) building is placed built:true and so
-    // never hits the sim delivery's false→true flip that counts construction — count
-    // it here so "construct a building" mission objectives credit instant builds too.
-    if (Buildings.isInstant(def) && typeof Sim !== "undefined" && Sim.statConstructed) Sim.statConstructed(state, placing.typeId);
+    // (Instant/gold-only buildings are counted for mission `construct` objectives
+    // inside Buildings.chargeBuilding — the canonical pure-core charge point — so
+    // no count is needed here; doing so would double-count.)
     if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();
     SFX.play("place");
@@ -12278,7 +12277,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.25.0";
+  const GAME_VERSION = "0.25.1";
   const PATCH_NOTES = [
     { v: "0.25.0", notes: [
       "NEW: a Mission Editor (🎯 on the start screen) — design your own missions on a grid and connect them into a flowchart",

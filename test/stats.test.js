@@ -121,6 +121,24 @@ function constructSawmillState() {
      get(s, "stats.constructed.byType.sawmill") === 1 && get(s, "stats.constructed.byType.mill") === 1);
 }
 
+// 1b) chargeBuilding counts INSTANT builds at placement (they never trip the
+// delivery flip), but does NOT count a non-instant build (that is counted once
+// when Sim finishes delivering its materials). Pure-core placement hook.
+{
+  const s = { treasury: 1000, towns: [{ id: 1, q: 0, r: 0, level: 1, gold: 0,
+    pop: { peasants: 0, workers: 0, burghers: 0 }, stock: {}, prices: {}, demand: {}, buildings: [] }] };
+  const town = s.towns[0];
+  Buildings.chargeBuilding(s, town, "hut");        // instant (gold-only)
+  ok("chargeBuilding: instant hut counts once at placement", get(s, "stats.constructed.total") === 1);
+  ok("chargeBuilding: instant hut recorded byType", get(s, "stats.constructed.byType.hut") === 1);
+  Buildings.chargeBuilding(s, town, "farm");       // instant
+  ok("chargeBuilding: a second instant build bumps total to 2", get(s, "stats.constructed.total") === 2);
+  ok("chargeBuilding: byType splits instant builds", get(s, "stats.constructed.byType.farm") === 1);
+  Buildings.chargeBuilding(s, town, "sawmill");    // NON-instant: counted at delivery, NOT here
+  ok("chargeBuilding: non-instant sawmill NOT counted at charge (waits for delivery)",
+     get(s, "stats.constructed.total") === 2 && get(s, "stats.constructed.byType.sawmill") === undefined);
+}
+
 // ========================================================================
 // 2) upgraded — a pendingUpgrade APPLIES (upgradeLevel increments).
 // ========================================================================

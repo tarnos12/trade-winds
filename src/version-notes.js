@@ -1,5 +1,5 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.25.0";
+  const GAME_VERSION = "0.25.1";
   const PATCH_NOTES = [
     { v: "0.25.0", notes: [
       "NEW: a Mission Editor (🎯 on the start screen) — design your own missions on a grid and connect them into a flowchart",
