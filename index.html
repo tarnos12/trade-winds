@@ -13234,7 +13234,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         "#balanceLabOverlay .bl-city{padding:9px 10px}",
         "#balanceLabOverlay .bl-city-hd{margin-bottom:4px}",
         "#balanceLabOverlay select.bl-lvl{font-size:11px;padding:2px 4px;font-weight:bold;color:var(--accent)}",
-        "#balanceLabOverlay .bl-city-sub{display:flex;gap:10px;align-items:baseline;margin-bottom:7px;font-size:10.5px}",
+        "#balanceLabOverlay .bl-city-hd .nm{flex:1}",
+        "#balanceLabOverlay .bl-delcity{margin-left:auto;font-size:15px;opacity:.55}",
+        "#balanceLabOverlay .bl-delcity:hover{opacity:1}",
+        "#balanceLabOverlay .bl-city-sub{display:flex;gap:10px;align-items:center;margin-bottom:7px;font-size:10.5px}",
         "#balanceLabOverlay .bl-slots{font-variant-numeric:tabular-nums;color:var(--paper);opacity:.8}",
         "#balanceLabOverlay .bl-slots.over{color:#e08a6a;opacity:1;font-weight:bold}",
         "#balanceLabOverlay .bl-cap{opacity:.6}",
@@ -13359,9 +13362,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       for (let L = 1; L <= 4; L++) lvlSel.appendChild(el("option", { value: String(L), text: "City L" + L, selected: L === lvl ? "selected" : null }));
       lvlSel.value = String(lvl);
       lvlSel.addEventListener("change", () => { city.level = +lvlSel.value; refresh(); });
-      const del = el("button", { class: "bl-x", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
-      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, lvlSel, del]));
+      const del = el("button", { class: "bl-x bl-delcity", text: "🗑", title: "remove city", onclick: () => { scn.cities.splice(ci, 1); refresh(); } });
+      card.appendChild(el("div", { class: "bl-city-hd" }, [nm, del]));
       card.appendChild(el("div", { class: "bl-city-sub" }, [
+        lvlSel,
         el("span", { class: "bl-slots" + (usedSlots > slotCap ? " over" : ""), title: "buildings used / slots at this city level", text: "🏗 " + usedSlots + "/" + slotCap }),
         el("span", { class: "bl-cap", text: "👥 " + capTxt }),
       ]));
@@ -13401,12 +13405,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         row.appendChild(el("button", { class: "bl-x", text: "✕", title: "remove this building", onclick: () => { city.buildings.splice(bi, 1); refresh(); } }));
         card.appendChild(row);
 
-        // per-building produce/consume line (e.g. Sawmill: wood −480 · planks +240)
+        // produce/consume line for the WHOLE row (per-building × count), e.g.
+        // 3× Sawmill → wood −1,440 · planks +720.
         const flows = buildingFlows(b.typeId, b.level || 1);
         if (flows.length) {
-          const fl = el("div", { class: "bl-flows" + (b.paused || b.count <= 0 ? " off" : "") });
+          const n = b.count || 0;
+          const fl = el("div", { class: "bl-flows" + (b.paused || n <= 0 ? " off" : "") });
           for (const f of flows) fl.appendChild(el("span", { class: f.sign > 0 ? "green" : "red",
-            text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin) }));
+            text: goodName(f.good) + " " + (f.sign > 0 ? "+" : "−") + fmt(f.perMin * n) }));
           card.appendChild(fl);
         }
       });
