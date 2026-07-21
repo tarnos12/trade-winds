@@ -42,9 +42,7 @@
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
-    state.quest = null;
     state.victory = false;
-    state._questSeq = 0;
     state.event = null;          // P4-C: no event on a fresh map
     state.eventSeed = (hashSeed(seedInput) ^ 0x1a2b3c4d) | 0;  // deterministic per-game event RNG
     state.eventCooldown = CONFIG.events.minGapTicks;
@@ -228,9 +226,7 @@
       : (hashSeed(state.seedInput) ^ 0x2545f491) | 0;
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
-    state.quest = data.quest || null;
     state.victory = !!data.victory;
-    if (typeof data._questSeq === "number") state._questSeq = data._questSeq;
     // P4-C: restore events (a bridge event's road is stored removed from roads;
     // Events.tick re-adds it on expiry, so the road returns after repair).
     state.event = data.event || null;

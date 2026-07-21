@@ -6,11 +6,6 @@
   // updateProgressHud null-guards them and refreshes the panel when it's open.
   const prestigeValEl = document.getElementById("prestigeVal");
   const castleLvlValEl = document.getElementById("castleLvlVal");
-  const questBannerEl = document.getElementById("questBanner");
-  const qbDescEl = document.getElementById("qbDesc");
-  const qbBarEl = document.getElementById("qbBar");
-  const qbProgEl = document.getElementById("qbProg");
-  const qbRewardEl = document.getElementById("qbReward");
   const winNoticeEl = document.getElementById("winNotice");
 
   function updateProgressHud() {
@@ -19,25 +14,7 @@
     // CP: prestige + castle level are shown in the castle panel — refresh it if open.
     if (window.CastleUI && window.CastleUI.isOpen) window.CastleUI.refresh();
   }
-
-  function renderQuestBanner() {
-    if (!questBannerEl) return;   // Q: banner removed from the DOM (onboarding → missions)
-    const q = state.quest;
-    const tmpl = q && Quests.template(q.id);
-    if (!tmpl) { questBannerEl.classList.add("hidden"); questBannerEl.setAttribute("aria-hidden", "true"); return; }
-    questBannerEl.classList.remove("hidden");
-    questBannerEl.setAttribute("aria-hidden", "false");
-    const target = Quests.targetOf(tmpl);
-    const prog = Quests.progressOf(state, tmpl);
-    qbDescEl.textContent = tmpl.desc;
-    qbProgEl.textContent = Math.floor(Math.min(prog, target)) + " / " + target;
-    qbBarEl.style.width = Math.max(0, Math.min(100, target ? prog / target * 100 : 0)) + "%";
-    const r = tmpl.reward || {};
-    const parts = [];
-    if (r.gold) parts.push(r.gold + " g");
-    if (r.prestige) parts.push("✨ " + r.prestige);
-    qbRewardEl.textContent = parts.length ? "Reward: " + parts.join(" · ") : "—";
-  }
+  // King's-Quest banner retired — no renderQuestBanner (quests removed entirely).
 
   // === POLISH: victory is the game's biggest moment and previously showed a
   // bland static card. This adds (a) a stat recap read from existing state
@@ -95,14 +72,11 @@
   // Live refresh (500ms, same cadence as the other panels). Also catches a
   // victory reached via the tick path (e.g. quest-driven) or a loaded save.
   updateProgressHud();
-  renderQuestBanner();
   if (state.victory) showVictory();
   setInterval(() => {
     updateProgressHud();
-    renderQuestBanner();
     if (state.victory) showVictory();
   }, 500);
 
-  window.ProgressUI = { updateProgressHud, renderQuestBanner, showVictory,
-                        Town, Castle, Quests };
+  window.ProgressUI = { updateProgressHud, showVictory, Town, Castle };
   // === PROGRESS-UI END ===

@@ -490,18 +490,16 @@
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
-    // P4-B: castle level + prestige + upgrade action.
+    // castle level + upgrade action (gold-only since King's Quests were retired).
     let castleHtml = `<div class="up-box">
-      <div class="up-line"><b>🏰 Castle — Level ${state.castleLevel || 1}</b>
-        <span>✨ ${Math.floor(state.prestige || 0)} prestige</span></div>`;
+      <div class="up-line"><b>🏰 Castle — Level ${state.castleLevel || 1}</b></div>`;
     const creq = Castle.nextReq(state);
     if (!creq) {
-      castleHtml += `<div class="up-max">Level ${state.castleLevel} — the realm is won 👑</div>`;
+      castleHtml += `<div class="up-max">Level ${state.castleLevel} — the castle is at its grandest 👑</div>`;
     } else {
       const cres = Castle.canUpgrade(state);
-      castleHtml += `<div class="up-req">Requires ${creq.prestigeReq} prestige (have ${Math.floor(state.prestige || 0)}) · ${creq.goldReq} g (have ${Math.floor(treas)})</div>
-        <button class="up-btn" data-castle-upgrade ${cres.ok ? "" : "disabled"}>${cres.ok ? "Upgrade to Level " + ((state.castleLevel || 1) + 1) : esc(cres.reason)}</button>
-        ${(state.castleLevel || 1) + 1 >= CONFIG.castle.maxLevel ? '<div class="up-req" style="text-align:center;margin-top:5px">Next level wins the game.</div>' : ""}`;
+      castleHtml += `<div class="up-req">Requires ${creq.goldReq} g (have ${Math.floor(treas)})</div>
+        <button class="up-btn" data-castle-upgrade ${cres.ok ? "" : "disabled"}>${cres.ok ? "Upgrade to Level " + ((state.castleLevel || 1) + 1) : esc(cres.reason)}</button>`;
     }
     castleHtml += `</div>`;
 

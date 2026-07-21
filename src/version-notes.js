@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.33.1";
+  const GAME_VERSION = "0.34.0";
   const PATCH_NOTES = [
+    { v: "0.34.0", notes: [
+      "Retired the old King\u2019s Quests entirely \u2014 they had no UI (the banner was removed long ago), ran invisibly, and only paid silent rewards",
+      "With prestige\u2019s only source gone, the Castle now upgrades on GOLD alone (like your cities), and its panel no longer asks for prestige",
+    ] },
     { v: "0.33.1", notes: [
       "Fixed the mystery intermittent sound: the King\u2019s-Quest fanfare was still firing even though its banner was removed, so quests completed invisibly with a random jingle \u2014 that cue is gone (quests still pay their rewards)",
     ] },

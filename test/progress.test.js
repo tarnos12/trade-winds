@@ -16,12 +16,12 @@ const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(
   m[1] + "\nthis.CONFIG=CONFIG; this.HexMath=HexMath; this.Sim=Sim;" +
-         "this.Town=Town; this.Castle=Castle; this.Quests=Quests;" +
+         "this.Town=Town; this.Castle=Castle;" +
          // Victory lands in slice 2A — export defensively so a pre-2A eval doesn't throw.
          "\nthis.Victory=(typeof Victory!=='undefined')?Victory:undefined;",
   sandbox
 );
-const { CONFIG, Town, Castle, Quests, Victory } = sandbox;
+const { CONFIG, Town, Castle, Victory } = sandbox;
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -70,51 +70,21 @@ function mkTown(over) {
   ok("canUpgrade fails at max level", Town.canUpgrade(maxed).ok === false);
 })();
 
-// ---- 2. Quest: deliver completes + pays prestige ----------------------------
-(function () {
-  const tmpl = CONFIG.quests.find(q => q.kind === "deliver");
-  ok("a deliver template exists", !!tmpl);
-  const state = { warehouse: {}, treasury: 0, prestige: 0, towns: [], quest: { id: tmpl.id, progress: 0, ticks: 0 } };
-
-  // Not enough delivered yet → no reward.
-  state.warehouse[tmpl.good] = tmpl.target - 1;
-  Quests.tick(state);
-  ok("deliver under target pays nothing", state.prestige === 0 && (state.quest && state.quest.id === tmpl.id));
-
-  // Meet the target → reward paid, goods consumed, new quest rolled.
-  state.warehouse[tmpl.good] = tmpl.target;
-  Quests.tick(state);
-  ok("deliver at target pays prestige", state.prestige === tmpl.reward.prestige);
-  ok("deliver pays gold", state.treasury === tmpl.reward.gold);
-  ok("deliver consumes the goods", (state.warehouse[tmpl.good] || 0) === 0);
-  ok("a new quest is rolled after completion", state.quest && state.quest.id !== undefined);
-})();
-
-// ---- 3. Quest: treasury completes -------------------------------------------
-(function () {
-  const tmpl = CONFIG.quests.find(q => q.kind === "treasury");
-  ok("a treasury template exists", !!tmpl);
-  const state = { warehouse: {}, treasury: tmpl.target, prestige: 0, towns: [], quest: { id: tmpl.id, progress: 0, ticks: 0 } };
-  Quests.tick(state);
-  ok("treasury quest pays prestige at target", state.prestige === tmpl.reward.prestige);
-})();
-
-// ---- 4. Castle upgrade consumes prestige + gold, increments level -----------
+// ---- 2. Castle upgrade is GOLD-ONLY (King's Quests retired → no prestige) ----
 (function () {
   const req2 = CONFIG.castle.levels[2];
   ok("castle L2 requirement defined", req2 && req2.goldReq > 0);
 
-  const state = { castleLevel: 1, prestige: 0, treasury: 0 };
+  const state = { castleLevel: 1, treasury: 0 };
   ok("castle upgrade blocked when broke", Castle.canUpgrade(state).ok === false);
 
-  state.prestige = req2.prestigeReq + 5;
+  // Gold alone gates it now — prestige is not required or consumed.
   state.treasury = req2.goldReq + 100;
-  ok("castle upgrade allowed when funded", Castle.canUpgrade(state).ok === true);
+  ok("castle upgrade allowed on gold alone", Castle.canUpgrade(state).ok === true);
 
   const res = Castle.upgrade(state);
   ok("castle upgrade succeeds", res.ok === true);
   ok("castle level increments to 2", state.castleLevel === 2);
-  ok("castle upgrade consumes prestige", state.prestige === 5);
   ok("castle upgrade consumes gold", state.treasury === 100);
   ok("castle L2 is not victory", state.victory !== true);
 })();
@@ -124,7 +94,7 @@ function mkTown(over) {
 // aristocrat happiness (see §6 + test/victory.test.js). Castle L5 stays a milestone /
 // prestige sink; Castle.upgrade must NOT flip state.victory nor return a truthy .victory.
 (function () {
-  const state = { castleLevel: 1, prestige: 1000, treasury: 100000 };
+  const state = { castleLevel: 1, treasury: 100000 };
   let last = null, guard = 0;
   while (Castle.canUpgrade(state).ok && guard++ < 10) last = Castle.upgrade(state);
   ok("castle reaches max level 5", state.castleLevel === CONFIG.castle.maxLevel);
@@ -155,25 +125,6 @@ function mkTown(over) {
 
 // -----------------------------------------------------------------------------
 if (fail) { console.error(`progress: ${pass} passed, ${fail} FAILED`); process.exit(1); }
-
-// === BAL2: quest rotation skips deliver-quests for unproducible goods =========
-(function () {
-  // Fresh state: bread/iron_tool/clothes producers are all research-locked, so the
-  // rotation must land only on non-deliver quests (treasury/happiness) until then.
-  const st = { research: { unlocked: [], active: null, progress: 0, spent: 0, queue: [] },
-               towns: [], warehouse: {}, treasury: 0, _questSeq: 0 };
-  let sawLockedDeliver = false;
-  for (let i = 0; i < 12; i++) {
-    const t = Quests.pick(st);
-    if (t.kind === "deliver") sawLockedDeliver = true;
-  }
-  ok("no deliver-quest offered while its good is unproducible", !sawLockedDeliver);
-  // Unlock the bakery chain -> deliver-bread becomes offerable again.
-  st.research.unlocked.push("unlock_bakery");
-  let sawBread = false;
-  for (let i = 0; i < 12; i++) if (Quests.pick(st).id === "deliver-bread") sawBread = true;
-  ok("deliver-bread returns once the bakery is unlocked", sawBread);
-})();
-// === /BAL2 ====================================================================
+console.log(`progress: ${pass} passed`);
 
 console.log(`progress: ${pass} passed`);

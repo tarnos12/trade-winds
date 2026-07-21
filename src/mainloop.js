@@ -62,13 +62,13 @@
         // Slice A: deliver materials from castleStock into the Research Center
         // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
         if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
-        Research.tick(state); Quests.tick(state); Victory.check(state);
-        // W-fix: the King's-Quest fanfare was ORPHANED — task Q removed the quest
-        // banner (onboarding moved to the Getting Started missions), so these
-        // quests now complete invisibly. The lone fanfare with nothing on screen
-        // was the "weird intermittent sound". The new mission system keeps its
-        // own audible cues (Tutorial: "mission done" / "all missions ✓"), which
-        // DO have visible UI. So: no cue here. (Quests still pay their rewards.)
+        Research.tick(state); Victory.check(state);
+        // King's Quests fully RETIRED: they had no UI (banner removed in Q,
+        // onboarding lives in the Getting Started missions) and ran invisibly,
+        // paying silent rewards + firing an orphaned fanfare (the "weird
+        // intermittent sound"). Engine, cue, and reward stream all removed; the
+        // castle now levels on gold alone. The mission system keeps its own
+        // audible cues (Tutorial), which have visible UI.
         if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
           Events.tick(state);
           if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
