@@ -2176,6 +2176,27 @@ Object.assign(CONFIG, {
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
     happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
+    // === SAWTOOTH FIX (post-victory happiness plateau) === Happiness reads whether
+    // the population's demand was MET this tick (per-good satisfaction gsat = consumed
+    // / required). Inter-city imports arrive in BURSTS — a cart dumps a load, stock
+    // spikes, then drains to ~0 before the next cart — so a good's instantaneous gsat
+    // sawtooths (1 when freshly stocked, <1 when the shelf momentarily empties), and
+    // happiness inherits it (~56↔99 on a supplied aristocrat estate). We feed
+    // happiness a SMOOTHED per-good satisfaction: a moving average (EMA) of gsat kept
+    // on the town (town.satEMA), so momentary between-cart dips don't crater happiness
+    // while a genuinely under-supplied good (gsat low for a sustained stretch) still
+    // pulls the average — and happiness — down. A soft low-pass strictly REDUCES
+    // variance (it cannot resonate/amplify like a hard reserve), and it is
+    // mean-preserving: a truly supplied estate (gsat≈1) still averages to ~100, so the
+    // win threshold is unaffected and scarcity is not trivialized. The EMA is
+    // SNAP-initialised (first sample = gsat), so the first tick and any steady/
+    // plentiful state are bit-identical to the old instantaneous model — only bursty
+    // transients are smoothed. satSmoothing is the EMA weight on the NEW sample per
+    // tick (smaller ⇒ smoother / longer memory); it composes with happyEase below to
+    // form a two-stage low-pass. This channel affects HAPPINESS only — consumption,
+    // stock, prices, trade and pop capacity are untouched.
+    satSmoothing: 0.05,      // EMA weight for the per-good satisfaction feeding happiness
+
     // === CC: people-tax — every tier produces ONLY gold (tax); higher tiers pay
     // MORE per capita (ratePerTier). At happyBase the multiplier is 1; every point
     // above happyBase adds bonusPerPoint (so happier cities fund trade faster).
@@ -2661,14 +2682,32 @@ Sim.tick = function (State) {
       }
     }
     // === /RU-A + /CC ===
-    const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
+    const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
       addDemand(gid, req);
       const have = stock[gid] || 0;
       const consume = Math.min(have, req);
       stock[gid] = have - consume;
-      gsat[gid] = req > 0 ? consume / req : 1;
+      gsatRaw[gid] = req > 0 ? consume / req : 1;
+    }
+    // === SAWTOOTH FIX === smooth the per-good satisfaction that HAPPINESS reads with a
+    // town-persisted EMA (town.satEMA), so momentary between-cart shelf dips don't
+    // crater happiness. Snap-initialised (first sample = raw) so a first/plentiful tick
+    // is bit-identical to the old instantaneous model; satSmoothing ≤ 0 (or missing) ⇒
+    // the old model exactly. Only demanded goods are smoothed; `gsat` (used by the
+    // happiness class-sat helpers below) is the SMOOTHED value. Consumption/stock above
+    // are unchanged, so prices, trade and pop capacity see the true instantaneous stock.
+    if (!town.satEMA || typeof town.satEMA !== "object") town.satEMA = {};
+    const satEMA = town.satEMA;
+    const satAlpha = (N.satSmoothing > 0) ? Math.min(1, N.satSmoothing) : 1;
+    const gsat = {};                     // per-good SMOOTHED satisfaction feeding happiness
+    for (const gid in gsatRaw) {
+      const raw = gsatRaw[gid];
+      const prev = satEMA[gid];
+      const sm = (typeof prev === "number") ? prev + (raw - prev) * satAlpha : raw;   // snap on first sample
+      satEMA[gid] = sm;
+      gsat[gid] = sm;
     }
     // Demand-weighted class satisfaction; null when the class isn't demanded at all.
     const classSat = (list) => {
@@ -7252,6 +7291,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   let renderAcc = 0;                 // AB: render-frame accumulator (60fps cap)
   const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
+  let _prevBuilds = -1;              // JUICE/AUDIO: edge-detect building/upgrade completions for the "construct" cue
 
   const fpsEl = document.getElementById("fps");
   const statEl = document.getElementById("stat");
@@ -7300,6 +7340,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         }
         if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
+      }
+      // JUICE/AUDIO: play the build-complete cue when a construction or upgrade
+      // finishes this frame (stats totals rise on both timed + instant completion;
+      // see Sim.statConstructed/statUpgraded). Skip the first sample so a loaded
+      // save doesn't fanfare its existing buildings.
+      if (typeof SFX !== "undefined" && SFX.play) {
+        const st = (state && state.stats) || {};
+        const nb = ((st.constructed && st.constructed.total) || 0) + ((st.upgraded && st.upgraded.total) || 0);
+        if (_prevBuilds >= 0 && nb > _prevBuilds) SFX.play("construct", "build complete");
+        _prevBuilds = nb;
       }
     }
 
@@ -10902,23 +10952,47 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 /* BUILD:juice START */
   // === JUICE START === (P5-B / slot #3 — cozy micro-animations, canvas overlay)
   // A tiny particle/effects layer driven by the RENDER clock (the rAF `dt`). It
-  // ONLY reads state.{carts,towns} + the module-local render caches (cartRender,
-  // in scope in this IIFE) and draws an overlay AFTER every base draw. It never
-  // mutates Sim/Trade/economy state, never writes to `state`, and never dirties
-  // the offscreen terrain cache — so saves, tests and the pure core are all
-  // unaffected. All transient effect state lives in the module-local arrays
-  // below (never persisted). Honors prefers-reduced-motion (motion off). Perf
-  // safeguards: a hard particle cap, a reused object pool, and zoom-culled
-  // emission of smoke/trails when the camera is far out.
+  // ONLY reads state.{carts,towns,treasury,castle} + the module-local render
+  // caches (cartRender, in scope in this IIFE) and draws an overlay AFTER every
+  // base draw. It never mutates Sim/Trade/economy state, never writes to
+  // `state`, and never dirties the offscreen terrain cache — so saves, tests
+  // and the pure core are all unaffected. All transient effect state lives in
+  // the module-local arrays/maps below (never persisted). Honors
+  // prefers-reduced-motion (motion off). Perf safeguards: a hard particle cap,
+  // a reused object pool, and zoom-culled emission of smoke/trails when the
+  // camera is far out.
+  //
+  // Effects: coinBurst (sale settles) + a "+Ng" tariff popup, smokePuff
+  // (chimney smoke for ACTIVELY producing buildings only — idle/unstaffed/
+  // input-starved buildings stay smokeless), trailDot + dustFleck (cart
+  // movement), popIn (town/building first appears), buildComplete
+  // (construction/upgrade finishes).
   const Juice = (() => {
     const MAX_PARTICLES = 240;      // hard cap — emission is skipped above this
-    const parts = [];               // active particles (world-space)
-    const pool  = [];               // dead particles, reused to avoid GC churn
-    const cartPhase = {};           // cart.id -> last-seen phase (sale detection)
-    const seenTowns = new Set();    // town ids already popped-in
-    const seenBld = new Set();      // "townId:q,r" building keys already popped-in
-    let smokeAcc = 0, trailAcc = 0; // emission cadence accumulators (ms)
-    let primed = false;             // first frame primes "seen" sets w/o bursting
+
+    // --- tuning (named consts, no magic numbers below) ---
+    const COIN_COUNT = 5;              // coins per sale burst
+    const SALE_SPARK_COUNT = 3;        // extra bright sparkles per sale burst (punch)
+    const TARIFF_POPUP_MIN = 0.4;      // min treasury delta (gold) to show a "+Ng" popup
+    const SMOKE_INTERVAL = 520;        // ms between chimney-puff emission passes
+    const SMOKE_COLOR_A = "#cfc4b4";   // chimney smoke tint A (subtle variation)
+    const SMOKE_COLOR_B = "#ddd2bc";   // chimney smoke tint B
+    const DUST_CHANCE = 0.35;          // odds of a dust fleck alongside a cart's trail dot
+    const DUST_COLOR = "#c9b28f";      // pale road-dust tint
+    const BUILD_COMPLETE_COLOR = "#bfe8a8";   // fresh construction finished (green-gold)
+    const UPGRADE_COMPLETE_COLOR = "#ffd27a"; // level-up finished (warm gold)
+
+    const parts = [];                // active particles (world-space)
+    const pool  = [];                // dead particles, reused to avoid GC churn
+    const cartPhase = {};            // cart.id -> last-seen phase (sale detection)
+    const seenTowns = new Set();     // town ids already popped-in
+    const seenBld = new Set();       // "townId:q,r" building keys already popped-in
+    const bldProgress = {};          // "townId:q,r" -> {built, level} (construction/upgrade completion)
+    const trailPrevPos = {};         // cart.id -> last trail-emission pixel pos (dust heading)
+    let smokeAcc = 0, trailAcc = 0;  // emission cadence accumulators (ms)
+    let primed = false;              // first frame primes "seen" sets w/o bursting
+    let prevTreasury = null;         // last-seen state.treasury (tariff popup delta)
+    let saleSpot = null;             // last sale location THIS frame (for the tariff popup)
 
     const rmq = window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
@@ -10938,9 +11012,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
 
     // ---- emitters (all read-only over state) ----
-    // Coin/spark burst at a town when a trade cart banks its sale.
+    // Coin/spark burst at a town when a trade cart banks its sale. Punchier
+    // than a plain coin: a soft gold ring pulse + a couple of bright sparkles
+    // ride along for extra "ka-ching" without changing the read-only contract.
     function coinBurst(x, y) {
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < COIN_COUNT; i++) {
         const p = spawn(); if (!p) break;
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.0;
         const sp = SIZE * 0.0024 + Math.random() * SIZE * 0.0012;
@@ -10953,22 +11029,54 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         p.life = p.max = 650 + Math.random() * 300;
         p.color = null;
       }
+      const r = spawn();
+      if (r) {
+        r.kind = "ring"; r.x = x; r.y = y; r.vx = 0; r.vy = 0; r.g = 0;
+        r.size = SIZE * 0.12; r.grow = SIZE * 0.012; r.life = r.max = 380; r.color = "#ffe9b0";
+      }
+      for (let i = 0; i < SALE_SPARK_COUNT; i++) {
+        const s = spawn(); if (!s) break;
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+        const sp = SIZE * 0.0018 + Math.random() * SIZE * 0.001;
+        s.kind = "spark"; s.x = x + (Math.random() - 0.5) * SIZE * 0.3; s.y = y;
+        s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp - SIZE * 0.0004;
+        s.g = SIZE * 0.000005; s.grow = 0; s.size = SIZE * 0.06;
+        s.life = s.max = 420 + Math.random() * 200; s.color = "#fff3c4";
+      }
     }
-    // Slow drifting smoke puff above an active producer's chimney.
-    function smokePuff(x, y) {
+    // Slow drifting smoke puff above an active producer's chimney. `lvl`
+    // (building level) nudges size/richness a touch so upgraded plants read
+    // as busier, without changing emission cadence dramatically.
+    function smokePuff(x, y, lvl) {
       const p = spawn(); if (!p) return;
       p.kind = "smoke";
       p.x = x + (Math.random() - 0.5) * SIZE * 0.15; p.y = y;
       p.vx = SIZE * 0.0003 + (Math.random() - 0.5) * SIZE * 0.0005;
       p.vy = -(SIZE * 0.0005 + Math.random() * SIZE * 0.0004);
-      p.g = 0; p.size = SIZE * 0.10; p.grow = SIZE * 0.00006;
-      p.life = p.max = 1600 + Math.random() * 900; p.color = null;
+      p.g = 0;
+      const bump = Math.min(0.4, ((lvl || 1) - 1) * 0.12);
+      p.size = SIZE * (0.10 + bump * 0.12);
+      p.grow = SIZE * (0.00006 + bump * 0.00002);
+      p.life = p.max = 1600 + Math.random() * 900 + bump * 300;
+      p.color = Math.random() < 0.5 ? SMOKE_COLOR_A : SMOKE_COLOR_B;
     }
     // Faint fading dot dropped behind a moving cart.
     function trailDot(x, y, color) {
       const p = spawn(); if (!p) return;
       p.kind = "trail"; p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.g = 0;
       p.size = SIZE * 0.12; p.grow = 0; p.life = p.max = 420; p.color = color;
+    }
+    // Tiny neutral dust mote kicked up beside a cart's wheels — a subtle,
+    // quick-fading sibling to trailDot (cargo-colored) for road-dust texture.
+    function dustFleck(x, y) {
+      const p = spawn(); if (!p) return;
+      p.kind = "dust"; p.x = x; p.y = y;
+      p.vx = (Math.random() - 0.5) * SIZE * 0.0004;
+      p.vy = -SIZE * 0.00025 - Math.random() * SIZE * 0.0002;
+      p.g = SIZE * 0.000003; p.grow = SIZE * 0.00003;
+      p.size = SIZE * (0.05 + Math.random() * 0.03);
+      p.life = p.max = 260 + Math.random() * 160;
+      p.color = null;
     }
     // Expanding ring + sparkles when a town/building first appears.
     function popIn(x, y, r, color) {
@@ -10986,24 +11094,71 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         s.life = s.max = 380 + Math.random() * 160; s.color = color;
       }
     }
+    // Bigger "ta-da" double-ring + sparkle burst when a building finishes
+    // construction or an upgrade completes — distinct from popIn (appearance)
+    // by being showier and color-coded (green-gold new build, warm gold upgrade).
+    function buildComplete(x, y, r, color) {
+      const p1 = spawn();
+      if (p1) {
+        p1.kind = "ring"; p1.x = x; p1.y = y; p1.vx = 0; p1.vy = 0; p1.g = 0;
+        p1.size = r * 0.25; p1.grow = r * 0.014; p1.life = p1.max = 560; p1.color = color;
+      }
+      const p2 = spawn();
+      if (p2) {
+        p2.kind = "ring"; p2.x = x; p2.y = y; p2.vx = 0; p2.vy = 0; p2.g = 0;
+        p2.size = r * 0.1; p2.grow = r * 0.02; p2.life = p2.max = 520; p2.color = "#fff6df";
+      }
+      for (let i = 0; i < 6; i++) {
+        const s = spawn(); if (!s) break;
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9;
+        const sp = SIZE * 0.0016 + Math.random() * SIZE * 0.001;
+        s.kind = "spark"; s.x = x; s.y = y - r * 0.3;
+        s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp - SIZE * 0.0006;
+        s.g = SIZE * 0.000005; s.grow = 0; s.size = SIZE * 0.065;
+        s.life = s.max = 460 + Math.random() * 220; s.color = color;
+      }
+    }
+    // Small floating text popup (e.g. "+12g" tariff feedback).
+    function textPopup(x, y, text, color) {
+      const p = spawn(); if (!p) return;
+      p.kind = "text"; p.x = x; p.y = y; p.vx = 0; p.vy = -(SIZE * 0.00045); p.g = 0;
+      p.size = Math.max(11, Math.round(SIZE * 0.24));  // reused as font px for this kind
+      p.grow = 0; p.life = p.max = 900; p.color = color; p.text = text;
+    }
 
     // ---- detectors (track transitions frame-to-frame; emit unless reduced) ----
     function detectSales() {
       const carts = state.carts || [], seen = {};
+      saleSpot = null;
       for (const c of carts) {
         if (!c) continue;
         seen[c.id] = true;
         const prev = cartPhase[c.id];
-        if (prev === "outbound" && c.phase === "return" && !reduced()) {
+        if (prev === "outbound" && c.phase === "return") {
           const dest = townById(c.toId);
-          if (dest) {
-            const px = HexMath.hexToPixel(dest.q, dest.r, SIZE);
-            coinBurst(px.x, px.y - SIZE * 0.4);
+          const pos = dest ? HexMath.hexToPixel(dest.q, dest.r, SIZE)
+            : (state.castle ? HexMath.hexToPixel(state.castle.q, state.castle.r, SIZE) : null);
+          if (pos) {
+            saleSpot = pos;
+            if (!reduced()) coinBurst(pos.x, pos.y - SIZE * 0.4);
           }
         }
         cartPhase[c.id] = c.phase;
       }
       for (const id in cartPhase) if (!seen[id]) delete cartPhase[id];
+    }
+    // Treasury ticked up (a tariff, or a castle sale) → a small floating
+    // "+Ng" near wherever this frame's sale settled (falls back to nothing if
+    // no sale landed this frame, keeping this purely reactive/read-only).
+    function detectTariff() {
+      const t = state.treasury;
+      if (typeof t !== "number") return;
+      if (prevTreasury === null) { prevTreasury = t; return; }   // prime, no burst on load
+      const delta = t - prevTreasury;
+      prevTreasury = t;
+      if (delta > TARIFF_POPUP_MIN && saleSpot && !reduced()) {
+        textPopup(saleSpot.x, saleSpot.y - SIZE * 0.75, "+" + Math.round(delta) + "g", "#ffd27a");
+      }
     }
     function detectPopins() {
       const emit = primed && !reduced();
@@ -11022,32 +11177,84 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
       primed = true;
     }
+    // Construction/upgrade completion: compares b.built/b.level frame-to-frame
+    // per building key. First sighting of a key only records a baseline (no
+    // burst), exactly like detectSales' cartPhase pattern — so this is safe to
+    // run unconditionally (loading a save full of finished buildings won't
+    // burst a backlog of "complete" pops).
+    function detectBuilds() {
+      for (const t of state.towns || []) {
+        if (!Array.isArray(t.buildings)) continue;
+        for (const b of t.buildings) {
+          const key = t.id + ":" + b.q + "," + b.r;
+          const built = b.built !== false;
+          const level = b.upgradeLevel || 1;   // buildings.js field name (NOT b.level)
+          const prev = bldProgress[key];
+          if (prev && !reduced()) {
+            if (!prev.built && built) {
+              const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+              buildComplete(p.x, p.y, SIZE * 0.5, BUILD_COMPLETE_COLOR);
+            } else if (prev.built && built && level > prev.level) {
+              const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+              buildComplete(p.x, p.y, SIZE * 0.46, UPGRADE_COMPLETE_COLOR);
+            }
+          }
+          bldProgress[key] = { built, level };
+        }
+      }
+    }
+    // Chimney smoke only for buildings that are ACTUALLY producing this tick:
+    // staffed (workers > 0) AND, for processors, currently holding enough of
+    // every input good to run (read-only stock check mirroring Sim's own
+    // effW-gate). Idle/unstaffed/input-starved buildings stay smokeless.
+    function producingNow(b, def, town) {
+      const inputs = def.inputs;
+      if (!inputs) return true;           // extractors: no inputs to starve on
+      const stock = town.stock || {};
+      for (const gid in inputs) if (!(stock[gid] > 0)) return false;
+      return true;
+    }
     function emitSmoke(dt) {
       if (state.zoom < 0.55) return;                 // zoom cull (far out)
-      smokeAcc += dt; if (smokeAcc < 520) return; smokeAcc = 0;
+      smokeAcc += dt; if (smokeAcc < SMOKE_INTERVAL) return; smokeAcc = 0;
       for (const t of state.towns || []) {
         if (!Array.isArray(t.buildings)) continue;
         for (const b of t.buildings) {
           if (!(b.workers > 0)) continue;
           const def = CONFIG.buildings[b.typeId];
           if (!def || (def.kind !== "extractor" && def.kind !== "processor")) continue;
-          if (Math.random() < 0.5) continue;         // stagger puffs (keep count low)
+          if (!producingNow(b, def, t)) continue;     // starved of inputs: no smoke
+          const lvl = b.upgradeLevel || 1;             // buildings.js field name (NOT b.level)
+          const puffChance = 0.5 + Math.min(0.3, (lvl - 1) * 0.08);  // busier plants puff a touch more
+          if (Math.random() > puffChance) continue;   // stagger puffs (keep count low)
           if (parts.length >= MAX_PARTICLES) return;
           const px = HexMath.hexToPixel(b.q, b.r, SIZE);
-          smokePuff(px.x + SIZE * 0.16, px.y - SIZE * 0.28);
+          smokePuff(px.x + SIZE * 0.16, px.y - SIZE * 0.28, lvl);
         }
       }
     }
     function emitTrails(dt) {
       if (state.zoom < 0.6) return;                  // zoom cull (dots-only regime)
       trailAcc += dt; if (trailAcc < 70) return; trailAcc = 0;
+      const seen = {};
       for (const c of state.carts || []) {
         if (!c || c.done) continue;
         const rp = cartRender[c.id];                 // smoothed render pos (set by drawCarts)
         if (!rp) continue;
-        if (parts.length >= MAX_PARTICLES) return;
+        seen[c.id] = true;
+        if (parts.length >= MAX_PARTICLES) break;
         trailDot(rp.x, rp.y, goodColor(c.goodId));
+        const prevP = trailPrevPos[c.id];
+        if (prevP && parts.length < MAX_PARTICLES && Math.random() < DUST_CHANCE) {
+          const dx = rp.x - prevP.x, dy = rp.y - prevP.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len, ny = dx / len;        // perpendicular to travel
+          const side = Math.random() < 0.5 ? 1 : -1;
+          dustFleck(rp.x + nx * side * SIZE * 0.14, rp.y + ny * side * SIZE * 0.14 + SIZE * 0.08);
+        }
+        trailPrevPos[c.id] = { x: rp.x, y: rp.y };
       }
+      for (const id in trailPrevPos) if (!seen[id]) delete trailPrevPos[id];
     }
 
     // ---- integrate + draw ----
@@ -11074,10 +11281,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           ctx.fillStyle = "#fff0b8";
           ctx.beginPath(); ctx.arc(p.x - p.size * 0.28, p.y - p.size * 0.3, p.size * 0.4, 0, Math.PI * 2); ctx.fill();
         } else if (p.kind === "smoke") {
-          ctx.globalAlpha = a * 0.22; ctx.fillStyle = "#cfc4b4";
+          ctx.globalAlpha = a * 0.22; ctx.fillStyle = p.color || "#cfc4b4";
           ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
         } else if (p.kind === "trail") {
           ctx.globalAlpha = a * 0.28; ctx.fillStyle = p.color;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        } else if (p.kind === "dust") {
+          ctx.globalAlpha = a * 0.2; ctx.fillStyle = DUST_COLOR;
           ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
         } else if (p.kind === "ring") {
           ctx.globalAlpha = a * 0.8; ctx.strokeStyle = p.color; ctx.lineWidth = 2;
@@ -11085,6 +11295,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         } else if (p.kind === "spark") {
           ctx.globalAlpha = Math.min(1, a * 1.4); ctx.fillStyle = p.color;
           ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        } else if (p.kind === "text") {
+          ctx.globalAlpha = Math.min(1, a * 1.2);
+          ctx.font = "bold " + p.size + "px system-ui, sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.lineWidth = Math.max(2, p.size * 0.16);
+          ctx.strokeStyle = "rgba(58,38,16,0.55)";
+          ctx.strokeText(p.text, p.x, p.y);
+          ctx.fillStyle = p.color;
+          ctx.fillText(p.text, p.x, p.y);
         }
       }
       ctx.globalAlpha = prev;
@@ -11093,15 +11312,19 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // Called once per render frame from drawWithDpr, AFTER all base draws.
     function frame(dt) {
       const d = Math.min(100, dt || 16);
-      if (reduced()) {
-        // motion off: drop any lingering particles, but keep detectors current
-        // so re-enabling later doesn't burst a backlog of "new" towns/sales.
-        while (parts.length) kill(parts.length - 1);
-        detectSales(); detectPopins();
-        return;
-      }
+      // Detectors always run (even under reduced-motion) so their trackers stay
+      // current — re-enabling motion later won't burst a backlog of "new"
+      // towns/sales/completions. Each detector internally gates its own
+      // particle-spawning on !reduced().
       detectSales();
       detectPopins();
+      detectBuilds();
+      detectTariff();
+      if (reduced()) {
+        // motion off: drop any lingering particles; detectors above already ran.
+        while (parts.length) kill(parts.length - 1);
+        return;
+      }
       emitSmoke(d);
       emitTrails(d);
       update(d);
@@ -11606,6 +11829,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (!ensureCtx()) return;
       try { if (ctx.state === "suspended") ctx.resume(); } catch (e) {}
       unlocked = true;
+      try { syncAmbience(); } catch (e) {}      // arm the ambience bed post-gesture (never before)
     }
 
     // One enveloped voice: osc(type) sliding from f0→f1, soft attack + decay.
@@ -11623,6 +11847,34 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       o.start(t0); o.stop(t0 + dur + 0.02);
     }
 
+    // Same as voice() but through a gentle lowpass — rounds off harsh harmonics
+    // for a warmer, softer timbre (used by the coin chime / levelup / construct cues).
+    function warmVoice(f0, f1, t0, dur, type, peak, cutoff) {
+      const o = ctx.createOscillator();
+      const f = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      o.type = type || "sine";
+      o.frequency.setValueAtTime(f0, t0);
+      if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+      f.type = "lowpass";
+      f.frequency.setValueAtTime(cutoff || 2200, t0);
+      f.Q.value = 0.7;
+      const a = Math.min(0.014, dur * 0.22);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + a);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(f); f.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+
+    // A single "coin" note: warm filtered fundamental + a soft, short octave-up
+    // shimmer partial layered on top — the classic bell/coin two-partial trick,
+    // rounder and warmer than a bare sine.
+    function coinNote(f, t0, dur, peak) {
+      warmVoice(f, f, t0, dur, "sine", peak, 2600);
+      warmVoice(f * 2.01, f * 2.01, t0, dur * 0.55, "sine", peak * 0.35, 3200);
+    }
+
     // Cue definitions — each builds a short, soft gesture from the current time.
     function render(name) {
       const t = ctx.currentTime;
@@ -11630,20 +11882,28 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         case "place":                              // soft wooden "tok"
           voice(200, 120, t, 0.10, "triangle", 0.5);
           break;
-        case "trade":                              // gentle two-note coin chime
-          voice(1046, 1046, t, 0.10, "sine", 0.28);
-          voice(1568, 1568, t + 0.06, 0.14, "sine", 0.22);
+        case "trade":                              // warm, rounder two-note coin chime
+          coinNote(1046, t, 0.20, 0.26);
+          coinNote(1568, t + 0.07, 0.24, 0.20);
           break;
-        case "levelup":                            // rising C–E–G arpeggio
-          voice(523, 523, t, 0.12, "triangle", 0.32);
-          voice(659, 659, t + 0.09, 0.12, "triangle", 0.32);
-          voice(784, 784, t + 0.18, 0.20, "triangle", 0.34);
+        case "levelup":                             // warmer rising arpeggio + soft low
+          voice(196, 196, t, 0.05, "sine", 0.16);   // foundation + a bright sparkle finish
+          warmVoice(523, 523, t + 0.02, 0.14, "triangle", 0.30, 2400);
+          warmVoice(659, 659, t + 0.11, 0.14, "triangle", 0.30, 2600);
+          warmVoice(784, 784, t + 0.20, 0.22, "triangle", 0.32, 2800);
+          coinNote(1568, t + 0.34, 0.30, 0.16);
+          break;
+        case "construct":                           // NEW: construction/upgrade complete —
+          voice(150, 90, t, 0.09, "triangle", 0.42);        // two soft mallet "thunk"s settling
+          voice(170, 100, t + 0.09, 0.10, "triangle", 0.40); // into a bright two-note finish
+          warmVoice(784, 784, t + 0.20, 0.10, "sine", 0.22, 2600);
+          warmVoice(988, 988, t + 0.26, 0.22, "sine", 0.26, 2600);
           break;
         case "quest": {                            // brief bright fanfare C–E–G–C
-          const n = [523, 659, 784, 1046];
-          for (let i = 0; i < n.length; i++)
-            voice(n[i], n[i], t + i * 0.08, 0.18, "triangle", 0.3);
-          break;
+          const n = [523, 659, 784, 1046];          // (legacy cue name — still called by
+          for (let i = 0; i < n.length; i++)        // progress-ui/tutorial "all missions/
+            voice(n[i], n[i], t + i * 0.08, 0.18, "triangle", 0.3); // victory" fanfares, not
+          break;                                    // the retired King's Quests system)
         }
         case "event":                              // mellow ding-dong notification
           voice(660, 660, t, 0.16, "sine", 0.26);
@@ -11652,6 +11912,62 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         default:
           voice(440, 440, t, 0.08, "sine", 0.2);
       }
+    }
+
+    // === Ambience: a very quiet, continuous market/wind bed (filtered noise +
+    // two soft detuned low drones with a slow breeze-swell LFO). Built lazily on
+    // first unlock() (never before a real user gesture) and only when not muted;
+    // muting fades it out (not torn down) and unmuting fades it back in. Entirely
+    // optional texture — if construction fails for any reason it's swallowed and
+    // the game/SFX cues are unaffected.
+    let amb = null;
+    function buildAmbience() {
+      if (!ctx || amb) return;
+      try {
+        const dur = 2;
+        const buf = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * dur)), ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        const noise = ctx.createBufferSource();
+        noise.buffer = buf; noise.loop = true;
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = "lowpass"; noiseFilter.frequency.value = 480; noiseFilter.Q.value = 0.5;
+        const noiseLevel = ctx.createGain(); noiseLevel.gain.value = 0.012;   // faint wind hiss
+
+        const d1 = ctx.createOscillator(); d1.type = "sine"; d1.frequency.value = 110;
+        const d2 = ctx.createOscillator(); d2.type = "sine"; d2.frequency.value = 164.5; // soft detuned 5th
+        const droneLevel = ctx.createGain(); droneLevel.gain.value = 0.008;   // faint market hum
+
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;       // slow breeze swell
+        const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.004;
+
+        const ambGain = ctx.createGain();
+        ambGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+
+        lfo.connect(lfoGain); lfoGain.connect(noiseLevel.gain);
+        noise.connect(noiseFilter); noiseFilter.connect(noiseLevel); noiseLevel.connect(ambGain);
+        d1.connect(droneLevel); d2.connect(droneLevel); droneLevel.connect(ambGain);
+        ambGain.connect(master);
+
+        noise.start(); lfo.start(); d1.start(); d2.start();
+        ambGain.gain.setTargetAtTime(1, ctx.currentTime, 3);   // slow ~3s fade-in (already very quiet)
+
+        amb = { noise, noiseFilter, noiseLevel, d1, d2, droneLevel, lfo, lfoGain, ambGain };
+      } catch (e) { amb = null; }
+    }
+    function fadeAmbience(on) {
+      if (!amb) return;
+      try {
+        const now = ctx.currentTime;
+        amb.ambGain.gain.cancelScheduledValues(now);
+        amb.ambGain.gain.setTargetAtTime(on ? 1 : 0.0001, now, on ? 2.5 : 0.6);
+      } catch (e) {}
+    }
+    // Keep ambience in sync with unlock/mute state — called after every state change.
+    function syncAmbience() {
+      if (!ctx || !unlocked) return;         // never before a real gesture
+      if (muted) { fadeAmbience(false); return; }
+      if (!amb) buildAmbience(); else fadeAmbience(true);
     }
 
     // === DEBUG (X): recent-sounds ring buffer. Every audible play is logged with
@@ -11685,6 +12001,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       muted = !!m;
       try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {}
       if (typeof state === "object" && state) state.muted = muted;
+      try { syncAmbience(); } catch (e) {}      // mute silences the ambience bed too
     }
     function toggle() { setMuted(!muted); return muted; }
 
@@ -12244,8 +12561,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.34.0";
+  const GAME_VERSION = "0.35.0";
   const PATCH_NOTES = [
+    { v: "0.35.0", notes: [
+      "Feel & juice pass (built by a 3-way agent team):",
+      "Economy: fixed the post-victory happiness sawtooth \u2014 a supplied estate now holds a steady happiness plateau instead of jittering as import carts arrive in bursts (peak-to-trough ~27 \u2192 <1, same average)",
+      "Visuals: punchier coin bursts on a sale, floating +Ng tariff popups, a build/upgrade \u201cta-da\u201d burst, chimney smoke only from buildings that are actually producing, and cart dust",
+      "Sound: warmer coin chime and level-up, a new construction-complete cue, and a subtle market ambience bed (respects mute, never plays before your first click)",
+    ] },
     { v: "0.34.0", notes: [
       "Retired the old King\u2019s Quests entirely \u2014 they had no UI (the banner was removed long ago), ran invisibly, and only paid silent rewards",
       "With prestige\u2019s only source gone, the Castle now upgrades on GOLD alone (like your cities), and its panel no longer asks for prestige",

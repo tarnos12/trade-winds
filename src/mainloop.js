@@ -27,6 +27,7 @@
   let renderAcc = 0;                 // AB: render-frame accumulator (60fps cap)
   const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
+  let _prevBuilds = -1;              // JUICE/AUDIO: edge-detect building/upgrade completions for the "construct" cue
 
   const fpsEl = document.getElementById("fps");
   const statEl = document.getElementById("stat");
@@ -75,6 +76,16 @@
         }
         if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
+      }
+      // JUICE/AUDIO: play the build-complete cue when a construction or upgrade
+      // finishes this frame (stats totals rise on both timed + instant completion;
+      // see Sim.statConstructed/statUpgraded). Skip the first sample so a loaded
+      // save doesn't fanfare its existing buildings.
+      if (typeof SFX !== "undefined" && SFX.play) {
+        const st = (state && state.stats) || {};
+        const nb = ((st.constructed && st.constructed.total) || 0) + ((st.upgraded && st.upgraded.total) || 0);
+        if (_prevBuilds >= 0 && nb > _prevBuilds) SFX.play("construct", "build complete");
+        _prevBuilds = nb;
       }
     }
 

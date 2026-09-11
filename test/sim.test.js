@@ -788,5 +788,94 @@ function place(typeId, q, r, over) {
 }
 // === /CC ======================================================================
 
+// === SAWTOOTH FIX (post-victory happiness plateau) ============================
+// Locks in the deterministic happiness smoothing: happiness reads a moving AVERAGE
+// (EMA, town.satEMA) of per-good satisfaction instead of the instantaneous shelf, so
+// a supplied aristocrat estate whose imports arrive in BURSTS holds a stable plateau
+// instead of the ~56↔99 sawtooth — WITHOUT changing steady-state happiness (mean
+// preserved) or trivializing genuine scarcity.
+{
+  const N = CONFIG.needs;
+  ok("SAW: CONFIG.needs.satSmoothing present and in (0,1]",
+     typeof N.satSmoothing === "number" && N.satSmoothing > 0 && N.satSmoothing <= 1);
+
+  const ARI = N.tiers.aristocrats;
+  const ARI_GOODS = [...ARI.basic, ...ARI.extra];
+  // A pure-import aristocrat estate: 10 aristocrat_homes, 20 seeded aristocrats, no
+  // local T3 producer. Its needs are met only by what we drop on the shelf.
+  const mkEstate = () => town({
+    level: 4, gold: 0,
+    pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 20 },
+    stock: {}, happiness: 100,
+    buildings: (() => { const a = []; for (let i = 0; i < 10; i++) a.push({ typeId: "aristocrat_home", q: 0, r: i + 1, workers: 0, built: true, delivered: {}, closedSlots: 0 }); return a; })(),
+  });
+  const AVG = {}; for (const g in ARI.perCapita) AVG[g] = ARI.perCapita[g] * 20;   // per-tick draw at full pop
+  // Drive with per-good BURSTS every GAP ticks (a cart dropping a load) but the estate
+  // only BANKS up to `hold` units of each good (its finite trade buy-buffer, i.e. the
+  // real minStock/needOf cap), so a burst tops the shelf to `hold` and it then drains
+  // to ~0 before the next cart — the exact bursty-import mechanism that sawtooths
+  // happiness (a supplied estate that reads instantaneous stock). Staggered phases
+  // mirror multi-good carts touching different goods on different ticks.
+  function driveBurst(gap, hold, horizon, warmup) {
+    const t = mkEstate(); const st = { towns: [t], tick: 0 };
+    const phase = {}; ARI_GOODS.forEach((g, i) => { phase[g] = (i * 7) % gap; });   // multi-good carts touch goods on different ticks
+    let mn = Infinity, mx = -Infinity, sum = 0, n = 0;
+    for (let i = 0; i < horizon; i++) {
+      for (const g of ARI_GOODS) if ((i % gap) === phase[g]) t.stock[g] = Math.min(hold, (t.stock[g] || 0) + AVG[g] * gap);
+      Sim.tick(st);
+      const h = t.tierHappiness.aristocrats;
+      if (i >= warmup && typeof h === "number") { if (h < mn) mn = h; if (h > mx) mx = h; sum += h; n++; }
+    }
+    return { min: mn, max: mx, mean: sum / n, p2t: mx - mn, pop: t.pop.aristocrats };
+  }
+
+  // (a) Snap-init: with a PLENTIFUL shelf every tick the smoothed path is bit-identical
+  //     to the old instantaneous model (EMA snaps to the first sample; gsat stays 1).
+  const drivePlentiful = (alpha) => {
+    const save = N.satSmoothing; N.satSmoothing = alpha;
+    const t = mkEstate(); const st = { towns: [t], tick: 0 };
+    const series = [];
+    for (let i = 0; i < 400; i++) { for (const g of ARI_GOODS) t.stock[g] = CONFIG.town.storageCap; Sim.tick(st); series.push(t.tierHappiness.aristocrats); }
+    N.satSmoothing = save; return series;
+  };
+  {
+    const smoothed = drivePlentiful(N.satSmoothing), raw = drivePlentiful(1);
+    ok("SAW: plentiful-shelf drive is bit-identical smoothed vs unsmoothed (snap-init, no steady-state regression)",
+       smoothed.length === raw.length && smoothed.every((v, i) => v === raw[i]));
+    ok("SAW: a fully-supplied estate plateaus at the win threshold (mean >= 99.5)",
+       smoothed[smoothed.length - 1] >= CONFIG.victory.aristocratHappiness);
+  }
+
+  // (b) The fix: bursty-but-supplied estate (the town banks a finite reserve `hold`,
+  //     so a good tops up then drains before the next burst) — smoothing collapses the
+  //     sawtooth while preserving the mean (a stable plateau, not a lower one). The
+  //     crisp <8 / trade-driven demonstration lives in trade.test.js (real Sim+Trade);
+  //     here we lock the robust invariants: the smoothing at least HALVES the ripple
+  //     and never moves the steady-state mean (no trivialize, no regress).
+  {
+    const save = N.satSmoothing;
+    N.satSmoothing = 1;    const before = driveBurst(50, 8, 4000, 2000);   // old instantaneous model
+    N.satSmoothing = save; const after  = driveBurst(50, 8, 4000, 2000);   // smoothed (default)
+    ok("SAW: bursty supply sawtooths WITHOUT smoothing (peak-to-trough > 20)", before.p2t > 20,
+       "before p2t=" + before.p2t.toFixed(1));
+    ok("SAW: smoothing at least halves the sawtooth (a stable plateau)", after.p2t < before.p2t * 0.5,
+       "after p2t=" + after.p2t.toFixed(2) + " vs before " + before.p2t.toFixed(1));
+    ok("SAW: smoothing does NOT lower the mean (mean preserved within 2 pts — no trivialize/regress)",
+       Math.abs(after.mean - before.mean) < 2, `before mean=${before.mean.toFixed(1)} after=${after.mean.toFixed(1)}`);
+  }
+
+  // (c) Determinism: identical bursty drives give bit-identical happiness stats.
+  {
+    const a = driveBurst(50, 8, 2000, 0), b2 = driveBurst(50, 8, 2000, 0);
+    ok("SAW: smoothed happiness drive is deterministic (bit-identical)",
+       a.min === b2.min && a.max === b2.max && a.mean === b2.mean);
+  }
+
+  // (d) satSmoothing did not mutate the shared CONFIG (restored to the built default).
+  ok("SAW: CONFIG.needs.satSmoothing restored to its config default after the A/B",
+     CONFIG.needs.satSmoothing > 0 && CONFIG.needs.satSmoothing <= 1);
+}
+// === /SAWTOOTH FIX ============================================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

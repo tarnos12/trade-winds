@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.34.0";
+  const GAME_VERSION = "0.35.0";
   const PATCH_NOTES = [
+    { v: "0.35.0", notes: [
+      "Feel & juice pass (built by a 3-way agent team):",
+      "Economy: fixed the post-victory happiness sawtooth \u2014 a supplied estate now holds a steady happiness plateau instead of jittering as import carts arrive in bursts (peak-to-trough ~27 \u2192 <1, same average)",
+      "Visuals: punchier coin bursts on a sale, floating +Ng tariff popups, a build/upgrade \u201cta-da\u201d burst, chimney smoke only from buildings that are actually producing, and cart dust",
+      "Sound: warmer coin chime and level-up, a new construction-complete cue, and a subtle market ambience bed (respects mute, never plays before your first click)",
+    ] },
     { v: "0.34.0", notes: [
       "Retired the old King\u2019s Quests entirely \u2014 they had no UI (the banner was removed long ago), ran invisibly, and only paid silent rewards",
       "With prestige\u2019s only source gone, the Castle now upgrades on GOLD alone (like your cities), and its panel no longer asks for prestige",

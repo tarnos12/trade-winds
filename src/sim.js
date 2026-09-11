@@ -44,6 +44,27 @@ Object.assign(CONFIG, {
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
     happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
+    // === SAWTOOTH FIX (post-victory happiness plateau) === Happiness reads whether
+    // the population's demand was MET this tick (per-good satisfaction gsat = consumed
+    // / required). Inter-city imports arrive in BURSTS — a cart dumps a load, stock
+    // spikes, then drains to ~0 before the next cart — so a good's instantaneous gsat
+    // sawtooths (1 when freshly stocked, <1 when the shelf momentarily empties), and
+    // happiness inherits it (~56↔99 on a supplied aristocrat estate). We feed
+    // happiness a SMOOTHED per-good satisfaction: a moving average (EMA) of gsat kept
+    // on the town (town.satEMA), so momentary between-cart dips don't crater happiness
+    // while a genuinely under-supplied good (gsat low for a sustained stretch) still
+    // pulls the average — and happiness — down. A soft low-pass strictly REDUCES
+    // variance (it cannot resonate/amplify like a hard reserve), and it is
+    // mean-preserving: a truly supplied estate (gsat≈1) still averages to ~100, so the
+    // win threshold is unaffected and scarcity is not trivialized. The EMA is
+    // SNAP-initialised (first sample = gsat), so the first tick and any steady/
+    // plentiful state are bit-identical to the old instantaneous model — only bursty
+    // transients are smoothed. satSmoothing is the EMA weight on the NEW sample per
+    // tick (smaller ⇒ smoother / longer memory); it composes with happyEase below to
+    // form a two-stage low-pass. This channel affects HAPPINESS only — consumption,
+    // stock, prices, trade and pop capacity are untouched.
+    satSmoothing: 0.05,      // EMA weight for the per-good satisfaction feeding happiness
+
     // === CC: people-tax — every tier produces ONLY gold (tax); higher tiers pay
     // MORE per capita (ratePerTier). At happyBase the multiplier is 1; every point
     // above happyBase adds bonusPerPoint (so happier cities fund trade faster).
@@ -529,14 +550,32 @@ Sim.tick = function (State) {
       }
     }
     // === /RU-A + /CC ===
-    const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
+    const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
       addDemand(gid, req);
       const have = stock[gid] || 0;
       const consume = Math.min(have, req);
       stock[gid] = have - consume;
-      gsat[gid] = req > 0 ? consume / req : 1;
+      gsatRaw[gid] = req > 0 ? consume / req : 1;
+    }
+    // === SAWTOOTH FIX === smooth the per-good satisfaction that HAPPINESS reads with a
+    // town-persisted EMA (town.satEMA), so momentary between-cart shelf dips don't
+    // crater happiness. Snap-initialised (first sample = raw) so a first/plentiful tick
+    // is bit-identical to the old instantaneous model; satSmoothing ≤ 0 (or missing) ⇒
+    // the old model exactly. Only demanded goods are smoothed; `gsat` (used by the
+    // happiness class-sat helpers below) is the SMOOTHED value. Consumption/stock above
+    // are unchanged, so prices, trade and pop capacity see the true instantaneous stock.
+    if (!town.satEMA || typeof town.satEMA !== "object") town.satEMA = {};
+    const satEMA = town.satEMA;
+    const satAlpha = (N.satSmoothing > 0) ? Math.min(1, N.satSmoothing) : 1;
+    const gsat = {};                     // per-good SMOOTHED satisfaction feeding happiness
+    for (const gid in gsatRaw) {
+      const raw = gsatRaw[gid];
+      const prev = satEMA[gid];
+      const sm = (typeof prev === "number") ? prev + (raw - prev) * satAlpha : raw;   // snap on first sample
+      satEMA[gid] = sm;
+      gsat[gid] = sm;
     }
     // Demand-weighted class satisfaction; null when the class isn't demanded at all.
     const classSat = (list) => {

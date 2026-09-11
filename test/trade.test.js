@@ -700,5 +700,66 @@ Pathing.invalidate();
 })();
 // === /CAPFIX ===================================================================
 
+// === SAWTOOTH FIX (post-victory happiness plateau) ============================
+// End-to-end (real Sim+Trade) proof that the happiness satisfaction-EMA collapses the
+// post-victory aristocrat sawtooth. A pure-import aristocrat estate (no local T3
+// producer) is road-connected to a specialist seller whose T3 surplus regenerates at
+// a limited rate, so its external traders deliver imports in BURSTS. Instantaneous
+// happiness (old model, satSmoothing=1) sawtooths; the smoothed model (CONFIG default)
+// holds a stable plateau at the SAME mean (mean preserved ⇒ not trivialized). This is
+// the exact scenario the Juice/Polish brief's Slice A targets; the numbers here mirror
+// the scratch measurement harness the lead can re-run.
+(function () {
+  Pathing.invalidate();
+  const ARI = CONFIG.needs.tiers.aristocrats;
+  const ARI_GOODS = [...ARI.basic, ...ARI.extra];
+  const CAP = CONFIG.town.storageCap;
+  const POP = 40, HOMES = 20;
+  const AVG = {}; for (const g in ARI.perCapita) AVG[g] = ARI.perCapita[g] * POP;   // per-tick draw at full pop
+
+  function estate() {
+    const b = [];
+    for (let i = 0; i < HOMES; i++) b.push({ typeId: "aristocrat_home", q: 0, r: i + 1, workers: 0, built: true, delivered: {}, closedSlots: 0 });
+    // level 3 ⇒ a 6-trader fleet: adequate long-run supply, but its multi-good carts
+    // deliver each T3 good in bursts, so the shelf empties between carts (the sawtooth).
+    return mkTown({ id: 1, q: 0, r: 0, level: 3, gold: 1e9,
+      pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: POP }, buildings: b });
+  }
+  function seller() {
+    return mkTown({ id: 2, q: 6, r: 0, level: 4, gold: 1e9,
+      pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 }, buildings: [] });
+  }
+  function drive(alpha, horizon, warmup) {
+    const save = CONFIG.needs.satSmoothing; CONFIG.needs.satSmoothing = alpha;
+    const roads = new Set(); for (let q = 1; q <= 5; q++) roads.add(K(q, 0));
+    const st = { roads, towns: [estate(), seller()], carts: [], treasury: 0, tradeSeed: 12345 >>> 0, tick: 0 };
+    const sellT = st.towns[1];
+    let mn = Infinity, mx = -Infinity, sum = 0, n = 0;
+    for (let i = 0; i < horizon; i++) {
+      for (const g of ARI_GOODS) sellT.stock[g] = Math.min(CAP, (sellT.stock[g] || 0) + AVG[g] * 6);   // limited regen ⇒ bursty imports
+      Sim.tick(st); Trade.tick(st);
+      const h = st.towns[0].tierHappiness && st.towns[0].tierHappiness.aristocrats;
+      if (i >= warmup && typeof h === "number") { if (h < mn) mn = h; if (h > mx) mx = h; sum += h; n++; }
+    }
+    CONFIG.needs.satSmoothing = save;
+    return { min: mn, max: mx, mean: sum / n, p2t: mx - mn };
+  }
+
+  const before = drive(1, 5000, 3000);                       // old instantaneous model
+  const after  = drive(CONFIG.needs.satSmoothing, 5000, 3000);  // smoothed (default)
+  ok("SAW: bursty-supplied aristocrat estate sawtooths on the OLD instantaneous model (peak-to-trough > 15)",
+     before.p2t > 15, "before p2t=" + before.p2t.toFixed(1));
+  ok("SAW: the satisfaction-EMA collapses the sawtooth to a plateau (peak-to-trough < 8)",
+     after.p2t < 8, "after p2t=" + after.p2t.toFixed(2) + " (before " + before.p2t.toFixed(1) + ")");
+  ok("SAW: the plateau mean is >= the old mean (smoothing does not lower it — no regress/trivialize)",
+     after.mean >= before.mean - 1.0, `before mean=${before.mean.toFixed(1)} after mean=${after.mean.toFixed(1)}`);
+
+  // Determinism: identical bursty runs are bit-identical.
+  const d1 = drive(CONFIG.needs.satSmoothing, 2500, 0), d2 = drive(CONFIG.needs.satSmoothing, 2500, 0);
+  ok("SAW: the smoothed Sim+Trade drive is deterministic (bit-identical)",
+     d1.min === d2.min && d1.max === d2.max && d1.mean === d2.mean);
+})();
+// === /SAWTOOTH FIX ============================================================
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

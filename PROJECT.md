@@ -102,7 +102,9 @@ not live teammates (see Team model).
 
 ## Current status (update every commit)
 
-**v0.34.0 — current on `main`.** The game is fully modular (`src/*.js` → `index.html` via
+**v0.35.0 — current on `main`.** Feel/juice pass (agent team: EconDev/JuiceDev/AudioDev): the post-victory happiness **sawtooth is fixed** (satisfaction EMA, `CONFIG.needs.satSmoothing`; supplied estate holds a plateau), plus richer transaction/build VFX + chimney smoke and warmer audio cues + a market ambience bed. Brief: [`docs/JUICE_POLISH_BRIEF.md`](docs/JUICE_POLISH_BRIEF.md).
+
+**v0.34.0.** The game is fully modular (`src/*.js` → `index.html` via
 `tools/build.js`; `--check` guards drift) and well past the old v0.23 log below. Since then, shipped
 in this line of work:
 - **Balance Lab (🧪 start-screen tool)** — a professional card-based economy editor: compose cities
@@ -127,7 +129,7 @@ in this line of work:
 
 Tests: **21 pure-core suites + the editor harness, all green**; `--check` OK; determinism preserved.
 
-**Active milestone — "Juice & Feel Polish" (v0.35.0, agent team running).** Author-chosen from the
+**Shipped: "Juice & Feel Polish" (v0.35.0).** Author-chosen from the
 Stage-3 tail. Three disjoint slices owned by worktree subagents (lead integrates serially): **VFX**
 (`src/juice.js`), **Audio** (`src/audio.js`), **Economy smoothing** (`src/sim.js`/`trade.js`/
 `config.js` — fix the post-victory happiness sawtooth via consumer buffers / trade smoothing). Full
