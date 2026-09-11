@@ -1,11 +1,9 @@
-  // === KINGDOM/EVENTS-UI START === (P4-C / slot #4 — kingdom screen, town alerts,
-  // random-event notifications). All DOM + canvas; reads the pure state produced by
-  // Events.tick. drawAlerts()/handleEventNotice() are function declarations so the
-  // render loop + accumulator (defined earlier) can call them via hoisting.
+  // === KINGDOM/EVENTS-UI START === (slot #4 — kingdom screen, town alerts, toasts,
+  // and the bottom-right Event Log feed). All DOM + canvas; reads pure state
+  // READ-ONLY. drawAlerts() is a function declaration so the render loop (defined
+  // earlier) can call it via hoisting. (The random Kingdom-Events system was retired.)
   const kingdomEl = document.getElementById("kingdomPanel");
   const kwBodyEl = document.getElementById("kwBody");
-  const kwBannerEl = document.getElementById("kwBanner");
-  const eventChipEl = document.getElementById("eventChip");
   const toastsEl = document.getElementById("toasts");
   let kingdomOpen = false;
   let kwSort = { key: "id", dir: 1 };
@@ -149,7 +147,6 @@
 
   function renderKingdom() {
     if (!kingdomOpen) return;
-    renderEventBanner();
     const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
@@ -210,29 +207,8 @@
     }
   });
 
-  // ---- event banner / chip / toasts --------------------------------------
-  function currentEventDef() {
-    const e = state.event;
-    if (!e) return null;
-    const def = CONFIG.events && CONFIG.events.defs[e.id];
-    return def ? { def, e } : null;
-  }
-  function eventText(def, e) {
-    let d = def.desc;
-    if (e.id === "craze" && e.goodId) d = "Everyone wants " + goodLabel(e.goodId) + " — its demand triples.";
-    return def.name + " — " + d + " · " + Math.max(0, e.ticksLeft | 0) + " ticks left";
-  }
-  function renderEventBanner() {
-    const cur = currentEventDef();
-    if (cur) { kwBannerEl.classList.remove("hidden"); kwBannerEl.innerHTML = (cur.def.icon || "✨") + " " + esc(eventText(cur.def, cur.e)); }
-    else { kwBannerEl.classList.add("hidden"); kwBannerEl.textContent = ""; }
-  }
-  function updateEventChip() {
-    const cur = currentEventDef();
-    if (cur) { eventChipEl.classList.add("show"); eventChipEl.textContent = (cur.def.icon || "✨") + " " + cur.def.name; }
-    else { eventChipEl.classList.remove("show"); eventChipEl.textContent = ""; }
-  }
-
+  // ---- toasts -------------------------------------------------------------
+  // Short-lived center notifications (used for build-error feedback, etc.).
   function showToast(msg) {
     const el = document.createElement("div");
     el.className = "toast"; el.textContent = msg;
@@ -241,28 +217,8 @@
     setTimeout(() => { el.classList.remove("in"); setTimeout(() => el.remove(), 320); }, 4200);
   }
 
-  // Called from the economy accumulator when Events.tick flags a start/end.
-  function handleEventNotice(notice) {
-    if (!notice) return;
-    const def = CONFIG.events.defs[notice.id];
-    const label = def ? (def.icon + " " + def.name) : notice.id;
-    if (notice.type === "start") {
-      let extra = "";
-      if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
-      showToast(label + extra + " has begun!");
-      SFX.play("event", (def ? def.name : notice.id) + " begins");
-      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + extra + " began");
-    } else {
-      showToast(label + " has ended.");
-      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + " ended");
-    }
-    updateEventChip();
-    if (kingdomOpen) renderKingdom();
-  }
-
-  // Keep the chip + open kingdom panel current as the economy ticks.
-  updateEventChip();
-  setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+  // Keep the open kingdom panel current as the economy ticks.
+  setInterval(() => { if (kingdomOpen) renderKingdom(); }, 500);
 
   // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
   // panel funnels notable happenings (kingdom events, research completed, town/
@@ -338,5 +294,4 @@
   window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,
                        showToast, drawAlerts, townAlertIcons,
                        get isOpen() { return kingdomOpen; } };
-  window.Events = Events;
   // === KINGDOM/EVENTS-UI END ===

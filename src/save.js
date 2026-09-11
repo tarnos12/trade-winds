@@ -43,9 +43,6 @@
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.victory = false;
-    state.event = null;          // P4-C: no event on a fresh map
-    state.eventSeed = (hashSeed(seedInput) ^ 0x1a2b3c4d) | 0;  // deterministic per-game event RNG
-    state.eventCooldown = CONFIG.events.minGapTicks;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -92,9 +89,6 @@
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
-        event: state.event,                // P4-C: active event
-        eventSeed: state.eventSeed,        // P4-C: event RNG stream
-        eventCooldown: state.eventCooldown,// P4-C: ticks until next event
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
         market: state.market,              // KR-A: bounded market history ring (≤600/good)
@@ -227,11 +221,6 @@
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    // P4-C: restore events (a bridge event's road is stored removed from roads;
-    // Events.tick re-adds it on expiry, so the road returns after repair).
-    state.event = data.event || null;
-    state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
-    state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.

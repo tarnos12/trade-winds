@@ -70,10 +70,6 @@
         // intermittent sound"). Engine, cue, and reward stream all removed; the
         // castle now levels on gold alone. The mission system keeps its own
         // audible cues (Tutorial), which have visible UI.
-        if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
-          Events.tick(state);
-          if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
-        }
         if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
       }

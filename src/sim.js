@@ -485,9 +485,6 @@ Sim.tick = function (State) {
       if (effW <= 0) continue;          // inputs missing → building idles this tick
       if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
-      // P4-C hook: a "bumper harvest" event boosts farm output (light, guarded).
-      const evMult = (type.id === "farm" && typeof Events !== "undefined" && Events.farmMultiplier)
-        ? Events.farmMultiplier(State) : 1;
       // P5-A hook: research output multipliers (guarded; 1x when no research).
       //   globalOutput always; extractorOutput for extractors (+ mineOutput for
       //   ore/stone mines); processorOutput for processors. Keys end in "Output"
@@ -506,7 +503,7 @@ Sim.tick = function (State) {
       }
       // === RU-A: compose per-building upgrade outputMult ===
       const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * resMult * upgMult;
       // === /RU-A ===
     }
 
@@ -752,11 +749,6 @@ Sim.tick = function (State) {
     // === /PP-A ===
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
-    // P4-C hook: a "demand craze" event triples one good's demand (price rises).
-    if (typeof Events !== "undefined" && Events.crazeGood) {
-      const cg = Events.crazeGood(State);
-      if (cg) demand[cg] = Events.adjustDemand(State, cg, demand[cg] || 0);
-    }
     town.demand = demand;
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);

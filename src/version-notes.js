@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.36.0";
+  const GAME_VERSION = "0.37.0";
   const PATCH_NOTES = [
+    { v: "0.37.0", notes: [
+      "Retired the random Kingdom Events system (Bumper Harvest / Demand Craze / Kingdom Fair) — it ran with almost no UI and unclear value; the economy is now purely player-driven",
+      "Objectives panel no longer repeats the mission's name below its own header — it just shows the progress count",
+    ] },
     { v: "0.36.0", notes: [
       "UI declutter & feel pass (Let-Them-Trade inspired), built by an agent team:",
       "The play screen is now corner-anchored and calm \u2014 gold + resources top-left, speed controls + a \u2630 Menu top-right, objectives on the right edge, build menu bottom-center",

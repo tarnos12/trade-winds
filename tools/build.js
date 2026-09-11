@@ -70,7 +70,6 @@ const MANIFEST = [
   { name: "research",         file: "research.js" },          // tech tree data + engine
   { name: "research-economy", file: "research-economy.js" },  // castle research economy
   { name: "progress",         file: "progress.js" },          // leveling / quests / prestige
-  { name: "events",           file: "events.js" },            // cozy market events
   { name: "kingdom-market",   file: "kingdom-market.js" },    // KR-A kingdom resource market (Market)
   { name: "ledger",           file: "ledger.js" },            // PP-A city gold ledger (Ledger)
   { name: "castle-market",    file: "castle-market.js" },     // castle material market (CastleMarket)

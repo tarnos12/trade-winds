@@ -161,8 +161,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
     const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
-    // replaces the CONFIG constant as the base; research tariffBonus still adds on top,
-    // Events.tariffMultiplier still applies below. Clamp the composed rate to [0.10, 0.40]
+    // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
+    // Clamp the composed rate to [0.10, 0.40]
     // (bounded by cfg.maxTariffRate). Falls back to cfg.tariffRate when a state/save
     // predates the slider, so default behaviour stays 0.25.
     const baseTariff = (typeof state.tariffRate === "number") ? state.tariffRate : cfg.tariffRate;
@@ -435,9 +435,6 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (buyer) buyer.gold = (buyer.gold || 0) + carried;
           cart.done = true; continue;
         }
-        // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
-        const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
-          ? Events.tariffMultiplier(state) : 1;
         let liveQty = 0;
         for (const item of cargo) {
           const carriedForItem = (item.unitBuy || 0) * item.qty;
@@ -457,7 +454,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!seller.stock) seller.stock = {};
             take = Math.min(item.qty, Math.max(0, seller.stock[item.goodId] || 0));
             value = (item.unitBuy || 0) * take;
-            const tariff = tariffRate * value * tariffMult;   // GDD §6.3: cut (+ research bonus)
+            const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff

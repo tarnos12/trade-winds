@@ -794,14 +794,6 @@
   table.kw-tbl tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
   .kw-good.up { color: #a6e0a8; } .kw-good.down { color: #f0a48c; }
   .kw-empty { opacity: 0.65; padding: 22px; text-align: center; }
-  .kw-banner { margin: 8px 12px 2px; padding: 7px 10px; border-radius: 8px;
-    background: #2a2413; border: 1px solid var(--accent); color: var(--paper); font-size: 12.5px; }
-  .kw-banner.hidden { display: none; }
-
-  #eventChip { display: none; align-items: center; gap: 6px; padding: 5px 10px;
-    background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
-    color: var(--accent); font-size: 12.5px; font-weight: bold; }
-  #eventChip.show { display: inline-flex; }
 
   #toasts { position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; gap: 6px; z-index: 40; pointer-events: none; align-items: center; }
@@ -1032,7 +1024,6 @@
     <button id="btnMute" class="ic" title="Toggle sound (M)">🔊</button>
     <button id="hudMenuBtn" class="ic" title="Menu — map, tools, help, debug">☰</button>
   </div>
-  <span id="eventChip" title="Active kingdom event"></span>
 </div>
 
 <!-- === HUD MENU === corner popup that houses everything non-essential (UI-declutter
@@ -1250,7 +1241,6 @@
     <div class="tp-title">📋 Kingdom Overview</div>
     <button id="kwClose" class="tp-close" title="Close">✕</button>
   </div>
-  <div id="kwBanner" class="kw-banner hidden"></div>
   <div class="kw-body" id="kwBody"></div>
 </div>
 <div id="toasts"></div>
@@ -2676,9 +2666,6 @@ Sim.tick = function (State) {
       if (effW <= 0) continue;          // inputs missing → building idles this tick
       if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
-      // P4-C hook: a "bumper harvest" event boosts farm output (light, guarded).
-      const evMult = (type.id === "farm" && typeof Events !== "undefined" && Events.farmMultiplier)
-        ? Events.farmMultiplier(State) : 1;
       // P5-A hook: research output multipliers (guarded; 1x when no research).
       //   globalOutput always; extractorOutput for extractors (+ mineOutput for
       //   ore/stone mines); processorOutput for processors. Keys end in "Output"
@@ -2697,7 +2684,7 @@ Sim.tick = function (State) {
       }
       // === RU-A: compose per-building upgrade outputMult ===
       const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
+      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * resMult * upgMult;
       // === /RU-A ===
     }
 
@@ -2943,11 +2930,6 @@ Sim.tick = function (State) {
     // === /PP-A ===
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
-    // P4-C hook: a "demand craze" event triples one good's demand (price rises).
-    if (typeof Events !== "undefined" && Events.crazeGood) {
-      const cg = Events.crazeGood(State);
-      if (cg) demand[cg] = Events.adjustDemand(State, cg, demand[cg] || 0);
-    }
     town.demand = demand;
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
@@ -3878,8 +3860,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
     const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
-    // replaces the CONFIG constant as the base; research tariffBonus still adds on top,
-    // Events.tariffMultiplier still applies below. Clamp the composed rate to [0.10, 0.40]
+    // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
+    // Clamp the composed rate to [0.10, 0.40]
     // (bounded by cfg.maxTariffRate). Falls back to cfg.tariffRate when a state/save
     // predates the slider, so default behaviour stays 0.25.
     const baseTariff = (typeof state.tariffRate === "number") ? state.tariffRate : cfg.tariffRate;
@@ -4152,9 +4134,6 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (buyer) buyer.gold = (buyer.gold || 0) + carried;
           cart.done = true; continue;
         }
-        // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
-        const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
-          ? Events.tariffMultiplier(state) : 1;
         let liveQty = 0;
         for (const item of cargo) {
           const carriedForItem = (item.unitBuy || 0) * item.qty;
@@ -4174,7 +4153,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!seller.stock) seller.stock = {};
             take = Math.min(item.qty, Math.max(0, seller.stock[item.goodId] || 0));
             value = (item.unitBuy || 0) * take;
-            const tariff = tariffRate * value * tariffMult;   // GDD §6.3: cut (+ research bonus)
+            const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
@@ -5179,193 +5158,6 @@ Victory.check = function (state) {
 // === PROGRESS-CORE END ===
 /* BUILD:events START */
 /* BUILD:progress END */
-// === EVENTS-CORE START ===  (P4-C / slot #4 — random events: cozy market
-// opportunities, GDD §7.3). Pure + deterministic: no DOM / canvas / Math.random —
-// timing draws from a seeded stream on State (state.eventSeed), mirroring Trade.
-// Effects are exposed as DATA HOOKS (farmMultiplier / crazeGood / adjustDemand /
-// tariffMultiplier) that Sim.tick & Trade.tick read through `typeof Events` guards,
-// so the pure cores stay independently testable. Wired into the 500ms accumulator
-// right AFTER Trade.tick(state). Events are opportunities, never progress-eaters:
-// they boost output, spike a price, waive the tariff, or reroute one road (which
-// auto-repairs) — nothing is destroyed.
-Object.assign(CONFIG, {
-  events: {
-    minGapTicks: 40,      // quiet stretch after an event ends before another may start
-    checkEveryTicks: 12,  // ticks between "roll for a new event" checks
-    startChance: 0.5,     // chance an eligible check actually starts one
-    defs: {
-      bumper: { id: "bumper", name: "Bumper Harvest", icon: "🌾",
-        desc: "Farms are overflowing — grain output +50%.",
-        weight: 3, durationTicks: 60, farmMultiplier: 1.5 },
-      craze:  { id: "craze", name: "Demand Craze", icon: "🔥",
-        desc: "One good is all the rage — its demand triples.",
-        weight: 3, durationTicks: 50, demandMultiplier: 3, demandFloor: 6 },
-      fair:   { id: "fair", name: "Kingdom Fair", icon: "🎪",
-        desc: "Tariff-free trading — carts pay no tariff.",
-        weight: 2, durationTicks: 40, tariffFree: true },
-      // AA: "Collapsed Bridge" (road-cutting) event removed — it was the only
-      // collapseRoad event; the road-cut machinery below is now dead but harmless.
-    },
-  },
-});
-
-var Events = (typeof Events !== "undefined" && Events) || {};
-(function () {
-  // ---- effect hooks (read by Sim.tick / Trade.tick through typeof guards) ----
-  Events.farmMultiplier = function (state) {           // bumper harvest
-    const e = state && state.event;
-    if (e && e.id === "bumper") { const d = CONFIG.events.defs.bumper; return (d && d.farmMultiplier) || 1; }
-    return 1;
-  };
-  Events.crazeGood = function (state) {                // id of the craze good, or null
-    const e = state && state.event;
-    return (e && e.id === "craze" && e.goodId) ? e.goodId : null;
-  };
-  Events.adjustDemand = function (state, goodId, base) { // craze: triples + floors demand
-    if (Events.crazeGood(state) === goodId) {
-      const d = CONFIG.events.defs.craze;
-      return (base || 0) * (d.demandMultiplier || 3) + (d.demandFloor || 0);
-    }
-    return base || 0;
-  };
-  Events.tariffMultiplier = function (state) {         // fair: waives the tariff
-    const e = state && state.event;
-    return (e && e.id === "fair") ? 0 : 1;
-  };
-  Events.isActive = function (state) { return !!(state && state.event); };
-
-  // ---- road helpers (state.roads is a Set at runtime, an array from a save) ---
-  function roadList(state) {
-    const r = state && state.roads;
-    if (!r) return [];
-    if (typeof r.has === "function" && typeof r.forEach === "function") return Array.from(r); // Set
-    if (Array.isArray(r)) return r.slice();
-    return [];
-  }
-  function delRoad(state, key) {
-    const r = state.roads;
-    if (r && typeof r.delete === "function") r.delete(key);
-    else if (Array.isArray(r)) { const i = r.indexOf(key); if (i >= 0) r.splice(i, 1); }
-  }
-  function addRoad(state, key) {
-    const r = state.roads;
-    if (r && typeof r.add === "function") r.add(key);
-    else if (Array.isArray(r)) { if (r.indexOf(key) < 0) r.push(key); }
-  }
-  function invalidatePathing() {
-    if (typeof Pathing !== "undefined" && Pathing.invalidate) Pathing.invalidate();
-  }
-  // P1: is hex `key` ("q,r") currently occupied by a town center, one of its
-  // buildings, or the research center? Pure/deterministic (HexMath only). Used to
-  // suppress a bridge "repair" that would otherwise drop a road back onto a hex
-  // the player built on while it was collapsed.
-  function hexOccupied(state, key) {
-    for (const t of (state.towns || [])) {
-      if (!t) continue;
-      if (HexMath.key(t.q, t.r) === key) return true;
-      for (const b of (t.buildings || [])) if (b && HexMath.key(b.q, b.r) === key) return true;
-    }
-    const rc = state.researchCenter;
-    if (rc && HexMath.key(rc.q, rc.r) === key) return true;
-    return false;
-  }
-
-  function weightedPick(rng) {
-    const defs = CONFIG.events.defs, ids = Object.keys(defs);
-    let total = 0; for (const id of ids) total += defs[id].weight || 1;
-    let r = rng() * total;
-    for (const id of ids) { r -= defs[id].weight || 1; if (r <= 0) return id; }
-    return ids[ids.length - 1];
-  }
-
-  // Start `id`. Returns true on success, false if it can't fire (e.g. a bridge
-  // collapse with no roads to collapse). Mutates state (state.event, maybe roads).
-  function beginEvent(state, id, rng) {
-    const def = CONFIG.events.defs[id];
-    if (!def) return false;
-    const ev = { id: id, ticksLeft: def.durationTicks };
-    if (id === "craze") {
-      const goods = Object.keys(CONFIG.goods);
-      ev.goodId = goods[Math.floor(rng() * goods.length)] || goods[0];
-    }
-    if (def.collapseRoad) {
-      const roads = roadList(state);
-      if (!roads.length) return false;              // nothing to collapse — skip cleanly
-      ev.roadKey = roads[Math.floor(rng() * roads.length)];
-      delRoad(state, ev.roadKey);
-      invalidatePathing();
-    }
-    state.event = ev;
-    return true;
-  }
-
-  // End the current event, undoing any reversible world change (bridge repair).
-  // M3: gate on the DEF's collapseRoad flag rather than a hardcoded id string —
-  // a loaded event whose id no longer names a def (retired/renamed in a later
-  // version) or a garbage roadKey (bad save) must not leave a road permanently
-  // missing with no repair path.
-  function endEvent(state) {
-    const e = state.event;
-    if (!e) return;
-    const def = CONFIG.events.defs[e.id];
-    // M3 + P1: restore the collapsed road only if the def marks it collapseRoad,
-    // roadKey is a real string, AND the vacated hex is still empty. If the player
-    // founded a town or built on that hex while the bridge was out, re-adding the
-    // road would double-occupy it (a Pathing road-node under a live building —
-    // carts route through the structure and placement reports a phantom road
-    // there forever). In that case drop the repair; the road stays gone.
-    if (def && def.collapseRoad && typeof e.roadKey === "string" && !hexOccupied(state, e.roadKey)) {
-      addRoad(state, e.roadKey); invalidatePathing();
-    }
-    state.event = null;
-  }
-
-  // Advance the event layer by one tick. Deterministic (seeded). Sets a transient
-  // state._eventNotice ({type:'start'|'end', id}) the browser layer drains for toasts.
-  Events.tick = function (state) {
-    if (!state) return state;
-    if (typeof state.eventSeed !== "number") state.eventSeed = 0;
-    if (typeof state.eventCooldown !== "number") state.eventCooldown = CONFIG.events.minGapTicks;
-    const cfg = CONFIG.events;
-    const rng = mulberry32(state.eventSeed | 0);
-    state.eventSeed = (Math.imul(state.eventSeed | 0, 1664525) + 1013904223) | 0;
-    state._eventNotice = null;
-
-    if (state.event) {                              // an event is running — count it down
-      state.event.ticksLeft = (state.event.ticksLeft | 0) - 1;
-      if (state.event.ticksLeft <= 0) {
-        const endedId = state.event.id;
-        endEvent(state);
-        state.eventCooldown = cfg.minGapTicks;
-        state._eventNotice = { type: "end", id: endedId };
-      }
-      return state;
-    }
-
-    if (state.eventCooldown > 0) { state.eventCooldown--; return state; }
-
-    // cooldown elapsed → roll. Reset the gap either way so rolls are paced.
-    state.eventCooldown = cfg.checkEveryTicks;
-    if (rng() < cfg.startChance) {
-      const id = weightedPick(rng);
-      if (beginEvent(state, id, rng)) state._eventNotice = { type: "start", id: id };
-    }
-    return state;
-  };
-
-  // Force-start a specific event now (used by the headless smoke test / debug).
-  Events.force = function (state, id) {
-    if (!state) return false;
-    if (typeof state.eventSeed !== "number") state.eventSeed = 0;
-    const rng = mulberry32(((state.eventSeed | 0) ^ 0x9e3779b9) | 0);
-    if (state.event) endEvent(state);
-    const ok = beginEvent(state, id, rng);
-    state._eventNotice = ok ? { type: "start", id: id } : null;
-    return ok;
-  };
-})();
-// === EVENTS-CORE END ===
-/* BUILD:events END */
 
 /* BUILD:kingdom-market START */
 // === KR-A: kingdom resource market (pure sampling + summaries) ===
@@ -5761,10 +5553,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     cam: { x: 0, y: 0 },       // world-space camera target
     zoom: 1,
     gameSpeed: 1,
-    // P4-C — random events (Events.tick owns these; KINGDOM/EVENTS-UI draws them).
-    event: null,               // current active event { id, ticksLeft, goodId?, roadKey? } or null
-    eventSeed: 0,              // seeded RNG stream for deterministic event timing
-    eventCooldown: 0,          // ticks until another event may start
     // P5D-C — onboarding coach. Live tracking for the tutorial step machine
     // (Tutorial module owns it; mirrored to a localStorage flag for gating).
     tutorial: null,            // { step:int, done:bool } once started, else null
@@ -7169,9 +6957,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.victory = false;
-    state.event = null;          // P4-C: no event on a fresh map
-    state.eventSeed = (hashSeed(seedInput) ^ 0x1a2b3c4d) | 0;  // deterministic per-game event RNG
-    state.eventCooldown = CONFIG.events.minGapTicks;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -7218,9 +7003,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
-        event: state.event,                // P4-C: active event
-        eventSeed: state.eventSeed,        // P4-C: event RNG stream
-        eventCooldown: state.eventCooldown,// P4-C: ticks until next event
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
         market: state.market,              // KR-A: bounded market history ring (≤600/good)
@@ -7353,11 +7135,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    // P4-C: restore events (a bridge event's road is stored removed from roads;
-    // Events.tick re-adds it on expiry, so the road returns after repair).
-    state.event = data.event || null;
-    state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
-    state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
@@ -7488,10 +7265,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // intermittent sound"). Engine, cue, and reward stream all removed; the
         // castle now levels on gold alone. The mission system keeps its own
         // audible cues (Tutorial), which have visible UI.
-        if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
-          Events.tick(state);
-          if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
-        }
         if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
       }
@@ -10831,14 +10604,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // === PROGRESS-UI END ===
 /* BUILD:progress-ui END */
 /* BUILD:kingdom-events-ui START */
-  // === KINGDOM/EVENTS-UI START === (P4-C / slot #4 — kingdom screen, town alerts,
-  // random-event notifications). All DOM + canvas; reads the pure state produced by
-  // Events.tick. drawAlerts()/handleEventNotice() are function declarations so the
-  // render loop + accumulator (defined earlier) can call them via hoisting.
+  // === KINGDOM/EVENTS-UI START === (slot #4 — kingdom screen, town alerts, toasts,
+  // and the bottom-right Event Log feed). All DOM + canvas; reads pure state
+  // READ-ONLY. drawAlerts() is a function declaration so the render loop (defined
+  // earlier) can call it via hoisting. (The random Kingdom-Events system was retired.)
   const kingdomEl = document.getElementById("kingdomPanel");
   const kwBodyEl = document.getElementById("kwBody");
-  const kwBannerEl = document.getElementById("kwBanner");
-  const eventChipEl = document.getElementById("eventChip");
   const toastsEl = document.getElementById("toasts");
   let kingdomOpen = false;
   let kwSort = { key: "id", dir: 1 };
@@ -10982,7 +10753,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
   function renderKingdom() {
     if (!kingdomOpen) return;
-    renderEventBanner();
     const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
@@ -11043,29 +10813,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
   });
 
-  // ---- event banner / chip / toasts --------------------------------------
-  function currentEventDef() {
-    const e = state.event;
-    if (!e) return null;
-    const def = CONFIG.events && CONFIG.events.defs[e.id];
-    return def ? { def, e } : null;
-  }
-  function eventText(def, e) {
-    let d = def.desc;
-    if (e.id === "craze" && e.goodId) d = "Everyone wants " + goodLabel(e.goodId) + " — its demand triples.";
-    return def.name + " — " + d + " · " + Math.max(0, e.ticksLeft | 0) + " ticks left";
-  }
-  function renderEventBanner() {
-    const cur = currentEventDef();
-    if (cur) { kwBannerEl.classList.remove("hidden"); kwBannerEl.innerHTML = (cur.def.icon || "✨") + " " + esc(eventText(cur.def, cur.e)); }
-    else { kwBannerEl.classList.add("hidden"); kwBannerEl.textContent = ""; }
-  }
-  function updateEventChip() {
-    const cur = currentEventDef();
-    if (cur) { eventChipEl.classList.add("show"); eventChipEl.textContent = (cur.def.icon || "✨") + " " + cur.def.name; }
-    else { eventChipEl.classList.remove("show"); eventChipEl.textContent = ""; }
-  }
-
+  // ---- toasts -------------------------------------------------------------
+  // Short-lived center notifications (used for build-error feedback, etc.).
   function showToast(msg) {
     const el = document.createElement("div");
     el.className = "toast"; el.textContent = msg;
@@ -11074,28 +10823,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     setTimeout(() => { el.classList.remove("in"); setTimeout(() => el.remove(), 320); }, 4200);
   }
 
-  // Called from the economy accumulator when Events.tick flags a start/end.
-  function handleEventNotice(notice) {
-    if (!notice) return;
-    const def = CONFIG.events.defs[notice.id];
-    const label = def ? (def.icon + " " + def.name) : notice.id;
-    if (notice.type === "start") {
-      let extra = "";
-      if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
-      showToast(label + extra + " has begun!");
-      SFX.play("event", (def ? def.name : notice.id) + " begins");
-      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + extra + " began");
-    } else {
-      showToast(label + " has ended.");
-      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + " ended");
-    }
-    updateEventChip();
-    if (kingdomOpen) renderKingdom();
-  }
-
-  // Keep the chip + open kingdom panel current as the economy ticks.
-  updateEventChip();
-  setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+  // Keep the open kingdom panel current as the economy ticks.
+  setInterval(() => { if (kingdomOpen) renderKingdom(); }, 500);
 
   // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
   // panel funnels notable happenings (kingdom events, research completed, town/
@@ -11171,7 +10900,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,
                        showToast, drawAlerts, townAlertIcons,
                        get isOpen() { return kingdomOpen; } };
-  window.Events = Events;
   // === KINGDOM/EVENTS-UI END ===
 /* BUILD:kingdom-events-ui END */
 
@@ -12666,7 +12394,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const primary = activeMissions[0];
       const pr = ev.byId[primary.id];
       const met = pr.objectives.filter(o => o.met).length;
-      elStep.innerHTML = '<div class="tut-now">▶ ' + esc(primary.name) + "</div>" +
+      // The panel header already shows the mission name+icon when a single
+      // mission is active, so don't repeat it here — just show progress. With
+      // several active, name the primary one so the count is unambiguous.
+      const nameLine = activeMissions.length === 1
+        ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
+      elStep.innerHTML = nameLine +
         '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>";
 
       let html = "";
@@ -12809,8 +12542,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.36.0";
+  const GAME_VERSION = "0.37.0";
   const PATCH_NOTES = [
+    { v: "0.37.0", notes: [
+      "Retired the random Kingdom Events system (Bumper Harvest / Demand Craze / Kingdom Fair) — it ran with almost no UI and unclear value; the economy is now purely player-driven",
+      "Objectives panel no longer repeats the mission's name below its own header — it just shows the progress count",
+    ] },
     { v: "0.36.0", notes: [
       "UI declutter & feel pass (Let-Them-Trade inspired), built by an agent team:",
       "The play screen is now corner-anchored and calm \u2014 gold + resources top-left, speed controls + a \u2630 Menu top-right, objectives on the right edge, build menu bottom-center",
