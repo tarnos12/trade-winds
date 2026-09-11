@@ -102,7 +102,7 @@ not live teammates (see Team model).
 
 ## Current status (update every commit)
 
-**v0.35.0 — current on `main`.** Feel/juice pass (agent team: EconDev/JuiceDev/AudioDev): the post-victory happiness **sawtooth is fixed** (satisfaction EMA, `CONFIG.needs.satSmoothing`; supplied estate holds a plateau), plus richer transaction/build VFX + chimney smoke and warmer audio cues + a market ambience bed. Brief: [`docs/JUICE_POLISH_BRIEF.md`](docs/JUICE_POLISH_BRIEF.md).
+**v0.36.0 — current on `main`.** UI declutter & feel pass (Let-Them-Trade style; agent team: lead HUD restructure + MotionDev camera/porter smoothing): corner-anchored HUD, a ☰ Menu popup housing all non-essential controls (seed/tools/reveal/help/debug), a collapsible bottom-right Event Log, right-edge objectives, and eased camera pan/zoom. Prior: feel/juice pass (agent team: EconDev/JuiceDev/AudioDev): the post-victory happiness **sawtooth is fixed** (satisfaction EMA, `CONFIG.needs.satSmoothing`; supplied estate holds a plateau), plus richer transaction/build VFX + chimney smoke and warmer audio cues + a market ambience bed. Brief: [`docs/JUICE_POLISH_BRIEF.md`](docs/JUICE_POLISH_BRIEF.md).
 
 **v0.34.0.** The game is fully modular (`src/*.js` → `index.html` via
 `tools/build.js`; `--check` guards drift) and well past the old v0.23 log below. Since then, shipped

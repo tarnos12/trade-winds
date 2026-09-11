@@ -59,6 +59,58 @@
   button.speed { min-width: 34px; text-align: center; padding: 5px 8px; }
   .spacer { flex: 1; }
 
+  /* === UI-DECLUTTER === compact icon buttons + the ☰ Menu popup that houses
+     every non-essential control. Corner-anchored, Let-Them-Trade style. */
+  button.ic {
+    min-width: 36px; text-align: center; padding: 5px 8px; font-size: 15px; line-height: 1;
+  }
+  #topActions { gap: 5px; }
+  #hudMenu {
+    position: fixed; top: 52px; right: 12px; width: 300px; max-width: calc(100vw - 24px);
+    z-index: 40; background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 11px; box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    padding: 10px 12px 12px; font-size: 12.5px;
+    transform-origin: top right; transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #hudMenu.hidden { display: none; }
+  #hudMenu.anim-in { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  #hudMenu .hm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  #hudMenu .hm-head b { color: var(--accent); font-size: 13.5px; }
+  #hudMenu .hm-sec { padding: 8px 0; border-top: 1px solid var(--panel-edge); }
+  #hudMenu .hm-sec:first-of-type { border-top: none; padding-top: 2px; }
+  #hudMenu .hm-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.5; margin-bottom: 6px; }
+  #hudMenu .hm-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+  #hudMenu .hm-row button { font-size: 12px; padding: 4px 8px; }
+  #hudMenu input#seed { width: 96px; }
+  #hudMenu .hm-help { opacity: 0.82; line-height: 1.5; font-size: 11.5px; }
+  #hudMenu .hm-help b { color: var(--accent); }
+  #hudMenu .hm-debug { font-variant-numeric: tabular-nums; opacity: 0.8; font-size: 11px; margin-bottom: 6px; }
+  #hudMenu .hm-debug .fps { color: var(--accent); font-weight: bold; }
+
+  /* === EVENT LOG === bottom-right collapsible feed (Let-Them-Trade style) */
+  #eventLog {
+    position: fixed; right: 12px; bottom: 12px; width: 300px; max-width: calc(100vw - 24px);
+    z-index: 22; background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.5); overflow: hidden; font-size: 11.5px;
+  }
+  #eventLog .el-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 10px; cursor: pointer; user-select: none;
+    background: linear-gradient(180deg, rgba(201,138,60,0.14), rgba(0,0,0,0));
+  }
+  #eventLog .el-title { font-weight: bold; color: var(--accent); font-size: 12px; letter-spacing: 0.3px; }
+  #eventLog .el-toggle { background: transparent; border: 0; color: var(--paper); font-size: 12px; padding: 0 4px; cursor: pointer; }
+  #eventLog .el-list { list-style: none; margin: 0; padding: 6px 8px; max-height: 200px; overflow-y: auto; }
+  #eventLog.collapsed .el-list { display: none; }
+  #eventLog .el-list li { display: flex; align-items: baseline; gap: 8px; padding: 3px 2px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  #eventLog .el-list li:last-child { border-bottom: none; }
+  #eventLog .el-ic { flex: 0 0 auto; }
+  #eventLog .el-tx { flex: 1 1 auto; opacity: 0.9; }
+  #eventLog .el-tm { flex: 0 0 auto; opacity: 0.5; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #eventLog .el-empty { opacity: 0.5; }
+  #eventLog .el-list::-webkit-scrollbar { width: 8px; }
+  #eventLog .el-list::-webkit-scrollbar-thumb { background: var(--panel-edge); border-radius: 4px; }
+
   /* === CITY-CARDS CSS === kingdom chip + city cards strip (EC-C) */
   #cityStrip {
     position: fixed; top: 52px; left: 12px; right: 12px;
@@ -848,12 +900,12 @@
   }
   #eoClose:hover, #meClose:hover { border-color: var(--accent); color: var(--accent); }
   #eoFrame, #meFrame { flex: 1 1 auto; width: 100%; border: 0; background: #14110c; }
-  /* DEBUG (X): recent-sounds panel */
+  /* DEBUG (X): recent-sounds panel — now lives inside ☰ Menu ▸ Debug (static). */
   #sfxDebug {
-    position: fixed; right: 8px; top: 92px; z-index: 30; width: 172px;
-    background: rgba(20,17,12,0.82); border: 1px solid var(--panel-edge);
-    border-radius: 8px; padding: 6px 8px; font-size: 11px; color: var(--paper);
-    pointer-events: none; user-select: none;
+    position: static; width: auto; z-index: auto; margin-top: 4px;
+    background: #1c160f; border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 5px 7px; font-size: 11px; color: var(--paper);
+    pointer-events: auto; user-select: none; max-height: 120px; overflow-y: auto;
   }
   #sfxDebug .sfxd-head { font-weight: bold; color: var(--accent); margin-bottom: 3px; font-size: 10.5px; letter-spacing: .3px; }
   #sfxDebug ul { list-style: none; margin: 0; padding: 0; }
@@ -864,11 +916,12 @@
   /* === EDITOR-OVERLAY END === */
   /* === TUTORIAL CSS START === (P5D-C / slot #4 — onboarding coach) */
   #tutorial {
-    position: fixed; left: 12px; top: 156px; width: 258px; z-index: 25;
+    position: fixed; right: 12px; top: 96px; width: 258px; z-index: 25;
     background: var(--panel); border: 1px solid var(--panel-edge);
     border-radius: 10px; padding: 10px 12px 12px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.45);
     font-size: 12.5px; line-height: 1.45;
+    transition: opacity 0.18s ease, transform 0.18s ease;
   }
   #tutorial.hidden { display: none; }
   #tutorial .tut-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -962,19 +1015,7 @@
 <div id="topbar">
   <div class="brand">Trade&nbsp;Winds <button id="verBadge" title="Patch notes">v0.8.0</button></div>
 
-  <div class="group">
-    <label class="seedlbl" for="seed">Seed</label>
-    <input id="seed" type="text" spellcheck="false" />
-    <button id="btnGen" title="Generate a fresh map from this seed">Generate</button>
-    <button id="btnRandom" title="Random seed">🎲</button>
-  </div>
-
-  <div class="group">
-    <button class="tool" data-mode="pan" title="Pan the camera (drag)">✋ Pan</button>
-    <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
-    <!-- CBM: Road & Town moved into the bottom build bar's 🏗 Build category. -->
-
-  </div>
+  <div class="spacer"></div>
 
   <!-- === SPEED-UI === speed & pause controls (P5D-A) -->
   <div class="group" id="speedGroup">
@@ -984,25 +1025,55 @@
     <button class="speed" data-speed="4" title="Quadruple speed (4)">4×</button>
   </div>
 
-  <div class="spacer"></div>
-
-  <div class="group">
-    <button id="btnResearch" title="Open the research tree">🔬 Research</button>
-  </div>
-
-  <div class="group">
-    <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Fog</button>
-    <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
-    <button id="btnKingdom" title="Kingdom overview — all towns (K)">📋 Kingdom</button>
-    <button id="btnMute" title="Toggle sound effects (M)">🔊 Sound</button>
+  <!-- primary quick-access + the ☰ Menu (everything non-essential lives in the menu) -->
+  <div class="group" id="topActions">
+    <button id="btnResearch" class="ic" title="Research tree">🔬</button>
+    <button id="btnKingdom" class="ic" title="Kingdom overview — all towns (K)">📋</button>
+    <button id="btnMute" class="ic" title="Toggle sound (M)">🔊</button>
+    <button id="hudMenuBtn" class="ic" title="Menu — map, tools, help, debug">☰</button>
   </div>
   <span id="eventChip" title="Active kingdom event"></span>
 </div>
 
-<!-- DEBUG (X): recent sounds + their source, right side below the toolbar -->
-<div id="sfxDebug" aria-hidden="true">
-  <div class="sfxd-head">🔎 Recent sounds</div>
-  <ul id="sfxDebugList"><li class="sfxd-empty">(none yet)</li></ul>
+<!-- === HUD MENU === corner popup that houses everything non-essential (UI-declutter
+     pass). The button elements below keep their original ids so their existing
+     handlers (input/audio/renderer/kingdom modules) stay bound after relocation. -->
+<div id="hudMenu" class="hidden" role="dialog" aria-label="Menu">
+  <div class="hm-head"><b>☰ Menu</b><button id="hudMenuClose" title="Close (Esc)">✕</button></div>
+
+  <div class="hm-sec">
+    <div class="hm-lbl">Map</div>
+    <div class="hm-row">
+      <label class="seedlbl" for="seed">Seed</label>
+      <input id="seed" type="text" spellcheck="false" />
+      <button id="btnGen" title="Generate a fresh map from this seed">Generate</button>
+      <button id="btnRandom" title="Random seed">🎲</button>
+    </div>
+    <div class="hm-row">
+      <button class="tool" data-mode="pan" title="Pan the camera (drag)">✋ Pan</button>
+      <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
+      <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
+      <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Reveal fog</button>
+    </div>
+  </div>
+
+  <div class="hm-sec">
+    <div class="hm-lbl">Controls</div>
+    <div class="hm-help">
+      <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
+      <b>Scroll</b> to zoom · use the <b>🏗 Build</b> menu (bottom) for cities, roads &amp; buildings.
+      Placing a town clears the fog around it.
+    </div>
+  </div>
+
+  <div class="hm-sec">
+    <div class="hm-lbl">Debug</div>
+    <div class="hm-debug"><span class="fps" id="fps">—</span> fps · <span id="stat">—</span></div>
+    <div id="sfxDebug" aria-hidden="true">
+      <div class="sfxd-head">🔎 Recent sounds</div>
+      <ul id="sfxDebugList"><li class="sfxd-empty">(none yet)</li></ul>
+    </div>
+  </div>
 </div>
 
 <!-- === CITY-CARDS === kingdom-gold chip + live city cards row (EC-C) -->
@@ -1035,19 +1106,7 @@
 </div>
 <!-- === KR-B HTML END === -->
 
-<div id="hint">
-  <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
-  <b>Scroll</b> to zoom · use the <b>🏗 Build</b> menu (bottom) for cities, roads &amp; buildings.
-  Placing a town clears the fog around it.
-</div>
-
-<div id="hud">
-  <!-- CP: treasury/tariff/prestige/castle-level moved into the castle click panel
-       (#castlePanel). Treasury stays on the top-left kingdom chip. #hud is now
-       just performance/board stats. -->
-  <div><span class="fps" id="fps">—</span> fps</div>
-  <div id="stat">—</div>
-</div>
+<!-- (controls hint moved into ☰ Menu ▸ Controls; FPS/stats into ☰ Menu ▸ Debug) -->
 
 <!-- === TILE-TOOLTIP === (C: hex hover tooltip — RenderDev drives this from
      renderer.js's hover-hex detection; UIDev (this file) owns the DOM element +
@@ -6830,6 +6889,83 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     return e.button === 1 || e.button === 2 || (e.button === 0 && state.mode === "pan");
   }
 
+  // ---------------------------------------------------------------
+  // MD: Eased camera motion (render-clock, presentation-only).
+  // state.cam.x/y and state.zoom are the ACTUAL, rendered camera values —
+  // renderer.js and everything else keep reading them unchanged. WASD, the
+  // recenter button, and wheel-zoom no longer snap those values directly;
+  // instead they move a target (camTarget / zoomTarget) that updateCamera()
+  // damps toward every render frame (called from applyKeyPan, which
+  // mainloop.js already invokes once per rAF with the real frame dt — never
+  // the economy tick). Mouse-drag panning is direct manipulation, so it
+  // keeps 1:1 tracking under the cursor: it writes BOTH the actual cam and
+  // the target in lockstep, so there's no post-drag glide-back and no
+  // fight between "where the mouse dragged it" and "where the ease is
+  // pulling it". This never reads/writes Sim/Trade state — purely state.cam
+  // / state.zoom, which are camera presentation fields, not economy state.
+  const CAM_PAN_EASE_RATE = 10;    // 1/s damping rate for WASD/recenter pan glide
+  const CAM_ZOOM_EASE_RATE = 14;   // 1/s damping rate for wheel-zoom glide
+  const CAM_SNAP_EPS = 0.01;       // close enough to target: snap the remainder (avoids infinite asymptote)
+  const ZOOM_SNAP_EPS = 0.0005;
+  let camTarget = null;      // lazily = {x, y}, matched to state.cam on first use
+  let zoomTarget = null;     // lazily = state.zoom on first use
+  let zoomAnchorScreen = null;   // last wheel screen point to hold fixed while zoom eases in
+  let lastCamX = null, lastCamY = null, lastZoom = null;   // see external-write resync below
+
+  function ensureCamTargets() {
+    if (!camTarget) camTarget = { x: state.cam.x, y: state.cam.y };
+    if (zoomTarget == null) zoomTarget = state.zoom;
+  }
+
+  // Damped exponential ease toward the target, frame-rate independent via dt.
+  function updateCamera(dt) {
+    ensureCamTargets();
+    // MD: another module can still legitimately write state.cam/state.zoom
+    // directly between our frames (save.js resets state.zoom=1 on new game/
+    // load; carts-castle-ui.js jumps state.cam.x/y for a "center on town"
+    // action). Every write WE make below leaves state.cam/state.zoom exactly
+    // at lastCamX/Y/lastZoom, so any mismatch here can only be such an
+    // outside write — resync the target to it instead of gliding back over
+    // it and undoing that jump.
+    if (lastCamX !== null && (state.cam.x !== lastCamX || state.cam.y !== lastCamY)) {
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
+    }
+    if (lastZoom !== null && state.zoom !== lastZoom) {
+      zoomTarget = state.zoom;
+    }
+    const dtS = Math.max(0, dt || 0) / 1000;
+
+    // Zoom glides toward zoomTarget; while it's moving, keep the point under
+    // the last wheel event's cursor position visually fixed (recomputed every
+    // step, not just once on the wheel tick, so the anchor holds through the
+    // whole glide rather than only its first frame).
+    if (Math.abs(zoomTarget - state.zoom) > ZOOM_SNAP_EPS) {
+      const anchor = zoomAnchorScreen;
+      const before = anchor ? screenToWorld(anchor.x, anchor.y) : null;
+      const zT = 1 - Math.exp(-CAM_ZOOM_EASE_RATE * dtS);
+      state.zoom += (zoomTarget - state.zoom) * zT;
+      if (Math.abs(zoomTarget - state.zoom) < ZOOM_SNAP_EPS) state.zoom = zoomTarget;
+      if (before) {
+        const after = screenToWorld(anchor.x, anchor.y);
+        const ax = before.x - after.x, ay = before.y - after.y;
+        state.cam.x += ax; state.cam.y += ay;
+        camTarget.x += ax; camTarget.y += ay;   // keep target in the same frame so pan-ease doesn't fight the zoom
+      }
+    } else {
+      state.zoom = zoomTarget;
+    }
+
+    // Pan glides toward camTarget (WASD / recenter feed it; drag-pan keeps
+    // both in lockstep so it stays 1:1 under the cursor, see above).
+    const pT = 1 - Math.exp(-CAM_PAN_EASE_RATE * dtS);
+    state.cam.x += (camTarget.x - state.cam.x) * pT;
+    state.cam.y += (camTarget.y - state.cam.y) * pT;
+    if (Math.abs(camTarget.x - state.cam.x) < CAM_SNAP_EPS) state.cam.x = camTarget.x;
+    if (Math.abs(camTarget.y - state.cam.y) < CAM_SNAP_EPS) state.cam.y = camTarget.y;
+
+    lastCamX = state.cam.x; lastCamY = state.cam.y; lastZoom = state.zoom;
+  }
+
   canvas.addEventListener("mousedown", (e) => {
     canvas.focus();
     dragging = true; dragPanned = false;
@@ -6852,8 +6988,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (Math.abs(dx) + Math.abs(dy) > 2) dragPanned = true;
     last = { x: e.clientX, y: e.clientY };
     if (panButton) {
+      // Direct manipulation: 1:1 under the cursor, no easing lag. Move the
+      // target in lockstep so nothing glides once the drag releases.
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
+      ensureCamTargets();
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
     } else if (state.mode === "erase" || state.mode === "eraseRoad") {
       // N: road mode no longer drag-paints — it's the click A→B tool. erase/
       // === J === eraseRoad drag-paints like "erase" (roads are safe to
@@ -6874,13 +7014,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const before = screenToWorld(e.clientX, e.clientY);
+    // MD: don't snap state.zoom — set the TARGET and let updateCamera() ease
+    // state.zoom toward it every frame, holding this cursor point fixed
+    // throughout the glide (not just this instant). Repeated ticks just keep
+    // sliding the target/anchor, so a fast scroll still feels responsive.
+    ensureCamTargets();
     const factor = e.deltaY < 0 ? CONFIG.camera.wheelStep : 1 / CONFIG.camera.wheelStep;
-    state.zoom = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, state.zoom * factor));
-    const after = screenToWorld(e.clientX, e.clientY);
-    // keep the point under the cursor fixed while zooming
-    state.cam.x += before.x - after.x;
-    state.cam.y += before.y - after.y;
+    zoomTarget = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, zoomTarget * factor));
+    zoomAnchorScreen = { x: e.clientX, y: e.clientY };
     scheduleSave();
   }, { passive: false });
 
@@ -6914,12 +7055,22 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // RT-B: don't drift the map while the full-screen tech tree is open
     // (WASD keydowns still land in `keys` since the overlay doesn't eat them).
     const tt = document.getElementById("techTree");
-    if (tt && !tt.classList.contains("hidden")) return;
-    const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
-    if (keys.has("w")) state.cam.y -= v;
-    if (keys.has("s")) state.cam.y += v;
-    if (keys.has("a")) state.cam.x -= v;
-    if (keys.has("d")) state.cam.x += v;
+    const ttOpen = tt && !tt.classList.contains("hidden");
+    if (!ttOpen) {
+      // MD: WASD moves the TARGET, not state.cam directly — updateCamera()
+      // below glides the actual camera toward it each frame, so starting/
+      // stopping a key no longer snaps.
+      ensureCamTargets();
+      const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
+      if (keys.has("w")) camTarget.y -= v;
+      if (keys.has("s")) camTarget.y += v;
+      if (keys.has("a")) camTarget.x -= v;
+      if (keys.has("d")) camTarget.x += v;
+    }
+    // Always ease toward whatever target is current (finishes any pending
+    // glide even while the tech tree blocks new key input) — render-clock
+    // only, driven by mainloop's per-rAF dt, never the economy tick.
+    updateCamera(dt);
   }
 
   // ---------------------------------------------------------------
@@ -6965,7 +7116,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     terrainDirty = true;
   });
   document.getElementById("btnCenter").addEventListener("click", () => {
-    state.cam.x = 0; state.cam.y = 0;
+    // MD: ease to center rather than snapping — set the target, updateCamera()
+    // (driven every frame by applyKeyPan) glides state.cam toward (0,0).
+    ensureCamTargets();
+    camTarget.x = 0; camTarget.y = 0;
   });
 /* BUILD:input END */
 
@@ -10930,8 +11084,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
       showToast(label + extra + " has begun!");
       SFX.play("event", (def ? def.name : notice.id) + " begins");
+      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + extra + " began");
     } else {
       showToast(label + " has ended.");
+      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + " ended");
     }
     updateEventChip();
     if (kingdomOpen) renderKingdom();
@@ -10940,6 +11096,76 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // Keep the chip + open kingdom panel current as the economy ticks.
   updateEventChip();
   setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+
+  // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
+  // panel funnels notable happenings (kingdom events, research completed, town/
+  // castle level-ups, victory) instead of scattering toasts/debug. Self-contained:
+  // builds its own DOM, reads state READ-ONLY, exposes window.EventLog.push.
+  const EventLog = (function () {
+    const MAX = 40;
+    const wrap = document.createElement("div");
+    wrap.id = "eventLog"; wrap.className = "collapsed";
+    wrap.innerHTML =
+      '<div class="el-head"><span class="el-title">📜 Event Log</span>' +
+      '<button class="el-toggle" title="Show / hide" aria-label="Toggle event log">▲</button></div>' +
+      '<ul class="el-list"></ul>';
+    document.body.appendChild(wrap);
+    const listEl = wrap.querySelector(".el-list");
+    const toggleBtn = wrap.querySelector(".el-toggle");
+    const headEl = wrap.querySelector(".el-head");
+    const entries = [];
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    function relTime(t) {
+      const s = Math.max(0, ((typeof performance !== "undefined" ? performance.now() : Date.now()) - t) / 1000);
+      if (s < 60) return "now";
+      const m = Math.floor(s / 60); return m + " min";
+    }
+    function render() {
+      if (!entries.length) { listEl.innerHTML = '<li class="el-empty">Nothing yet — found a town to begin.</li>'; return; }
+      let html = "";
+      for (const e of entries) html += '<li><span class="el-ic">' + e.icon + '</span><span class="el-tx">' +
+        esc(e.text) + '</span><span class="el-tm">' + relTime(e.t) + '</span></li>';
+      listEl.innerHTML = html;
+    }
+    function push(icon, text) {
+      entries.unshift({ icon: icon || "•", text: String(text), t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+      if (entries.length > MAX) entries.length = MAX;
+      render();
+    }
+    function setCollapsed(v) { wrap.classList.toggle("collapsed", v); toggleBtn.textContent = v ? "▲" : "▼"; }
+    headEl.addEventListener("click", () => setCollapsed(!wrap.classList.contains("collapsed")));
+    setInterval(render, 15000);   // refresh the "x min" labels
+    render();
+    return { push: push, setCollapsed: setCollapsed };
+  })();
+  window.EventLog = EventLog;
+
+  // Feed the log from state deltas (read-only poll): research completions,
+  // town level-ups, castle upgrades, and victory.
+  (function () {
+    let rSeen = null, lvls = {}, castleSeen = null, wonSeen = false;
+    function nameOf(id) {
+      const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
+      if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
+      return id;
+    }
+    setInterval(function () {
+      if (typeof state !== "object" || !state) return;
+      const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : null;
+      if (done) {
+        if (rSeen === null) rSeen = new Set(done);
+        else for (const id of done) if (!rSeen.has(id)) { rSeen.add(id); EventLog.push("🔬", "Researched " + nameOf(id)); }
+      }
+      for (const t of (state.towns || [])) {
+        const prev = (t.id in lvls) ? lvls[t.id] : (t.level || 1);
+        if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
+        lvls[t.id] = t.level || 1;
+      }
+      if (castleSeen === null) castleSeen = state.castleLevel || 1;
+      else if ((state.castleLevel || 1) > castleSeen) { castleSeen = state.castleLevel; EventLog.push("🏰", "Castle upgraded to level " + state.castleLevel); }
+      if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
+    }, 1200);
+  })();
 
   // Expose for the headless smoke test / console debugging.
   window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,
@@ -11362,6 +11588,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const PER_CITY    = 4;      // cap per city (a few is enough to read as "alive")
     const LEG_MS      = 1500;   // ms for one building<->centre leg
     const ZOOM_CULL   = 0.6;    // below this zoom: cull (external carts go dots-only too)
+    const FADE_MS     = 220;    // MD: spawn/despawn opacity fade — a porter starting or
+                                 // stopping (worker leaves, stock hits cap) glides into/out
+                                 // of view instead of popping, matching the path glide below
     const roster = new Map();   // "townId:q,r" -> porter obj (persistent, reused)
 
     const rmq = window.matchMedia
@@ -11408,15 +11637,22 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
               t: Math.random(),                 // desynced start along the leg
               dir: Math.random() < 0.5 ? 1 : -1,
               off: (Math.random() - 0.5),       // lateral jitter so co-located porters spread
+              alpha: 0, leaving: false,         // MD: fades in from 0 rather than popping in at full opacity
+              key,                              // MD: self-key, so the fade-out pass below can address it
             };
             roster.set(key, tr);
           } else {
             tr.good = good;                     // cheap refresh (output rarely changes)
+            tr.leaving = false;                 // MD: re-wanted mid-fade-out — resume fading back in, don't vanish
           }
           cityCount++; total++;
         }
       }
-      for (const key of roster.keys()) if (!wanted.has(key)) roster.delete(key);
+      // MD: mark no-longer-wanted porters to fade out instead of deleting them
+      // outright — draw() ticks their alpha down and removes them once it hits
+      // 0, so a porter whose building stopped producing eases out of view
+      // rather than teleporting away mid-glide.
+      for (const tr of roster.values()) if (!wanted.has(tr.key)) tr.leaving = true;
     }
 
     function townById(id) {
@@ -11487,7 +11723,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     function draw(dt) {
       const d = Math.min(100, dt || 16);
-      for (const tr of roster.values()) {
+      const fadeStep = d / FADE_MS;
+      for (const [key, tr] of roster) {
+        // MD: fade in on spawn / fade out before despawn — a porter's
+        // visibility eases too, not just its position, so it never pops.
+        if (tr.leaving) {
+          tr.alpha -= fadeStep;
+          if (tr.alpha <= 0) { roster.delete(key); continue; }
+        } else if (tr.alpha < 1) {
+          tr.alpha = Math.min(1, tr.alpha + fadeStep);
+        }
         // advance the oscillation 0<->1 (building <-> centre), gently looping
         tr.t += (tr.dir * d) / LEG_MS;
         if (tr.t >= 1) { tr.t = 1; tr.dir = -1; }
@@ -11502,7 +11747,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         const a = tr.pts[0], c = tr.pts[tr.pts.length - 1];
         const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
         const j = tr.off * SIZE * 0.3;
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, tr.alpha));
         drawToken(p.x + (-dy / len) * j, p.y + (dx / len) * j, tr.good, tr.amount);
+        ctx.globalAlpha = prevAlpha;
       }
     }
 
@@ -12561,8 +12809,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.35.0";
+  const GAME_VERSION = "0.36.0";
   const PATCH_NOTES = [
+    { v: "0.36.0", notes: [
+      "UI declutter & feel pass (Let-Them-Trade inspired), built by an agent team:",
+      "The play screen is now corner-anchored and calm \u2014 gold + resources top-left, speed controls + a \u2630 Menu top-right, objectives on the right edge, build menu bottom-center",
+      "Everything non-essential (seed/regenerate, map tools, reveal-fog, controls help, FPS + sound-debug) now lives in the \u2630 Menu, one click from the top corner",
+      "NEW: a collapsible Event Log (bottom-right) that funnels research, level-ups, castle upgrades, kingdom events and the win into one feed",
+      "Camera panning and zoom now glide smoothly to their target instead of snapping; internal porters fade in/out instead of popping",
+    ] },
     { v: "0.35.0", notes: [
       "Feel & juice pass (built by a 3-way agent team):",
       "Economy: fixed the post-victory happiness sawtooth \u2014 a supplied estate now holds a steady happiness plateau instead of jittering as import carts arrive in bursts (peak-to-trough ~27 \u2192 <1, same average)",
@@ -12804,6 +13059,36 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const toggle = (show) => panel.classList.toggle("hidden", show === undefined ? !panel.classList.contains("hidden") : !show);
     badge.addEventListener("click", () => toggle());
     document.getElementById("pnClose").addEventListener("click", () => toggle(false));
+  })();
+
+  // === UI-DECLUTTER === the ☰ HUD menu: a corner popup housing every
+  // non-essential control (map/tools/help/debug). Opens with a small fade+slide,
+  // closes on ✕, Esc, or an outside click. The relocated buttons keep their own
+  // ids so their existing handlers (input/audio/kingdom modules) stay bound.
+  (function () {
+    const btn = document.getElementById("hudMenuBtn");
+    const menu = document.getElementById("hudMenu");
+    const close = document.getElementById("hudMenuClose");
+    if (!btn || !menu) return;
+    let open = false;
+    function setOpen(v) {
+      open = v;
+      if (v) {
+        menu.classList.remove("hidden");
+        menu.classList.add("anim-in");
+        requestAnimationFrame(() => menu.classList.remove("anim-in"));  // trigger the transition
+      } else {
+        menu.classList.add("hidden");
+      }
+      btn.classList.toggle("active", v);
+    }
+    btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+    if (close) close.addEventListener("click", () => setOpen(false));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && open) setOpen(false); });
+    // Outside-click closes the menu (but not clicks inside it or on the button).
+    document.addEventListener("click", (e) => {
+      if (open && !menu.contains(e.target) && e.target !== btn) setOpen(false);
+    });
   })();
 /* BUILD:version-notes END */
 

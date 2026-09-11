@@ -21,6 +21,9 @@
     const PER_CITY    = 4;      // cap per city (a few is enough to read as "alive")
     const LEG_MS      = 1500;   // ms for one building<->centre leg
     const ZOOM_CULL   = 0.6;    // below this zoom: cull (external carts go dots-only too)
+    const FADE_MS     = 220;    // MD: spawn/despawn opacity fade — a porter starting or
+                                 // stopping (worker leaves, stock hits cap) glides into/out
+                                 // of view instead of popping, matching the path glide below
     const roster = new Map();   // "townId:q,r" -> porter obj (persistent, reused)
 
     const rmq = window.matchMedia
@@ -67,15 +70,22 @@
               t: Math.random(),                 // desynced start along the leg
               dir: Math.random() < 0.5 ? 1 : -1,
               off: (Math.random() - 0.5),       // lateral jitter so co-located porters spread
+              alpha: 0, leaving: false,         // MD: fades in from 0 rather than popping in at full opacity
+              key,                              // MD: self-key, so the fade-out pass below can address it
             };
             roster.set(key, tr);
           } else {
             tr.good = good;                     // cheap refresh (output rarely changes)
+            tr.leaving = false;                 // MD: re-wanted mid-fade-out — resume fading back in, don't vanish
           }
           cityCount++; total++;
         }
       }
-      for (const key of roster.keys()) if (!wanted.has(key)) roster.delete(key);
+      // MD: mark no-longer-wanted porters to fade out instead of deleting them
+      // outright — draw() ticks their alpha down and removes them once it hits
+      // 0, so a porter whose building stopped producing eases out of view
+      // rather than teleporting away mid-glide.
+      for (const tr of roster.values()) if (!wanted.has(tr.key)) tr.leaving = true;
     }
 
     function townById(id) {
@@ -146,7 +156,16 @@
 
     function draw(dt) {
       const d = Math.min(100, dt || 16);
-      for (const tr of roster.values()) {
+      const fadeStep = d / FADE_MS;
+      for (const [key, tr] of roster) {
+        // MD: fade in on spawn / fade out before despawn — a porter's
+        // visibility eases too, not just its position, so it never pops.
+        if (tr.leaving) {
+          tr.alpha -= fadeStep;
+          if (tr.alpha <= 0) { roster.delete(key); continue; }
+        } else if (tr.alpha < 1) {
+          tr.alpha = Math.min(1, tr.alpha + fadeStep);
+        }
         // advance the oscillation 0<->1 (building <-> centre), gently looping
         tr.t += (tr.dir * d) / LEG_MS;
         if (tr.t >= 1) { tr.t = 1; tr.dir = -1; }
@@ -161,7 +180,10 @@
         const a = tr.pts[0], c = tr.pts[tr.pts.length - 1];
         const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
         const j = tr.off * SIZE * 0.3;
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, tr.alpha));
         drawToken(p.x + (-dy / len) * j, p.y + (dx / len) * j, tr.good, tr.amount);
+        ctx.globalAlpha = prevAlpha;
       }
     }
 

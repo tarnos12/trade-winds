@@ -221,6 +221,83 @@
     return e.button === 1 || e.button === 2 || (e.button === 0 && state.mode === "pan");
   }
 
+  // ---------------------------------------------------------------
+  // MD: Eased camera motion (render-clock, presentation-only).
+  // state.cam.x/y and state.zoom are the ACTUAL, rendered camera values —
+  // renderer.js and everything else keep reading them unchanged. WASD, the
+  // recenter button, and wheel-zoom no longer snap those values directly;
+  // instead they move a target (camTarget / zoomTarget) that updateCamera()
+  // damps toward every render frame (called from applyKeyPan, which
+  // mainloop.js already invokes once per rAF with the real frame dt — never
+  // the economy tick). Mouse-drag panning is direct manipulation, so it
+  // keeps 1:1 tracking under the cursor: it writes BOTH the actual cam and
+  // the target in lockstep, so there's no post-drag glide-back and no
+  // fight between "where the mouse dragged it" and "where the ease is
+  // pulling it". This never reads/writes Sim/Trade state — purely state.cam
+  // / state.zoom, which are camera presentation fields, not economy state.
+  const CAM_PAN_EASE_RATE = 10;    // 1/s damping rate for WASD/recenter pan glide
+  const CAM_ZOOM_EASE_RATE = 14;   // 1/s damping rate for wheel-zoom glide
+  const CAM_SNAP_EPS = 0.01;       // close enough to target: snap the remainder (avoids infinite asymptote)
+  const ZOOM_SNAP_EPS = 0.0005;
+  let camTarget = null;      // lazily = {x, y}, matched to state.cam on first use
+  let zoomTarget = null;     // lazily = state.zoom on first use
+  let zoomAnchorScreen = null;   // last wheel screen point to hold fixed while zoom eases in
+  let lastCamX = null, lastCamY = null, lastZoom = null;   // see external-write resync below
+
+  function ensureCamTargets() {
+    if (!camTarget) camTarget = { x: state.cam.x, y: state.cam.y };
+    if (zoomTarget == null) zoomTarget = state.zoom;
+  }
+
+  // Damped exponential ease toward the target, frame-rate independent via dt.
+  function updateCamera(dt) {
+    ensureCamTargets();
+    // MD: another module can still legitimately write state.cam/state.zoom
+    // directly between our frames (save.js resets state.zoom=1 on new game/
+    // load; carts-castle-ui.js jumps state.cam.x/y for a "center on town"
+    // action). Every write WE make below leaves state.cam/state.zoom exactly
+    // at lastCamX/Y/lastZoom, so any mismatch here can only be such an
+    // outside write — resync the target to it instead of gliding back over
+    // it and undoing that jump.
+    if (lastCamX !== null && (state.cam.x !== lastCamX || state.cam.y !== lastCamY)) {
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
+    }
+    if (lastZoom !== null && state.zoom !== lastZoom) {
+      zoomTarget = state.zoom;
+    }
+    const dtS = Math.max(0, dt || 0) / 1000;
+
+    // Zoom glides toward zoomTarget; while it's moving, keep the point under
+    // the last wheel event's cursor position visually fixed (recomputed every
+    // step, not just once on the wheel tick, so the anchor holds through the
+    // whole glide rather than only its first frame).
+    if (Math.abs(zoomTarget - state.zoom) > ZOOM_SNAP_EPS) {
+      const anchor = zoomAnchorScreen;
+      const before = anchor ? screenToWorld(anchor.x, anchor.y) : null;
+      const zT = 1 - Math.exp(-CAM_ZOOM_EASE_RATE * dtS);
+      state.zoom += (zoomTarget - state.zoom) * zT;
+      if (Math.abs(zoomTarget - state.zoom) < ZOOM_SNAP_EPS) state.zoom = zoomTarget;
+      if (before) {
+        const after = screenToWorld(anchor.x, anchor.y);
+        const ax = before.x - after.x, ay = before.y - after.y;
+        state.cam.x += ax; state.cam.y += ay;
+        camTarget.x += ax; camTarget.y += ay;   // keep target in the same frame so pan-ease doesn't fight the zoom
+      }
+    } else {
+      state.zoom = zoomTarget;
+    }
+
+    // Pan glides toward camTarget (WASD / recenter feed it; drag-pan keeps
+    // both in lockstep so it stays 1:1 under the cursor, see above).
+    const pT = 1 - Math.exp(-CAM_PAN_EASE_RATE * dtS);
+    state.cam.x += (camTarget.x - state.cam.x) * pT;
+    state.cam.y += (camTarget.y - state.cam.y) * pT;
+    if (Math.abs(camTarget.x - state.cam.x) < CAM_SNAP_EPS) state.cam.x = camTarget.x;
+    if (Math.abs(camTarget.y - state.cam.y) < CAM_SNAP_EPS) state.cam.y = camTarget.y;
+
+    lastCamX = state.cam.x; lastCamY = state.cam.y; lastZoom = state.zoom;
+  }
+
   canvas.addEventListener("mousedown", (e) => {
     canvas.focus();
     dragging = true; dragPanned = false;
@@ -243,8 +320,12 @@
     if (Math.abs(dx) + Math.abs(dy) > 2) dragPanned = true;
     last = { x: e.clientX, y: e.clientY };
     if (panButton) {
+      // Direct manipulation: 1:1 under the cursor, no easing lag. Move the
+      // target in lockstep so nothing glides once the drag releases.
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
+      ensureCamTargets();
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
     } else if (state.mode === "erase" || state.mode === "eraseRoad") {
       // N: road mode no longer drag-paints — it's the click A→B tool. erase/
       // === J === eraseRoad drag-paints like "erase" (roads are safe to
@@ -265,13 +346,14 @@
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const before = screenToWorld(e.clientX, e.clientY);
+    // MD: don't snap state.zoom — set the TARGET and let updateCamera() ease
+    // state.zoom toward it every frame, holding this cursor point fixed
+    // throughout the glide (not just this instant). Repeated ticks just keep
+    // sliding the target/anchor, so a fast scroll still feels responsive.
+    ensureCamTargets();
     const factor = e.deltaY < 0 ? CONFIG.camera.wheelStep : 1 / CONFIG.camera.wheelStep;
-    state.zoom = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, state.zoom * factor));
-    const after = screenToWorld(e.clientX, e.clientY);
-    // keep the point under the cursor fixed while zooming
-    state.cam.x += before.x - after.x;
-    state.cam.y += before.y - after.y;
+    zoomTarget = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, zoomTarget * factor));
+    zoomAnchorScreen = { x: e.clientX, y: e.clientY };
     scheduleSave();
   }, { passive: false });
 
@@ -305,12 +387,22 @@
     // RT-B: don't drift the map while the full-screen tech tree is open
     // (WASD keydowns still land in `keys` since the overlay doesn't eat them).
     const tt = document.getElementById("techTree");
-    if (tt && !tt.classList.contains("hidden")) return;
-    const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
-    if (keys.has("w")) state.cam.y -= v;
-    if (keys.has("s")) state.cam.y += v;
-    if (keys.has("a")) state.cam.x -= v;
-    if (keys.has("d")) state.cam.x += v;
+    const ttOpen = tt && !tt.classList.contains("hidden");
+    if (!ttOpen) {
+      // MD: WASD moves the TARGET, not state.cam directly — updateCamera()
+      // below glides the actual camera toward it each frame, so starting/
+      // stopping a key no longer snaps.
+      ensureCamTargets();
+      const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
+      if (keys.has("w")) camTarget.y -= v;
+      if (keys.has("s")) camTarget.y += v;
+      if (keys.has("a")) camTarget.x -= v;
+      if (keys.has("d")) camTarget.x += v;
+    }
+    // Always ease toward whatever target is current (finishes any pending
+    // glide even while the tech tree blocks new key input) — render-clock
+    // only, driven by mainloop's per-rAF dt, never the economy tick.
+    updateCamera(dt);
   }
 
   // ---------------------------------------------------------------
@@ -356,5 +448,8 @@
     terrainDirty = true;
   });
   document.getElementById("btnCenter").addEventListener("click", () => {
-    state.cam.x = 0; state.cam.y = 0;
+    // MD: ease to center rather than snapping — set the target, updateCamera()
+    // (driven every frame by applyKeyPan) glides state.cam toward (0,0).
+    ensureCamTargets();
+    camTarget.x = 0; camTarget.y = 0;
   });

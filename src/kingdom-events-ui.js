@@ -251,8 +251,10 @@
       if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
       showToast(label + extra + " has begun!");
       SFX.play("event", (def ? def.name : notice.id) + " begins");
+      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + extra + " began");
     } else {
       showToast(label + " has ended.");
+      if (window.EventLog) window.EventLog.push(def ? def.icon : "✨", (def ? def.name : notice.id) + " ended");
     }
     updateEventChip();
     if (kingdomOpen) renderKingdom();
@@ -261,6 +263,76 @@
   // Keep the chip + open kingdom panel current as the economy ticks.
   updateEventChip();
   setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+
+  // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
+  // panel funnels notable happenings (kingdom events, research completed, town/
+  // castle level-ups, victory) instead of scattering toasts/debug. Self-contained:
+  // builds its own DOM, reads state READ-ONLY, exposes window.EventLog.push.
+  const EventLog = (function () {
+    const MAX = 40;
+    const wrap = document.createElement("div");
+    wrap.id = "eventLog"; wrap.className = "collapsed";
+    wrap.innerHTML =
+      '<div class="el-head"><span class="el-title">📜 Event Log</span>' +
+      '<button class="el-toggle" title="Show / hide" aria-label="Toggle event log">▲</button></div>' +
+      '<ul class="el-list"></ul>';
+    document.body.appendChild(wrap);
+    const listEl = wrap.querySelector(".el-list");
+    const toggleBtn = wrap.querySelector(".el-toggle");
+    const headEl = wrap.querySelector(".el-head");
+    const entries = [];
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    function relTime(t) {
+      const s = Math.max(0, ((typeof performance !== "undefined" ? performance.now() : Date.now()) - t) / 1000);
+      if (s < 60) return "now";
+      const m = Math.floor(s / 60); return m + " min";
+    }
+    function render() {
+      if (!entries.length) { listEl.innerHTML = '<li class="el-empty">Nothing yet — found a town to begin.</li>'; return; }
+      let html = "";
+      for (const e of entries) html += '<li><span class="el-ic">' + e.icon + '</span><span class="el-tx">' +
+        esc(e.text) + '</span><span class="el-tm">' + relTime(e.t) + '</span></li>';
+      listEl.innerHTML = html;
+    }
+    function push(icon, text) {
+      entries.unshift({ icon: icon || "•", text: String(text), t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+      if (entries.length > MAX) entries.length = MAX;
+      render();
+    }
+    function setCollapsed(v) { wrap.classList.toggle("collapsed", v); toggleBtn.textContent = v ? "▲" : "▼"; }
+    headEl.addEventListener("click", () => setCollapsed(!wrap.classList.contains("collapsed")));
+    setInterval(render, 15000);   // refresh the "x min" labels
+    render();
+    return { push: push, setCollapsed: setCollapsed };
+  })();
+  window.EventLog = EventLog;
+
+  // Feed the log from state deltas (read-only poll): research completions,
+  // town level-ups, castle upgrades, and victory.
+  (function () {
+    let rSeen = null, lvls = {}, castleSeen = null, wonSeen = false;
+    function nameOf(id) {
+      const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
+      if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
+      return id;
+    }
+    setInterval(function () {
+      if (typeof state !== "object" || !state) return;
+      const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : null;
+      if (done) {
+        if (rSeen === null) rSeen = new Set(done);
+        else for (const id of done) if (!rSeen.has(id)) { rSeen.add(id); EventLog.push("🔬", "Researched " + nameOf(id)); }
+      }
+      for (const t of (state.towns || [])) {
+        const prev = (t.id in lvls) ? lvls[t.id] : (t.level || 1);
+        if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
+        lvls[t.id] = t.level || 1;
+      }
+      if (castleSeen === null) castleSeen = state.castleLevel || 1;
+      else if ((state.castleLevel || 1) > castleSeen) { castleSeen = state.castleLevel; EventLog.push("🏰", "Castle upgraded to level " + state.castleLevel); }
+      if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
+    }, 1200);
+  })();
 
   // Expose for the headless smoke test / console debugging.
   window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,

@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.35.0";
+  const GAME_VERSION = "0.36.0";
   const PATCH_NOTES = [
+    { v: "0.36.0", notes: [
+      "UI declutter & feel pass (Let-Them-Trade inspired), built by an agent team:",
+      "The play screen is now corner-anchored and calm \u2014 gold + resources top-left, speed controls + a \u2630 Menu top-right, objectives on the right edge, build menu bottom-center",
+      "Everything non-essential (seed/regenerate, map tools, reveal-fog, controls help, FPS + sound-debug) now lives in the \u2630 Menu, one click from the top corner",
+      "NEW: a collapsible Event Log (bottom-right) that funnels research, level-ups, castle upgrades, kingdom events and the win into one feed",
+      "Camera panning and zoom now glide smoothly to their target instead of snapping; internal porters fade in/out instead of popping",
+    ] },
     { v: "0.35.0", notes: [
       "Feel & juice pass (built by a 3-way agent team):",
       "Economy: fixed the post-victory happiness sawtooth \u2014 a supplied estate now holds a steady happiness plateau instead of jittering as import carts arrive in bursts (peak-to-trough ~27 \u2192 <1, same average)",
@@ -242,4 +249,34 @@
     const toggle = (show) => panel.classList.toggle("hidden", show === undefined ? !panel.classList.contains("hidden") : !show);
     badge.addEventListener("click", () => toggle());
     document.getElementById("pnClose").addEventListener("click", () => toggle(false));
+  })();
+
+  // === UI-DECLUTTER === the ☰ HUD menu: a corner popup housing every
+  // non-essential control (map/tools/help/debug). Opens with a small fade+slide,
+  // closes on ✕, Esc, or an outside click. The relocated buttons keep their own
+  // ids so their existing handlers (input/audio/kingdom modules) stay bound.
+  (function () {
+    const btn = document.getElementById("hudMenuBtn");
+    const menu = document.getElementById("hudMenu");
+    const close = document.getElementById("hudMenuClose");
+    if (!btn || !menu) return;
+    let open = false;
+    function setOpen(v) {
+      open = v;
+      if (v) {
+        menu.classList.remove("hidden");
+        menu.classList.add("anim-in");
+        requestAnimationFrame(() => menu.classList.remove("anim-in"));  // trigger the transition
+      } else {
+        menu.classList.add("hidden");
+      }
+      btn.classList.toggle("active", v);
+    }
+    btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+    if (close) close.addEventListener("click", () => setOpen(false));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && open) setOpen(false); });
+    // Outside-click closes the menu (but not clicks inside it or on the button).
+    document.addEventListener("click", (e) => {
+      if (open && !menu.contains(e.target) && e.target !== btn) setOpen(false);
+    });
   })();
