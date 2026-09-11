@@ -5,6 +5,10 @@ const CONFIG = {
   // fractions* of the board, so the map stays varied for any seed.
   map: {
     radius: 14, hexSize: 24, edgeFalloff: 0.55,
+    // The board is a RECTANGLE of pointy-top hexes, `width` columns × `height`
+    // rows, centered on the castle at (0,0). `radius` above is retained only as
+    // a scalar for deposit inner-band math; it no longer sets the board shape.
+    rect: { width: 50, height: 25 },
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },

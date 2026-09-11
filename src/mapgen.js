@@ -72,14 +72,25 @@ const MapGen = {
     const elevN = makeValueNoise(seed);
 
     // ---- build the grid; sample elevation for water/mountain shaping ----
+    // RECTANGLE shape: `width` columns × `height` rows of pointy-top hexes,
+    // centered on the castle at axial (0,0). Row `row` shifts its axial q by
+    // -floor(row/2) so the rows stack into a true screen-space rectangle
+    // (the classic brick-wall edge) rather than a sheared parallelogram.
     const hexes = new Map();
     const waterMode = (preset.water && preset.water.mode) || "rim";
     const waterFrac = (preset.water && preset.water.frac) || 0;
-    for (let q = -radius; q <= radius; q++) {
-      const lo = Math.max(-radius, -q - radius), hi = Math.min(radius, -q + radius);
-      for (let r = lo; r <= hi; r++) {
-        const d = HexMath.dist(0, 0, q, r) / radius;     // 0 centre → 1 rim
-        // rim mode sinks the rim (island); center mode (oasis) sinks the middle.
+    const rect = preset.rect || CONFIG.map.rect || { width: 50, height: 25 };
+    const W = Math.max(3, rect.width | 0), H = Math.max(3, rect.height | 0);
+    const halfW = Math.floor(W / 2), halfH = Math.floor(H / 2);
+    for (let row = -halfH; row < H - halfH; row++) {
+      const rOffset = Math.floor(row / 2);
+      for (let col = -halfW; col < W - halfW; col++) {
+        const q = col - rOffset, r = row;
+        // Rectangle-normalized distance (Chebyshev on the col/row axes): 0 at the
+        // center → 1 at the nearest edge. rim mode sinks the border (island);
+        // center mode (oasis) sinks the middle.
+        const nx = halfW ? col / halfW : 0, ny = halfH ? row / halfH : 0;
+        const d = Math.min(1, Math.max(Math.abs(nx), Math.abs(ny)));
         let falloff = 0;
         if (waterMode === "rim") falloff = d * d * CONFIG.map.edgeFalloff;
         else if (waterMode === "center") falloff = (1 - d) * (1 - d) * CONFIG.map.edgeFalloff;
@@ -87,6 +98,7 @@ const MapGen = {
         hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, revealed: false });
       }
     }
+    const topRow = -halfH;   // northmost row (used by the snow pole below)
     const all = Array.from(hexes.values());   // deterministic insertion order
 
     // ---- (1) water by elevation quantile ----
@@ -215,7 +227,7 @@ const MapGen = {
     if (snowCfg.mode === "pole") {
       const rows = snowCfg.rows || 1;
       for (const h of all) {
-        if (h.r <= (-radius + rows - 1) && groundSet[h.terrain]) h.terrain = "snow";
+        if (h.r <= (topRow + rows - 1) && groundSet[h.terrain]) h.terrain = "snow";
       }
     }
 

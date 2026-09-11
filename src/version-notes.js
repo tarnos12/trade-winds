@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.37.0";
+  const GAME_VERSION = "0.38.0";
   const PATCH_NOTES = [
+    { v: "0.38.0", notes: [
+      "The world is now a wide RECTANGLE (50 × 25 tiles) centered on your castle, instead of the old hexagonal disc — more room to spread out, with a snow band along the north edge and water along the borders",
+    ] },
     { v: "0.37.0", notes: [
       "Retired the random Kingdom Events system (Bumper Harvest / Demand Craze / Kingdom Fair) — it ran with almost no UI and unclear value; the economy is now purely player-driven",
       "Objectives panel no longer repeats the mission's name below its own header — it just shows the progress count",
