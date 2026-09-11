@@ -102,6 +102,43 @@ not live teammates (see Team model).
 
 ## Current status (update every commit)
 
+**v0.34.0 — current on `main`.** The game is fully modular (`src/*.js` → `index.html` via
+`tools/build.js`; `--check` guards drift) and well past the old v0.23 log below. Since then, shipped
+in this line of work:
+- **Balance Lab (🧪 start-screen tool)** — a professional card-based economy editor: compose cities
+  from real buildings/populations, live per-good production-vs-consumption + a persistent Resources
+  panel (net /min, staffed producers by level), hover/pin a resource for a summed produced/consumed
+  breakdown, per-building pause + slot caps by city level, house needs split Basic/Luxury, carrying-
+  capacity ratios, and a **ground-truth Run-sim** over the real `Sim`/`Trade`. Scenario persists.
+- **Game-wide economy rebalance (v0.32)** to clean per-minute anchors: extractors 20–60/min,
+  every processor ~10/min at its 2:1 input ratio, needs 2.5/min per basic + 1.5/min per luxury,
+  across all four tiers. Peasants/workers stay single-town self-sufficient; burgher/aristocrat full
+  happiness now depends on inter-city trade (intended). Prices/costs/housing untouched.
+- **Windows desktop app (v0.33, Electron)** — `electron/main.js` serves the game from a secure
+  `app://` origin (so the blob-iframe editors' localStorage works) + a preload that auto-saves ALL
+  data (game + research/mission/balance editors) to one editable JSON file on disk. `DESKTOP.md`;
+  the same `index.html` still runs in any browser.
+- **King's Quests fully retired (v0.34)** — they had no UI and ran invisibly; removed the engine +
+  `CONFIG.quests` + dead banner UI; castle now upgrades on **gold alone** (prestige's only source
+  was quests), mirroring the gold-only town upgrades.
+- Plus: 60fps render cap, sound-debug panel, gold-only town upgrades, per-minute rate displays,
+  smooth cart interpolation, internal-trader icons, mission editor + data-driven Getting Started
+  onboarding, "Collapsed Bridge" event removed.
+
+Tests: **21 pure-core suites + the editor harness, all green**; `--check` OK; determinism preserved.
+
+**Active milestone — "Juice & Feel Polish" (v0.35.0, agent team running).** Author-chosen from the
+Stage-3 tail. Three disjoint slices owned by worktree subagents (lead integrates serially): **VFX**
+(`src/juice.js`), **Audio** (`src/audio.js`), **Economy smoothing** (`src/sim.js`/`trade.js`/
+`config.js` — fix the post-victory happiness sawtooth via consumer buffers / trade smoothing). Full
+brief + exit criteria: [`docs/JUICE_POLISH_BRIEF.md`](docs/JUICE_POLISH_BRIEF.md).
+
+**Stage-3 → 1.0 remaining after this:** the **campaign scenarios + scenario-select** (the last big
+headline item; exit = "a stranger finishes Scenario 1 without questions"); optional Stage-4
+(harbors/water trade, bandits/guards).
+
+<details><summary>Older status log (v0.21–v0.23, condensed) — kept for history</summary>
+
 **v0.23.0 — Playtest-feedback batch (on `main`).** Ten items shipped by a 4-person agent team
 (CoreDev/RenderDev/UIDev/QA) on the modular `src/`. **Trade works without roads** now — `Pathing.route`
 always returns a route (`road:false` off-road fallback) and off-road carts travel at half speed
@@ -204,6 +241,8 @@ verified by browser boot (the pure-core suites don't reach it).
 
 Known non-blocking notes: research ETA display can read 1s optimistic (cosmetic; completion is
 consumed-gated). Terrain enum as built uses `fertile` (not `field`) — the code is the source of truth.
+
+</details>
 
 ## Workflow notes
 
