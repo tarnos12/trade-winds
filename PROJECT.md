@@ -7,6 +7,9 @@ operates. The design authority is [`GDD.md`](GDD.md); this file is its team-faci
 
 **Keep the "Current status" section current — update it in the same commit as every completed task.**
 
+**Shipping ritual (author's standing request): every time you ship (commit + push a user-facing change), also refresh the preview Artifact from the current `index.html` and give the author the link.** The preview Artifact is:
+<https://claude.ai/code/artifact/61de603d-e712-4a2d-81fa-443ed426b565> (favicon ⛵). Read it once per session before the first republish (publish gate), then republish the same file path to keep the URL stable.
+
 ---
 
 ## Goal
