@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.0";
+  const GAME_VERSION = "0.38.1";
   const PATCH_NOTES = [
+    { v: "0.38.1", notes: [
+      "Moved the Build / Peasant bar down to the bottom edge of the screen (it used to float higher to clear the old corner widgets, which are gone now)",
+    ] },
     { v: "0.38.0", notes: [
       "The world is now a wide RECTANGLE (50 × 25 tiles) centered on your castle, instead of the old hexagonal disc — more room to spread out, with a snow band along the north edge and water along the borders",
     ] },

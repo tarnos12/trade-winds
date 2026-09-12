@@ -387,10 +387,12 @@
   /* === TOWN-UI CSS END === */
 
   /* === BUILD-BAR CSS START === (PV2-B) persistent bottom-center build bar.
-     Floats above the corner widgets (#hint bottom-left, #hud bottom-right) so it
-     never overlaps them; content scrolls horizontally if it overflows. */
+     Sits near the bottom edge of the view; the corner widgets it used to clear
+     (#hint / #hud) were retired in the UI-declutter pass, and the Event Log is
+     bottom-RIGHT so the centered bar doesn't collide with it. Its category
+     flyout opens upward, so a low anchor is fine. Scrolls horizontally if wide. */
   #buildBar {
-    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
     max-width: calc(100vw - 24px); z-index: 15;
     display: flex; flex-direction: column; gap: 5px;
     background: var(--panel); border: 1px solid var(--panel-edge);
@@ -12558,8 +12560,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.0";
+  const GAME_VERSION = "0.38.1";
   const PATCH_NOTES = [
+    { v: "0.38.1", notes: [
+      "Moved the Build / Peasant bar down to the bottom edge of the screen (it used to float higher to clear the old corner widgets, which are gone now)",
+    ] },
     { v: "0.38.0", notes: [
       "The world is now a wide RECTANGLE (50 × 25 tiles) centered on your castle, instead of the old hexagonal disc — more room to spread out, with a snow band along the north edge and water along the borders",
     ] },
