@@ -1035,6 +1035,13 @@
   <div class="hm-head"><b>☰ Menu</b><button id="hudMenuClose" title="Close (Esc)">✕</button></div>
 
   <div class="hm-sec">
+    <div class="hm-lbl">Game</div>
+    <div class="hm-row">
+      <button id="btnMainMenu" title="Save and return to the main menu">🏠 Main Menu</button>
+    </div>
+  </div>
+
+  <div class="hm-sec">
     <div class="hm-lbl">Map</div>
     <div class="hm-row">
       <label class="seedlbl" for="seed">Seed</label>
@@ -12146,6 +12153,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     btnDice.addEventListener("click", () => { seedEl.value = randomSeed(); });
     seedEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); startNew(); } });
 
+    // "Main Menu" (in the ☰ menu): save the current game so Continue resumes it
+    // exactly, close the ☰ popup, and reopen the title overlay (which also pauses
+    // the economy). saveGame() is shared IIFE scope, like newGame/loadGame above.
+    const btnMainMenu = document.getElementById("btnMainMenu");
+    if (btnMainMenu) btnMainMenu.addEventListener("click", () => {
+      try { if (typeof saveGame === "function") saveGame(); } catch (e) {}
+      const menu = document.getElementById("hudMenu");
+      if (menu) { menu.classList.remove("anim-in"); menu.classList.add("hidden"); }
+      show();
+    });
+
     return { show, hide, isOpen: () => open, startNew, continueSave, refreshContinue };
   })();
   window.StartScreen = StartScreen;
@@ -12560,8 +12578,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.1";
+  const GAME_VERSION = "0.38.2";
   const PATCH_NOTES = [
+    { v: "0.38.2", notes: [
+      "NEW: a 🏠 Main Menu button in the ☰ Menu — it saves your game and returns to the title screen, where Continue picks up exactly where you left off",
+    ] },
     { v: "0.38.1", notes: [
       "Moved the Build / Peasant bar down to the bottom edge of the screen (it used to float higher to clear the old corner widgets, which are gone now)",
     ] },

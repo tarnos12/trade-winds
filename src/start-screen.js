@@ -80,6 +80,17 @@
     btnDice.addEventListener("click", () => { seedEl.value = randomSeed(); });
     seedEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); startNew(); } });
 
+    // "Main Menu" (in the ☰ menu): save the current game so Continue resumes it
+    // exactly, close the ☰ popup, and reopen the title overlay (which also pauses
+    // the economy). saveGame() is shared IIFE scope, like newGame/loadGame above.
+    const btnMainMenu = document.getElementById("btnMainMenu");
+    if (btnMainMenu) btnMainMenu.addEventListener("click", () => {
+      try { if (typeof saveGame === "function") saveGame(); } catch (e) {}
+      const menu = document.getElementById("hudMenu");
+      if (menu) { menu.classList.remove("anim-in"); menu.classList.add("hidden"); }
+      show();
+    });
+
     return { show, hide, isOpen: () => open, startNew, continueSave, refreshContinue };
   })();
   window.StartScreen = StartScreen;

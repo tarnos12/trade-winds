@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.1";
+  const GAME_VERSION = "0.38.2";
   const PATCH_NOTES = [
+    { v: "0.38.2", notes: [
+      "NEW: a 🏠 Main Menu button in the ☰ Menu — it saves your game and returns to the title screen, where Continue picks up exactly where you left off",
+    ] },
     { v: "0.38.1", notes: [
       "Moved the Build / Peasant bar down to the bottom edge of the screen (it used to float higher to clear the old corner widgets, which are gone now)",
     ] },
