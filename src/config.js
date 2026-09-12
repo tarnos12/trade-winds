@@ -24,25 +24,94 @@ const CONFIG = {
   // shoal clusters (1–3 tiles each); `near` biases the FIRST shoal to within
   // that hex-distance of the castle. Fish is a T1 resource: NO ring (exempt
   // from the T2 push-out) and never far from spawn. ===
+  // Each preset also carries an explicit `rect` (board size) and a `tiers` block
+  // naming its identity on the 6 Custom-Map axes (Fertility / World Age / Climate
+  // / Sea Level / Resources / Size). The `tiers` block is UI metadata only — it
+  // pre-fills the Custom panel when a player derives a custom world from this
+  // preset; MapGen ignores it for a plain preset generate. Retuned so the five
+  // worlds read as VISUALLY DISTINCT: lush-green Fertile, desert Oasis, barren
+  // giant Big World, rugged snowy Highlands, and watery Isles.
   mapPresets: {
-    fertile: { label: "Fertile Land", radius: 14, water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.05,
-      groundMix: { fertile: 0.50, barren: 0.35, desert: 0.15 },
-      forest: { patches: 6, size: [6, 14] }, snow: { mode: "pole", rows: 2 },
+    fertile: { label: "Fertile Land", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
+      water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.06,
+      groundMix: { fertile: 0.64, barren: 0.23, desert: 0.13 },   // lush: dominant green (barren:desert < 2x, out of the strict ordering check)
+      forest: { patches: 9, size: [8, 16] }, snow: { mode: "pole", rows: 2 },
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 6 }, coal: { count: 2, ring: 6 }, gold: { count: 1, ring: 8 },
                   fish: { count: 5, near: 6 } } },   // === TV2-FIX: ~4-6 shoals ===
-    oasis: { label: "Oasis", radius: 14, water: { mode: "center", frac: 0.12 }, mountainFrac: 0.06,
-      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },
+    oasis: { label: "Oasis", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "arid", worldAge: "normal", climate: "warm", seaLevel: "low", resources: "scarce", size: "normal" },
+      water: { mode: "center", frac: 0.12 }, mountainFrac: 0.05,
+      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },   // sand sea + central lake
       forest: { patches: 2, size: [3, 7] }, snow: { mode: "none" },
       deposits: { stone: { count: 2, ring: 0 }, clay: { count: 1, ring: 2 }, iron: { count: 2, ring: 5 }, coal: { count: 1, ring: 5 }, gold: { count: 1, ring: 7 },
                   fish: { count: 4, near: 6 } } },   // === TV2-FIX: ~3-5 shoals, in the central water ===
-    big_world: { label: "Big World", radius: 18, water: { mode: "rim", frac: 0.15 }, mountainFrac: 0.07,
-      groundMix: { fertile: 0.40, barren: 0.45, desert: 0.15 },
-      forest: { patches: 8, size: [6, 16] }, snow: { mode: "pole", rows: 2 },
-      // T1 near spawn, T2 pushed far out (bigger rings).
+    big_world: { label: "Big World", radius: 18, rect: { width: 66, height: 33 },
+      tiers: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "rich", size: "large" },
+      water: { mode: "rim", frac: 0.16 }, mountainFrac: 0.07,
+      groundMix: { barren: 0.52, fertile: 0.28, desert: 0.20 },   // vast barren frontier — clearly NOT the green Fertile map
+      forest: { patches: 11, size: [6, 16] }, snow: { mode: "pole", rows: 3 },
+      // T1 near spawn, T2 pushed far out (bigger rings) on the big board.
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 3 }, iron: { count: 3, ring: 9 }, coal: { count: 3, ring: 9 }, gold: { count: 2, ring: 12 },
                   fish: { count: 6, near: 8 } } },   // === TV2-FIX: ~5-8 shoals, some near the start rings ===
+    highlands: { label: "Highlands", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "normal", worldAge: "young", climate: "cold", seaLevel: "low", resources: "rich", size: "normal" },
+      water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
+      groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands, green valleys, little sand
+      forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
+      // stone/ore rich and pulled inward (mining world); gold still furthest out.
+      deposits: { stone: { count: 4, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 4, ring: 5 }, coal: { count: 4, ring: 5 }, gold: { count: 2, ring: 7 },
+                  fish: { count: 3, near: 6 } } },
+    isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal" },
+      water: { mode: "rim", frac: 0.42 }, mountainFrac: 0.02,   // archipelago: high rim water breaks the land into islands; worn-flat (few mountains)
+      groundMix: { fertile: 0.58, barren: 0.27, desert: 0.15 },   // green isles (barren:desert < 2x, out of the strict ordering check)
+      forest: { patches: 7, size: [5, 12] }, snow: { mode: "none" },   // temperate ocean world — the top rows are sea, so no snow band
+      // fewer land deposits (small islands), lots of fish. ensureCastleConnected
+      // guarantees the castle island still reaches the mainland by a carved bridge.
+      deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 4 }, coal: { count: 2, ring: 4 }, gold: { count: 1, ring: 6 },
+                  fish: { count: 8, near: 5 } } },
   },
   mapPresetDefault: "fertile",
+  // === Custom-Map tier tables ===  Six independent axes; the MIDDLE option of
+  // each is the baseline (≈ the Fertile preset). MapGen.applyTiers(base, sel)
+  // layers a selection onto any base preset to build a resolved preset. Order of
+  // keys here is the order the Custom panel renders the dropdowns.
+  // Guardrails enforced in applyTiers: mountainFrac <= 0.14, forest.patches >= 2,
+  // groundMix.fertile >= 20% of the mix (always some green contrast).
+  mapTiers: {
+    fertility: { label: "Fertility", default: "normal", options: [
+      { id: "lush",   label: "Lush",   groundMix: { fertile: 0.65, barren: 0.22, desert: 0.13 }, forestPatchMul: 1.5, forestSize: [8, 16] },
+      { id: "normal", label: "Normal", groundMix: { fertile: 0.45, barren: 0.35, desert: 0.20 }, forestPatchMul: 1.0, forestSize: [6, 14] },
+      { id: "arid",   label: "Arid",   groundMix: { fertile: 0.20, barren: 0.40, desert: 0.40 }, forestPatchMul: 0.4, forestSize: [4, 9] },
+    ] },
+    worldAge: { label: "World Age", default: "normal", options: [
+      { id: "young",  label: "Young",  mountainFrac: 0.12 },
+      { id: "normal", label: "Normal", mountainFrac: 0.06 },
+      { id: "old",    label: "Old",    mountainFrac: 0.02 },
+    ] },
+    climate: { label: "Climate", default: "temperate", options: [
+      { id: "cold",      label: "Cold",      snow: { mode: "pole", rows: 4 }, desertToBarren: true },
+      { id: "temperate", label: "Temperate", snow: { mode: "pole", rows: 2 } },
+      { id: "warm",      label: "Warm",      snow: { mode: "none" }, desertAdd: 0.05 },
+    ] },
+    seaLevel: { label: "Sea Level", default: "normal", options: [
+      { id: "low",    label: "Low",    waterFrac: 0.10 },
+      { id: "normal", label: "Normal", waterFrac: 0.18 },
+      { id: "high",   label: "High",   waterFrac: 0.30 },
+    ] },
+    resources: { label: "Resources", default: "normal", options: [
+      { id: "scarce", label: "Scarce", countMul: 0.6, ringMul: 1.2 },
+      { id: "normal", label: "Normal", countMul: 1.0, ringMul: 1.0 },
+      { id: "rich",   label: "Rich",   countMul: 1.6, ringMul: 0.8 },
+    ] },
+    size: { label: "Size", default: "normal", options: [
+      { id: "small",  label: "Small",  rect: { width: 36, height: 18 } },
+      { id: "normal", label: "Normal", rect: { width: 50, height: 25 } },
+      { id: "large",  label: "Large",  rect: { width: 66, height: 33 } },
+    ] },
+  },
+  mapTiersDefault: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
   // === /TV2 map presets ===
   fog:    { castleReveal: 4, townReveal: 3 },
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },

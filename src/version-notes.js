@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.3";
+  const GAME_VERSION = "0.39.0";
   const PATCH_NOTES = [
+    { v: "0.39.0", notes: [
+      "NEW: Custom Map — pick “Custom…” on the start screen to shape your world with 6 dropdowns (Fertility, World Age, Climate, Sea Level, Resources, Size), each Low/Normal/High. 🎲 Regenerate rolls a fresh world with the same settings",
+      "The 5 map presets are now clearly distinct — lush-green Fertile, desert Oasis, barren-giant Big World, plus two NEW worlds: rugged snowy Highlands and watery Isles (archipelago)",
+      "Your chosen world settings are saved, so Continue restores the same map type",
+    ] },
     { v: "0.38.3", notes: [
       "Fixed the castle getting stranded: the castle tile and the ring around it are now always buildable land, and the castle is guaranteed to be connected by land to the rest of the map (a land bridge is carved if needed) — this fixes the Oasis map, whose central lake could island the castle",
     ] },

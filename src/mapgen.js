@@ -60,14 +60,113 @@ const MapGen = {
     }
     return taken;
   },
+  // === Custom-Map tier resolution ===  Deep-clone `basePreset` and layer the
+  // selected tier options (CONFIG.mapTiers) onto it, returning a NEW resolved
+  // preset object. Pure + deterministic (no rng): a given (base, selection)
+  // always yields the same preset, so generate() stays reproducible. `sel` is a
+  // { fertility, worldAge, climate, seaLevel, resources, size } map of option
+  // ids (missing axes fall back to each axis's `default`). Guardrails keep every
+  // combo playable: mountainFrac <= 0.14, forest.patches >= 2, and the ground
+  // mix keeps >= 20% fertile so there's always some green contrast.
+  applyTiers(basePreset, sel) {
+    const T = (CONFIG.mapTiers) || {};
+    const base = basePreset || (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    const p = JSON.parse(JSON.stringify(base));   // deep clone; JSON-safe preset shapes only
+    sel = sel || {};
+    const optFor = (axis) => {
+      const ax = T[axis]; if (!ax || !ax.options) return null;
+      const want = sel[axis] || ax.default;
+      return ax.options.find(o => o.id === want) || ax.options.find(o => o.id === ax.default) || null;
+    };
+    // --- Size (rect board dims + a proportional radius for deposit inner-band math) ---
+    const sz = optFor("size");
+    if (sz && sz.rect) {
+      p.rect = { width: sz.rect.width | 0, height: sz.rect.height | 0 };
+      p.radius = Math.max(6, Math.round(p.rect.width * 0.28));   // 36->10, 50->14, 66->18
+    }
+    // --- Fertility (ground mix + forest density/size) ---
+    const fert = optFor("fertility");
+    if (fert) {
+      if (fert.groundMix) p.groundMix = Object.assign({}, fert.groundMix);
+      p.forest = p.forest || { patches: 6, size: [6, 14] };
+      if (fert.forestSize) p.forest.size = fert.forestSize.slice();
+      const basePatches = (base.forest && base.forest.patches) || 6;   // multiplier is over the BASE preset's patch count
+      p.forest.patches = Math.round(basePatches * (fert.forestPatchMul != null ? fert.forestPatchMul : 1));
+    }
+    // --- World Age (mountainFrac) ---
+    const age = optFor("worldAge");
+    if (age && age.mountainFrac != null) p.mountainFrac = age.mountainFrac;
+    // --- Climate (snow band + desert<->barren shifts) ---
+    const clim = optFor("climate");
+    if (clim) {
+      if (clim.snow) p.snow = Object.assign({}, clim.snow);
+      p.groundMix = p.groundMix || {};
+      if (clim.desertToBarren) {   // Cold: freeze the desert share into barren
+        p.groundMix.barren = (p.groundMix.barren || 0) + (p.groundMix.desert || 0);
+        p.groundMix.desert = 0;
+      }
+      if (clim.desertAdd) p.groundMix.desert = (p.groundMix.desert || 0) + clim.desertAdd;   // Warm: a little more sand
+    }
+    // --- Sea Level (water fraction; keeps the base water MODE; inert if none) ---
+    const sea = optFor("seaLevel");
+    p.water = p.water || { mode: "rim", frac: 0 };
+    if (sea && sea.waterFrac != null && p.water.mode !== "none") p.water.frac = sea.waterFrac;
+    // --- Resources (deposit count/ring multipliers) ---
+    const res = optFor("resources");
+    if (res && p.deposits) {
+      const cm = res.countMul != null ? res.countMul : 1;
+      const rm = res.ringMul != null ? res.ringMul : 1;
+      for (const k of Object.keys(p.deposits)) {
+        const d = p.deposits[k]; if (!d) continue;
+        if (d.count != null) d.count = Math.max(1, Math.round(d.count * cm));   // min 1 so every type still spawns
+        if (d.ring) d.ring = Math.round(d.ring * rm);
+        if (d.near) d.near = Math.round(d.near * rm);
+      }
+    }
+    // --- Guardrails (keep every combo playable) ---
+    p.mountainFrac = Math.min(0.14, Math.max(0, p.mountainFrac || 0));   // hard cap: mountains can wall off far deposits
+    p.forest = p.forest || { patches: 2, size: [4, 8] };
+    p.forest.patches = Math.max(2, p.forest.patches | 0);               // always >= 2 forest patches
+    p.groundMix = p.groundMix || { fertile: 0.2, barren: 0.4, desert: 0.4 };
+    { // fertile floor: at least 20% of the mix, so there is always green contrast
+      const g = p.groundMix;
+      const f = g.fertile || 0, rest = (g.barren || 0) + (g.desert || 0), sum = f + rest;
+      if (sum > 0 && f / sum < 0.20) g.fertile = 0.20 * rest / 0.80;    // -> fertile is exactly 20% of the new sum
+    }
+    // --- Deposit-crowding clamp (Large x Rich / Small x Rich safety valve) ---
+    if (p.deposits) {
+      const land = ((p.rect && p.rect.width) || 50) * ((p.rect && p.rect.height) || 25);
+      const landKeys = ["stone", "clay", "iron", "coal", "gold"];
+      let clusters = 0; for (const k of landKeys) if (p.deposits[k]) clusters += p.deposits[k].count || 0;
+      const cap = Math.floor(land * 0.06 / 3);   // ~6% of the board as deposit tiles (avg cluster ~3)
+      if (clusters > cap && cap > 0) {
+        const scale = cap / clusters;
+        for (const k of landKeys) { const d = p.deposits[k]; if (d && d.count) d.count = Math.max(1, Math.round(d.count * scale)); }
+      }
+    }
+    return p;
+  },
   // Returns { seed, radius, preset, hexes: Map<key, hex> }.
-  generate(seedInput, radius, presetId) {
+  // === Custom map: pass presetId "custom" (or any `tiers` object carrying a
+  // `base`) plus a `tiers` selection; the resolved preset is built via applyTiers
+  // and the stream stays deterministic (same seed + tiers => identical map). ===
+  generate(seedInput, radius, presetId, tiers) {
     presetId = presetId || (CONFIG.mapPresetDefault || "fertile");
-    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ||
-                   (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    let preset;
+    if (tiers && typeof tiers === "object" && (presetId === "custom" || tiers.base)) {
+      const baseId = (tiers.base && CONFIG.mapPresets && CONFIG.mapPresets[tiers.base]) ? tiers.base
+        : ((CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile"));
+      preset = MapGen.applyTiers((CONFIG.mapPresets && CONFIG.mapPresets[baseId]) || {}, tiers);
+      presetId = "custom";
+    } else {
+      preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ||
+               (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    }
     radius = radius || preset.radius || CONFIG.map.radius;
     const seed = hashSeed(seedInput);
     // Single seeded stream (seed ^ presetId) consumed in a FIXED order below.
+    // For custom maps presetId is the constant "custom" — the tiers change the
+    // number of draws deterministically, so same (seed, tiers) => same map.
     const rng = mulberry32((hashSeed(seedInput) ^ hashSeed(presetId)) | 0);
     const elevN = makeValueNoise(seed);
 
@@ -245,7 +344,7 @@ const MapGen = {
     // bridge if needed. Runs last so it sees the final terrain. ----
     MapGen.ensureCastleConnected(hexes);
 
-    return { seed, radius, preset: presetId, hexes };
+    return { seed, radius, preset: presetId, hexes, tiers: (presetId === "custom" ? tiers : undefined) };
   },
   // Guarantee the castle tile (0,0) and its 6 neighbours are usable land: (0,0)
   // becomes grass (the castle sits on it); each neighbour that is water /

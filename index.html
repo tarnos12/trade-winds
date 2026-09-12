@@ -1293,25 +1293,94 @@ const CONFIG = {
   // shoal clusters (1–3 tiles each); `near` biases the FIRST shoal to within
   // that hex-distance of the castle. Fish is a T1 resource: NO ring (exempt
   // from the T2 push-out) and never far from spawn. ===
+  // Each preset also carries an explicit `rect` (board size) and a `tiers` block
+  // naming its identity on the 6 Custom-Map axes (Fertility / World Age / Climate
+  // / Sea Level / Resources / Size). The `tiers` block is UI metadata only — it
+  // pre-fills the Custom panel when a player derives a custom world from this
+  // preset; MapGen ignores it for a plain preset generate. Retuned so the five
+  // worlds read as VISUALLY DISTINCT: lush-green Fertile, desert Oasis, barren
+  // giant Big World, rugged snowy Highlands, and watery Isles.
   mapPresets: {
-    fertile: { label: "Fertile Land", radius: 14, water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.05,
-      groundMix: { fertile: 0.50, barren: 0.35, desert: 0.15 },
-      forest: { patches: 6, size: [6, 14] }, snow: { mode: "pole", rows: 2 },
+    fertile: { label: "Fertile Land", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
+      water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.06,
+      groundMix: { fertile: 0.64, barren: 0.23, desert: 0.13 },   // lush: dominant green (barren:desert < 2x, out of the strict ordering check)
+      forest: { patches: 9, size: [8, 16] }, snow: { mode: "pole", rows: 2 },
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 6 }, coal: { count: 2, ring: 6 }, gold: { count: 1, ring: 8 },
                   fish: { count: 5, near: 6 } } },   // === TV2-FIX: ~4-6 shoals ===
-    oasis: { label: "Oasis", radius: 14, water: { mode: "center", frac: 0.12 }, mountainFrac: 0.06,
-      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },
+    oasis: { label: "Oasis", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "arid", worldAge: "normal", climate: "warm", seaLevel: "low", resources: "scarce", size: "normal" },
+      water: { mode: "center", frac: 0.12 }, mountainFrac: 0.05,
+      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },   // sand sea + central lake
       forest: { patches: 2, size: [3, 7] }, snow: { mode: "none" },
       deposits: { stone: { count: 2, ring: 0 }, clay: { count: 1, ring: 2 }, iron: { count: 2, ring: 5 }, coal: { count: 1, ring: 5 }, gold: { count: 1, ring: 7 },
                   fish: { count: 4, near: 6 } } },   // === TV2-FIX: ~3-5 shoals, in the central water ===
-    big_world: { label: "Big World", radius: 18, water: { mode: "rim", frac: 0.15 }, mountainFrac: 0.07,
-      groundMix: { fertile: 0.40, barren: 0.45, desert: 0.15 },
-      forest: { patches: 8, size: [6, 16] }, snow: { mode: "pole", rows: 2 },
-      // T1 near spawn, T2 pushed far out (bigger rings).
+    big_world: { label: "Big World", radius: 18, rect: { width: 66, height: 33 },
+      tiers: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "rich", size: "large" },
+      water: { mode: "rim", frac: 0.16 }, mountainFrac: 0.07,
+      groundMix: { barren: 0.52, fertile: 0.28, desert: 0.20 },   // vast barren frontier — clearly NOT the green Fertile map
+      forest: { patches: 11, size: [6, 16] }, snow: { mode: "pole", rows: 3 },
+      // T1 near spawn, T2 pushed far out (bigger rings) on the big board.
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 3 }, iron: { count: 3, ring: 9 }, coal: { count: 3, ring: 9 }, gold: { count: 2, ring: 12 },
                   fish: { count: 6, near: 8 } } },   // === TV2-FIX: ~5-8 shoals, some near the start rings ===
+    highlands: { label: "Highlands", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "normal", worldAge: "young", climate: "cold", seaLevel: "low", resources: "rich", size: "normal" },
+      water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
+      groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands, green valleys, little sand
+      forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
+      // stone/ore rich and pulled inward (mining world); gold still furthest out.
+      deposits: { stone: { count: 4, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 4, ring: 5 }, coal: { count: 4, ring: 5 }, gold: { count: 2, ring: 7 },
+                  fish: { count: 3, near: 6 } } },
+    isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal" },
+      water: { mode: "rim", frac: 0.42 }, mountainFrac: 0.02,   // archipelago: high rim water breaks the land into islands; worn-flat (few mountains)
+      groundMix: { fertile: 0.58, barren: 0.27, desert: 0.15 },   // green isles (barren:desert < 2x, out of the strict ordering check)
+      forest: { patches: 7, size: [5, 12] }, snow: { mode: "none" },   // temperate ocean world — the top rows are sea, so no snow band
+      // fewer land deposits (small islands), lots of fish. ensureCastleConnected
+      // guarantees the castle island still reaches the mainland by a carved bridge.
+      deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 4 }, coal: { count: 2, ring: 4 }, gold: { count: 1, ring: 6 },
+                  fish: { count: 8, near: 5 } } },
   },
   mapPresetDefault: "fertile",
+  // === Custom-Map tier tables ===  Six independent axes; the MIDDLE option of
+  // each is the baseline (≈ the Fertile preset). MapGen.applyTiers(base, sel)
+  // layers a selection onto any base preset to build a resolved preset. Order of
+  // keys here is the order the Custom panel renders the dropdowns.
+  // Guardrails enforced in applyTiers: mountainFrac <= 0.14, forest.patches >= 2,
+  // groundMix.fertile >= 20% of the mix (always some green contrast).
+  mapTiers: {
+    fertility: { label: "Fertility", default: "normal", options: [
+      { id: "lush",   label: "Lush",   groundMix: { fertile: 0.65, barren: 0.22, desert: 0.13 }, forestPatchMul: 1.5, forestSize: [8, 16] },
+      { id: "normal", label: "Normal", groundMix: { fertile: 0.45, barren: 0.35, desert: 0.20 }, forestPatchMul: 1.0, forestSize: [6, 14] },
+      { id: "arid",   label: "Arid",   groundMix: { fertile: 0.20, barren: 0.40, desert: 0.40 }, forestPatchMul: 0.4, forestSize: [4, 9] },
+    ] },
+    worldAge: { label: "World Age", default: "normal", options: [
+      { id: "young",  label: "Young",  mountainFrac: 0.12 },
+      { id: "normal", label: "Normal", mountainFrac: 0.06 },
+      { id: "old",    label: "Old",    mountainFrac: 0.02 },
+    ] },
+    climate: { label: "Climate", default: "temperate", options: [
+      { id: "cold",      label: "Cold",      snow: { mode: "pole", rows: 4 }, desertToBarren: true },
+      { id: "temperate", label: "Temperate", snow: { mode: "pole", rows: 2 } },
+      { id: "warm",      label: "Warm",      snow: { mode: "none" }, desertAdd: 0.05 },
+    ] },
+    seaLevel: { label: "Sea Level", default: "normal", options: [
+      { id: "low",    label: "Low",    waterFrac: 0.10 },
+      { id: "normal", label: "Normal", waterFrac: 0.18 },
+      { id: "high",   label: "High",   waterFrac: 0.30 },
+    ] },
+    resources: { label: "Resources", default: "normal", options: [
+      { id: "scarce", label: "Scarce", countMul: 0.6, ringMul: 1.2 },
+      { id: "normal", label: "Normal", countMul: 1.0, ringMul: 1.0 },
+      { id: "rich",   label: "Rich",   countMul: 1.6, ringMul: 0.8 },
+    ] },
+    size: { label: "Size", default: "normal", options: [
+      { id: "small",  label: "Small",  rect: { width: 36, height: 18 } },
+      { id: "normal", label: "Normal", rect: { width: 50, height: 25 } },
+      { id: "large",  label: "Large",  rect: { width: 66, height: 33 } },
+    ] },
+  },
+  mapTiersDefault: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
   // === /TV2 map presets ===
   fog:    { castleReveal: 4, townReveal: 3 },
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
@@ -1479,14 +1548,113 @@ const MapGen = {
     }
     return taken;
   },
+  // === Custom-Map tier resolution ===  Deep-clone `basePreset` and layer the
+  // selected tier options (CONFIG.mapTiers) onto it, returning a NEW resolved
+  // preset object. Pure + deterministic (no rng): a given (base, selection)
+  // always yields the same preset, so generate() stays reproducible. `sel` is a
+  // { fertility, worldAge, climate, seaLevel, resources, size } map of option
+  // ids (missing axes fall back to each axis's `default`). Guardrails keep every
+  // combo playable: mountainFrac <= 0.14, forest.patches >= 2, and the ground
+  // mix keeps >= 20% fertile so there's always some green contrast.
+  applyTiers(basePreset, sel) {
+    const T = (CONFIG.mapTiers) || {};
+    const base = basePreset || (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    const p = JSON.parse(JSON.stringify(base));   // deep clone; JSON-safe preset shapes only
+    sel = sel || {};
+    const optFor = (axis) => {
+      const ax = T[axis]; if (!ax || !ax.options) return null;
+      const want = sel[axis] || ax.default;
+      return ax.options.find(o => o.id === want) || ax.options.find(o => o.id === ax.default) || null;
+    };
+    // --- Size (rect board dims + a proportional radius for deposit inner-band math) ---
+    const sz = optFor("size");
+    if (sz && sz.rect) {
+      p.rect = { width: sz.rect.width | 0, height: sz.rect.height | 0 };
+      p.radius = Math.max(6, Math.round(p.rect.width * 0.28));   // 36->10, 50->14, 66->18
+    }
+    // --- Fertility (ground mix + forest density/size) ---
+    const fert = optFor("fertility");
+    if (fert) {
+      if (fert.groundMix) p.groundMix = Object.assign({}, fert.groundMix);
+      p.forest = p.forest || { patches: 6, size: [6, 14] };
+      if (fert.forestSize) p.forest.size = fert.forestSize.slice();
+      const basePatches = (base.forest && base.forest.patches) || 6;   // multiplier is over the BASE preset's patch count
+      p.forest.patches = Math.round(basePatches * (fert.forestPatchMul != null ? fert.forestPatchMul : 1));
+    }
+    // --- World Age (mountainFrac) ---
+    const age = optFor("worldAge");
+    if (age && age.mountainFrac != null) p.mountainFrac = age.mountainFrac;
+    // --- Climate (snow band + desert<->barren shifts) ---
+    const clim = optFor("climate");
+    if (clim) {
+      if (clim.snow) p.snow = Object.assign({}, clim.snow);
+      p.groundMix = p.groundMix || {};
+      if (clim.desertToBarren) {   // Cold: freeze the desert share into barren
+        p.groundMix.barren = (p.groundMix.barren || 0) + (p.groundMix.desert || 0);
+        p.groundMix.desert = 0;
+      }
+      if (clim.desertAdd) p.groundMix.desert = (p.groundMix.desert || 0) + clim.desertAdd;   // Warm: a little more sand
+    }
+    // --- Sea Level (water fraction; keeps the base water MODE; inert if none) ---
+    const sea = optFor("seaLevel");
+    p.water = p.water || { mode: "rim", frac: 0 };
+    if (sea && sea.waterFrac != null && p.water.mode !== "none") p.water.frac = sea.waterFrac;
+    // --- Resources (deposit count/ring multipliers) ---
+    const res = optFor("resources");
+    if (res && p.deposits) {
+      const cm = res.countMul != null ? res.countMul : 1;
+      const rm = res.ringMul != null ? res.ringMul : 1;
+      for (const k of Object.keys(p.deposits)) {
+        const d = p.deposits[k]; if (!d) continue;
+        if (d.count != null) d.count = Math.max(1, Math.round(d.count * cm));   // min 1 so every type still spawns
+        if (d.ring) d.ring = Math.round(d.ring * rm);
+        if (d.near) d.near = Math.round(d.near * rm);
+      }
+    }
+    // --- Guardrails (keep every combo playable) ---
+    p.mountainFrac = Math.min(0.14, Math.max(0, p.mountainFrac || 0));   // hard cap: mountains can wall off far deposits
+    p.forest = p.forest || { patches: 2, size: [4, 8] };
+    p.forest.patches = Math.max(2, p.forest.patches | 0);               // always >= 2 forest patches
+    p.groundMix = p.groundMix || { fertile: 0.2, barren: 0.4, desert: 0.4 };
+    { // fertile floor: at least 20% of the mix, so there is always green contrast
+      const g = p.groundMix;
+      const f = g.fertile || 0, rest = (g.barren || 0) + (g.desert || 0), sum = f + rest;
+      if (sum > 0 && f / sum < 0.20) g.fertile = 0.20 * rest / 0.80;    // -> fertile is exactly 20% of the new sum
+    }
+    // --- Deposit-crowding clamp (Large x Rich / Small x Rich safety valve) ---
+    if (p.deposits) {
+      const land = ((p.rect && p.rect.width) || 50) * ((p.rect && p.rect.height) || 25);
+      const landKeys = ["stone", "clay", "iron", "coal", "gold"];
+      let clusters = 0; for (const k of landKeys) if (p.deposits[k]) clusters += p.deposits[k].count || 0;
+      const cap = Math.floor(land * 0.06 / 3);   // ~6% of the board as deposit tiles (avg cluster ~3)
+      if (clusters > cap && cap > 0) {
+        const scale = cap / clusters;
+        for (const k of landKeys) { const d = p.deposits[k]; if (d && d.count) d.count = Math.max(1, Math.round(d.count * scale)); }
+      }
+    }
+    return p;
+  },
   // Returns { seed, radius, preset, hexes: Map<key, hex> }.
-  generate(seedInput, radius, presetId) {
+  // === Custom map: pass presetId "custom" (or any `tiers` object carrying a
+  // `base`) plus a `tiers` selection; the resolved preset is built via applyTiers
+  // and the stream stays deterministic (same seed + tiers => identical map). ===
+  generate(seedInput, radius, presetId, tiers) {
     presetId = presetId || (CONFIG.mapPresetDefault || "fertile");
-    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ||
-                   (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    let preset;
+    if (tiers && typeof tiers === "object" && (presetId === "custom" || tiers.base)) {
+      const baseId = (tiers.base && CONFIG.mapPresets && CONFIG.mapPresets[tiers.base]) ? tiers.base
+        : ((CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile"));
+      preset = MapGen.applyTiers((CONFIG.mapPresets && CONFIG.mapPresets[baseId]) || {}, tiers);
+      presetId = "custom";
+    } else {
+      preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ||
+               (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
+    }
     radius = radius || preset.radius || CONFIG.map.radius;
     const seed = hashSeed(seedInput);
     // Single seeded stream (seed ^ presetId) consumed in a FIXED order below.
+    // For custom maps presetId is the constant "custom" — the tiers change the
+    // number of draws deterministically, so same (seed, tiers) => same map.
     const rng = mulberry32((hashSeed(seedInput) ^ hashSeed(presetId)) | 0);
     const elevN = makeValueNoise(seed);
 
@@ -1664,7 +1832,7 @@ const MapGen = {
     // bridge if needed. Runs last so it sees the final terrain. ----
     MapGen.ensureCastleConnected(hexes);
 
-    return { seed, radius, preset: presetId, hexes };
+    return { seed, radius, preset: presetId, hexes, tiers: (presetId === "custom" ? tiers : undefined) };
   },
   // Guarantee the castle tile (0,0) and its 6 neighbours are usable land: (0,0)
   // becomes grass (the castle sits on it); each neighbour that is water /
@@ -7023,13 +7191,29 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // ---------------------------------------------------------------
   // New game / reset
   // ---------------------------------------------------------------
-  function newGame(seedInput, presetId) {
+  // === Custom Map: `tiers` (optional) is a { base, fertility, worldAge, climate,
+  // seaLevel, resources, size } selection — when present the world is a resolved
+  // CUSTOM preset (MapGen.applyTiers) and state.mapPreset becomes "custom".
+  // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
+  // custom worlds never clobbers an existing save). ===
+  function newGame(seedInput, presetId, tiers, noSave) {
     state.seedInput = seedInput;
+    const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
-    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
-    state.mapPreset = preset;
-    const pr = CONFIG.mapPresets[preset];
-    state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    if (hasTiers) {
+      const baseId = (tiers.base && CONFIG.mapPresets && CONFIG.mapPresets[tiers.base]) ? tiers.base
+        : ((CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile"));
+      state.mapPreset = "custom";
+      state.mapTiers = Object.assign({}, tiers, { base: baseId });   // normalize the base id into the stored selection
+      // radius null => generate() derives it from the resolved (applyTiers) preset's own rect-scaled radius.
+      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers);
+    } else {
+      const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
+      state.mapPreset = preset;
+      state.mapTiers = null;
+      const pr = CONFIG.mapPresets[preset];
+      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    }
     state.roads = new Set();
     // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
     // Events bridge collapse/repair ~4747) calls Pathing.invalidate() right
@@ -7064,7 +7248,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     document.getElementById("seed").value = seedInput;
     reveal(0, 0, CONFIG.fog.castleReveal);      // clear fog around the castle
     terrainDirty = true;
-    scheduleSave();
+    if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
   // ---------------------------------------------------------------
@@ -7081,6 +7265,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         saveVersion: CONFIG.saveVersion,
         seed: state.seedInput,
         preset: state.mapPreset,           // === TV2: persist chosen map preset ===
+        tiers: state.mapTiers || null,     // === Custom Map: persist the tier selection (null for a plain preset) ===
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -7199,7 +7384,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     data = migrate(data);
     if (!data || !saveShapeOk(data)) return false;
     try {
-    newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
+    // === TV2 / Custom Map: restore the saved preset — and its tier selection
+    // when it was a custom world. Old saves (no `tiers`, or preset !== "custom")
+    // take the plain-preset path; a "custom" preset with a missing/garbage tiers
+    // object falls back to the default preset inside newGame. ===
+    newGame(data.seed, data.preset,
+      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null);
     // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
     // would slip past saveShapeOk's array-type check, land in the Set, then throw
     // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it
@@ -12170,14 +12360,133 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const btnDice = document.getElementById("ssDice");
     let open = false;
 
-    // === TV2: fill the preset dropdown from CONFIG.mapPresets (once). ===
+    // === Custom Map ===  These are all built dynamically here (start-screen.js
+    // is the only file this agent owns; index.html is the build OUTPUT and must
+    // not be hand-edited). The panel injects its own <style> and DOM, following
+    // the EventLog self-contained-module pattern.
+    const CUSTOM_ID = "custom";
+    const TIER_AXES = Object.keys(CONFIG.mapTiers || {});           // ordered by config
+    const tierSel = {};                                             // axis -> <select>
+    let lastBase = CONFIG.mapPresetDefault || "fertile";           // base preset the custom world derives from
+    let customPanel = null, baseNoteEl = null;
+
+    // === TV2: fill the preset dropdown from CONFIG.mapPresets, then a Custom
+    // entry at the end (once). ===
     if (presetEl && !presetEl.options.length) {
       for (const id of Object.keys(CONFIG.mapPresets || {})) {
         const opt = document.createElement("option");
         opt.value = id; opt.textContent = CONFIG.mapPresets[id].label || id;
         presetEl.appendChild(opt);
       }
+      const custOpt = document.createElement("option");
+      custOpt.value = CUSTOM_ID; custOpt.textContent = "Custom…";
+      presetEl.appendChild(custOpt);
       presetEl.value = CONFIG.mapPresetDefault || "fertile";
+    }
+
+    // ---- inject the custom-panel stylesheet (once) ----
+    function injectStyle() {
+      if (document.getElementById("ssCustomStyle")) return;
+      const st = document.createElement("style");
+      st.id = "ssCustomStyle";
+      st.textContent =
+        "#ssCustom{margin:4px auto 0;max-width:400px;text-align:left;border:1px solid var(--panel-edge);" +
+        "border-radius:10px;padding:12px 14px;background:rgba(0,0,0,0.18);}" +
+        "#ssCustom .ss-cust-head{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 8px;}" +
+        "#ssCustom .ss-cust-title{font-size:12.5px;font-weight:bold;color:var(--accent);letter-spacing:.3px;}" +
+        "#ssCustom .ss-cust-base{font-size:11px;opacity:.65;}" +
+        "#ssCustom .ss-cust-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;}" +
+        "#ssCustom .ss-cust-row{display:flex;flex-direction:column;gap:2px;}" +
+        "#ssCustom .ss-cust-row label{font-size:10.5px;opacity:.78;letter-spacing:.2px;}" +
+        "#ssCustom .ss-cust-row select{background:#1c160f;color:var(--paper);border:1px solid var(--panel-edge);" +
+        "border-radius:6px;padding:5px 6px;font-family:inherit;font-size:12.5px;}" +
+        "#ssCustom .ss-cust-row select:disabled{opacity:.4;cursor:not-allowed;}" +
+        "#ssRegen{margin-top:10px;width:100%;font-size:13px;padding:8px 12px;border-radius:8px;font-weight:bold;" +
+        "background:transparent;color:var(--paper);border:1px solid var(--panel-edge);cursor:pointer;}" +
+        "#ssRegen:hover{border-color:var(--accent);color:var(--accent);}";
+      document.head.appendChild(st);
+    }
+
+    // ---- build the panel DOM (once), inserted right after the Map row ----
+    function buildPanel() {
+      if (customPanel || !presetEl) return;
+      injectStyle();
+      const panel = document.createElement("div");
+      panel.id = "ssCustom"; panel.hidden = true;
+      const head = document.createElement("div");
+      head.className = "ss-cust-head";
+      head.innerHTML = '<span class="ss-cust-title">Custom world</span>';
+      baseNoteEl = document.createElement("span");
+      baseNoteEl.className = "ss-cust-base";
+      head.appendChild(baseNoteEl);
+      panel.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "ss-cust-grid";
+      for (const axis of TIER_AXES) {
+        const ax = CONFIG.mapTiers[axis];
+        const row = document.createElement("div");
+        row.className = "ss-cust-row";
+        const lab = document.createElement("label");
+        lab.textContent = ax.label || axis;
+        lab.setAttribute("for", "ssTier_" + axis);
+        const sel = document.createElement("select");
+        sel.id = "ssTier_" + axis;
+        for (const o of ax.options) {
+          const opt = document.createElement("option");
+          opt.value = o.id; opt.textContent = o.label || o.id;
+          sel.appendChild(opt);
+        }
+        sel.value = ax.default;
+        sel.addEventListener("change", () => { if (presetEl.value === CUSTOM_ID) previewCustom(); });
+        tierSel[axis] = sel;
+        row.appendChild(lab); row.appendChild(sel);
+        grid.appendChild(row);
+      }
+      panel.appendChild(grid);
+
+      const regen = document.createElement("button");
+      regen.id = "ssRegen"; regen.type = "button";
+      regen.textContent = "🎲 Regenerate (new seed)";
+      regen.addEventListener("click", () => { seedEl.value = randomSeed(); previewCustom(); });
+      panel.appendChild(regen);
+
+      const mapRow = presetEl.closest(".ss-seedrow") || presetEl.parentNode;
+      mapRow.parentNode.insertBefore(panel, mapRow.nextSibling);
+      customPanel = panel;
+    }
+
+    // ---- read the current tier selection off the dropdowns ----
+    function readTiers() {
+      const t = { base: lastBase };
+      for (const axis of TIER_AXES) t[axis] = tierSel[axis] ? tierSel[axis].value : CONFIG.mapTiers[axis].default;
+      return t;
+    }
+    // ---- write a tier selection (or a base preset's defaults) into the dropdowns ----
+    function setTiersUI(tiers) {
+      const baseTiers = (CONFIG.mapPresets[lastBase] && CONFIG.mapPresets[lastBase].tiers) || CONFIG.mapTiersDefault || {};
+      for (const axis of TIER_AXES) {
+        if (!tierSel[axis]) continue;
+        const want = (tiers && tiers[axis]) || baseTiers[axis] || CONFIG.mapTiers[axis].default;
+        tierSel[axis].value = CONFIG.mapTiers[axis].options.some(o => o.id === want) ? want : CONFIG.mapTiers[axis].default;
+      }
+      syncBaseNote();
+    }
+    // ---- grey out Sea Level when the base preset has no water (axis is inert) ----
+    function syncBaseNote() {
+      const base = CONFIG.mapPresets[lastBase] || {};
+      if (baseNoteEl) baseNoteEl.textContent = "based on " + (base.label || lastBase);
+      const noWater = base.water && base.water.mode === "none";
+      if (tierSel.seaLevel) { tierSel.seaLevel.disabled = !!noWater; tierSel.seaLevel.title = noWater ? "No sea on this base map" : ""; }
+    }
+    function showPanel(v) { buildPanel(); if (customPanel) customPanel.hidden = !v; }
+
+    // ---- live PREVIEW: regenerate the backdrop map from the current custom
+    // selection WITHOUT saving (so rolling worlds never clobbers Continue). ----
+    function previewCustom(seed) {
+      const s = (typeof seed === "string" && seed.trim()) ? seed.trim() : (seedEl.value.trim() || randomSeed());
+      seedEl.value = s;
+      try { newGame(s, CUSTOM_ID, readTiers(), true /* noSave */); } catch (e) {}
     }
 
     function refreshContinue() {
@@ -12190,7 +12499,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       state.gameSpeed = 0;                       // pause economy while the menu is up
       overlay.classList.remove("hidden");
       seedEl.value = state.seedInput || randomSeed();
-      if (presetEl) presetEl.value = state.mapPreset || CONFIG.mapPresetDefault || "fertile";   // === TV2 ===
+      buildPanel();
+      // === Custom Map: restore the picker to the running world's settings. ===
+      if (state.mapPreset === CUSTOM_ID) {
+        if (state.mapTiers && CONFIG.mapPresets[state.mapTiers.base]) lastBase = state.mapTiers.base;
+        if (presetEl) presetEl.value = CUSTOM_ID;
+        setTiersUI(state.mapTiers);
+        showPanel(true);
+      } else {
+        if (presetEl) presetEl.value = state.mapPreset || CONFIG.mapPresetDefault || "fertile";   // === TV2 ===
+        lastBase = (presetEl && CONFIG.mapPresets[presetEl.value]) ? presetEl.value : lastBase;
+        showPanel(false);
+      }
       refreshContinue();
       requestAnimationFrame(() => overlay.classList.add("in"));
     }
@@ -12203,15 +12523,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       setSpeed(1);   // route through P5D-A so the speed toolbar syncs to 1x on start
       hide();
     }
-    function startNew(seedArg, presetArg) {
+    function startNew(seedArg, presetArg, tiersArg) {
       const seed = (typeof seedArg === "string" && seedArg.trim())
         ? seedArg.trim()
         : (seedEl.value.trim() || randomSeed());
-      // === TV2: preset from arg (smoke harness / API) or the dropdown. ===
-      const preset = (typeof presetArg === "string" && CONFIG.mapPresets[presetArg])
+      // === TV2 / Custom Map: preset from arg (smoke harness / API) or the dropdown. ===
+      const preset = (typeof presetArg === "string" && (CONFIG.mapPresets[presetArg] || presetArg === CUSTOM_ID))
         ? presetArg
         : ((presetEl && presetEl.value) || CONFIG.mapPresetDefault || "fertile");
-      newGame(seed, preset);
+      let tiers = null;
+      if (preset === CUSTOM_ID) tiers = (tiersArg && typeof tiersArg === "object") ? tiersArg : readTiers();
+      newGame(seed, preset, tiers);
       setMode(state.mode);
       begin();
       if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: onboarding on a new game
@@ -12226,18 +12548,31 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     btnNew.addEventListener("click", () => startNew());
     btnContinue.addEventListener("click", () => continueSave());
-    btnDice.addEventListener("click", () => { seedEl.value = randomSeed(); });
+    btnDice.addEventListener("click", () => { seedEl.value = randomSeed(); if (presetEl.value === CUSTOM_ID) previewCustom(); });
     seedEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); startNew(); } });
 
-    // "Main Menu" (in the ☰ menu): save the current game so Continue resumes it
-    // exactly, close the ☰ popup, and reopen the title overlay (which also pauses
-    // the economy). saveGame() is shared IIFE scope, like newGame/loadGame above.
+    // "Main Menu" (in the ☰ menu, added v0.38.2): save the current game so
+    // Continue resumes it exactly, close the ☰ popup, and reopen this overlay
+    // (which also pauses the economy). saveGame() is shared IIFE scope.
     const btnMainMenu = document.getElementById("btnMainMenu");
     if (btnMainMenu) btnMainMenu.addEventListener("click", () => {
       try { if (typeof saveGame === "function") saveGame(); } catch (e) {}
       const menu = document.getElementById("hudMenu");
       if (menu) { menu.classList.remove("anim-in"); menu.classList.add("hidden"); }
       show();
+    });
+    // === Custom Map: reveal the panel + live-preview when "Custom…" is picked;
+    // otherwise remember the chosen preset as the base for a later custom world. ===
+    if (presetEl) presetEl.addEventListener("change", () => {
+      if (presetEl.value === CUSTOM_ID) {
+        showPanel(true);
+        setTiersUI(null);            // prefill from lastBase's identity tiers
+        previewCustom();
+      } else {
+        lastBase = CONFIG.mapPresets[presetEl.value] ? presetEl.value : lastBase;
+        showPanel(false);
+        syncBaseNote();
+      }
     });
 
     return { show, hide, isOpen: () => open, startNew, continueSave, refreshContinue };
@@ -12654,8 +12989,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.3";
+  const GAME_VERSION = "0.39.0";
   const PATCH_NOTES = [
+    { v: "0.39.0", notes: [
+      "NEW: Custom Map — pick “Custom…” on the start screen to shape your world with 6 dropdowns (Fertility, World Age, Climate, Sea Level, Resources, Size), each Low/Normal/High. 🎲 Regenerate rolls a fresh world with the same settings",
+      "The 5 map presets are now clearly distinct — lush-green Fertile, desert Oasis, barren-giant Big World, plus two NEW worlds: rugged snowy Highlands and watery Isles (archipelago)",
+      "Your chosen world settings are saved, so Continue restores the same map type",
+    ] },
     { v: "0.38.3", notes: [
       "Fixed the castle getting stranded: the castle tile and the ring around it are now always buildable land, and the castle is guaranteed to be connected by land to the rest of the map (a land bridge is carved if needed) — this fixes the Oasis map, whose central lake could island the castle",
     ] },

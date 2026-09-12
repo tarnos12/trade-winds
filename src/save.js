@@ -8,13 +8,29 @@
   // ---------------------------------------------------------------
   // New game / reset
   // ---------------------------------------------------------------
-  function newGame(seedInput, presetId) {
+  // === Custom Map: `tiers` (optional) is a { base, fertility, worldAge, climate,
+  // seaLevel, resources, size } selection — when present the world is a resolved
+  // CUSTOM preset (MapGen.applyTiers) and state.mapPreset becomes "custom".
+  // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
+  // custom worlds never clobbers an existing save). ===
+  function newGame(seedInput, presetId, tiers, noSave) {
     state.seedInput = seedInput;
+    const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
-    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
-    state.mapPreset = preset;
-    const pr = CONFIG.mapPresets[preset];
-    state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    if (hasTiers) {
+      const baseId = (tiers.base && CONFIG.mapPresets && CONFIG.mapPresets[tiers.base]) ? tiers.base
+        : ((CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile"));
+      state.mapPreset = "custom";
+      state.mapTiers = Object.assign({}, tiers, { base: baseId });   // normalize the base id into the stored selection
+      // radius null => generate() derives it from the resolved (applyTiers) preset's own rect-scaled radius.
+      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers);
+    } else {
+      const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
+      state.mapPreset = preset;
+      state.mapTiers = null;
+      const pr = CONFIG.mapPresets[preset];
+      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    }
     state.roads = new Set();
     // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
     // Events bridge collapse/repair ~4747) calls Pathing.invalidate() right
@@ -49,7 +65,7 @@
     document.getElementById("seed").value = seedInput;
     reveal(0, 0, CONFIG.fog.castleReveal);      // clear fog around the castle
     terrainDirty = true;
-    scheduleSave();
+    if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
   // ---------------------------------------------------------------
@@ -66,6 +82,7 @@
         saveVersion: CONFIG.saveVersion,
         seed: state.seedInput,
         preset: state.mapPreset,           // === TV2: persist chosen map preset ===
+        tiers: state.mapTiers || null,     // === Custom Map: persist the tier selection (null for a plain preset) ===
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -184,7 +201,12 @@
     data = migrate(data);
     if (!data || !saveShapeOk(data)) return false;
     try {
-    newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
+    // === TV2 / Custom Map: restore the saved preset — and its tier selection
+    // when it was a custom world. Old saves (no `tiers`, or preset !== "custom")
+    // take the plain-preset path; a "custom" preset with a missing/garbage tiers
+    // object falls back to the default preset inside newGame. ===
+    newGame(data.seed, data.preset,
+      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null);
     // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
     // would slip past saveShapeOk's array-type check, land in the Set, then throw
     // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it
