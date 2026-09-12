@@ -1643,16 +1643,85 @@ const MapGen = {
       }
     }
 
-    // ---- (7) castle hub: buildable grassland at map centre ----
-    const c = hexes.get(HexMath.key(0, 0));
-    if (c) c.terrain = "fertile";
+    // ---- (7) castle hub: grassland at centre + a cleared, buildable 7-hex core ----
+    MapGen.ensureCastleCore(hexes);
 
     // ---- (8) playability repair: viable start near the castle ----
     // === TV2-FIX: extra args — guarantee >=1 usable fish tile within 6 of
     // the castle (fish is a starter T1 food source). ===
     MapGen.repairPlayability(hexes, 4, 6, 3, 6, 1);
 
+    // ---- (9) connectivity: the castle's land MUST reach the main landmass by
+    // road-passable tiles, else research materials/traders can't reach it (and
+    // the center-water Oasis strands the castle on an island). Carve a land
+    // bridge if needed. Runs last so it sees the final terrain. ----
+    MapGen.ensureCastleConnected(hexes);
+
     return { seed, radius, preset: presetId, hexes };
+  },
+  // Guarantee the castle tile (0,0) and its 6 neighbours are usable land: (0,0)
+  // becomes grass (the castle sits on it); each neighbour that is water /
+  // mountains / forest / fish is cleared to barren so there is generic build
+  // space around the castle for later castle-adjacent buildings. Ore/stone/clay
+  // deposits adjacent to the castle are KEPT (valuable, and a mine can sit on
+  // them). Deterministic (no rng).
+  ensureCastleCore(hexes) {
+    const core = [{ q: 0, r: 0 }].concat(HexMath.neighbors(0, 0));
+    for (const p of core) {
+      const h = hexes.get(HexMath.key(p.q, p.r));
+      if (!h) continue;
+      if (p.q === 0 && p.r === 0) { h.terrain = "fertile"; continue; }
+      const td = CONFIG.terrain[h.terrain];
+      const isOreDeposit = !!(td && td.deposit && h.terrain !== "forest" && h.terrain !== "fish");
+      if (isOreDeposit) continue;                    // keep an adjacent stone/ore vein
+      if (!td || !td.buildable) h.terrain = "barren"; // clear water/mountains/forest/fish
+    }
+  },
+  // Ensure the castle's landmass is connected by ROAD-passable tiles to the map's
+  // largest land component; if not (e.g. an Oasis central lake islands the
+  // castle), carve the shortest barren land-bridge from the castle to that main
+  // component. Deterministic: component labelling + BFS use a fixed neighbour
+  // order, so the same map always carves the same bridge.
+  ensureCastleConnected(hexes) {
+    const roadable = (h) => { const td = h && CONFIG.terrain[h.terrain]; return !!(td && td.road); };
+    // label road-passable connected components
+    const comp = new Map(); const sizes = []; let next = 0;
+    for (const h of hexes.values()) {
+      const k0 = HexMath.key(h.q, h.r);
+      if (comp.has(k0) || !roadable(h)) continue;
+      const id = next++; let size = 0; const stack = [k0]; comp.set(k0, id);
+      while (stack.length) {
+        const k = stack.pop(); size++;
+        const c = MapGen.parseKey(k);
+        for (const n of HexMath.neighbors(c.q, c.r)) {
+          const nk = HexMath.key(n.q, n.r); const nh = hexes.get(nk);
+          if (nh && roadable(nh) && !comp.has(nk)) { comp.set(nk, id); stack.push(nk); }
+        }
+      }
+      sizes[id] = size;
+    }
+    const castleId = comp.get(HexMath.key(0, 0));
+    if (castleId == null || !sizes.length) return;
+    let mainId = 0; for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[mainId]) mainId = i;
+    if (castleId === mainId) return;                 // already on the main landmass
+    // BFS from the castle over ALL tiles to the nearest main-component tile.
+    const prev = new Map(); prev.set(HexMath.key(0, 0), null);
+    const queue = [HexMath.key(0, 0)]; let head = 0, target = null;
+    while (head < queue.length) {
+      const k = queue[head++];
+      if (comp.get(k) === mainId) { target = k; break; }
+      const c = MapGen.parseKey(k);
+      for (const n of HexMath.neighbors(c.q, c.r)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (!hexes.has(nk) || prev.has(nk)) continue;
+        prev.set(nk, k); queue.push(nk);
+      }
+    }
+    if (target == null) return;
+    for (let k = target; k != null; k = prev.get(k)) {   // carve obstacles on the path
+      const h = hexes.get(k); const td = CONFIG.terrain[h.terrain];
+      if (!td || !td.road) h.terrain = "barren";
+    }
   },
   // Guarantee at least `minFertile` fertile and `minForest` forest hexes within
   // `K` of the castle so a fresh player can found a city + potato_farm + farm +
@@ -12578,8 +12647,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.2";
+  const GAME_VERSION = "0.38.3";
   const PATCH_NOTES = [
+    { v: "0.38.3", notes: [
+      "Fixed the castle getting stranded: the castle tile and the ring around it are now always buildable land, and the castle is guaranteed to be connected by land to the rest of the map (a land bridge is carved if needed) — this fixes the Oasis map, whose central lake could island the castle",
+    ] },
     { v: "0.38.2", notes: [
       "NEW: a 🏠 Main Menu button in the ☰ Menu — it saves your game and returns to the title screen, where Continue picks up exactly where you left off",
     ] },

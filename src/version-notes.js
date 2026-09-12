@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.38.2";
+  const GAME_VERSION = "0.38.3";
   const PATCH_NOTES = [
+    { v: "0.38.3", notes: [
+      "Fixed the castle getting stranded: the castle tile and the ring around it are now always buildable land, and the castle is guaranteed to be connected by land to the rest of the map (a land bridge is carved if needed) — this fixes the Oasis map, whose central lake could island the castle",
+    ] },
     { v: "0.38.2", notes: [
       "NEW: a 🏠 Main Menu button in the ☰ Menu — it saves your game and returns to the title screen, where Continue picks up exactly where you left off",
     ] },
