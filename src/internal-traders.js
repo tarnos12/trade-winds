@@ -56,8 +56,15 @@
           // output good has room in the town (stock below cap). A maxed-out good is
           // over-produced and its output is wasted, so the porter idles instead of
           // shuttling pointlessly (the "potato farm forever moving 2 potato" case).
+          // GRAN: also require a genuine WHOLE-UNIT surplus (≥1) to haul. No
+          // artificial minimum-batch threshold — batched production (Sim releases
+          // output as +N whole units on an interval, not a trickle each tick) is
+          // what kills the old 1-wood flicker; between batches there is simply
+          // nothing to move.
           const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
-          if (((t.stock && t.stock[good]) || 0) >= cap - 1e-6) continue;
+          const have = (t.stock && t.stock[good]) || 0;
+          if (have < 1) continue;               // no whole-unit surplus to carry
+          if (have >= cap - 1e-6) continue;     // maxed out: output wasted, porter idles
           const key = t.id + ":" + b.q + "," + b.r;
           wanted.add(key);
           let tr = roster.get(key);
@@ -156,7 +163,16 @@
 
     function draw(dt) {
       const d = Math.min(100, dt || 16);
-      const fadeStep = d / FADE_MS;
+      const fadeStep = d / FADE_MS;   // MD: spawn/despawn fade stays in REAL time (unchanged)
+      // #4b BUGFIX: porter MOTION must scale with state.gameSpeed, exactly like the
+      // external trade carts do. Trade carts advance on ECONOMY TICKS, which fire
+      // every CONFIG.econ.baseTickMs / gameSpeed real-ms, so their on-screen speed
+      // rises with gameSpeed; porters advance on the rAF frame delta (real time), so
+      // without this factor they crawled at 1× while the map carts sped up at 4×.
+      // Scale only the movement delta (gameSpeed 0 ⇒ paused ⇒ porters freeze), never
+      // the fade above.
+      const gs = Math.max(0, (state && state.gameSpeed) || 1);
+      const dMove = d * gs;
       for (const [key, tr] of roster) {
         // MD: fade in on spawn / fade out before despawn — a porter's
         // visibility eases too, not just its position, so it never pops.
@@ -167,7 +183,7 @@
           tr.alpha = Math.min(1, tr.alpha + fadeStep);
         }
         // advance the oscillation 0<->1 (building <-> centre), gently looping
-        tr.t += (tr.dir * d) / LEG_MS;
+        tr.t += (tr.dir * dMove) / LEG_MS;
         if (tr.t >= 1) { tr.t = 1; tr.dir = -1; }
         else if (tr.t <= 0) { tr.t = 0; tr.dir = 1; }
         const town = townById(tr.townId);

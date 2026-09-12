@@ -88,11 +88,18 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
                    stock: { wood: 100000 },   // firewood plentiful
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
   const potato = [];
-  for (let i = 0; i < 100; i++) { Sim.tick({ towns: [t] }); potato.push(t.stock.potato || 0); }
+  // GRAN + satEMA: batched (whole-unit) production has an early empty-shelf window
+  // and the satisfaction EMA smooths happiness, so the happiness→population ramp
+  // converges more slowly than the old instant-per-tick model. Run long enough to
+  // settle at full housing cap (happiness ~70 ⇒ full cap holds); capture potato over
+  // the first 100 ticks for the production check.
+  for (let i = 0; i < 500; i++) { Sim.tick({ towns: [t] }); if (i < 100) potato.push(t.stock.potato || 0); }
 
   ok("Sim assigns workers to the potato_farm (workerSlots cap)",
      t.buildings[0].workers === CONFIG.buildings.potato_farm.workerSlots);
-  ok("potato_farm produces potato (stock > 0)", potato[0] > 0);
+  // GRAN: extractors release whole-unit BATCHES on their interval (not a trickle
+  // each tick), so stock is 0 until the first batch lands — assert some batch did.
+  ok("potato_farm produces potato (stock > 0 after a batch)", potato.some(v => v > 0));
   ok("basics met (potato+wood) ⇒ happiness settles near ~70",
      Math.abs(t.happiness - 70) < 2.5);
   ok("CC: basics-only town (happiness ~70) fills housing to FULL cap", (() => {
@@ -122,8 +129,12 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const t = town({ pop: { peasants: 6, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
-  for (let i = 0; i < 300; i++) Sim.tick({ towns: [t] });
-  ok("potato stock is clamped at the storage cap (80)", t.stock.potato === CAP);
+  let maxPotato = 0;
+  for (let i = 0; i < 300; i++) { Sim.tick({ towns: [t] }); maxPotato = Math.max(maxPotato, t.stock.potato || 0); }
+  // GRAN: output is released in whole-unit batches, so potato peaks at (and is
+  // clamped to) the cap right after a batch and dips between batches — the peak is
+  // exactly the cap and it never exceeds it.
+  ok("potato production reaches the storage cap (80) and is clamped there", maxPotato === CAP);
   ok("no good ever exceeds the storage cap", Object.values(t.stock).every(v => v <= CAP + 1e-9));
 }
 
@@ -248,11 +259,14 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const t = town({ pop: { peasants: 0, workers: 3, burghers: 0 },
                    stock: { grain: 60 },
                    buildings: [b("mill", 0, 1)] });
-  const g0 = t.stock.grain;
   Sim.tick({ towns: [t] });
   ok("Sim assigns workers to the mill", t.buildings[0].workers === CONFIG.buildings.mill.workerSlots);
-  ok("mill consumes grain input", t.stock.grain < g0);
-  ok("mill produces flour output", (t.stock.flour || 0) > 0);
+  // GRAN: a processor BANKS its input draw (b._inAcc) and output (b._prodAcc) each
+  // tick and flushes them to stock as whole units on the 24-tick interval; after a
+  // single tick both are banked (this bare-mill town has no worker housing, so its
+  // pop clamps to 0 next tick — the banked flows are the faithful measure here).
+  ok("mill consumes grain input (banked)", (t.buildings[0]._inAcc && t.buildings[0]._inAcc.grain) > 0);
+  ok("mill produces flour output (banked)", (t.buildings[0]._prodAcc || 0) > 0);
 }
 
 // ========================================================================
@@ -277,9 +291,15 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   Sim.tick({ towns: [t] });
   ok("greedy fill: first farm takes 2, second takes 0",
      t.buildings[0].workers === 2 && t.buildings[1].workers === 0);
-  // 2 labourers × rate 2 × happiness-eff ≤ 1.2x = 4.8 potato max; unbounded would be 9.6.
-  ok("labour pool caps production across buildings", (t.stock.potato || 0) <= 4.8 + 1e-9);
-  ok("labour-capped town still produced something", (t.stock.potato || 0) > 0);
+  // GRAN: production is BANKED per building (released to stock in bulk on the
+  // interval). Measure the banked output after one tick: only the staffed farm
+  // banks anything, bounded by ratePerWorker × pool(2) × effMax. (This pop-2/no-house
+  // town clamps to 0 pop next tick, so one tick's bank is the faithful measure —
+  // unbounded fill would have BOTH farms banking.)
+  const prod0 = t.buildings[0]._prodAcc || 0, prod1 = t.buildings[1]._prodAcc || 0;
+  const bound = CONFIG.buildings.potato_farm.output.ratePerWorker * 2 * CONFIG.needs.effMax + 1e-9;
+  ok("labour pool caps production across buildings", prod0 <= bound && prod1 === 0);
+  ok("labour-capped town still produced something", prod0 > 0);
 }
 
 // ========================================================================
@@ -508,7 +528,11 @@ function place(typeId, q, r, over) {
     const t1 = mk(1), t2 = mk(2);
     Sim.tick({ towns: [t1] });
     Sim.tick({ towns: [t2] });
-    ok("RU-A: upgradeLevel 2 farm yields 1.25× grain", t1.stock.grain > 0 && near(t2.stock.grain / t1.stock.grain, 1.25, 1e-6));
+    // GRAN: grain is banked (b._prodAcc) and flushed to stock in whole-unit batches;
+    // total production = released stock + the carried remainder. The upgrade's exact
+    // 1.25× outputMult is on the banked total (floored stock alone would quantise it).
+    const grainOut = (t) => (t.stock.grain || 0) + (t.buildings[0]._prodAcc || 0);
+    ok("RU-A: upgradeLevel 2 farm yields 1.25× grain", grainOut(t1) > 0 && near(grainOut(t2) / grainOut(t1), 1.25, 1e-6));
   }
 
   // -- slotPlus: sawmill at L3 (base 2 slots + 1) staffs 3 workers from a big pool
@@ -555,10 +579,15 @@ function place(typeId, q, r, over) {
     const tHi = mk(1), tLo = mk(4);   // L4 hut cuts basic consumption to 0.7×
     Sim.tick({ towns: [tHi] });
     Sim.tick({ towns: [tLo] });
-    ok("RU-A: L4 hut consumes less wood", tLo.stock.wood > tHi.stock.wood);
-    ok("RU-A: L4 hut consumes less potato", tLo.stock.potato > tHi.stock.potato);
-    ok("RU-A: extra needs (fish) consumed equally", near(tLo.stock.fish, tHi.stock.fish, 1e-9));
-    ok("RU-A: extra needs (wool) consumed equally", near(tLo.stock.wool, tHi.stock.wool, 1e-9));
+    // GRAN: consumption is integer-quantized with a carry, so one tick removes 0
+    // whole units — but the town's published demand IS the real (fractional)
+    // per-capita consumption request (basicConsumptionMult applied). At equal pop
+    // (one tick) it's the faithful measure; running further would let the L4 hut's
+    // larger capacity grow its pop and confound the per-capita comparison.
+    ok("RU-A: L4 hut consumes less wood", tLo.demand.wood < tHi.demand.wood);
+    ok("RU-A: L4 hut consumes less potato", tLo.demand.potato < tHi.demand.potato);
+    ok("RU-A: extra needs (fish) demanded equally", near(tLo.demand.fish, tHi.demand.fish, 1e-9));
+    ok("RU-A: extra needs (wool) demanded equally", near(tLo.demand.wool, tHi.demand.wool, 1e-9));
   }
 
   // -- pending upgrade: its material need shows in demand, drains stock over
@@ -876,6 +905,65 @@ function place(typeId, q, r, over) {
      CONFIG.needs.satSmoothing > 0 && CONFIG.needs.satSmoothing <= 1);
 }
 // === /SAWTOOTH FIX ============================================================
+
+// ========================================================================
+// GRAN) Economy granularity overhaul — town.stock is ALWAYS a whole number:
+// production releases whole-unit BATCHES on a per-kind interval, and consumption
+// removes whole units with a fractional carry (satisfaction stays smooth via satEMA).
+// ========================================================================
+{
+  // (a) Integer invariant: run a full producing + consuming economy and assert
+  //     every stock value stays an integer on every tick.
+  const t = town({ level: 3, pop: { peasants: 4, workers: 3, burghers: 0 },
+    stock: { wood: 40, potato: 40, fish: 40, wool: 40, coal: 40, clothes: 40, bread: 40, mead: 40, grain: 40 },
+    buildings: [
+      place("potato_farm", 0, 1, { built: true }), place("lumberjack", 1, 1, { built: true }),
+      place("fishery", 2, 1, { built: true }), place("shepherd", 3, 1, { built: true }),
+      place("mill", 4, 1, { built: true }),
+      place("hut", 0, 2, { built: true }), place("hut", 1, 2, { built: true }),
+      place("cottage", 2, 2, { built: true }),
+    ] });
+  let allInt = true, badTick = -1;
+  for (let i = 0; i < 200 && allInt; i++) {
+    Sim.tick({ towns: [t] });
+    for (const g in t.stock) if (!Number.isInteger(t.stock[g])) { allInt = false; badTick = i; break; }
+  }
+  ok("GRAN: town.stock stays integer (whole units) across 200 producing/consuming ticks", allInt);
+  if (!allInt) console.error("      first fractional stock at tick " + badTick + ": " + JSON.stringify(t.stock));
+
+  // (b) Bulk release: a staffed extractor's output arrives as whole-unit batches
+  //     (some ticks add nothing, then a tick jumps by ≥1), NOT a per-tick trickle.
+  const t3 = town({ pop: { peasants: 2, workers: 0, burghers: 0 }, stock: { wood: 1e5 },
+    buildings: [place("potato_farm", 0, 1, { built: true }),
+                place("hut", 0, 2, { built: true }), place("hut", 1, 2, { built: true })] });
+  let sawZeroTick = false, sawBatchJump = false;
+  for (let i = 0; i < 40; i++) {
+    const before = t3.stock.potato || 0;
+    Sim.tick({ towns: [t3] });
+    const delta = (t3.stock.potato || 0) - before;
+    if (delta === 0) sawZeroTick = true;   // no trickle: quiet ticks add nothing
+    if (delta >= 1) sawBatchJump = true;   // batch tick: whole-unit jump
+  }
+  ok("GRAN: extractor output has quiet ticks (no per-tick trickle)", sawZeroTick);
+  ok("GRAN: extractor output releases whole-unit batches (≥1 jump)", sawBatchJump);
+
+  // (c) Batch cadence from CONFIG: an always-staffed extractor releases on the
+  //     extractor interval (intervalSec × 1000/baseTickMs ticks). Peasants staff a
+  //     lumberjack; count the ticks between successive `wood` jumps.
+  const secs = (CONFIG.econ.productionIntervalSec && CONFIG.econ.productionIntervalSec.extractor) || 8;
+  const expectTicks = Math.round(secs * (1000 / CONFIG.econ.baseTickMs));
+  const t4 = town({ pop: { peasants: 3, workers: 0, burghers: 0 }, stock: { potato: 1e5, wood: 0 },
+    buildings: [place("lumberjack", 0, 1, { built: true }), place("hut", 0, 2, { built: true }),
+                place("hut", 1, 2, { built: true })] });
+  const jumpTicks = [];
+  for (let i = 0; i < expectTicks * 3 + 2; i++) {
+    const before = t4.stock.wood || 0;
+    Sim.tick({ towns: [t4] });
+    if ((t4.stock.wood || 0) > before) jumpTicks.push(i);
+  }
+  const gap = jumpTicks.length >= 2 ? (jumpTicks[1] - jumpTicks[0]) : -1;
+  ok("GRAN: extractor releases on the CONFIG interval (×1000/baseTickMs ticks)", gap === expectTicks);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

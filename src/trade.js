@@ -11,8 +11,8 @@
 // it. The trader is available from LEVEL 1 (the old `level >= 2` gate is gone),
 // so a connected town trades the moment it has a shortfall and a reachable seller
 // — fixing the "towns stuck at L1 never trade" bug. The player still earns the
-// effective tariff (state.tariffRate + research tariffBonus, × Events multiplier,
-// clamped) on every purchase → state.treasury.
+// effective tariff (state.tariffRate + research tariffBonus, clamped) on every
+// purchase → state.treasury.
 //
 // It only READS prices (Sim.tick already republished them via Sim.priceFor) and
 // mutates only town.stock / town.gold, state.carts and state.treasury. Anti-
@@ -271,8 +271,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const sellerIsCastle = !!pick.sellerCastle;
       const primaryUnit = pick.price;
       const primaryAfford = primaryUnit > 0 ? (home.gold || 0) / primaryUnit : cartCapacity;
-      const primaryQty = Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford);
-      if (!(primaryQty > 0)) continue;
+      // === GRAN: traders move WHOLE units only (never a fractional/0 load). Floor
+      // the sized quantity to an integer; a city that can't afford/spare a whole
+      // unit simply doesn't dispatch (min 1).
+      const primaryQty = Math.floor(Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford));
+      if (!(primaryQty >= 1)) continue;
 
       const cargo = [{ goodId: want.gid, qty: primaryQty, unitBuy: primaryUnit }];
       sellReserve(state, pick.seller, want.gid, primaryQty, sellerIsCastle);
@@ -286,8 +289,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (avail <= 0) continue;
         const unit = sellPrice(state, pick.seller, g.gid, sellerIsCastle);
         const afford = unit > 0 ? goldLeft / unit : capLeft;
-        const q = Math.min(capLeft, avail, g.shortfall, afford);
-        if (!(q > 0)) continue;
+        const q = Math.floor(Math.min(capLeft, avail, g.shortfall, afford));   // GRAN: whole units only
+        if (!(q >= 1)) continue;
         cargo.push({ goodId: g.gid, qty: q, unitBuy: unit });
         sellReserve(state, pick.seller, g.gid, q, sellerIsCastle);
         capLeft -= q; goldLeft -= unit * q;
@@ -382,10 +385,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!buyer.stock) buyer.stock = {};
             for (const item of cart.cargo) {
               const room = Math.max(0, capG - (buyer.stock[item.goodId] || 0));
-              const move = Math.min(perTick, item.qty - (item.unloaded || 0), room);
+              // === GRAN: meter WHOLE units into the buyer's (integer) stock; carry
+              // the sub-unit fraction of perTick so delivery still spans ~the same ticks.
+              item._unlAcc = (item._unlAcc || 0) + perTick;
+              const move = Math.min(Math.floor(item._unlAcc), item.qty - (item.unloaded || 0), room);
               if (move > 0) {
                 buyer.stock[item.goodId] = (buyer.stock[item.goodId] || 0) + move;
                 item.unloaded = (item.unloaded || 0) + move;
+                item._unlAcc -= move;
                 if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, item.goodId, move);   // MISSION-STATS: units delivered
               }
             }
@@ -397,11 +404,13 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         } else {
           if (buyer) {
             if (!buyer.stock) buyer.stock = {};
-            const move = Math.min(perTick, cart.qty - (cart.unloaded || 0),
+            cart._unlAcc = (cart._unlAcc || 0) + perTick;   // GRAN: whole-unit metering with carry
+            const move = Math.min(Math.floor(cart._unlAcc), cart.qty - (cart.unloaded || 0),
                                   Math.max(0, capG - (buyer.stock[cart.goodId] || 0)));
             if (move > 0) {
               buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + move;
               cart.unloaded = (cart.unloaded || 0) + move;
+              cart._unlAcc -= move;
               if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, cart.goodId, move);   // MISSION-STATS: units delivered
             }
           }

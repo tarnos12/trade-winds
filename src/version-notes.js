@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.39.0";
+  const GAME_VERSION = "0.40.0";
   const PATCH_NOTES = [
+    { v: "0.40.0", notes: [
+      "Economy overhaul — resources are now whole units everywhere (no more fractions in your warehouse); a building banks the fractional leftover and rolls it into the next batch, so nothing is lost",
+      "Buildings now produce in BATCHES on a timer (gatherers every 8s, workshops every 12s) instead of trickling every tick — same output rate, delivered in chunks",
+      "Fixed the porter that endlessly shuttled 1 wood back and forth (batched production means there's a real load to carry, not a constant dribble)",
+      "Fixed internal porters ignoring game speed — they now move faster at 2×/4× like the road caravans do",
+    ] },
     { v: "0.39.0", notes: [
       "NEW: Custom Map — pick “Custom…” on the start screen to shape your world with 6 dropdowns (Fertility, World Age, Climate, Sea Level, Resources, Size), each Low/Normal/High. 🎲 Regenerate rolls a fresh world with the same settings",
       "The 5 map presets are now clearly distinct — lush-green Fertile, desert Oasis, barren-giant Big World, plus two NEW worlds: rugged snowy Highlands and watery Isles (archipelago)",

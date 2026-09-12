@@ -2799,6 +2799,14 @@ Sim.tick = function (State) {
   const N = CONFIG.needs;
   const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
   const clamp0 = (x) => (x > 0 ? x : 0);
+  // === GRAN: bulk-production release intervals (whole-unit batches). Per-kind
+  // interval (GAME-SECONDS) from CONFIG.econ.productionIntervalSec; fall back to
+  // the design defaults only if the key is ever absent. intervalTicks = intervalSec
+  // × (1000/baseTickMs) (= ×2 at the 500ms base step). A kind not listed ⇒ 0 ⇒
+  // release whole units every tick.
+  const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+  const prodIntervalSec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || { extractor: 8, processor: 12 };
+  const intervalTicksFor = (kind) => Math.round((prodIntervalSec[kind] || 0) * (1000 / baseTickMs));
 
   for (const town of State.towns) {
     if (!town) continue;
@@ -2913,48 +2921,89 @@ Sim.tick = function (State) {
     }
     // === /CB-A + /RU-A (moved above production by WOODFIX) ============
 
-    // --- 1. Production -------------------------------------------------
-    // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
-    // consuming its inputs (processors); throughput is throttled by missing inputs.
+    // --- 1. Production (GRAN: fractional carry + whole-unit BULK release) ------
+    // Each producing building BANKS its per-tick output into a float accumulator
+    // (b._prodAcc) and, for processors, its per-tick input draw into b._inAcc — no
+    // stock moves per tick. A per-building countdown (b._prodTimer, started at
+    // intervalTicks and thus STAGGERED by build time) RELEASES Math.floor of each
+    // accumulator into/out of town.stock every intervalTicks, carrying the
+    // fractional remainder to the next batch — so town.stock only ever moves in
+    // WHOLE units while the underlying economy math stays fractional and smooth
+    // (e.g. lumberjack 0.5/tick × 16 ticks = 8.0 → +8 wood every 8s; a leftover
+    // 0.5 carries so the next batch is 8, matching the "2.5/s ⇒ 2 then 3" design).
+    // Interval 0 (a kind not listed) releases whole units every tick. Determinism
+    // is unchanged: no RNG here, and the accumulators/timer are pure functions of
+    // state (default 0 / intervalTicks) initialised deterministically.
     for (const b of buildings) {
       if (!b || b.built === false) continue;   // CB-A: unbuilt buildings don't produce; !b guards a null array element (matches assignWorkers/target-loop siblings) so a corrupt entry can't deref null → throw
       const type = CONFIG.buildings[b.typeId];
       if (!type || !type.output) continue;
-      const w = b.workers || 0;
-      if (w <= 0) continue;
-      // Inputs cap effective workers; record full desired input as demand.
-      let effW = w;
-      const inputs = type.inputs;
-      if (inputs) {
-        for (const gid in inputs) {
-          const qty = inputs[gid];
-          if (qty > 0) effW = Math.min(effW, (stock[gid] || 0) / qty);
-          addDemand(gid, qty * w);
-        }
-      }
-      if (effW <= 0) continue;          // inputs missing → building idles this tick
-      if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
-      // P5-A hook: research output multipliers (guarded; 1x when no research).
-      //   globalOutput always; extractorOutput for extractors (+ mineOutput for
-      //   ore/stone mines); processorOutput for processors. Keys end in "Output"
-      //   so Research.effect multiplies unlocked nodes, defaulting to 1.
-      let resMult = 1;
-      if (typeof Research !== "undefined" && Research.effect) {
-        resMult = Research.effect(State, "globalOutput", 1);
-        if (type.kind === "extractor") {
-          resMult *= Research.effect(State, "extractorOutput", 1);
-          if (MINE_TERRAINS[type.terrain]) {   // === TV2: deposit-tile mines & quarries ===
-            resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: mines & quarries
+      const inputs = type.inputs;
+      const intervalTicks = intervalTicksFor(type.kind);
+      if (typeof b._prodTimer !== "number") b._prodTimer = intervalTicks;
+      if (typeof b._prodAcc !== "number") b._prodAcc = 0;
+      if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};
+
+      const w = b.workers || 0;
+      if (w > 0) {
+        // Inputs cap effective workers (throttled against stock NOT YET claimed by
+        // this building's banked-but-unreleased draw); record full desired input as
+        // demand every tick, exactly as the per-tick model did.
+        let effW = w;
+        if (inputs) {
+          for (const gid in inputs) {
+            const qty = inputs[gid];
+            if (qty > 0) effW = Math.min(effW, ((stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
+            addDemand(gid, qty * w);
           }
-        } else if (type.kind === "processor") {
-          resMult *= Research.effect(State, "processorOutput", 1);
+        }
+        if (effW < 0) effW = 0;
+        if (effW > 0) {
+          // P5-A hook: research output multipliers (guarded; 1x when no research).
+          //   globalOutput always; extractorOutput for extractors (+ mineOutput for
+          //   ore/stone mines); processorOutput for processors. Keys end in "Output"
+          //   so Research.effect multiplies unlocked nodes, defaulting to 1.
+          let resMult = 1;
+          if (typeof Research !== "undefined" && Research.effect) {
+            resMult = Research.effect(State, "globalOutput", 1);
+            if (type.kind === "extractor") {
+              resMult *= Research.effect(State, "extractorOutput", 1);
+              if (MINE_TERRAINS[type.terrain]) {   // === TV2: deposit-tile mines & quarries ===
+                resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: mines & quarries
+              }
+            } else if (type.kind === "processor") {
+              resMult *= Research.effect(State, "processorOutput", 1);
+            }
+          }
+          // === RU-A: compose per-building upgrade outputMult ===
+          const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+          // BANK this tick's flows (float); nothing enters/leaves stock until release.
+          if (inputs) for (const gid in inputs) b._inAcc[gid] = (b._inAcc[gid] || 0) + inputs[gid] * effW;
+          b._prodAcc += out.ratePerWorker * effW * hf * resMult * upgMult;
+          // === /RU-A ===
         }
       }
-      // === RU-A: compose per-building upgrade outputMult ===
-      const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * resMult * upgMult;
-      // === /RU-A ===
+
+      // RELEASE whole units on the batch boundary (or every tick when interval 0).
+      // Processors flush banked input-consumption and output-production together, so
+      // both sides of the recipe stay integer and on the same cadence.
+      const releaseBatch = () => {
+        if (inputs) {
+          for (const gid in inputs) {
+            const consumed = Math.floor(b._inAcc[gid] || 0);
+            if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
+          }
+        }
+        const rel = Math.floor(b._prodAcc);
+        if (rel > 0) { stock[out.goodId] = (stock[out.goodId] || 0) + rel; b._prodAcc -= rel; }
+      };
+      if (intervalTicks <= 0) {
+        releaseBatch();
+      } else if (--b._prodTimer <= 0) {
+        releaseBatch();
+        b._prodTimer = intervalTicks;
+      }
     }
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
@@ -2997,14 +3046,25 @@ Sim.tick = function (State) {
       }
     }
     // === /RU-A + /CC ===
+    // === GRAN: integer consumption with per-town carry. gsatRaw is STILL the REAL
+    // fractional demand-vs-shelf (min(have,req)/req) so the satEMA smoothing below —
+    // and thus happiness — is unchanged and stays smooth; only the PHYSICAL stock
+    // decrement is integer-quantized: fractional demand accrues in town._consCarry
+    // and we subtract Math.floor of it (clamped to available stock, never negative),
+    // carrying the sub-unit remainder. No demand backlog builds during a shortage
+    // (unmet whole-unit demand is dropped, exactly as the old min() did).
+    if (!town._consCarry || typeof town._consCarry !== "object") town._consCarry = {};
     const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
       addDemand(gid, req);
       const have = stock[gid] || 0;
-      const consume = Math.min(have, req);
-      stock[gid] = have - consume;
-      gsatRaw[gid] = req > 0 ? consume / req : 1;
+      gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
+      const cc = (town._consCarry[gid] || 0) + req;             // accrue fractional demand
+      let take = Math.floor(cc);
+      if (take > have) take = have;                             // clamp ≥0 — can't consume what isn't there
+      if (take > 0) stock[gid] = have - take;
+      town._consCarry[gid] = cc - Math.floor(cc);               // carry only the sub-unit remainder
     }
     // === SAWTOOTH FIX === smooth the per-good satisfaction that HAPPINESS reads with a
     // town-persisted EMA (town.satEMA), so momentary between-cart shelf dips don't
@@ -3979,8 +4039,8 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
 // it. The trader is available from LEVEL 1 (the old `level >= 2` gate is gone),
 // so a connected town trades the moment it has a shortfall and a reachable seller
 // — fixing the "towns stuck at L1 never trade" bug. The player still earns the
-// effective tariff (state.tariffRate + research tariffBonus, × Events multiplier,
-// clamped) on every purchase → state.treasury.
+// effective tariff (state.tariffRate + research tariffBonus, clamped) on every
+// purchase → state.treasury.
 //
 // It only READS prices (Sim.tick already republished them via Sim.priceFor) and
 // mutates only town.stock / town.gold, state.carts and state.treasury. Anti-
@@ -4239,8 +4299,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const sellerIsCastle = !!pick.sellerCastle;
       const primaryUnit = pick.price;
       const primaryAfford = primaryUnit > 0 ? (home.gold || 0) / primaryUnit : cartCapacity;
-      const primaryQty = Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford);
-      if (!(primaryQty > 0)) continue;
+      // === GRAN: traders move WHOLE units only (never a fractional/0 load). Floor
+      // the sized quantity to an integer; a city that can't afford/spare a whole
+      // unit simply doesn't dispatch (min 1).
+      const primaryQty = Math.floor(Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford));
+      if (!(primaryQty >= 1)) continue;
 
       const cargo = [{ goodId: want.gid, qty: primaryQty, unitBuy: primaryUnit }];
       sellReserve(state, pick.seller, want.gid, primaryQty, sellerIsCastle);
@@ -4254,8 +4317,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (avail <= 0) continue;
         const unit = sellPrice(state, pick.seller, g.gid, sellerIsCastle);
         const afford = unit > 0 ? goldLeft / unit : capLeft;
-        const q = Math.min(capLeft, avail, g.shortfall, afford);
-        if (!(q > 0)) continue;
+        const q = Math.floor(Math.min(capLeft, avail, g.shortfall, afford));   // GRAN: whole units only
+        if (!(q >= 1)) continue;
         cargo.push({ goodId: g.gid, qty: q, unitBuy: unit });
         sellReserve(state, pick.seller, g.gid, q, sellerIsCastle);
         capLeft -= q; goldLeft -= unit * q;
@@ -4350,10 +4413,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!buyer.stock) buyer.stock = {};
             for (const item of cart.cargo) {
               const room = Math.max(0, capG - (buyer.stock[item.goodId] || 0));
-              const move = Math.min(perTick, item.qty - (item.unloaded || 0), room);
+              // === GRAN: meter WHOLE units into the buyer's (integer) stock; carry
+              // the sub-unit fraction of perTick so delivery still spans ~the same ticks.
+              item._unlAcc = (item._unlAcc || 0) + perTick;
+              const move = Math.min(Math.floor(item._unlAcc), item.qty - (item.unloaded || 0), room);
               if (move > 0) {
                 buyer.stock[item.goodId] = (buyer.stock[item.goodId] || 0) + move;
                 item.unloaded = (item.unloaded || 0) + move;
+                item._unlAcc -= move;
                 if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, item.goodId, move);   // MISSION-STATS: units delivered
               }
             }
@@ -4365,11 +4432,13 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         } else {
           if (buyer) {
             if (!buyer.stock) buyer.stock = {};
-            const move = Math.min(perTick, cart.qty - (cart.unloaded || 0),
+            cart._unlAcc = (cart._unlAcc || 0) + perTick;   // GRAN: whole-unit metering with carry
+            const move = Math.min(Math.floor(cart._unlAcc), cart.qty - (cart.unloaded || 0),
                                   Math.max(0, capG - (buyer.stock[cart.goodId] || 0)));
             if (move > 0) {
               buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + move;
               cart.unloaded = (cart.unloaded || 0) + move;
+              cart._unlAcc -= move;
               if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, cart.goodId, move);   // MISSION-STATS: units delivered
             }
           }
@@ -11642,8 +11711,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           // output good has room in the town (stock below cap). A maxed-out good is
           // over-produced and its output is wasted, so the porter idles instead of
           // shuttling pointlessly (the "potato farm forever moving 2 potato" case).
+          // GRAN: also require a genuine WHOLE-UNIT surplus (≥1) to haul. No
+          // artificial minimum-batch threshold — batched production (Sim releases
+          // output as +N whole units on an interval, not a trickle each tick) is
+          // what kills the old 1-wood flicker; between batches there is simply
+          // nothing to move.
           const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
-          if (((t.stock && t.stock[good]) || 0) >= cap - 1e-6) continue;
+          const have = (t.stock && t.stock[good]) || 0;
+          if (have < 1) continue;               // no whole-unit surplus to carry
+          if (have >= cap - 1e-6) continue;     // maxed out: output wasted, porter idles
           const key = t.id + ":" + b.q + "," + b.r;
           wanted.add(key);
           let tr = roster.get(key);
@@ -11742,7 +11818,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     function draw(dt) {
       const d = Math.min(100, dt || 16);
-      const fadeStep = d / FADE_MS;
+      const fadeStep = d / FADE_MS;   // MD: spawn/despawn fade stays in REAL time (unchanged)
+      // #4b BUGFIX: porter MOTION must scale with state.gameSpeed, exactly like the
+      // external trade carts do. Trade carts advance on ECONOMY TICKS, which fire
+      // every CONFIG.econ.baseTickMs / gameSpeed real-ms, so their on-screen speed
+      // rises with gameSpeed; porters advance on the rAF frame delta (real time), so
+      // without this factor they crawled at 1× while the map carts sped up at 4×.
+      // Scale only the movement delta (gameSpeed 0 ⇒ paused ⇒ porters freeze), never
+      // the fade above.
+      const gs = Math.max(0, (state && state.gameSpeed) || 1);
+      const dMove = d * gs;
       for (const [key, tr] of roster) {
         // MD: fade in on spawn / fade out before despawn — a porter's
         // visibility eases too, not just its position, so it never pops.
@@ -11753,7 +11838,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           tr.alpha = Math.min(1, tr.alpha + fadeStep);
         }
         // advance the oscillation 0<->1 (building <-> centre), gently looping
-        tr.t += (tr.dir * d) / LEG_MS;
+        tr.t += (tr.dir * dMove) / LEG_MS;
         if (tr.t >= 1) { tr.t = 1; tr.dir = -1; }
         else if (tr.t <= 0) { tr.t = 0; tr.dir = 1; }
         const town = townById(tr.townId);
@@ -12989,8 +13074,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.39.0";
+  const GAME_VERSION = "0.40.0";
   const PATCH_NOTES = [
+    { v: "0.40.0", notes: [
+      "Economy overhaul — resources are now whole units everywhere (no more fractions in your warehouse); a building banks the fractional leftover and rolls it into the next batch, so nothing is lost",
+      "Buildings now produce in BATCHES on a timer (gatherers every 8s, workshops every 12s) instead of trickling every tick — same output rate, delivered in chunks",
+      "Fixed the porter that endlessly shuttled 1 wood back and forth (batched production means there's a real load to carry, not a constant dribble)",
+      "Fixed internal porters ignoring game speed — they now move faster at 2×/4× like the road caravans do",
+    ] },
     { v: "0.39.0", notes: [
       "NEW: Custom Map — pick “Custom…” on the start screen to shape your world with 6 dropdowns (Fertility, World Age, Climate, Sea Level, Resources, Size), each Low/Normal/High. 🎲 Regenerate rolls a fresh world with the same settings",
       "The 5 map presets are now clearly distinct — lush-green Fertile, desert Oasis, barren-giant Big World, plus two NEW worlds: rugged snowy Highlands and watery Isles (archipelago)",
