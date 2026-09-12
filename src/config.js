@@ -46,7 +46,14 @@ const CONFIG = {
   // === /TV2 map presets ===
   fog:    { castleReveal: 4, townReveal: 3 },
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
-  econ:   { baseTickMs: 500 },
+  econ:   { baseTickMs: 500,
+    // === Bulk production (v0.39): a producing building banks its output and
+    // releases it in WHOLE units every N game-seconds instead of trickling a
+    // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
+    // and the fractional remainder carries into the next batch so nothing is
+    // lost. Keyed by building `kind`; a kind not listed here releases whatever
+    // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
+    productionIntervalSec: { extractor: 8, processor: 12 } },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.
   // road      = a road segment may cross this hex (traders/pathing).
