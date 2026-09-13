@@ -83,6 +83,44 @@ ok("default preset is fertile", MapGen.generate("harbor").preset === "fertile");
 const SEEDS = ["harbor", "flint", "gale", "sirocco", "monsoon"];
 const DEP_ALL = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
 const buildableT = t => !!(CONFIG.terrain[t] && CONFIG.terrain[t].buildable);
+const roadableH = h => { const td = h && CONFIG.terrain[h.terrain]; return !!(td && td.road); };
+
+// v0.43 REACHABILITY: fraction of ROADABLE hexes reachable from the castle (0,0)
+// by road-passable tiles. MapGen.ensureReachable should keep this at (almost) 1.
+function reachFrac(map) {
+  const c0 = map.hexes.get("0,0");
+  if (!c0 || !roadableH(c0)) return 0;
+  const seen = new Set(["0,0"]); const stack = ["0,0"];
+  while (stack.length) {
+    const k = stack.pop(); const c = MapGen.parseKey(k);
+    for (const n of HexMath.neighbors(c.q, c.r)) {
+      const nk = HexMath.key(n.q, n.r); const nh = map.hexes.get(nk);
+      if (nh && roadableH(nh) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
+    }
+  }
+  let total = 0; for (const h of map.hexes.values()) if (roadableH(h)) total++;
+  return total ? seen.size / total : 0;
+}
+// connected-component sizes of the fertile/forest PATCH terrain (for size-variety checks)
+function patchSizes(map) {
+  const seen = new Set(); const out = [];
+  const isPatch = t => t === "fertile" || t === "forest";
+  for (const h of map.hexes.values()) {
+    const k = HexMath.key(h.q, h.r);
+    if (seen.has(k) || !isPatch(h.terrain)) continue;
+    let s = 0; const st = [k]; seen.add(k);
+    while (st.length) {
+      const kk = st.pop(); s++; const c = MapGen.parseKey(kk);
+      for (const n of HexMath.neighbors(c.q, c.r)) {
+        const nk = HexMath.key(n.q, n.r); const nh = map.hexes.get(nk);
+        if (nh && isPatch(nh.terrain) && !seen.has(nk)) { seen.add(nk); st.push(nk); }
+      }
+    }
+    out.push(s);
+  }
+  return out;
+}
+const waterCount = map => { let w = 0; for (const h of map.hexes.values()) if (h.terrain === "water") w++; return w; };
 
 for (const pid of presetIds) {
   const preset = CONFIG.mapPresets[pid];
@@ -163,18 +201,23 @@ for (const pid of presetIds) {
     if ((preset.water.frac || 0) > 0) ok(`${tag} water present`, count("water") > 0);
     if (preset.snow && preset.snow.mode === "pole") ok(`${tag} snow present`, count("snow") > 0);
     if ((preset.mountainFrac || 0) > 0) ok(`${tag} mountains present`, count("mountains") > 0);
-    //     …the ground-share ORDER follows groundMix (any pair configured at a
-    //     >=2x ratio must come out larger — e.g. oasis: desert+barren dominate
-    //     its sliver of fertile; fertile preset: fertile > desert)…
-    const gm = preset.groundMix;
-    for (const x of Object.keys(gm)) for (const y of Object.keys(gm)) {
-      if (gm[x] >= 2 * gm[y]) ok(`${tag} ground mix order ${x} > ${y}`, count(x) > count(y));
+    //     …the v0.43 PATCH PARADIGM holds: fertile is a MINORITY of the land and
+    //     the barren/desert/snow FILLER is the majority (far LESS continuous grass
+    //     than the old fertile-default ground — the whole point of the overhaul)…
+    const landCount = ["barren", "desert", "snow", "fertile", "forest"].reduce((s, t) => s + count(t), 0);
+    if (landCount > 0) {
+      ok(`${tag} fertile is a MINORITY of land (<35%)`, count("fertile") / landCount < 0.35);
+      ok(`${tag} filler (barren+desert+snow) is the MAJORITY of land (>50%)`,
+        (count("barren") + count("desert") + count("snow")) / landCount > 0.50);
     }
     //     …and no single terrain swamps the board. (Cap is 60%: the oasis preset
-    //     is intentionally desert-dominant — ~52% desert on the rectangle — which
+    //     is intentionally desert-dominant — ~55% desert on the rectangle — which
     //     is thematic, not a bug; the guard still catches a true one-terrain map.)
     ok(`${tag} no terrain > 60% of board`, hexes.length > 0 &&
       Object.values(hexes.reduce((m2, h) => (m2[h.terrain] = (m2[h.terrain] || 0) + 1, m2), {})).every(c => c <= hexes.length * 0.6));
+    // (i) v0.43 REACHABILITY — roadable land is (almost) one component that
+    //     INCLUDES the castle (mountain necks / rivers are bridged; wide sea isn't).
+    ok(`${tag} roadable land reaches >=92% from castle`, reachFrac(map) >= 0.92);
   }
 }
 // === /TV2-FIX ===
@@ -310,6 +353,100 @@ for (const combo of CUSTOM_COMBOS) {
 // custom board size actually changes with the Size axis (rectangle board)
 ok("custom size:large board is 66*33 hexes", MapGen.generate("harbor", null, "custom", { base: "fertile", size: "large" }).hexes.size === 66 * 33);
 ok("custom size:small board is 36*18 hexes", MapGen.generate("harbor", null, "custom", { base: "fertile", size: "small" }).hexes.size === 36 * 18);
+
+// ==== v0.43 MapGen overhaul: patch paradigm, water features, reachability, fog ====
+
+// --- config surface for the new systems ---
+ok("map.patchSizes has small/medium/big [lo,hi] buckets", (() => {
+  const p = CONFIG.map.patchSizes;
+  return p && ["small", "medium", "big"].every(k => Array.isArray(p[k]) && p[k].length === 2 && p[k][0] <= p[k][1]);
+})());
+ok("map.lakes level table (none<low<normal<many)", (() => { const l = CONFIG.map.lakes;
+  return l && l.none === 0 && l.low > 0 && l.normal > l.low && l.many > l.normal; })());
+ok("map.rivers level table (none<few<normal<many)", (() => { const r = CONFIG.map.rivers;
+  return r && r.none === 0 && r.few > 0 && r.normal > r.few && r.many > r.normal; })());
+ok("map.riverWidth is [1,5]", Array.isArray(CONFIG.map.riverWidth) && CONFIG.map.riverWidth[0] === 1 && CONFIG.map.riverWidth[1] === 5);
+ok("map.lakeSize is a [lo,hi] range", Array.isArray(CONFIG.map.lakeSize) && CONFIG.map.lakeSize[0] <= CONFIG.map.lakeSize[1]);
+ok("map.depositAffinity: clay->water, ore->barren/mountains", (() => { const a = CONFIG.map.depositAffinity;
+  return a && a.clay.indexOf("water") >= 0 && ["stone", "iron", "gold", "coal"].every(t => a[t] && a[t].indexOf("mountains") >= 0); })());
+ok("fog.startReveal scales small<normal<large", (() => { const s = CONFIG.fog.startReveal;
+  return s && s.small === 10 && s.normal === 15 && s.large === 20; })());
+
+// --- the two NEW custom axes ---
+ok("new tier axes lakes/rivers present (4 options each)", ["lakes", "rivers"]
+  .every(a => CONFIG.mapTiers[a] && Array.isArray(CONFIG.mapTiers[a].options) && CONFIG.mapTiers[a].options.length === 4));
+ok("every preset carries a lakes + rivers level", Object.values(CONFIG.mapPresets)
+  .every(p => (p.lakes in CONFIG.map.lakes) && (p.rivers in CONFIG.map.rivers)));
+
+// --- applyTiers resolves the lakes/rivers axes onto the preset ---
+ok("applyTiers lakes:many -> p.lakes 'many'", MapGen.applyTiers(FBASE, { lakes: "many" }).lakes === "many");
+ok("applyTiers lakes:none -> p.lakes 'none'", MapGen.applyTiers(FBASE, { lakes: "none" }).lakes === "none");
+ok("applyTiers rivers:many -> p.rivers 'many'", MapGen.applyTiers(FBASE, { rivers: "many" }).rivers === "many");
+ok("applyTiers rivers:none -> p.rivers 'none'", MapGen.applyTiers(FBASE, { rivers: "none" }).rivers === "none");
+ok("applyTiers unset lakes/rivers stay valid keys", (() => { const p = MapGen.applyTiers(FBASE, {});
+  return (p.lakes in CONFIG.map.lakes) && (p.rivers in CONFIG.map.rivers); })());
+
+// --- (a) far less fertile than the old default: fertile is a MINORITY of land ---
+ok("fertile is a minority of land on every preset", presetIds.every(pid => {
+  const map = MapGen.generate("harbor", CONFIG.mapPresets[pid].radius, pid);
+  const hx = [...map.hexes.values()]; const c = t => hx.filter(h => h.terrain === t).length;
+  const land = ["barren", "desert", "snow", "fertile", "forest"].reduce((s, t) => s + c(t), 0);
+  return land > 0 && c("fertile") / land < 0.35;
+}));
+
+// --- (b) patches exist in VARIED sizes (fertile+forest connected components) ---
+ok("patches come in varied sizes (small <=3 AND big >=8 present)", (() => {
+  const sizes = patchSizes(MapGen.generate("harbor", 14, "fertile"));
+  return sizes.some(s => s <= 3) && sizes.some(s => s >= 8) && sizes.length >= 3;
+}));
+
+// --- (d) lakes/rivers appear at the right LEVELS: more water at 'many' than 'none'
+//     (sea held constant via seaLevel:normal, so the delta is lakes+rivers) ---
+ok("more inland water at lakes/rivers 'many' than 'none'", (() => {
+  const none = MapGen.generate("harbor", null, "custom", { base: "fertile", seaLevel: "normal", lakes: "none", rivers: "none" });
+  const many = MapGen.generate("harbor", null, "custom", { base: "fertile", seaLevel: "normal", lakes: "many", rivers: "many" });
+  return waterCount(many) > waterCount(none) + 10;
+}));
+// rivers vary in WIDTH: a rivers-heavy dry map has water tiles with >=3 water
+// neighbours somewhere (a wide stretch), proving width>1 is exercised.
+ok("rivers produce wide (>1) stretches somewhere", (() => {
+  const map = MapGen.generate("gale", null, "custom", { base: "highlands", seaLevel: "low", lakes: "none", rivers: "many" });
+  for (const h of map.hexes.values()) {
+    if (h.terrain !== "water") continue;
+    const wn = HexMath.neighbors(h.q, h.r).filter(n => { const nh = map.hexes.get(HexMath.key(n.q, n.r)); return nh && nh.terrain === "water"; }).length;
+    if (wn >= 3) return true;
+  }
+  return false;
+}));
+
+// --- (c) reachability holds even on MOUNTAIN-HEAVY custom worlds ---
+ok("mountain-heavy worlds stay reachable (>=90% from castle)", (() => {
+  const combos = [
+    { base: "highlands", worldAge: "young", climate: "cold", resources: "rich" },
+    { base: "fertile", worldAge: "young", seaLevel: "low", rivers: "many" },
+    { base: "big_world", worldAge: "young", size: "large", rivers: "many" },
+  ];
+  for (const combo of combos) for (const seed of ["harbor", "flint", "sirocco"]) {
+    if (reachFrac(MapGen.generate(seed, null, "custom", combo)) < 0.90) return false;
+  }
+  return true;
+}));
+
+// --- (e) the size-based REVEAL area around the castle always has forest + fertile ---
+ok("reveal-radius area always has fertile+forest (every preset & seed)", presetIds.every(pid => {
+  return SEEDS.every(seed => {
+    const map = MapGen.generate(seed, CONFIG.mapPresets[pid].radius, pid);
+    const R = map.revealRadius || CONFIG.fog.castleReveal;
+    const near = [...map.hexes.values()].filter(h => dc(h.q, h.r) <= R);
+    return near.some(h => h.terrain === "fertile") && near.some(h => h.terrain === "forest");
+  });
+}));
+ok("generate() returns a size-based revealRadius (10/15/20)", (() => {
+  const s = MapGen.generate("harbor", null, "custom", { base: "fertile", size: "small" }).revealRadius;
+  const n = MapGen.generate("harbor", 14, "fertile").revealRadius;
+  const l = MapGen.generate("harbor", null, "custom", { base: "fertile", size: "large" }).revealRadius;
+  return s === 10 && n === 15 && l === 20;
+})());
 
 console.log("\nterrain histogram (seed 'harbor', fertile):");
 const hist = {};

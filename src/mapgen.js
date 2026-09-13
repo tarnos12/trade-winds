@@ -111,6 +111,10 @@ const MapGen = {
     const sea = optFor("seaLevel");
     p.water = p.water || { mode: "rim", frac: 0 };
     if (sea && sea.waterFrac != null && p.water.mode !== "none") p.water.frac = sea.waterFrac;
+    // --- Lakes / Rivers (v0.43): each axis option names a LEVEL string that
+    //     MapGen.generate maps to a count via CONFIG.map.lakes / CONFIG.map.rivers ---
+    const lk = optFor("lakes");   if (lk && lk.lakes)  p.lakes  = lk.lakes;
+    const rv = optFor("rivers");  if (rv && rv.rivers) p.rivers = rv.rivers;
     // --- Resources (deposit count/ring multipliers) ---
     const res = optFor("resources");
     if (res && p.deposits) {
@@ -125,6 +129,9 @@ const MapGen = {
     }
     // --- Guardrails (keep every combo playable) ---
     p.mountainFrac = Math.min(0.14, Math.max(0, p.mountainFrac || 0));   // hard cap: mountains can wall off far deposits
+    // v0.43: water-feature levels always resolve to a known key (fall back to the base's, else a sane middle).
+    if (!(CONFIG.map && CONFIG.map.lakes  && p.lakes  in CONFIG.map.lakes))  p.lakes  = (base.lakes  in ((CONFIG.map && CONFIG.map.lakes)  || {})) ? base.lakes  : "low";
+    if (!(CONFIG.map && CONFIG.map.rivers && p.rivers in CONFIG.map.rivers)) p.rivers = (base.rivers in ((CONFIG.map && CONFIG.map.rivers) || {})) ? base.rivers : "few";
     p.forest = p.forest || { patches: 2, size: [4, 8] };
     p.forest.patches = Math.max(2, p.forest.patches | 0);               // always >= 2 forest patches
     p.groundMix = p.groundMix || { fertile: 0.2, barren: 0.4, desert: 0.4 };
@@ -214,58 +221,139 @@ const MapGen = {
       const seaT = MapGen.quantile(elevs, waterFrac);
       for (const h of all) if (h.elevation < seaT) h.terrain = "water";
     }
-    // ---- (2) mountains: highest land by elevation ----
+    // ---- (2) mountains: cohesive RANGES (grown ridge blobs), not scattered
+    // single peaks. Budget = mountainFrac of the land; seed ridges at the highest
+    // remaining land hexes and grow blobs from them. Reachability is guaranteed
+    // afterwards (ensureReachable) so a range can never permanently wall off land. ----
     const mtnFrac = preset.mountainFrac || 0;
     if (mtnFrac > 0) {
-      const landElevs = all.filter(h => h.terrain === null).map(h => h.elevation).sort((a, b) => a - b);
-      const mtnT = MapGen.quantile(landElevs, 1 - mtnFrac);
-      for (const h of all) if (h.terrain === null && h.elevation >= mtnT) h.terrain = "mountains";
+      const land0 = all.filter(h => h.terrain === null);
+      const budget = Math.round(land0.length * mtnFrac);
+      if (budget > 0 && land0.length) {
+        const byElev = land0.slice().sort((a, b) => b.elevation - a.elevation ||
+          (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
+        let placed = 0, si = 0;
+        while (placed < budget && si < byElev.length) {
+          let seed = null;
+          while (si < byElev.length) { const h = byElev[si++]; if (h.terrain === null) { seed = h; break; } }
+          if (!seed) break;
+          const remaining = budget - placed;
+          const rsize = Math.min(remaining, 4 + Math.floor(rng() * 8));   // ridge blob 4..11
+          const taken = MapGen.growPatch(hexes, HexMath.key(seed.q, seed.r), rsize,
+            k => hexes.get(k).terrain === null, (kk) => { hexes.get(kk).terrain = "mountains"; }, rng);
+          placed += taken.size || 0;
+          if (!taken.size) break;   // safety: nothing grew (shouldn't happen)
+        }
+      }
     }
 
-    // ---- (3) base ground blobs (barren / desert / fertile) via patch growth ----
-    const mix = preset.groundMix || { fertile: 0.5, barren: 0.35, desert: 0.15 };
-    const mixKeys = Object.keys(mix);
-    let mixTotal = 0; for (const k of mixKeys) mixTotal += mix[k];
-    const pickGround = () => {
-      let x = rng() * mixTotal;
-      for (const k of mixKeys) { x -= mix[k]; if (x <= 0) return k; }
-      return mixKeys[mixKeys.length - 1];
+    // ---- (3) LAKES: inland water blobs, SEPARATE from the rim/center SEA. Count
+    // by the preset's `lakes` LEVEL (CONFIG.map.lakes); size per blob from
+    // CONFIG.map.lakeSize. Placed on land, kept clear of the immediate castle core. ----
+    const lakeCount = (CONFIG.map && CONFIG.map.lakes && CONFIG.map.lakes[preset.lakes]) || 0;
+    const lakeSize = (CONFIG.map && CONFIG.map.lakeSize) || [4, 10];
+    for (let i = 0; i < lakeCount; i++) {
+      const pool = all.filter(h => h.terrain === null && HexMath.dist(0, 0, h.q, h.r) >= 4).map(h => HexMath.key(h.q, h.r));
+      if (!pool.length) break;
+      const start = pool[Math.floor(rng() * pool.length)];
+      const size = lakeSize[0] + Math.floor(rng() * (lakeSize[1] - lakeSize[0] + 1));
+      MapGen.growPatch(hexes, start, size, k => hexes.get(k).terrain === null, (kk) => { hexes.get(kk).terrain = "water"; }, rng);
+    }
+
+    // ---- (4) RIVERS: winding water lines descending elevation from a high inland
+    // point toward the sea / a lake / the board edge; WIDTH varies along the course
+    // (CONFIG.map.riverWidth). Count by the preset's `rivers` LEVEL. ----
+    const riverCount = (CONFIG.map && CONFIG.map.rivers && CONFIG.map.rivers[preset.rivers]) || 0;
+    const rw = (CONFIG.map && CONFIG.map.riverWidth) || [1, 5];
+    for (let i = 0; i < riverCount; i++) MapGen.carveRiver(hexes, all, rng, rw[0], rw[1]);
+
+    // ---- (5) FILLER ground: fill the remaining land with the BACKGROUND biomes
+    // (barren/desert — the low-value filler), grown as coherent blobs. fertile is
+    // NO LONGER a filler; it arrives as discrete PATCHES in phase (7). ----
+    const mix = preset.groundMix || { fertile: 0.45, barren: 0.35, desert: 0.20 };
+    let fillerKeys = Object.keys(mix).filter(k => k !== "fertile" && mix[k] > 0);
+    if (!fillerKeys.length) fillerKeys = ["barren"];
+    let fillerTotal = 0; for (const k of fillerKeys) fillerTotal += (mix[k] || 0);
+    if (fillerTotal <= 0) fillerTotal = 1;
+    const pickFiller = () => {
+      let x = rng() * fillerTotal;
+      for (const k of fillerKeys) { x -= (mix[k] || 0); if (x <= 0) return k; }
+      return fillerKeys[fillerKeys.length - 1];
     };
     const isGroundless = k => hexes.get(k).terrain === null;
     for (const h of all) {
       const k = HexMath.key(h.q, h.r);
       if (h.terrain !== null) continue;
-      const type = pickGround();
-      const size = 8 + Math.floor(rng() * 11);   // 8..18 — coherent clumps
+      const type = pickFiller();
+      const size = 8 + Math.floor(rng() * 11);   // 8..18 — coherent background clumps
       MapGen.growPatch(hexes, k, size, isGroundless, (kk) => { hexes.get(kk).terrain = type; }, rng);
     }
 
-    // ---- (4) forest patches on generic ground ----
-    const fCfg = preset.forest || { patches: 0, size: [4, 8] };
-    const groundSet = { barren: 1, desert: 1, fertile: 1 };
-    const groundKeys = () => all.filter(h => groundSet[h.terrain]).map(h => HexMath.key(h.q, h.r));
-    for (let i = 0; i < (fCfg.patches || 0); i++) {
-      const pool = groundKeys();
-      if (!pool.length) break;
-      const start = pool[Math.floor(rng() * pool.length)];
-      const size = fCfg.size[0] + Math.floor(rng() * (fCfg.size[1] - fCfg.size[0] + 1));
-      MapGen.growPatch(hexes, start, size, k => groundSet[hexes.get(k).terrain], (kk) => { hexes.get(kk).terrain = "forest"; }, rng);
+    // ---- (6) snow region — BOTH poles (north AND south edge rows). Row depth
+    // scales with the climate/snow setting (snowCfg.rows). Converts only filler
+    // ground (barren/desert), so it never eats a fertile/forest patch or water. ----
+    const snowCfg = preset.snow || { mode: "none" };
+    if (snowCfg.mode === "pole") {
+      const rows = snowCfg.rows || 1;
+      const botRow = topRow + (H - 1);   // southmost axial row (board row H-1)
+      for (const h of all) {
+        if (h.terrain !== "barren" && h.terrain !== "desert") continue;
+        if (h.r <= topRow + rows - 1 || h.r >= botRow - (rows - 1)) h.terrain = "snow";
+      }
     }
 
-    // ---- (5) deposit clusters (distance-BANDED by tier) ----
+    // ---- (7) PATCHES: fertile (mixed with some forest) plus a few pure-forest
+    // stands, grown on the barren/desert filler in a MIX of sizes (mostly medium)
+    // until a coverage TARGET is met. The target is the preset's fertile share
+    // scaled well DOWN so fertile stays a clear MINORITY of the land — the whole
+    // point of the v0.43 paradigm (far less continuous grass). Patches occasionally
+    // seed against an existing patch so they COMBINE into organic clusters. ----
+    let mixTotalAll = 0; for (const k of Object.keys(mix)) mixTotalAll += (mix[k] || 0);
+    const fertShare = mixTotalAll > 0 ? (mix.fertile || 0) / mixTotalAll : 0.3;
+    const patchGround = k => { const t = hexes.get(k).terrain; return t === "barren" || t === "desert"; };
+    const groundNow = () => all.filter(h => patchGround(HexMath.key(h.q, h.r)));
+    const patchTarget = Math.round(groundNow().length * Math.min(0.55, fertShare * 0.62));
+    const PS = (CONFIG.map && CONFIG.map.patchSizes) || { small: [1, 3], medium: [4, 7], big: [8, 12] };
+    const pickSizeCat = () => { const x = rng(); return x < 0.25 ? "small" : (x < 0.82 ? "medium" : "big"); };  // mostly medium
+    let coverage = 0, guard = 0;
+    while (coverage < patchTarget && guard++ < 600) {
+      let pool = groundNow().map(h => HexMath.key(h.q, h.r));
+      if (!pool.length) break;
+      if (rng() < 0.3) {   // occasionally abut an existing patch → merged, natural clusters
+        const bordering = pool.filter(k => { const p = MapGen.parseKey(k);
+          return HexMath.neighbors(p.q, p.r).some(n => { const nh = hexes.get(HexMath.key(n.q, n.r));
+            return nh && (nh.terrain === "fertile" || nh.terrain === "forest"); }); });
+        if (bordering.length) pool = bordering;
+      }
+      const start = pool[Math.floor(rng() * pool.length)];
+      const cat = pickSizeCat();
+      const band = PS[cat] || PS.medium || [4, 7];
+      const psize = band[0] + Math.floor(rng() * (band[1] - band[0] + 1));
+      const forestPatch = rng() < 0.25;   // ~1 in 4 patches is a pure-forest stand
+      const taken = MapGen.growPatch(hexes, start, psize, patchGround, (kk) => {
+        // a MIXED (fertile) patch is ~72% fertile + ~28% forest; a forest patch is all forest.
+        hexes.get(kk).terrain = forestPatch ? "forest" : (rng() < 0.28 ? "forest" : "fertile");
+      }, rng);
+      coverage += taken.size || 0;
+      if (!taken.size) break;
+    }
+
+    // ---- (8) deposit clusters (distance-BANDED by tier, + terrain AFFINITY) ----
+    // Band logic is unchanged from TV2 (see below). v0.43 layers an AFFINITY
+    // pre-filter ON TOP: within the in-band pool, prefer a seed hex whose
+    // neighbourhood contains one of CONFIG.map.depositAffinity[type]'s terrains
+    // (clay→water; stone/iron/gold/coal→barren/mountains); fall back to the plain
+    // in-band pool when no neighbourhood matches.
     // Each ore good spawns within a [minFrac, maxFrac] DISTANCE BAND from the
-    // castle, expressed as a fraction of castleMaxDist (castle → farthest hex).
-    // Band = the preset's per-good override (`deposits.<good>.band`) else the
-    // global tier band (CONFIG.map.depositBands[CONFIG.map.depositTiers[good]]).
-    // T1 (stone) [0,1] = anywhere; T2 (clay/coal) [0.33,1]; T3 (iron/gold) [0.66,1].
-    // If the castle is near an edge the band is clipped by the board — if no
-    // in-band depositable hex remains for a placement, we relax the min to 0
-    // (keeping the outer bound) so every configured deposit still spawns.
+    // castle, expressed as a fraction of castleMaxDist. If the castle is near an
+    // edge the band is clipped by the board — if no in-band depositable hex
+    // remains we relax the min to 0 so every configured deposit still spawns.
     const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
     const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
     const deps = preset.deposits || {};
     const TIERS = (CONFIG.map && CONFIG.map.depositTiers) || {};
     const BANDS = (CONFIG.map && CONFIG.map.depositBands) || {};
+    const AFF = (CONFIG.map && CONFIG.map.depositAffinity) || {};
     const distOf = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r); };
     for (const type of ["stone", "clay", "iron", "coal", "gold"]) {   // fixed order ⇒ reproducible rng
       const cfg = deps[type]; if (!cfg) continue;
@@ -275,6 +363,10 @@ const MapGen = {
       const hi = Math.round((band[1] != null ? band[1] : 1) * castleMaxDist);
       const inBand    = (k) => depositable[hexes.get(k).terrain] && distOf(k) >= lo && distOf(k) <= hi;
       const inRelaxed = (k) => depositable[hexes.get(k).terrain] && distOf(k) <= hi;  // min dropped to 0
+      const affTerr = AFF[type];
+      const affMatch = (k) => { const p = MapGen.parseKey(k);
+        return HexMath.neighbors(p.q, p.r).some(n => { const nh = hexes.get(HexMath.key(n.q, n.r));
+          return nh && affTerr.indexOf(nh.terrain) >= 0; }); };
       for (let i = 0; i < (cfg.count || 0); i++) {
         let pool = all.filter(h => inBand(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
         let takable = inBand;
@@ -283,20 +375,20 @@ const MapGen = {
           takable = inRelaxed;
         }
         if (!pool.length) break;
+        if (affTerr && affTerr.length) {   // AFFINITY: prefer hexes next to the matching terrain
+          const affPool = pool.filter(affMatch);
+          if (affPool.length) pool = affPool;
+        }
         const start = pool[Math.floor(rng() * pool.length)];
         const size = 1 + Math.floor(rng() * 3);   // 1..3
         MapGen.growPatch(hexes, start, size, takable, (kk) => { hexes.get(kk).terrain = terr; }, rng);
       }
     }
 
-    // ---- (5b) fish shoals — === TV2-FIX: WATER tiles ADJACENT TO buildable
-    // land become `fish`, so a shore city/road can always reach the tile (the
-    // fishery sits ON it). Runs in a FIXED slot in the single rng stream —
-    // after the land deposits (5), before snow (6) — so same (seed, preset)
-    // still yields an identical map (adding the phase changed maps vs the
-    // pre-fix build once, which is expected; determinism holds per version).
-    // Clustered 1–3 like the other deposits. cfg.near biases the FIRST shoal
-    // toward the castle: fish is a T1 resource and must not sit far out. ===
+    // ---- (9) fish shoals — WATER tiles ADJACENT TO buildable land become `fish`
+    // (a shore city/road can reach the tile). Now that LAKES and RIVERS add inland
+    // water, shoals also appear on their shores, not just the sea. Clustered 1–3;
+    // cfg.near biases the FIRST shoal toward the castle (fish is a T1 resource). ----
     const fishCfg = deps.fish;
     if (fishCfg) {
       const landNeighbored = (k) => {
@@ -321,32 +413,66 @@ const MapGen = {
         MapGen.growPatch(hexes, start, size, fishTakable, (kk) => { hexes.get(kk).terrain = "fish"; }, rng);
       }
     }
-    // === /TV2-FIX (5b) ===
 
-    // ---- (6) snow region (polar rows) ----
-    const snowCfg = preset.snow || { mode: "none" };
-    if (snowCfg.mode === "pole") {
-      const rows = snowCfg.rows || 1;
-      for (const h of all) {
-        if (h.r <= (topRow + rows - 1) && groundSet[h.terrain]) h.terrain = "snow";
-      }
-    }
-
-    // ---- (7) castle hub: grassland at centre + a cleared, buildable 7-hex core ----
+    // ---- (10) castle hub: grassland at centre + a cleared, buildable 7-hex core ----
     MapGen.ensureCastleCore(hexes);
 
-    // ---- (8) playability repair: viable start near the castle ----
-    // === TV2-FIX: extra args — guarantee >=1 usable fish tile within 6 of
-    // the castle (fish is a starter T1 food source). ===
+    // ---- (11) playability repair: a viable T1 start near the castle (forest +
+    // fertile + a usable fish tile). K=4 sits INSIDE any size-based reveal radius
+    // (>=10), so the revealed OPENING always contains wood + fertile land. ----
     MapGen.repairPlayability(hexes, 4, 6, 3, 6, 1);
 
-    // ---- (9) connectivity: the castle's land MUST reach the main landmass by
-    // road-passable tiles, else research materials/traders can't reach it (and
-    // the center-water Oasis strands the castle on an island). Carve a land
-    // bridge if needed. Runs last so it sees the final terrain. ----
+    // ---- (12) connectivity — the castle's land MUST reach the main landmass
+    // (carve a bridge if islanded), and then EVERY roadable region walled off by a
+    // THIN barrier (a mountain neck or a river) is reconnected to the castle by
+    // carving a short pass. Wide open sea (a real archipelago) is left alone. Runs
+    // last so it sees the final terrain; carving obstacles→barren is fish-safe. ----
     MapGen.ensureCastleConnected(hexes);
+    MapGen.ensureReachable(hexes);
 
-    return { seed, radius, preset: presetId, hexes, tiers: (presetId === "custom" ? tiers : undefined) };
+    // ---- reveal radius scales with board size (v0.43); save.js reveals it at new-game. ----
+    const revealTier = W <= 40 ? "small" : (W <= 58 ? "normal" : "large");
+    const revealRadius = (CONFIG.fog && CONFIG.fog.startReveal && CONFIG.fog.startReveal[revealTier]) ||
+      (CONFIG.fog && CONFIG.fog.castleReveal) || 4;
+
+    return { seed, radius, preset: presetId, hexes, revealRadius, rect: { width: W, height: H },
+      tiers: (presetId === "custom" ? tiers : undefined) };
+  },
+  // === v0.43: carve ONE winding river. Starts at a high-elevation inland land
+  // hex, then repeatedly steps to a low-elevation neighbour (meandering: it picks
+  // among the two lowest via `rng`) until it reaches existing water, the board
+  // edge, or the castle core. Stamps a channel whose WIDTH drifts within
+  // [wMin,wMax] along the course. Rivers are water (not roadable); ensureReachable
+  // runs afterwards so a river can't permanently isolate land. Deterministic. ===
+  carveRiver(hexes, all, rng, wMin, wMax) {
+    const landNull = all.filter(h => h.terrain === null);
+    if (!landNull.length) return;
+    const srcSorted = landNull.slice().sort((a, b) => b.elevation - a.elevation ||
+      (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
+    const topN = Math.max(1, Math.floor(srcSorted.length * 0.25));   // pick a source among the highest quartile
+    let cur = srcSorted[Math.floor(rng() * topN)];
+    let width = wMin + Math.floor(rng() * (wMax - wMin + 1));
+    const maxSteps = landNull.length;   // generous cap; the descent normally reaches water first
+    const visited = new Set();
+    for (let step = 0; step < maxSteps; step++) {
+      if (!cur) break;
+      const ck = HexMath.key(cur.q, cur.r);
+      visited.add(ck);
+      // stamp a channel blob of `width` around cur (over land or existing water; keep it off the castle core).
+      MapGen.growPatch(hexes, ck, Math.max(1, width),
+        (k) => { const p = MapGen.parseKey(k); const t = hexes.get(k).terrain;
+          return (t === null || t === "water") && HexMath.dist(0, 0, p.q, p.r) >= 3; },
+        (kk) => { hexes.get(kk).terrain = "water"; }, rng);
+      // next: descend to the lowest-elevation unvisited land neighbour (still-null),
+      // meandering by choosing among the two lowest. Stop at sea/lake or a dead end.
+      const nbrs = HexMath.neighbors(cur.q, cur.r).map(n => hexes.get(HexMath.key(n.q, n.r))).filter(Boolean);
+      if (nbrs.some(n => n.terrain === "water" && !visited.has(HexMath.key(n.q, n.r)))) break;   // reached a body of water
+      const cand = nbrs.filter(n => n.terrain === null && !visited.has(HexMath.key(n.q, n.r)) && HexMath.dist(0, 0, n.q, n.r) >= 3)
+        .sort((a, b) => a.elevation - b.elevation || (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
+      if (!cand.length) break;
+      cur = cand[Math.floor(rng() * Math.min(cand.length, 2))];
+      width = Math.max(wMin, Math.min(wMax, width + (Math.floor(rng() * 3) - 1)));   // drift width ±1
+    }
   },
   // Guarantee the castle tile (0,0) and its 6 neighbours are usable land: (0,0)
   // becomes grass (the castle sits on it); each neighbour that is water /
@@ -410,6 +536,91 @@ const MapGen = {
     for (let k = target; k != null; k = prev.get(k)) {   // carve obstacles on the path
       const h = hexes.get(k); const td = CONFIG.terrain[h.terrain];
       if (!td || !td.road) h.terrain = "barren";
+    }
+  },
+  // === v0.43: map-wide reachability guarantee. After all obstacles are placed,
+  // the roadable land should be (almost) ONE connected component that includes the
+  // castle. Any roadable region walled off by a THIN barrier (a mountain neck or a
+  // river — up to `maxCarve` obstacle hexes) is reconnected to the castle's
+  // component by carving the fewest obstacle hexes to barren. A region separated by
+  // WIDE open sea (a genuine archipelago, e.g. the Isles preset) is left alone: it
+  // would take more than maxCarve carves to reach, so it's skipped. Deterministic:
+  // component labelling and the layered obstacle-cost search use a fixed neighbour
+  // order and key tie-breaks. Carving obstacles→barren only ADDS buildable land, so
+  // it can never strand a fish tile. Iterates until nothing thin remains. ===
+  ensureReachable(hexes, maxCarve) {
+    maxCarve = maxCarve || 8;
+    const roadable = (h) => { const td = h && CONFIG.terrain[h.terrain]; return !!(td && td.road); };
+    const label = () => {   // -> { comp:Map, castleId }
+      const comp = new Map(); let next = 0;
+      for (const h of hexes.values()) {
+        const k0 = HexMath.key(h.q, h.r);
+        if (comp.has(k0) || !roadable(h)) continue;
+        const id = next++; const stack = [k0]; comp.set(k0, id);
+        while (stack.length) {
+          const k = stack.pop(); const c = MapGen.parseKey(k);
+          for (const n of HexMath.neighbors(c.q, c.r)) {
+            const nk = HexMath.key(n.q, n.r); const nh = hexes.get(nk);
+            if (nh && roadable(nh) && !comp.has(nk)) { comp.set(nk, id); stack.push(nk); }
+          }
+        }
+      }
+      return { comp, castleId: comp.get(HexMath.key(0, 0)) };
+    };
+    for (let iter = 0; iter < 60; iter++) {
+      const { comp, castleId } = label();
+      if (castleId == null) return;   // castle not roadable (ensureCastleCore prevents this)
+      // any roadable tile in a different component?
+      let stranded = false;
+      for (const h of hexes.values()) { if (roadable(h) && comp.get(HexMath.key(h.q, h.r)) !== castleId) { stranded = true; break; } }
+      if (!stranded) return;   // fully connected
+      // Layered search from the castle component, counting OBSTACLE hexes crossed.
+      // dist(hex) = obstacles that must be carved to reach it; roadable moves cost 0,
+      // stepping onto an obstacle costs +1. Find the nearest OTHER-component roadable
+      // tile within maxCarve; carve the obstacles along the path back to the castle.
+      const dist = new Map(); const prev = new Map();
+      let frontier = [];   // hexes newly reachable at the current obstacle level
+      for (const h of hexes.values()) {
+        if (roadable(h) && comp.get(HexMath.key(h.q, h.r)) === castleId) {
+          const k = HexMath.key(h.q, h.r); dist.set(k, 0); prev.set(k, null); frontier.push(k);
+        }
+      }
+      let target = null;
+      for (let level = 0; level <= maxCarve && target == null; level++) {
+        // (a) flood roadable at this obstacle level (0-cost moves) from the frontier
+        const q = frontier.slice(); let qh = 0;
+        while (qh < q.length) {
+          const k = q[qh++]; const c = MapGen.parseKey(k);
+          for (const n of HexMath.neighbors(c.q, c.r)) {
+            const nk = HexMath.key(n.q, n.r); const nh = hexes.get(nk);
+            if (!nh || dist.has(nk)) continue;
+            if (roadable(nh)) {
+              dist.set(nk, level); prev.set(nk, k);
+              if (comp.get(nk) !== castleId) { target = nk; break; }   // reached a stranded region
+              q.push(nk);
+            }
+          }
+          if (target != null) break;
+        }
+        if (target != null) break;
+        // (b) step one obstacle ring outward → next level frontier
+        const next = [];
+        for (const [k, d] of dist) {
+          if (d !== level) continue;
+          const c = MapGen.parseKey(k);
+          for (const n of HexMath.neighbors(c.q, c.r)) {
+            const nk = HexMath.key(n.q, n.r); const nh = hexes.get(nk);
+            if (!nh || dist.has(nk) || roadable(nh)) continue;
+            dist.set(nk, level + 1); prev.set(nk, k); next.push(nk);
+          }
+        }
+        frontier = next;
+      }
+      if (target == null) return;   // nearest stranded region is beyond maxCarve → leave it (real island)
+      for (let k = target; k != null; k = prev.get(k)) {   // carve obstacles on the path to barren
+        const h = hexes.get(k); const td = CONFIG.terrain[h.terrain];
+        if (!td || !td.road) h.terrain = "barren";
+      }
     }
   },
   // Guarantee at least `minFertile` fertile and `minForest` forest hexes within

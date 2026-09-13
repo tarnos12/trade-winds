@@ -19,6 +19,26 @@ const CONFIG = {
     // a good via `deposits.<good>.band = [lo,hi]` (e.g. Highlands pulls ore inward).
     depositTiers: { stone: 1, clay: 2, coal: 2, iron: 3, gold: 3 },
     depositBands: { 1: [0.0, 1.0], 2: [0.33, 1.0], 3: [0.66, 1.0] },
+    // === v0.43 MapGen overhaul ===
+    // PATCH PARADIGM: the background/filler biomes (barren/desert/snow, plus
+    // water/mountains) fill MOST of the map; fertile & forest appear as discrete
+    // PATCHES grown in a mix of sizes. Net effect: far less continuous grass.
+    // patchSizes = named size buckets a patch is drawn from (mostly medium).
+    patchSizes: { small: [1, 3], medium: [4, 7], big: [8, 12] },
+    // Deposit terrain AFFINITY (layered ON TOP of the distance-tier bands): a
+    // deposit prefers seed hexes whose neighbourhood contains one of these
+    // terrains (falls back to the plain in-band pool when none match). Clay hugs
+    // water; the metals/stone favour rocky barren/mountain country.
+    depositAffinity: { clay: ["water"], stone: ["barren", "mountains"],
+      iron: ["barren", "mountains"], gold: ["barren", "mountains"], coal: ["barren", "mountains"] },
+    // LAKES: inland water blobs (separate from the rim/center SEA which the Sea
+    // Level axis controls). COUNT keyed by a preset's `lakes` LEVEL string; SIZE
+    // range per blob. Placed on land, kept clear of the immediate castle core.
+    lakes: { none: 0, low: 2, normal: 4, many: 8 }, lakeSize: [4, 10],
+    // RIVERS: winding water lines that descend elevation from a high inland point
+    // toward the sea / a lake / the board edge. COUNT keyed by a preset's `rivers`
+    // LEVEL string; WIDTH varies within this range along each course.
+    rivers: { none: 0, few: 1, normal: 3, many: 5 }, riverWidth: [1, 5],
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
@@ -43,31 +63,35 @@ const CONFIG = {
   // giant Big World, rugged snowy Highlands, and watery Isles.
   mapPresets: {
     fertile: { label: "Fertile Land", radius: 14, rect: { width: 50, height: 25 },
-      tiers: { fertility: "lush", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
+      tiers: { fertility: "lush", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal", lakes: "normal", rivers: "normal" },
       water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.06,
-      groundMix: { fertile: 0.64, barren: 0.23, desert: 0.13 },   // lush: dominant green (barren:desert < 2x, out of the strict ordering check)
+      lakes: "normal", rivers: "normal",   // === v0.43: temperate, well-watered ===
+      groundMix: { fertile: 0.64, barren: 0.23, desert: 0.13 },   // v0.43: fertile share drives PATCH coverage (scaled down); barren/desert are the filler background
       forest: { patches: 9, size: [8, 16] }, snow: { mode: "pole", rows: 2 },
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 6 }, coal: { count: 2, ring: 6 }, gold: { count: 1, ring: 8 },
                   fish: { count: 5, near: 6 } } },   // === TV2-FIX: ~4-6 shoals ===
     oasis: { label: "Oasis", radius: 14, rect: { width: 50, height: 25 },
-      tiers: { fertility: "arid", worldAge: "normal", climate: "warm", seaLevel: "low", resources: "scarce", size: "normal" },
+      tiers: { fertility: "arid", worldAge: "normal", climate: "warm", seaLevel: "low", resources: "scarce", size: "normal", lakes: "low", rivers: "few" },
       water: { mode: "center", frac: 0.12 }, mountainFrac: 0.05,
-      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },   // sand sea + central lake
+      lakes: "low", rivers: "few",   // === v0.43: arid — a couple of oasis pools, a trickle of wadis ===
+      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },   // sand sea (filler) + a central lake, sparse green patches
       forest: { patches: 2, size: [3, 7] }, snow: { mode: "none" },
       deposits: { stone: { count: 2, ring: 0 }, clay: { count: 1, ring: 2 }, iron: { count: 2, ring: 5 }, coal: { count: 1, ring: 5 }, gold: { count: 1, ring: 7 },
                   fish: { count: 4, near: 6 } } },   // === TV2-FIX: ~3-5 shoals, in the central water ===
     big_world: { label: "Big World", radius: 18, rect: { width: 66, height: 33 },
-      tiers: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "rich", size: "large" },
+      tiers: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "rich", size: "large", lakes: "normal", rivers: "normal" },
       water: { mode: "rim", frac: 0.16 }, mountainFrac: 0.07,
-      groundMix: { barren: 0.52, fertile: 0.28, desert: 0.20 },   // vast barren frontier — clearly NOT the green Fertile map
+      lakes: "normal", rivers: "normal",   // === v0.43: a big continent with several lakes and rivers ===
+      groundMix: { barren: 0.52, fertile: 0.28, desert: 0.20 },   // vast barren frontier (filler) — clearly NOT the green Fertile map
       forest: { patches: 11, size: [6, 16] }, snow: { mode: "pole", rows: 3 },
       // T1 near spawn, T2 pushed far out (bigger rings) on the big board.
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 3 }, iron: { count: 3, ring: 9 }, coal: { count: 3, ring: 9 }, gold: { count: 2, ring: 12 },
                   fish: { count: 6, near: 8 } } },   // === TV2-FIX: ~5-8 shoals, some near the start rings ===
     highlands: { label: "Highlands", radius: 14, rect: { width: 50, height: 25 },
-      tiers: { fertility: "normal", worldAge: "young", climate: "cold", seaLevel: "low", resources: "rich", size: "normal" },
+      tiers: { fertility: "normal", worldAge: "young", climate: "cold", seaLevel: "low", resources: "rich", size: "normal", lakes: "low", rivers: "few" },
       water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
-      groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands, green valleys, little sand
+      lakes: "low", rivers: "few",   // === v0.43: rugged uplands — few tarns, a couple of mountain streams ===
+      groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands (barren filler), green valley patches, little sand
       forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
       // Mining world: ore-rich, and it BENDS the global tier bands (presets-may-
       // override) to pull coal/iron inward so ore is reachable earlier; gold still
@@ -75,9 +99,10 @@ const CONFIG = {
       deposits: { stone: { count: 4 }, clay: { count: 2 }, iron: { count: 4, band: [0.4, 1.0] }, coal: { count: 4, band: [0.2, 1.0] }, gold: { count: 2 },
                   fish: { count: 3, near: 6 } } },
     isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
-      tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal" },
+      tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal", lakes: "many", rivers: "many" },
       water: { mode: "rim", frac: 0.42 }, mountainFrac: 0.02,   // archipelago: high rim water breaks the land into islands; worn-flat (few mountains)
-      groundMix: { fertile: 0.58, barren: 0.27, desert: 0.15 },   // green isles (barren:desert < 2x, out of the strict ordering check)
+      lakes: "many", rivers: "many",   // === v0.43: watery world — lots of inland pools and streams too ===
+      groundMix: { fertile: 0.58, barren: 0.27, desert: 0.15 },   // green isle patches on a barren/desert filler base
       forest: { patches: 7, size: [5, 12] }, snow: { mode: "none" },   // temperate ocean world — the top rows are sea, so no snow band
       // fewer land deposits (small islands), lots of fish. ensureCastleConnected
       // guarantees the castle island still reaches the mainland by a carved bridge.
@@ -122,10 +147,28 @@ const CONFIG = {
       { id: "normal", label: "Normal", rect: { width: 50, height: 25 } },
       { id: "large",  label: "Large",  rect: { width: 66, height: 33 } },
     ] },
+    // === v0.43: two NEW water-feature axes. Each option just names a LEVEL
+    // string that applyTiers writes onto the resolved preset (p.lakes / p.rivers);
+    // MapGen.generate maps the level to a count via CONFIG.map.lakes / .rivers. ===
+    lakes: { label: "Lakes", default: "low", options: [
+      { id: "none",   label: "None",   lakes: "none"   },
+      { id: "low",    label: "Few",    lakes: "low"    },
+      { id: "normal", label: "Normal", lakes: "normal" },
+      { id: "many",   label: "Many",   lakes: "many"   },
+    ] },
+    rivers: { label: "Rivers", default: "few", options: [
+      { id: "none",   label: "None",   rivers: "none"   },
+      { id: "few",    label: "Few",    rivers: "few"    },
+      { id: "normal", label: "Normal", rivers: "normal" },
+      { id: "many",   label: "Many",   rivers: "many"   },
+    ] },
   },
-  mapTiersDefault: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal" },
+  mapTiersDefault: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal", lakes: "low", rivers: "few" },
   // === /TV2 map presets ===
-  fog:    { castleReveal: 4, townReveal: 3 },
+  // === v0.43: fog reveal at NEW-GAME scales with board size (startReveal), so a
+  // big board still opens with a workable viewport. `castleReveal` is the legacy
+  // fallback (used if a map carries no size-derived radius). townReveal unchanged.
+  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 10, normal: 15, large: 20 } },
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
     // === Bulk production (v0.39): a producing building banks its output and

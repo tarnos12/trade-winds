@@ -63,7 +63,10 @@
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
     document.getElementById("seed").value = seedInput;
-    reveal(0, 0, CONFIG.fog.castleReveal);      // clear fog around the castle
+    // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
+    // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
+    // dims; fall back to the legacy castleReveal if a map carries none.
+    reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }

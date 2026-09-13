@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.42.0";
+  const GAME_VERSION = "0.43.0";
   const PATCH_NOTES = [
+    { v: "0.43.0", notes: [
+      "MAJOR map overhaul \u2014 far less grass. Fertile land & forest now appear as varied-size PATCHES (small/medium/big, each a fertile+forest mix) scattered over a background of barren, desert, snow, water and mountains",
+      "Mountains are now impassable RANGES (bigger on \u2018young\u2019 worlds) \u2014 with a guarantee the map stays reachable (a pass is carved if a region gets walled off)",
+      "NEW water: inland LAKES and winding RIVERS (width varies 1\u20135 tiles), both can hold fish. Set Lakes and Rivers on the Custom map (none/low/normal/many)",
+      "Resources spawn more logically: clay hugs water; stone/iron/gold/coal favour barren & mountains. Snow now caps BOTH the north and south edges",
+      "The map now starts FOGGED \u2014 you see a starting area around your castle (larger on bigger maps), always seeded with wood + fertile land for an early economy",
+    ] },
     { v: "0.42.0", notes: [
       "City limit: you can found 4 cities to start. Research three Kingdom charters to raise it \u2014 Township Grants (+3 \u2192 7), Provincial Rule (+3 \u2192 10), Imperial Domain (+2 \u2192 12)",
       "Founding a city is now one-shot: after you place a city the tool drops back to pan mode, so you won\u2019t accidentally keep dropping cities \u2014 re-pick City to found the next. The City button shows your count (e.g. 2/4) and greys out at the cap",
