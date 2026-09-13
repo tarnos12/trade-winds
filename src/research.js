@@ -32,6 +32,8 @@ Object.assign(CONFIG, {
     // Scout-unit chain (T1 → a 2nd scout, T2 → a 3rd). Colors: Red (start), Green, Blue.
     { id: "scouting_party",  branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 5 }, name: "Scouting Party",    desc: "Commission a second Scout unit to explore the map.", cost: 300,  timeTicks: 25, prereqs: ["paved_roads"], effect: { scoutCount: 1 } },
     { id: "ranger_lodge",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 6 }, name: "Ranger Lodge",      desc: "Commission a third Scout unit.",                     cost: 1200, timeTicks: 50, prereqs: ["scouting_party"], effect: { scoutCount: 1 } },
+    // Advanced Provisioner: unlock a castle-side building (1 fish + 1 potato → 2 provisions).
+    { id: "advanced_provisioner", branch: "logistics", band: "kingdom", kind: "kingdom", pos: { col: 1, row: 7 }, name: "Advanced Provisioner", desc: "Unlocks the Advanced Provisioner (1 fish + 1 potato → 2 provisions).", cost: 900, timeTicks: 45, prereqs: ["scouting_party"], effect: { advancedProvisioner: true } },
     // ---- Administration (kingdom): squeeze more coin & growth from the realm ----
     { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
     { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },

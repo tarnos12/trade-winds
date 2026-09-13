@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.45.0";
+  const GAME_VERSION = "0.46.0";
   const PATCH_NOTES = [
+    { v: "0.46.0", notes: [
+      "NEW: the ADVANCED PROVISIONER \u2014 research it (Logistics branch), then build it next to your castle from the \ud83c\udfd7 Build menu. It runs alongside the built-in provisioner, turning 1 fish + 1 potato \u2192 2 provisions (and the castle starts buying fish automatically)",
+    ] },
     { v: "0.45.0", notes: [
       "NEW: SCOUT UNITS! You start with 1 Red scout at the castle \u2014 pick it from the top-left icon (or click it on the map) to open its panel (\ud83c\udf92 provisions x/10)",
       "Send a scout to EXPLORE a spot: it marches there (2\u00d7 faster on roads, fastest route), plants its colored flag, and lifts the fog around it \u2014 spending 1 provision per tile uncovered, always standing on discovered ground",

@@ -76,6 +76,7 @@ const RESEARCH_MATERIALS = {
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
   scouting_party: { planks: 15, wood: 20 },        // scout-unit chain (2nd / 3rd scout)
   ranger_lodge:   { planks: 25, iron_tool: 15 },
+  advanced_provisioner: { planks: 20, stone: 20 }, // Advanced Provisioner building unlock
   township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
   provincial_rule: { iron_tool: 20, chairs: 20 },
   imperial_domain: { gold_ring: 20, chairs: 30 },

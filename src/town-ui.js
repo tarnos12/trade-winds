@@ -777,6 +777,14 @@
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
         { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
+      // v0.46: Advanced Provisioner — shown only once researched and not yet built.
+      const apCfg = CONFIG.advancedProvisioner || {};
+      const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
+      if (apResearched && !state.advancedProvisioner) {
+        const g = (apCfg.build && apCfg.build.gold) || 0;
+        items.push({ action: "advProvisioner", name: "Advanced Provisioner", sub: `🍲 ${g}g`,
+          tip: "Placement — click a hex next to the castle to build it (1 fish + 1 potato → 2 provisions)." });
+      }
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
         const active = !it.disabled && state.mode === it.action;
@@ -987,7 +995,7 @@
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
-    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding") {
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
@@ -996,6 +1004,7 @@
         action === "town" ? "Click a valid site to found a city."
         : action === "road" ? "Drag across land to lay roads."
         : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
+        : action === "advProvisioner" ? "Click a hex next to the castle to build the Advanced Provisioner."
         : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
     }
   });

@@ -61,6 +61,9 @@
       // footprint or the castle). Owned by the pure Buildings.canPlaceTown.
       return Buildings.canPlaceTown(state, q, r).ok;
     }
+    if (state.mode === "advProvisioner") {
+      return Buildings.canPlaceAdvancedProvisioner(state, q, r).ok;   // v0.46: castle-adjacent
+    }
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
@@ -100,6 +103,16 @@
         // map click drop another city). Re-select City to found the next one.
         setMode("pan");
       }
+    } else if (state.mode === "advProvisioner") {
+      const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+      if (res.ok) {
+        Buildings.placeAdvancedProvisioner(state, q, r);
+        scheduleSave();
+        SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        setMode("pan");   // one-shot placement
+        if (typeof showToast === "function") showToast("🍲 Advanced Provisioner built");
+      } else if (typeof showToast === "function") showToast("✗ " + res.reason);
     } else if (state.mode === "erase") {
       let changed = false;
       if (state.roads.delete(k)) { Pathing.invalidate(); changed = true; }

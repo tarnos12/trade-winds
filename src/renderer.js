@@ -777,6 +777,36 @@
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // === ADVANCED PROVISIONER (v0.46) === map token + placement highlight.
+  function drawAdvancedProvisioner() {
+    // placement highlight: tint the castle's 6 neighbours while in place mode.
+    if (state.mode === "advProvisioner") {
+      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+        const k = HexMath.key(n.q, n.r);
+        if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+        const ok = Buildings.canPlaceAdvancedProvisioner(state, n.q, n.r).ok;
+        const p = HexMath.hexToPixel(n.q, n.r, SIZE);
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = ok ? "#6fbf73" : "#e0503c";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    const c = state.advancedProvisioner;
+    if (!c) return;
+    const p = HexMath.hexToPixel(c.q, c.r, SIZE);
+    const rad = SIZE * 0.3;
+    ctx.fillStyle = "#b5713a"; ctx.strokeStyle = "#6e3f1b"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#f4ecdd";
+    ctx.font = Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🍲", p.x, p.y + 0.5);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
   function drawHoverGhost() {
     if (!hoverHex || state.mode === "pan") return;
     const k = HexMath.key(hoverHex.q, hoverHex.r);

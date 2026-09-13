@@ -136,6 +136,7 @@
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
+    if (typeof drawAdvancedProvisioner === "function") drawAdvancedProvisioner();   // v0.46: Advanced Provisioner token + placement highlight
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)

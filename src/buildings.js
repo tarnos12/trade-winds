@@ -574,4 +574,49 @@ Buildings.startCenterUpgrade = function (state) {
   return { ok: true };
 };
 // === /RESEARCH CENTER (Slice B) ==============================================
+
+// === ADVANCED PROVISIONER (v0.46) — a research-unlocked, castle-adjacent building.
+// Placed like the Research Center (beside the castle, on buildable land), but built
+// INSTANTLY on gold payment. Once built it runs the Provisioner `advanced` line
+// (1 fish + 1 potato → 2 provisions) and switches on castle fish-buying.
+Buildings.canPlaceAdvancedProvisioner = function (state, q, r) {
+  if (state && state.advancedProvisioner) return { ok: false, reason: "Advanced Provisioner already built" };
+  const need = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.research);
+  if (need && typeof Research !== "undefined" && Research.has && !Research.has(state, need))
+    return { ok: false, reason: "Research Advanced Provisioner first" };
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
+  return { ok: true };
+};
+Buildings.placeAdvancedProvisioner = function (state, q, r) {
+  const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+  if (!res.ok) return res;
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  state.treasury = (state.treasury || 0) - buildGold;
+  state.advancedProvisioner = { q, r, built: true };
+  // switch on castle fish-buying so the advanced line has its second input.
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
+  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  return { ok: true };
+};
+// === /ADVANCED PROVISIONER ===================================================
 // === BUILDINGS-CORE END ===

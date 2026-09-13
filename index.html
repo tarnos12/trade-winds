@@ -4195,6 +4195,51 @@ Buildings.startCenterUpgrade = function (state) {
   return { ok: true };
 };
 // === /RESEARCH CENTER (Slice B) ==============================================
+
+// === ADVANCED PROVISIONER (v0.46) — a research-unlocked, castle-adjacent building.
+// Placed like the Research Center (beside the castle, on buildable land), but built
+// INSTANTLY on gold payment. Once built it runs the Provisioner `advanced` line
+// (1 fish + 1 potato → 2 provisions) and switches on castle fish-buying.
+Buildings.canPlaceAdvancedProvisioner = function (state, q, r) {
+  if (state && state.advancedProvisioner) return { ok: false, reason: "Advanced Provisioner already built" };
+  const need = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.research);
+  if (need && typeof Research !== "undefined" && Research.has && !Research.has(state, need))
+    return { ok: false, reason: "Research Advanced Provisioner first" };
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
+  return { ok: true };
+};
+Buildings.placeAdvancedProvisioner = function (state, q, r) {
+  const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+  if (!res.ok) return res;
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  state.treasury = (state.treasury || 0) - buildGold;
+  state.advancedProvisioner = { q, r, built: true };
+  // switch on castle fish-buying so the advanced line has its second input.
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
+  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  return { ok: true };
+};
+// === /ADVANCED PROVISIONER ===================================================
 // === BUILDINGS-CORE END ===
 /* BUILD:buildings END */
 
@@ -4849,6 +4894,8 @@ Object.assign(CONFIG, {
     // Scout-unit chain (T1 → a 2nd scout, T2 → a 3rd). Colors: Red (start), Green, Blue.
     { id: "scouting_party",  branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 5 }, name: "Scouting Party",    desc: "Commission a second Scout unit to explore the map.", cost: 300,  timeTicks: 25, prereqs: ["paved_roads"], effect: { scoutCount: 1 } },
     { id: "ranger_lodge",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 6 }, name: "Ranger Lodge",      desc: "Commission a third Scout unit.",                     cost: 1200, timeTicks: 50, prereqs: ["scouting_party"], effect: { scoutCount: 1 } },
+    // Advanced Provisioner: unlock a castle-side building (1 fish + 1 potato → 2 provisions).
+    { id: "advanced_provisioner", branch: "logistics", band: "kingdom", kind: "kingdom", pos: { col: 1, row: 7 }, name: "Advanced Provisioner", desc: "Unlocks the Advanced Provisioner (1 fish + 1 potato → 2 provisions).", cost: 900, timeTicks: 45, prereqs: ["scouting_party"], effect: { advancedProvisioner: true } },
     // ---- Administration (kingdom): squeeze more coin & growth from the realm ----
     { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
     { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
@@ -5354,6 +5401,7 @@ const RESEARCH_MATERIALS = {
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
   scouting_party: { planks: 15, wood: 20 },        // scout-unit chain (2nd / 3rd scout)
   ranger_lodge:   { planks: 25, iron_tool: 15 },
+  advanced_provisioner: { planks: 20, stone: 20 }, // Advanced Provisioner building unlock
   township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
   provincial_rule: { iron_tool: 20, chairs: 20 },
   imperial_domain: { gold_ring: 20, chairs: 30 },
@@ -6122,6 +6170,13 @@ var CastleMarket = (function () {
 // provisions at new-game; cap = max store; each LINE converts `inputs` (whole
 // units from castleStock) → `output` provisions every `everyTicks` (2 ticks = 1s).
 CONFIG.castle = CONFIG.castle || {};
+// The Advanced Provisioner is a research-unlocked building placed next to the
+// castle; once built it runs the `advanced` line (1 fish + 1 potato → 2) and the
+// castle starts buying fish. Build is instant on gold payment (from the treasury).
+if (!CONFIG.advancedProvisioner) {
+  CONFIG.advancedProvisioner = { name: "Advanced Provisioner", glyph: "🍲",
+    build: { gold: 400 }, research: "advanced_provisioner", fishLimit: 40 };
+}
 if (!CONFIG.castle.provisions) {
   CONFIG.castle.provisions = {
     start: 15, cap: 30,
@@ -7034,6 +7089,36 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // === ADVANCED PROVISIONER (v0.46) === map token + placement highlight.
+  function drawAdvancedProvisioner() {
+    // placement highlight: tint the castle's 6 neighbours while in place mode.
+    if (state.mode === "advProvisioner") {
+      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+        const k = HexMath.key(n.q, n.r);
+        if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+        const ok = Buildings.canPlaceAdvancedProvisioner(state, n.q, n.r).ok;
+        const p = HexMath.hexToPixel(n.q, n.r, SIZE);
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = ok ? "#6fbf73" : "#e0503c";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    const c = state.advancedProvisioner;
+    if (!c) return;
+    const p = HexMath.hexToPixel(c.q, c.r, SIZE);
+    const rad = SIZE * 0.3;
+    ctx.fillStyle = "#b5713a"; ctx.strokeStyle = "#6e3f1b"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#f4ecdd";
+    ctx.font = Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🍲", p.x, p.y + 0.5);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
   function drawHoverGhost() {
     if (!hoverHex || state.mode === "pan") return;
     const k = HexMath.key(hoverHex.q, hoverHex.r);
@@ -7207,6 +7292,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // footprint or the castle). Owned by the pure Buildings.canPlaceTown.
       return Buildings.canPlaceTown(state, q, r).ok;
     }
+    if (state.mode === "advProvisioner") {
+      return Buildings.canPlaceAdvancedProvisioner(state, q, r).ok;   // v0.46: castle-adjacent
+    }
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
@@ -7246,6 +7334,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // map click drop another city). Re-select City to found the next one.
         setMode("pan");
       }
+    } else if (state.mode === "advProvisioner") {
+      const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+      if (res.ok) {
+        Buildings.placeAdvancedProvisioner(state, q, r);
+        scheduleSave();
+        SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        setMode("pan");   // one-shot placement
+        if (typeof showToast === "function") showToast("🍲 Advanced Provisioner built");
+      } else if (typeof showToast === "function") showToast("✗ " + res.reason);
     } else if (state.mode === "erase") {
       let changed = false;
       if (state.roads.delete(k)) { Pathing.invalidate(); changed = true; }
@@ -8070,6 +8168,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
+    if (typeof drawAdvancedProvisioner === "function") drawAdvancedProvisioner();   // v0.46: Advanced Provisioner token + placement highlight
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)
@@ -8858,6 +8957,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
         { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
+      // v0.46: Advanced Provisioner — shown only once researched and not yet built.
+      const apCfg = CONFIG.advancedProvisioner || {};
+      const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
+      if (apResearched && !state.advancedProvisioner) {
+        const g = (apCfg.build && apCfg.build.gold) || 0;
+        items.push({ action: "advProvisioner", name: "Advanced Provisioner", sub: `🍲 ${g}g`,
+          tip: "Placement — click a hex next to the castle to build it (1 fish + 1 potato → 2 provisions)." });
+      }
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
         const active = !it.disabled && state.mode === it.action;
@@ -9068,7 +9175,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
-    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding") {
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
@@ -9077,6 +9184,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         action === "town" ? "Click a valid site to found a city."
         : action === "road" ? "Drag across land to lay roads."
         : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
+        : action === "advProvisioner" ? "Click a hex next to the castle to build the Advanced Provisioner."
         : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
     }
   });
@@ -14054,8 +14162,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.45.0";
+  const GAME_VERSION = "0.46.0";
   const PATCH_NOTES = [
+    { v: "0.46.0", notes: [
+      "NEW: the ADVANCED PROVISIONER \u2014 research it (Logistics branch), then build it next to your castle from the \ud83c\udfd7 Build menu. It runs alongside the built-in provisioner, turning 1 fish + 1 potato \u2192 2 provisions (and the castle starts buying fish automatically)",
+    ] },
     { v: "0.45.0", notes: [
       "NEW: SCOUT UNITS! You start with 1 Red scout at the castle \u2014 pick it from the top-left icon (or click it on the map) to open its panel (\ud83c\udf92 provisions x/10)",
       "Send a scout to EXPLORE a spot: it marches there (2\u00d7 faster on roads, fastest route), plants its colored flag, and lifts the fog around it \u2014 spending 1 provision per tile uncovered, always standing on discovered ground",

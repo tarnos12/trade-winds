@@ -9,6 +9,13 @@
 // provisions at new-game; cap = max store; each LINE converts `inputs` (whole
 // units from castleStock) → `output` provisions every `everyTicks` (2 ticks = 1s).
 CONFIG.castle = CONFIG.castle || {};
+// The Advanced Provisioner is a research-unlocked building placed next to the
+// castle; once built it runs the `advanced` line (1 fish + 1 potato → 2) and the
+// castle starts buying fish. Build is instant on gold payment (from the treasury).
+if (!CONFIG.advancedProvisioner) {
+  CONFIG.advancedProvisioner = { name: "Advanced Provisioner", glyph: "🍲",
+    build: { gold: 400 }, research: "advanced_provisioner", fishLimit: 40 };
+}
 if (!CONFIG.castle.provisions) {
   CONFIG.castle.provisions = {
     start: 15, cap: 30,
