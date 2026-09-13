@@ -4846,6 +4846,9 @@ Object.assign(CONFIG, {
     { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
     { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
     { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+    // Scout-unit chain (T1 → a 2nd scout, T2 → a 3rd). Colors: Red (start), Green, Blue.
+    { id: "scouting_party",  branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 5 }, name: "Scouting Party",    desc: "Commission a second Scout unit to explore the map.", cost: 300,  timeTicks: 25, prereqs: ["paved_roads"], effect: { scoutCount: 1 } },
+    { id: "ranger_lodge",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 6 }, name: "Ranger Lodge",      desc: "Commission a third Scout unit.",                     cost: 1200, timeTicks: 50, prereqs: ["scouting_party"], effect: { scoutCount: 1 } },
     // ---- Administration (kingdom): squeeze more coin & growth from the realm ----
     { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
     { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
@@ -5349,6 +5352,8 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
   town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
+  scouting_party: { planks: 15, wood: 20 },        // scout-unit chain (2nd / 3rd scout)
+  ranger_lodge:   { planks: 25, iron_tool: 15 },
   township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
   provincial_rule: { iron_tool: 20, chairs: 20 },
   imperial_domain: { gold_ring: 20, chairs: 30 },
@@ -7451,7 +7456,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      // v0.45: give Scouts first refusal on a plain (pan-mode) click — selecting a
+      // scout, or setting an explore target for the selected one. Returns true if
+      // it consumed the click, so it doesn't also place/select something else.
+      if (state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick
+          && Scouts.handleClick(h.q, h.r, e)) { /* consumed by Scouts */ }
+      else if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
       else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
@@ -7664,6 +7674,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
     state.provisions = (CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15;   // v0.44: start with a small buffer
     state._provTimers = {};      // v0.44: per-provisioner-line conversion timers
+    state.scouts = [];           // v0.45: Scout units (Scouts.ensure creates the starting Red scout)
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.victory = false;
@@ -7709,6 +7720,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         castleStock: state.castleStock,    // CRE: castle research-material stockpile
         provisions: state.provisions,      // v0.44: castle provision store
         _provTimers: state._provTimers,    // v0.44: provisioner line timers
+        scouts: state.scouts,              // v0.45: Scout units
         advancedProvisioner: state.advancedProvisioner, // v0.45: Advanced Provisioner building
         researchCenter: state.researchCenter, // Slice B: the unique Research Center (or null)
         researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
@@ -7850,6 +7862,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       : ((CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15);
     state._provTimers = (data._provTimers && typeof data._provTimers === "object") ? data._provTimers : {};
     state.advancedProvisioner = (data.advancedProvisioner && typeof data.advancedProvisioner === "object") ? data.advancedProvisioner : null;
+    state.scouts = Array.isArray(data.scouts) ? data.scouts : [];   // v0.45: Scout units (Scouts.ensure tops up to the researched count)
     state.researchCenter = normalizeResearchCenter(data.researchCenter);   // Slice B: the unique Research Center (or null)
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     // PP-A: castle market config (normalized), stock reservations, market RNG.
@@ -8052,6 +8065,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
+    if (typeof Scouts !== "undefined" && Scouts.frame) Scouts.frame(dt);  // v0.45: scout units (move/reveal/draw), scaled by gameSpeed internally
     drawAlerts();     // P4-C: subtle status icons over towns in a bad state
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
@@ -12256,6 +12270,20 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.InternalTraders = InternalTraders;
   // === INTERNAL-TRADERS END ===
 /* BUILD:internal-traders END */
+/* BUILD:scouts START */
+// === SCOUTS START ===  (v0.45 — Scout units)
+// STUB — the full implementation is written by ScoutAgent. This placeholder keeps
+// the build + the (guarded) hooks in mainloop/input working until it lands.
+// The module lives in the browser IIFE, so the real version may use the shared
+// closure globals directly: `state`, `ctx`, `SIZE`, `reveal`, `isVisible`,
+// `HexMath`, `Pathing`, `hexAtScreen`, `setMode`, etc.
+var Scouts = (typeof Scouts !== "undefined" && Scouts) || {};
+Scouts.ensure = Scouts.ensure || function () {};
+Scouts.frame = Scouts.frame || function () {};
+Scouts.handleClick = Scouts.handleClick || function () { return false; };
+if (typeof window !== "undefined") window.Scouts = Scouts;
+// === SCOUTS END ===
+/* BUILD:scouts END */
 /* BUILD:ppe-chatter START */
   // === PP-E START === (map juice — LTT-style ambient city chatter, render-only)
   // Three overlays drawn from drawWithDpr AFTER Juice (topmost):

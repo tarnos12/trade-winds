@@ -131,6 +131,7 @@
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
+    if (typeof Scouts !== "undefined" && Scouts.frame) Scouts.frame(dt);  // v0.45: scout units (move/reveal/draw), scaled by gameSpeed internally
     drawAlerts();     // P4-C: subtle status icons over towns in a bad state
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();

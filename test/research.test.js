@@ -51,13 +51,13 @@ function runSecs(st, n) { for (let i = 0; i < TPS * n; i++) Research.tick(st); }
 // =========================================================================
 const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
 const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
-const KINGDOM_COUNT = 18;   // 15 + the 3-node city-cap chain in administration
-const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // 18 + 27 + 9 = 54
-ok("expected node count derived from CONFIG (18 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
-ok("EXPECT resolves to 54", EXPECT === 54);
-// Production & logistics are 5 nodes each; administration is 8 (5 + the city-cap chain).
-ok("kingdom branch node counts (prod 5 / log 5 / admin 8)",
-  Research.nodesIn("production").length === 5 && Research.nodesIn("logistics").length === 5 && Research.nodesIn("administration").length === 8);
+const KINGDOM_COUNT = 20;   // 15 + 3-node city-cap chain (admin) + 2-node scout chain (logistics)
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // 20 + 27 + 9 = 56
+ok("expected node count derived from CONFIG (20 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
+ok("EXPECT resolves to 56", EXPECT === 56);
+// Production 5; logistics 7 (5 + scout chain); administration 8 (5 + city-cap chain).
+ok("kingdom branch node counts (prod 5 / log 7 / admin 8)",
+  Research.nodesIn("production").length === 5 && Research.nodesIn("logistics").length === 7 && Research.nodesIn("administration").length === 8);
 ok("branches() is the 3 kingdom branches, development dropped",
   Research.branches().length === 3 && Research.branches().indexOf("development") < 0);
 // === CC: bands() API — 5 bands (aristocrat added above burgher). ===

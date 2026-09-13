@@ -310,7 +310,12 @@
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      // v0.45: give Scouts first refusal on a plain (pan-mode) click — selecting a
+      // scout, or setting an explore target for the selected one. Returns true if
+      // it consumed the click, so it doesn't also place/select something else.
+      if (state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick
+          && Scouts.handleClick(h.q, h.r, e)) { /* consumed by Scouts */ }
+      else if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
       else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");

@@ -88,6 +88,7 @@ const MANIFEST = [
   { name: "kingdom-events-ui", file: "kingdom-events-ui.js" }, // kingdom screen + town alerts + event banners
   { name: "juice",             file: "juice.js" },             // cozy micro-animation canvas overlay
   { name: "internal-traders",  file: "internal-traders.js" },  // ambient within-city porter render layer
+  { name: "scouts",            file: "scouts.js" },            // Scout units: select/explore/reveal fog + castle refill
   { name: "ppe-chatter",       file: "ppe-chatter.js" },       // LTT-style ambient city-chatter map juice
   { name: "audio",             file: "audio.js" },             // procedural WebAudio SFX + mute
   { name: "start-screen",      file: "start-screen.js" },      // New Game / Continue start overlay

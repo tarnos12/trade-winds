@@ -61,6 +61,7 @@
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
     state.provisions = (CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15;   // v0.44: start with a small buffer
     state._provTimers = {};      // v0.44: per-provisioner-line conversion timers
+    state.scouts = [];           // v0.45: Scout units (Scouts.ensure creates the starting Red scout)
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.victory = false;
@@ -106,6 +107,7 @@
         castleStock: state.castleStock,    // CRE: castle research-material stockpile
         provisions: state.provisions,      // v0.44: castle provision store
         _provTimers: state._provTimers,    // v0.44: provisioner line timers
+        scouts: state.scouts,              // v0.45: Scout units
         advancedProvisioner: state.advancedProvisioner, // v0.45: Advanced Provisioner building
         researchCenter: state.researchCenter, // Slice B: the unique Research Center (or null)
         researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
@@ -247,6 +249,7 @@
       : ((CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15);
     state._provTimers = (data._provTimers && typeof data._provTimers === "object") ? data._provTimers : {};
     state.advancedProvisioner = (data.advancedProvisioner && typeof data.advancedProvisioner === "object") ? data.advancedProvisioner : null;
+    state.scouts = Array.isArray(data.scouts) ? data.scouts : [];   // v0.45: Scout units (Scouts.ensure tops up to the researched count)
     state.researchCenter = normalizeResearchCenter(data.researchCenter);   // Slice B: the unique Research Center (or null)
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     // PP-A: castle market config (normalized), stock reservations, market RNG.
