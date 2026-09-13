@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.44.0";
+  const GAME_VERSION = "0.44.1";
   const PATCH_NOTES = [
+    { v: "0.44.1", notes: [
+      "Provisions now use a \ud83c\udf92 bag icon (a provision pack) instead of a loaf",
+    ] },
     { v: "0.44.0", notes: [
       "Removed the Castle UPGRADE system \u2014 it only raised a cosmetic level and gated nothing. The castle is now a fixed-capacity hub (same warehouse + traders)",
       "NEW: the castle stockpiles PROVISIONS. It automatically buys surplus potato from your cities and its built-in provisioner turns 2 potato \u2192 1 provision (cap 30; you start with 15) \u2014 see the new Provisions bar in the Castle panel",
