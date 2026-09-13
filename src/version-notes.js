@@ -1,6 +1,12 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.44.1";
+  const GAME_VERSION = "0.45.0";
   const PATCH_NOTES = [
+    { v: "0.45.0", notes: [
+      "NEW: SCOUT UNITS! You start with 1 Red scout at the castle \u2014 pick it from the top-left icon (or click it on the map) to open its panel (\ud83c\udf92 provisions x/10)",
+      "Send a scout to EXPLORE a spot: it marches there (2\u00d7 faster on roads, fastest route), plants its colored flag, and lifts the fog around it \u2014 spending 1 provision per tile uncovered, always standing on discovered ground",
+      "When its pack runs dry it walks home, refills from the castle\u2019s provision store (1/sec), and heads back out to keep exploring around its flag. It can also Return to castle on command (Guard area comes with enemies later)",
+      "Unlock a 2nd (Green) and 3rd (Blue) scout via research \u2014 Scouting Party then Ranger Lodge in the Logistics branch",
+    ] },
     { v: "0.44.1", notes: [
       "Provisions now use a \ud83c\udf92 bag icon (a provision pack) instead of a loaf",
     ] },
