@@ -266,7 +266,7 @@
   // Feed the log from state deltas (read-only poll): research completions,
   // town level-ups, castle upgrades, and victory.
   (function () {
-    let rSeen = null, lvls = {}, castleSeen = null, wonSeen = false;
+    let rSeen = null, lvls = {}, wonSeen = false;
     function nameOf(id) {
       const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
       if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
@@ -284,8 +284,7 @@
         if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
         lvls[t.id] = t.level || 1;
       }
-      if (castleSeen === null) castleSeen = state.castleLevel || 1;
-      else if ((state.castleLevel || 1) > castleSeen) { castleSeen = state.castleLevel; EventLog.push("🏰", "Castle upgraded to level " + state.castleLevel); }
+      // (castle upgrades removed v0.44 — no castle-level log)
       if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
     }, 1200);
   })();

@@ -5731,33 +5731,11 @@ Town.upgrade = function (town) {
   return { ok: true, level: town.level };
 };
 
-// --- Castle leveling (pure gate + apply) ------------------------------------
+// --- Castle ------------------------------------------------------------------
+// Castle UPGRADES were removed (v0.44): they only raised a cosmetic level and
+// gated nothing (warehouse capacity + trader count are independent). The castle
+// is a fixed-capacity hub now; state.castleLevel stays 1 for save compatibility.
 var Castle = (typeof Castle !== "undefined" && Castle) || {};
-Castle.nextReq = function (state) {
-  const lvl = (state && state.castleLevel) || 1;
-  if (lvl >= CONFIG.castle.maxLevel) return null;
-  return (CONFIG.castle.levels || [])[lvl + 1] || null;
-};
-Castle.canUpgrade = function (state) {
-  const req = Castle.nextReq(state);
-  if (!req) return { ok: false, reason: "Castle at maximum" };
-  // Quests retired → GOLD ONLY (prestige had no other source). prestigeReq in the
-  // level table is now vestigial and ignored.
-  if ((state.treasury || 0) < req.goldReq) return { ok: false, reason: "Needs " + req.goldReq + " g" };
-  return { ok: true };
-};
-// Consume treasury and raise state.castleLevel. Reaching maxLevel (5) is a
-// MILESTONE only — it no longer wins the game (BALPV Phase 2A: the victory is now
-// a 100%-happy aristocrat estate, see Victory.check). Returns the gate result
-// (+ level on success). Deliberately does NOT set/return state.victory.
-Castle.upgrade = function (state) {
-  const res = Castle.canUpgrade(state);
-  if (!res.ok) return res;
-  const req = Castle.nextReq(state);
-  state.treasury = (state.treasury || 0) - req.goldReq;
-  state.castleLevel = (state.castleLevel || 1) + 1;
-  return { ok: true, level: state.castleLevel };
-};
 
 // --- Victory: a fully-happy aristocrat estate (BALPV Phase 2A) ---------------
 // The game is won when ANY town has a BUILT aristocrat_home AND that town's
@@ -10106,18 +10084,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
-    // castle level + upgrade action (gold-only since King's Quests were retired).
-    let castleHtml = `<div class="up-box">
-      <div class="up-line"><b>🏰 Castle — Level ${state.castleLevel || 1}</b></div>`;
-    const creq = Castle.nextReq(state);
-    if (!creq) {
-      castleHtml += `<div class="up-max">Level ${state.castleLevel} — the castle is at its grandest 👑</div>`;
-    } else {
-      const cres = Castle.canUpgrade(state);
-      castleHtml += `<div class="up-req">Requires ${creq.goldReq} g (have ${Math.floor(treas)})</div>
-        <button class="up-btn" data-castle-upgrade ${cres.ok ? "" : "disabled"}>${cres.ok ? "Upgrade to Level " + ((state.castleLevel || 1) + 1) : esc(cres.reason)}</button>`;
-    }
-    castleHtml += `</div>`;
+    // Castle upgrades were removed (v0.44): the castle is a fixed-capacity hub
+    // (warehouse + traders don't depend on a level). The Keep tab is filled by the
+    // castlePanelSections hooks below (provisioner, research economy, …).
+    let castleHtml = "";
 
     // CP: extension hook so later slices (e.g. CRE — castle research economy) can
     // inject their own section (research-materials list, etc.) without editing this
@@ -10161,18 +10131,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // RESEARCH CENTER (Slice C): "Place Research Center" button in the rc-box.
     if (e.target.closest("button[data-place-rc]")) {
       startPlacingResearchCenter();
-      return;
-    }
-    if (e.target.closest("button[data-castle-upgrade]")) {
-      const res = Castle.upgrade(state);
-      if (res.ok) {
-        renderCastlePanel(true);
-        updateProgressHud();
-        // BALPV: castle L5 is a milestone, not the win — victory now fires from
-        // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
-        scheduleSave();
-        SFX.play("levelup", "castle upgrade");
-      }
       return;
     }
     const b = e.target.closest("button[data-buy]");
@@ -11191,13 +11149,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // (rendered by renderCastlePanel's up-box). These getElementByIds are null now;
   // updateProgressHud null-guards them and refreshes the panel when it's open.
   const prestigeValEl = document.getElementById("prestigeVal");
-  const castleLvlValEl = document.getElementById("castleLvlVal");
   const winNoticeEl = document.getElementById("winNotice");
 
   function updateProgressHud() {
     if (prestigeValEl) prestigeValEl.textContent = Math.floor(state.prestige || 0).toLocaleString();
-    if (castleLvlValEl) castleLvlValEl.textContent = state.castleLevel || 1;
-    // CP: prestige + castle level are shown in the castle panel — refresh it if open.
+    // castle level removed (v0.44) — castle is fixed capacity now.
+    // CP: prestige is shown in the castle panel — refresh it if open.
     if (window.CastleUI && window.CastleUI.isOpen) window.CastleUI.refresh();
   }
   // King's-Quest banner retired — no renderQuestBanner (quests removed entirely).
@@ -11536,7 +11493,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // Feed the log from state deltas (read-only poll): research completions,
   // town level-ups, castle upgrades, and victory.
   (function () {
-    let rSeen = null, lvls = {}, castleSeen = null, wonSeen = false;
+    let rSeen = null, lvls = {}, wonSeen = false;
     function nameOf(id) {
       const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
       if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
@@ -11554,8 +11511,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
         lvls[t.id] = t.level || 1;
       }
-      if (castleSeen === null) castleSeen = state.castleLevel || 1;
-      else if ((state.castleLevel || 1) > castleSeen) { castleSeen = state.castleLevel; EventLog.push("🏰", "Castle upgraded to level " + state.castleLevel); }
+      // (castle upgrades removed v0.44 — no castle-level log)
       if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
     }, 1200);
   })();

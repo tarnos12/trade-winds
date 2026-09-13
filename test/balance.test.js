@@ -388,33 +388,11 @@ ok("aristocrat base tax rate is the config maximum (mutation guard)",
    JSON.stringify(RPT));
 
 // ---------------------------------------------------------------------------
-// (H) CASTLE LADDER — mid-game milestone, NO LONGER the victory (Phase-2 pass).
-//     The win moved to a 100%-happy aristocrat_home (see test/victory.test.js +
-//     test/aristocrat_economy.test.js). King's Quests are RETIRED, so the castle
-//     now levels on GOLD alone: assert a healthy treasury climbs the ladder to L5
-//     as a MILESTONE, and that reaching L5 does NOT flip victory.
+// (H) CASTLE UPGRADES REMOVED (v0.44) — the castle is a fixed-capacity hub; there
+//     is no upgrade ladder. The win is unchanged: a 100%-happy aristocrat_home
+//     (see test/victory.test.js + test/aristocrat_economy.test.js).
 // ---------------------------------------------------------------------------
-const vstate = {
-  tick: 0, treasury: 0, castleLevel: 1,
-  towns: [{ happiness: 92 }, { happiness: 95 }, { happiness: 90 }],
-};
-let l5Tick = -1;
-for (let t = 0; t < 20000; t++) {
-  vstate.tick = t;
-  vstate.treasury += 1.0;                       // steady tariff income
-  if (Castle.canUpgrade(vstate).ok) Castle.upgrade(vstate);
-  if (vstate.castleLevel >= 5) { l5Tick = t; break; }
-}
-ok("castle ladder reaches level 5 (milestone, not victory)", vstate.castleLevel === 5,
-   "castleLevel=" + vstate.castleLevel);
-ok("reaching castle L5 does NOT flag victory (win moved to aristocrat_home@100%)",
-   vstate.victory !== true, "victory=" + vstate.victory);
-ok("castle L5 reached in a reasonable horizon on gold alone", l5Tick >= 0 && l5Tick < 20000,
-   "l5Tick=" + l5Tick);
-// Castle gold requirements must be finite & positive so L5 is not walled off.
-const CL = CONFIG.castle.levels;
-ok("castle has 5 levels defined", CONFIG.castle.maxLevel === 5 && CL.length >= 6);
-ok("castle L5 gold requirement is finite and positive", CL[5].goldReq > 0 && isFinite(CL[5].goldReq));
+ok("castle upgrade ladder removed", typeof Castle.canUpgrade === "undefined" && typeof Castle.upgrade === "undefined");
 
 // ---------------------------------------------------------------------------
 console.log((fail === 0 ? "PASS" : "FAIL") + ": balance.test.js — " + pass + " passed, " + fail + " failed");

@@ -490,18 +490,10 @@
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
-    // castle level + upgrade action (gold-only since King's Quests were retired).
-    let castleHtml = `<div class="up-box">
-      <div class="up-line"><b>🏰 Castle — Level ${state.castleLevel || 1}</b></div>`;
-    const creq = Castle.nextReq(state);
-    if (!creq) {
-      castleHtml += `<div class="up-max">Level ${state.castleLevel} — the castle is at its grandest 👑</div>`;
-    } else {
-      const cres = Castle.canUpgrade(state);
-      castleHtml += `<div class="up-req">Requires ${creq.goldReq} g (have ${Math.floor(treas)})</div>
-        <button class="up-btn" data-castle-upgrade ${cres.ok ? "" : "disabled"}>${cres.ok ? "Upgrade to Level " + ((state.castleLevel || 1) + 1) : esc(cres.reason)}</button>`;
-    }
-    castleHtml += `</div>`;
+    // Castle upgrades were removed (v0.44): the castle is a fixed-capacity hub
+    // (warehouse + traders don't depend on a level). The Keep tab is filled by the
+    // castlePanelSections hooks below (provisioner, research economy, …).
+    let castleHtml = "";
 
     // CP: extension hook so later slices (e.g. CRE — castle research economy) can
     // inject their own section (research-materials list, etc.) without editing this
@@ -545,18 +537,6 @@
     // RESEARCH CENTER (Slice C): "Place Research Center" button in the rc-box.
     if (e.target.closest("button[data-place-rc]")) {
       startPlacingResearchCenter();
-      return;
-    }
-    if (e.target.closest("button[data-castle-upgrade]")) {
-      const res = Castle.upgrade(state);
-      if (res.ok) {
-        renderCastlePanel(true);
-        updateProgressHud();
-        // BALPV: castle L5 is a milestone, not the win — victory now fires from
-        // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
-        scheduleSave();
-        SFX.play("levelup", "castle upgrade");
-      }
       return;
     }
     const b = e.target.closest("button[data-buy]");
