@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.41.0";
+  const GAME_VERSION = "0.42.0";
   const PATCH_NOTES = [
+    { v: "0.42.0", notes: [
+      "City limit: you can found 4 cities to start. Research three Kingdom charters to raise it \u2014 Township Grants (+3 \u2192 7), Provincial Rule (+3 \u2192 10), Imperial Domain (+2 \u2192 12)",
+      "Founding a city is now one-shot: after you place a city the tool drops back to pan mode, so you won\u2019t accidentally keep dropping cities \u2014 re-pick City to found the next. The City button shows your count (e.g. 2/4) and greys out at the cap",
+    ] },
     { v: "0.41.0", notes: [
       "Resources now spawn in distance TIERS from your castle: T1 (stone — plus wood, fish and farmland) can appear anywhere; T2 (clay, coal) in the outer two-thirds; T3 (iron, gold) only in the far third — so expanding outward is rewarded",
       "Your castle no longer always sits dead-center — it now spawns at a randomized, off-center spot on every map (still on connected, buildable land)",

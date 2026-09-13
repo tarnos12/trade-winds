@@ -35,6 +35,10 @@ Object.assign(CONFIG, {
     { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
     { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
     { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+    // City-cap chain: raise how many cities you may found (base 4 → 7 → 10 → 12).
+    { id: "township_grants", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 5 }, name: "Township Grants",   desc: "Charter up to 3 more cities (7 total).",           cost: 700,  timeTicks: 45, prereqs: ["town_charters"],   effect: { cityCapBonus: 3 } },
+    { id: "provincial_rule", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 6 }, name: "Provincial Rule",   desc: "Charter up to 3 more cities (10 total).",          cost: 1600, timeTicks: 60, prereqs: ["township_grants"], effect: { cityCapBonus: 3 } },
+    { id: "imperial_domain", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 7 }, name: "Imperial Domain",   desc: "Charter up to 2 more cities (12 total).",          cost: 3200, timeTicks: 80, prereqs: ["provincial_rule"], effect: { cityCapBonus: 2 } },
 
     // ---- Unlock nodes: one per non-startUnlocked building (effect:{} — gate
     // only). band = building's tier; branch mirrors band for legacy grouping. ----

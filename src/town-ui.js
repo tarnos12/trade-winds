@@ -764,8 +764,14 @@
       // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
       // needs no confirmation (matches the existing road-erase behaviour);
       // destroying a building always confirms via uiConfirm before removing it.
+      // City cap: show founded/cap and disable the tool once the cap is reached.
+      const cityCap = (Buildings.cityCap ? Buildings.cityCap(state) : 4);
+      const cityHave = Array.isArray(state.towns) ? state.towns.length : 0;
+      const cityFull = cityHave >= cityCap;
       const items = [
-        { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
+        { action: "town", name: "City", sub: `Found a city · ${cityHave}/${cityCap}`, disabled: cityFull,
+          tip: cityFull ? `City limit reached (${cityHave}/${cityCap}) — research Township Grants / Provincial Rule / Imperial Domain to raise it.`
+                        : "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
         { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },

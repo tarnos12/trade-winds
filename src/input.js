@@ -95,6 +95,10 @@
         scheduleSave();
         SFX.play("place");
         if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        // Cities are one-shot: founding is expensive and capped, so exit town mode
+        // after each placement instead of staying "armed" (which made every later
+        // map click drop another city). Re-select City to found the next one.
+        setMode("pan");
       }
     } else if (state.mode === "erase") {
       let changed = false;

@@ -74,6 +74,9 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
   town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
+  township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
+  provincial_rule: { iron_tool: 20, chairs: 20 },
+  imperial_domain: { gold_ring: 20, chairs: 30 },
   // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },

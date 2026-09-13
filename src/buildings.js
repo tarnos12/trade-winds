@@ -384,6 +384,12 @@ Buildings.canPlaceTown = function (state, q, r) {
   const terrDef = CONFIG.terrain[hex.terrain];
   if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
 
+  // City cap: base (CONFIG.town.baseCityCap) + research cityCapBonus. Founded
+  // cities are state.towns; the castle is separate and does not count.
+  const cap = Buildings.cityCap(state);
+  const have = Array.isArray(state.towns) ? state.towns.length : 0;
+  if (have >= cap) return { ok: false, reason: "City limit reached (" + have + "/" + cap + ") — research more charters" };
+
   // EC-A: founding a city is paid from the Kingdom treasury.
   const foundCost = Buildings.foundCost();
   if ((state.treasury || 0) < foundCost) return { ok: false, reason: "Treasury too low — need " + foundCost + " gold to found" };
@@ -430,6 +436,13 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
 // Treasury gold required to found a new city center.
 Buildings.foundCost = function () {
   return (CONFIG.town && CONFIG.town.foundCost) || 1000;
+};
+
+// Max cities the player may found: base cap + research `cityCapBonus` (additive).
+Buildings.cityCap = function (state) {
+  const base = (CONFIG.town && CONFIG.town.baseCityCap) || 4;
+  const bonus = (typeof Research !== "undefined" && Research.effect) ? (Research.effect(state, "cityCapBonus", 0) || 0) : 0;
+  return base + bonus;
 };
 
 // Deduct a building's cost at placement: only the GOLD → state.treasury (CB-A).

@@ -2391,6 +2391,9 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    baseCityCap: 4,             // cities you may found before research; +cityCapBonus
+                                // from research raises it (Township Grants +3 → 7,
+                                // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
     roadCost: 5,                // treasury gold per road hex
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
@@ -3748,6 +3751,12 @@ Buildings.canPlaceTown = function (state, q, r) {
   const terrDef = CONFIG.terrain[hex.terrain];
   if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
 
+  // City cap: base (CONFIG.town.baseCityCap) + research cityCapBonus. Founded
+  // cities are state.towns; the castle is separate and does not count.
+  const cap = Buildings.cityCap(state);
+  const have = Array.isArray(state.towns) ? state.towns.length : 0;
+  if (have >= cap) return { ok: false, reason: "City limit reached (" + have + "/" + cap + ") — research more charters" };
+
   // EC-A: founding a city is paid from the Kingdom treasury.
   const foundCost = Buildings.foundCost();
   if ((state.treasury || 0) < foundCost) return { ok: false, reason: "Treasury too low — need " + foundCost + " gold to found" };
@@ -3794,6 +3803,13 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
 // Treasury gold required to found a new city center.
 Buildings.foundCost = function () {
   return (CONFIG.town && CONFIG.town.foundCost) || 1000;
+};
+
+// Max cities the player may found: base cap + research `cityCapBonus` (additive).
+Buildings.cityCap = function (state) {
+  const base = (CONFIG.town && CONFIG.town.baseCityCap) || 4;
+  const bonus = (typeof Research !== "undefined" && Research.effect) ? (Research.effect(state, "cityCapBonus", 0) || 0) : 0;
+  return base + bonus;
 };
 
 // Deduct a building's cost at placement: only the GOLD → state.treasury (CB-A).
@@ -4582,6 +4598,10 @@ Object.assign(CONFIG, {
     { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
     { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
     { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+    // City-cap chain: raise how many cities you may found (base 4 → 7 → 10 → 12).
+    { id: "township_grants", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 5 }, name: "Township Grants",   desc: "Charter up to 3 more cities (7 total).",           cost: 700,  timeTicks: 45, prereqs: ["town_charters"],   effect: { cityCapBonus: 3 } },
+    { id: "provincial_rule", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 6 }, name: "Provincial Rule",   desc: "Charter up to 3 more cities (10 total).",          cost: 1600, timeTicks: 60, prereqs: ["township_grants"], effect: { cityCapBonus: 3 } },
+    { id: "imperial_domain", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 7 }, name: "Imperial Domain",   desc: "Charter up to 2 more cities (12 total).",          cost: 3200, timeTicks: 80, prereqs: ["provincial_rule"], effect: { cityCapBonus: 2 } },
 
     // ---- Unlock nodes: one per non-startUnlocked building (effect:{} — gate
     // only). band = building's tier; branch mirrors band for legacy grouping. ----
@@ -5075,6 +5095,9 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
   town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
+  township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
+  provincial_rule: { iron_tool: 20, chairs: 20 },
+  imperial_domain: { gold_ring: 20, chairs: 30 },
   // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },
@@ -6903,6 +6926,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         scheduleSave();
         SFX.play("place");
         if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        // Cities are one-shot: founding is expensive and capped, so exit town mode
+        // after each placement instead of staying "armed" (which made every later
+        // map click drop another city). Re-select City to found the next one.
+        setMode("pan");
       }
     } else if (state.mode === "erase") {
       let changed = false;
@@ -8476,8 +8503,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
       // needs no confirmation (matches the existing road-erase behaviour);
       // destroying a building always confirms via uiConfirm before removing it.
+      // City cap: show founded/cap and disable the tool once the cap is reached.
+      const cityCap = (Buildings.cityCap ? Buildings.cityCap(state) : 4);
+      const cityHave = Array.isArray(state.towns) ? state.towns.length : 0;
+      const cityFull = cityHave >= cityCap;
       const items = [
-        { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
+        { action: "town", name: "City", sub: `Found a city · ${cityHave}/${cityCap}`, disabled: cityFull,
+          tip: cityFull ? `City limit reached (${cityHave}/${cityCap}) — research Township Grants / Provincial Rule / Imperial Domain to raise it.`
+                        : "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
         { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
@@ -13088,8 +13121,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.41.0";
+  const GAME_VERSION = "0.42.0";
   const PATCH_NOTES = [
+    { v: "0.42.0", notes: [
+      "City limit: you can found 4 cities to start. Research three Kingdom charters to raise it \u2014 Township Grants (+3 \u2192 7), Provincial Rule (+3 \u2192 10), Imperial Domain (+2 \u2192 12)",
+      "Founding a city is now one-shot: after you place a city the tool drops back to pan mode, so you won\u2019t accidentally keep dropping cities \u2014 re-pick City to found the next. The City button shows your count (e.g. 2/4) and greys out at the cap",
+    ] },
     { v: "0.41.0", notes: [
       "Resources now spawn in distance TIERS from your castle: T1 (stone — plus wood, fish and farmland) can appear anywhere; T2 (clay, coal) in the outer two-thirds; T3 (iron, gold) only in the far third — so expanding outward is rewarded",
       "Your castle no longer always sits dead-center — it now spawns at a randomized, off-center spot on every map (still on connected, buildable land)",

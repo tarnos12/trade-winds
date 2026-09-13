@@ -353,6 +353,9 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    baseCityCap: 4,             // cities you may found before research; +cityCapBonus
+                                // from research raises it (Township Grants +3 → 7,
+                                // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
     roadCost: 5,                // treasury gold per road hex
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
