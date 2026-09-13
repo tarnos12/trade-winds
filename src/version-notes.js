@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.43.0";
+  const GAME_VERSION = "0.44.0";
   const PATCH_NOTES = [
+    { v: "0.44.0", notes: [
+      "Removed the Castle UPGRADE system \u2014 it only raised a cosmetic level and gated nothing. The castle is now a fixed-capacity hub (same warehouse + traders)",
+      "NEW: the castle stockpiles PROVISIONS. It automatically buys surplus potato from your cities and its built-in provisioner turns 2 potato \u2192 1 provision (cap 30; you start with 15) \u2014 see the new Provisions bar in the Castle panel",
+      "Provisions will fuel Scout units and an unlockable Advanced Provisioner (1 fish + 1 potato \u2192 2) \u2014 coming in the next update",
+    ] },
     { v: "0.43.0", notes: [
       "MAJOR map overhaul \u2014 far less grass. Fertile land & forest now appear as varied-size PATCHES (small/medium/big, each a fertile+forest mix) scattered over a background of barren, desert, snow, water and mountains",
       "Mountains are now impassable RANGES (bigger on \u2018young\u2019 worlds) \u2014 with a guarantee the map stays reachable (a pass is carved if a region gets walled off)",

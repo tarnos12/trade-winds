@@ -53,9 +53,14 @@
     state.castleStock = Object.assign({}, (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {});   // CRE + RSF: starter materials so first researches never stall
     state.researchCenter = null;   // Slice B: no Research Center yet — research paused until the player builds one
     state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
-    state.castleTrade = {};      // PP-A: castle market — all goods off by default
+    // v0.44: the castle provisioner buys potato by default so provisions start
+    // flowing as soon as a city sells surplus. (Fish is enabled when the Advanced
+    // Provisioner is built, v0.45.) Other goods stay off unless the player enables.
+    state.castleTrade = { potato: { enabled: true, limit: 40 } };
     state.castleReserved = {};   // PP-A: castle stock reservations
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
+    state.provisions = (CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15;   // v0.44: start with a small buffer
+    state._provTimers = {};      // v0.44: per-provisioner-line conversion timers
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
     state.victory = false;
@@ -99,6 +104,9 @@
         revealed: Array.from(state.revealed),
         warehouse: state.warehouse,        // CASTLE-UI (T9): player warehouse
         castleStock: state.castleStock,    // CRE: castle research-material stockpile
+        provisions: state.provisions,      // v0.44: castle provision store
+        _provTimers: state._provTimers,    // v0.44: provisioner line timers
+        advancedProvisioner: state.advancedProvisioner, // v0.45: Advanced Provisioner building
         researchCenter: state.researchCenter, // Slice B: the unique Research Center (or null)
         researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
         castleTrade: state.castleTrade,        // PP-A: castle market config
@@ -235,6 +243,10 @@
     if (typeof Market !== "undefined" && Market.normalize) Market.normalize(state);
     else if (!state.market || typeof state.market !== "object") state.market = { hist: {}, head: 0, len: 0 };
     state.castleStock = (data.castleStock && typeof data.castleStock === "object") ? data.castleStock : {};   // CRE
+    state.provisions = (typeof data.provisions === "number") ? data.provisions   // v0.44: castle provisions
+      : ((CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15);
+    state._provTimers = (data._provTimers && typeof data._provTimers === "object") ? data._provTimers : {};
+    state.advancedProvisioner = (data.advancedProvisioner && typeof data.advancedProvisioner === "object") ? data.advancedProvisioner : null;
     state.researchCenter = normalizeResearchCenter(data.researchCenter);   // Slice B: the unique Research Center (or null)
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     // PP-A: castle market config (normalized), stock reservations, market RNG.

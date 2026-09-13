@@ -516,6 +516,32 @@
   // Registry of extra panel sections (CP hook; see renderCastlePanel).
   const castlePanelSections = [];
 
+  // v0.44: Provisioner section — provision store + each active line's progress.
+  // Reads the pure Provisioner module (window.Provisioner) READ-ONLY.
+  castlePanelSections.push(function provisionerSection(state) {
+    if (typeof Provisioner === "undefined") return "";
+    const cap = Provisioner.cap();
+    const have = Math.floor(state.provisions || 0);
+    const pct = cap ? Math.max(0, Math.min(100, have / cap * 100)) : 0;
+    const stock = state.castleStock || {};
+    let html = `<div class="up-box">
+      <div class="up-line"><b>🥖 Provisions</b> <span style="float:right">${have} / ${cap}</span></div>
+      <div class="tp-bar" style="margin:4px 0 8px"><span style="width:${pct}%"></span></div>`;
+    const lineRow = (key, label, def) => {
+      if (!def) return "";
+      const prog = Math.round(Provisioner.progress(state, key) * 100);
+      const ins = Object.keys(def.inputs).map(g => `${def.inputs[g]} ${goodIcon(g)}`).join(" + ");
+      const short = Object.keys(def.inputs).some(g => (stock[g] || 0) < def.inputs[g]);
+      return `<div class="tp-row"><span class="k">${label}: ${ins} → ${def.output} 🥖</span>
+        <span class="v${short ? "" : ""}" style="opacity:${short ? 0.5 : 1}">${short ? "need stock" : prog + "%"}</span></div>`;
+    };
+    const c = (CONFIG.castle && CONFIG.castle.provisions) || {};
+    html += lineRow("basic", "Provisioner", c.basic);
+    if (Provisioner.hasAdvanced(state)) html += lineRow("advanced", "Advanced", c.advanced);
+    html += `<div class="tp-hint2">The castle buys potato from cities and turns it into provisions for your scouts.</div></div>`;
+    return html;
+  });
+
   function openCastlePanel() {
     // mutually exclusive with the town panel
     if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();

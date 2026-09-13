@@ -60,6 +60,9 @@
         // PP-A: castle MARKET buyers run AFTER research buyers (research materials
         // get first pick of the shared fleet), buying player-enabled goods to limit.
         if (typeof CastleMarket !== "undefined") CastleMarket.tick(state);
+        // v0.44: the castle provisioner turns bought potato (+ fish for the
+        // Advanced Provisioner) into provisions, AFTER the market buys the inputs.
+        if (typeof Provisioner !== "undefined" && Provisioner.tick) Provisioner.tick(state);
         // Slice A: deliver materials from castleStock into the Research Center
         // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
         if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
