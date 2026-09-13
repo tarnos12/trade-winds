@@ -6,9 +6,19 @@ const CONFIG = {
   map: {
     radius: 14, hexSize: 24, edgeFalloff: 0.55,
     // The board is a RECTANGLE of pointy-top hexes, `width` columns × `height`
-    // rows, centered on the castle at (0,0). `radius` above is retained only as
-    // a scalar for deposit inner-band math; it no longer sets the board shape.
+    // rows. The castle sits at axial (0,0) but is placed at a seeded, off-center
+    // board position (not the middle) — see MapGen; `castleMargin` keeps it this
+    // many hexes clear of the board edge so it always has a buildable ring.
     rect: { width: 50, height: 25 },
+    castleMargin: 2,
+    // === Deposit tiering by distance from the castle ===  Every ore good has a
+    // TIER; a tier is a [min,max] DISTANCE BAND expressed as a fraction of the
+    // castle's distance to the farthest map hex. T1 may spawn anywhere, T2
+    // mid-to-far, T3 far. Terrain resources (fertile/forest/fish/water) are T1 by
+    // nature — they follow normal biome generation. A preset may bend the rule for
+    // a good via `deposits.<good>.band = [lo,hi]` (e.g. Highlands pulls ore inward).
+    depositTiers: { stone: 1, clay: 2, coal: 2, iron: 3, gold: 3 },
+    depositBands: { 1: [0.0, 1.0], 2: [0.33, 1.0], 3: [0.66, 1.0] },
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
@@ -59,8 +69,10 @@ const CONFIG = {
       water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
       groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands, green valleys, little sand
       forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
-      // stone/ore rich and pulled inward (mining world); gold still furthest out.
-      deposits: { stone: { count: 4, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 4, ring: 5 }, coal: { count: 4, ring: 5 }, gold: { count: 2, ring: 7 },
+      // Mining world: ore-rich, and it BENDS the global tier bands (presets-may-
+      // override) to pull coal/iron inward so ore is reachable earlier; gold still
+      // keeps the far T3 band. `band` = [minFrac, maxFrac] of castle→farthest-hex.
+      deposits: { stone: { count: 4 }, clay: { count: 2 }, iron: { count: 4, band: [0.4, 1.0] }, coal: { count: 4, band: [0.2, 1.0] }, gold: { count: 2 },
                   fish: { count: 3, near: 6 } } },
     isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
       tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal" },

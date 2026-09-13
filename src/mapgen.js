@@ -171,24 +171,30 @@ const MapGen = {
     const elevN = makeValueNoise(seed);
 
     // ---- build the grid; sample elevation for water/mountain shaping ----
-    // RECTANGLE shape: `width` columns × `height` rows of pointy-top hexes,
-    // centered on the castle at axial (0,0). Row `row` shifts its axial q by
-    // -floor(row/2) so the rows stack into a true screen-space rectangle
-    // (the classic brick-wall edge) rather than a sheared parallelogram.
+    // RECTANGLE shape: `width` columns × `height` rows of pointy-top hexes. The
+    // castle sits at axial (0,0), but it is placed at a seeded OFF-CENTER board
+    // position (not the middle): we pick a board cell (castleCol,castleRow),
+    // kept `castleMargin` clear of the edges, and generate the grid so THAT cell
+    // maps to axial (0,0). Each row shifts its axial q by -floor(row/2) so the
+    // rows stack into a true screen-space rectangle. Water falloff is keyed to the
+    // BOARD centre (island rims hug the board edge, not the castle) and snow to the
+    // board's top row, while deposits / spawn / connectivity use the castle (0,0).
     const hexes = new Map();
     const waterMode = (preset.water && preset.water.mode) || "rim";
     const waterFrac = (preset.water && preset.water.frac) || 0;
     const rect = preset.rect || CONFIG.map.rect || { width: 50, height: 25 };
     const W = Math.max(3, rect.width | 0), H = Math.max(3, rect.height | 0);
     const halfW = Math.floor(W / 2), halfH = Math.floor(H / 2);
-    for (let row = -halfH; row < H - halfH; row++) {
-      const rOffset = Math.floor(row / 2);
-      for (let col = -halfW; col < W - halfW; col++) {
-        const q = col - rOffset, r = row;
-        // Rectangle-normalized distance (Chebyshev on the col/row axes): 0 at the
-        // center → 1 at the nearest edge. rim mode sinks the border (island);
-        // center mode (oasis) sinks the middle.
-        const nx = halfW ? col / halfW : 0, ny = halfH ? row / halfH : 0;
+    const margin = Math.max(0, Math.min((CONFIG.map.castleMargin | 0) || 0, Math.floor(Math.min(W, H) / 2) - 1));
+    const castleCol = margin + Math.floor(rng() * (W - 2 * margin));   // seeded, drawn first in the stream
+    const castleRow = margin + Math.floor(rng() * (H - 2 * margin));
+    const bcCol = (W - 1) / 2, bcRow = (H - 1) / 2;   // board centre (water falloff reference)
+    for (let br = 0; br < H; br++) {
+      const arow = br - castleRow;
+      for (let bc = 0; bc < W; bc++) {
+        const q = (bc - castleCol) - Math.floor(arow / 2), r = arow;
+        // rim mode sinks the border (island); center mode (oasis) sinks the middle.
+        const nx = halfW ? (bc - bcCol) / halfW : 0, ny = halfH ? (br - bcRow) / halfH : 0;
         const d = Math.min(1, Math.max(Math.abs(nx), Math.abs(ny)));
         let falloff = 0;
         if (waterMode === "rim") falloff = d * d * CONFIG.map.edgeFalloff;
@@ -197,8 +203,10 @@ const MapGen = {
         hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, revealed: false });
       }
     }
-    const topRow = -halfH;   // northmost row (used by the snow pole below)
+    const topRow = -castleRow;   // northmost axial row (board row 0) — used by the snow pole below
     const all = Array.from(hexes.values());   // deterministic insertion order
+    let castleMaxDist = 0;   // castle → farthest hex, the reference for deposit distance bands
+    for (const h of all) { const dd = HexMath.dist(0, 0, h.q, h.r); if (dd > castleMaxDist) castleMaxDist = dd; }
 
     // ---- (1) water by elevation quantile ----
     if (waterFrac > 0) {
@@ -244,41 +252,35 @@ const MapGen = {
       MapGen.growPatch(hexes, start, size, k => groundSet[hexes.get(k).terrain], (kk) => { hexes.get(kk).terrain = "forest"; }, rng);
     }
 
-    // ---- (5) deposit clusters (distance-ringed; T2 further out than T1) ----
+    // ---- (5) deposit clusters (distance-BANDED by tier) ----
+    // Each ore good spawns within a [minFrac, maxFrac] DISTANCE BAND from the
+    // castle, expressed as a fraction of castleMaxDist (castle → farthest hex).
+    // Band = the preset's per-good override (`deposits.<good>.band`) else the
+    // global tier band (CONFIG.map.depositBands[CONFIG.map.depositTiers[good]]).
+    // T1 (stone) [0,1] = anywhere; T2 (clay/coal) [0.33,1]; T3 (iron/gold) [0.66,1].
+    // If the castle is near an edge the band is clipped by the board — if no
+    // in-band depositable hex remains for a placement, we relax the min to 0
+    // (keeping the outer bound) so every configured deposit still spawns.
     const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
     const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
     const deps = preset.deposits || {};
-    // === B (batch-2): pull PEASANT / early-tier deposits INWARD. `stone` is
-    // quarried by PEASANTS and is the first mined material the early buildings
-    // need — but a `ring:0` stone could seed ANYWHERE in the depositable pool
-    // (out to the rim), so it often spawned far from the castle. We cap the SEED
-    // distance for these near-spawn types to an inner band (a fraction of radius),
-    // analogous to fish's `near`. T2/T3 deposits (iron/coal/gold) are UNTOUCHED and
-    // keep their outer rings, so tier ordering (stone nearest → gold furthest) is
-    // preserved. A preset may override the cap per type via `deposits.<type>.near`.
-    // Only the SEED pool is biased inward (growth candidates still respect the ring
-    // via `takable`); determinism holds (seeded rng only) and every deposit still
-    // generates — we fall back to the full ring pool when the inner band is empty.
-    const NEAR_FRAC = { stone: 0.4, clay: 0.6 };   // stone hugs spawn; clay slightly further (still inner)
-    // fixed order so RNG draws are reproducible
-    for (const type of ["stone", "clay", "iron", "coal", "gold"]) {
+    const TIERS = (CONFIG.map && CONFIG.map.depositTiers) || {};
+    const BANDS = (CONFIG.map && CONFIG.map.depositBands) || {};
+    const distOf = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r); };
+    for (const type of ["stone", "clay", "iron", "coal", "gold"]) {   // fixed order ⇒ reproducible rng
       const cfg = deps[type]; if (!cfg) continue;
       const terr = DEP_TERRAIN[type];
-      // === TV2-FIX: STRICT rings — growth candidates must respect the ring
-      // too, so a blob can never creep closer to the castle than cfg.ring
-      // (previously only the SEED hex was ring-filtered and growPatch could
-      // expand 1–2 hexes inward). Fish is exempt: it's T1, near-spawn. ===
-      const ringOk = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) >= (cfg.ring || 0); };
-      const takable = (k) => depositable[hexes.get(k).terrain] && ringOk(k);
-      // B: outer SEED cap for near-spawn peasant/early types (null = no cap → old behaviour).
-      const nearCap = (cfg.near != null) ? cfg.near
-        : (NEAR_FRAC[type] != null ? Math.max(cfg.ring || 0, Math.round(radius * NEAR_FRAC[type])) : null);
+      const band = Array.isArray(cfg.band) ? cfg.band : (BANDS[TIERS[type] || 1] || [0, 1]);
+      const lo = Math.round((band[0] || 0) * castleMaxDist);
+      const hi = Math.round((band[1] != null ? band[1] : 1) * castleMaxDist);
+      const inBand    = (k) => depositable[hexes.get(k).terrain] && distOf(k) >= lo && distOf(k) <= hi;
+      const inRelaxed = (k) => depositable[hexes.get(k).terrain] && distOf(k) <= hi;  // min dropped to 0
       for (let i = 0; i < (cfg.count || 0); i++) {
-        let pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
-                        .map(h => HexMath.key(h.q, h.r));
-        if (nearCap != null) {   // B: bias the seed toward the castle (inner band), keep full pool as fallback
-          const inner = pool.filter(k => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) <= nearCap; });
-          if (inner.length) pool = inner;
+        let pool = all.filter(h => inBand(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
+        let takable = inBand;
+        if (!pool.length) {   // band clipped by the board edge — relax the near bound
+          pool = all.filter(h => inRelaxed(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
+          takable = inRelaxed;
         }
         if (!pool.length) break;
         const start = pool[Math.floor(rng() * pool.length)];

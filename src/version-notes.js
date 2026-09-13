@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.40.0";
+  const GAME_VERSION = "0.41.0";
   const PATCH_NOTES = [
+    { v: "0.41.0", notes: [
+      "Resources now spawn in distance TIERS from your castle: T1 (stone — plus wood, fish and farmland) can appear anywhere; T2 (clay, coal) in the outer two-thirds; T3 (iron, gold) only in the far third — so expanding outward is rewarded",
+      "Your castle no longer always sits dead-center — it now spawns at a randomized, off-center spot on every map (still on connected, buildable land)",
+      "Presets can bend the rule: the Highlands mining world pulls its coal & iron closer in, while gold still sits far out",
+    ] },
     { v: "0.40.0", notes: [
       "Economy overhaul — resources are now whole units everywhere (no more fractions in your warehouse); a building banks the fractional leftover and rolls it into the next batch, so nothing is lost",
       "Buildings now produce in BATCHES on a timer (gatherers every 8s, workshops every 12s) instead of trickling every tick — same output rate, delivered in chunks",

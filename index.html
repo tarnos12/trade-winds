@@ -1275,9 +1275,19 @@ const CONFIG = {
   map: {
     radius: 14, hexSize: 24, edgeFalloff: 0.55,
     // The board is a RECTANGLE of pointy-top hexes, `width` columns × `height`
-    // rows, centered on the castle at (0,0). `radius` above is retained only as
-    // a scalar for deposit inner-band math; it no longer sets the board shape.
+    // rows. The castle sits at axial (0,0) but is placed at a seeded, off-center
+    // board position (not the middle) — see MapGen; `castleMargin` keeps it this
+    // many hexes clear of the board edge so it always has a buildable ring.
     rect: { width: 50, height: 25 },
+    castleMargin: 2,
+    // === Deposit tiering by distance from the castle ===  Every ore good has a
+    // TIER; a tier is a [min,max] DISTANCE BAND expressed as a fraction of the
+    // castle's distance to the farthest map hex. T1 may spawn anywhere, T2
+    // mid-to-far, T3 far. Terrain resources (fertile/forest/fish/water) are T1 by
+    // nature — they follow normal biome generation. A preset may bend the rule for
+    // a good via `deposits.<good>.band = [lo,hi]` (e.g. Highlands pulls ore inward).
+    depositTiers: { stone: 1, clay: 2, coal: 2, iron: 3, gold: 3 },
+    depositBands: { 1: [0.0, 1.0], 2: [0.33, 1.0], 3: [0.66, 1.0] },
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
@@ -1328,8 +1338,10 @@ const CONFIG = {
       water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
       groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands, green valleys, little sand
       forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
-      // stone/ore rich and pulled inward (mining world); gold still furthest out.
-      deposits: { stone: { count: 4, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 4, ring: 5 }, coal: { count: 4, ring: 5 }, gold: { count: 2, ring: 7 },
+      // Mining world: ore-rich, and it BENDS the global tier bands (presets-may-
+      // override) to pull coal/iron inward so ore is reachable earlier; gold still
+      // keeps the far T3 band. `band` = [minFrac, maxFrac] of castle→farthest-hex.
+      deposits: { stone: { count: 4 }, clay: { count: 2 }, iron: { count: 4, band: [0.4, 1.0] }, coal: { count: 4, band: [0.2, 1.0] }, gold: { count: 2 },
                   fish: { count: 3, near: 6 } } },
     isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
       tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal" },
@@ -1659,24 +1671,30 @@ const MapGen = {
     const elevN = makeValueNoise(seed);
 
     // ---- build the grid; sample elevation for water/mountain shaping ----
-    // RECTANGLE shape: `width` columns × `height` rows of pointy-top hexes,
-    // centered on the castle at axial (0,0). Row `row` shifts its axial q by
-    // -floor(row/2) so the rows stack into a true screen-space rectangle
-    // (the classic brick-wall edge) rather than a sheared parallelogram.
+    // RECTANGLE shape: `width` columns × `height` rows of pointy-top hexes. The
+    // castle sits at axial (0,0), but it is placed at a seeded OFF-CENTER board
+    // position (not the middle): we pick a board cell (castleCol,castleRow),
+    // kept `castleMargin` clear of the edges, and generate the grid so THAT cell
+    // maps to axial (0,0). Each row shifts its axial q by -floor(row/2) so the
+    // rows stack into a true screen-space rectangle. Water falloff is keyed to the
+    // BOARD centre (island rims hug the board edge, not the castle) and snow to the
+    // board's top row, while deposits / spawn / connectivity use the castle (0,0).
     const hexes = new Map();
     const waterMode = (preset.water && preset.water.mode) || "rim";
     const waterFrac = (preset.water && preset.water.frac) || 0;
     const rect = preset.rect || CONFIG.map.rect || { width: 50, height: 25 };
     const W = Math.max(3, rect.width | 0), H = Math.max(3, rect.height | 0);
     const halfW = Math.floor(W / 2), halfH = Math.floor(H / 2);
-    for (let row = -halfH; row < H - halfH; row++) {
-      const rOffset = Math.floor(row / 2);
-      for (let col = -halfW; col < W - halfW; col++) {
-        const q = col - rOffset, r = row;
-        // Rectangle-normalized distance (Chebyshev on the col/row axes): 0 at the
-        // center → 1 at the nearest edge. rim mode sinks the border (island);
-        // center mode (oasis) sinks the middle.
-        const nx = halfW ? col / halfW : 0, ny = halfH ? row / halfH : 0;
+    const margin = Math.max(0, Math.min((CONFIG.map.castleMargin | 0) || 0, Math.floor(Math.min(W, H) / 2) - 1));
+    const castleCol = margin + Math.floor(rng() * (W - 2 * margin));   // seeded, drawn first in the stream
+    const castleRow = margin + Math.floor(rng() * (H - 2 * margin));
+    const bcCol = (W - 1) / 2, bcRow = (H - 1) / 2;   // board centre (water falloff reference)
+    for (let br = 0; br < H; br++) {
+      const arow = br - castleRow;
+      for (let bc = 0; bc < W; bc++) {
+        const q = (bc - castleCol) - Math.floor(arow / 2), r = arow;
+        // rim mode sinks the border (island); center mode (oasis) sinks the middle.
+        const nx = halfW ? (bc - bcCol) / halfW : 0, ny = halfH ? (br - bcRow) / halfH : 0;
         const d = Math.min(1, Math.max(Math.abs(nx), Math.abs(ny)));
         let falloff = 0;
         if (waterMode === "rim") falloff = d * d * CONFIG.map.edgeFalloff;
@@ -1685,8 +1703,10 @@ const MapGen = {
         hexes.set(HexMath.key(q, r), { q, r, terrain: null, elevation: elev, revealed: false });
       }
     }
-    const topRow = -halfH;   // northmost row (used by the snow pole below)
+    const topRow = -castleRow;   // northmost axial row (board row 0) — used by the snow pole below
     const all = Array.from(hexes.values());   // deterministic insertion order
+    let castleMaxDist = 0;   // castle → farthest hex, the reference for deposit distance bands
+    for (const h of all) { const dd = HexMath.dist(0, 0, h.q, h.r); if (dd > castleMaxDist) castleMaxDist = dd; }
 
     // ---- (1) water by elevation quantile ----
     if (waterFrac > 0) {
@@ -1732,41 +1752,35 @@ const MapGen = {
       MapGen.growPatch(hexes, start, size, k => groundSet[hexes.get(k).terrain], (kk) => { hexes.get(kk).terrain = "forest"; }, rng);
     }
 
-    // ---- (5) deposit clusters (distance-ringed; T2 further out than T1) ----
+    // ---- (5) deposit clusters (distance-BANDED by tier) ----
+    // Each ore good spawns within a [minFrac, maxFrac] DISTANCE BAND from the
+    // castle, expressed as a fraction of castleMaxDist (castle → farthest hex).
+    // Band = the preset's per-good override (`deposits.<good>.band`) else the
+    // global tier band (CONFIG.map.depositBands[CONFIG.map.depositTiers[good]]).
+    // T1 (stone) [0,1] = anywhere; T2 (clay/coal) [0.33,1]; T3 (iron/gold) [0.66,1].
+    // If the castle is near an edge the band is clipped by the board — if no
+    // in-band depositable hex remains for a placement, we relax the min to 0
+    // (keeping the outer bound) so every configured deposit still spawns.
     const DEP_TERRAIN = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
     const depositable = { barren: 1, desert: 1, fertile: 1, forest: 1 };
     const deps = preset.deposits || {};
-    // === B (batch-2): pull PEASANT / early-tier deposits INWARD. `stone` is
-    // quarried by PEASANTS and is the first mined material the early buildings
-    // need — but a `ring:0` stone could seed ANYWHERE in the depositable pool
-    // (out to the rim), so it often spawned far from the castle. We cap the SEED
-    // distance for these near-spawn types to an inner band (a fraction of radius),
-    // analogous to fish's `near`. T2/T3 deposits (iron/coal/gold) are UNTOUCHED and
-    // keep their outer rings, so tier ordering (stone nearest → gold furthest) is
-    // preserved. A preset may override the cap per type via `deposits.<type>.near`.
-    // Only the SEED pool is biased inward (growth candidates still respect the ring
-    // via `takable`); determinism holds (seeded rng only) and every deposit still
-    // generates — we fall back to the full ring pool when the inner band is empty.
-    const NEAR_FRAC = { stone: 0.4, clay: 0.6 };   // stone hugs spawn; clay slightly further (still inner)
-    // fixed order so RNG draws are reproducible
-    for (const type of ["stone", "clay", "iron", "coal", "gold"]) {
+    const TIERS = (CONFIG.map && CONFIG.map.depositTiers) || {};
+    const BANDS = (CONFIG.map && CONFIG.map.depositBands) || {};
+    const distOf = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r); };
+    for (const type of ["stone", "clay", "iron", "coal", "gold"]) {   // fixed order ⇒ reproducible rng
       const cfg = deps[type]; if (!cfg) continue;
       const terr = DEP_TERRAIN[type];
-      // === TV2-FIX: STRICT rings — growth candidates must respect the ring
-      // too, so a blob can never creep closer to the castle than cfg.ring
-      // (previously only the SEED hex was ring-filtered and growPatch could
-      // expand 1–2 hexes inward). Fish is exempt: it's T1, near-spawn. ===
-      const ringOk = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) >= (cfg.ring || 0); };
-      const takable = (k) => depositable[hexes.get(k).terrain] && ringOk(k);
-      // B: outer SEED cap for near-spawn peasant/early types (null = no cap → old behaviour).
-      const nearCap = (cfg.near != null) ? cfg.near
-        : (NEAR_FRAC[type] != null ? Math.max(cfg.ring || 0, Math.round(radius * NEAR_FRAC[type])) : null);
+      const band = Array.isArray(cfg.band) ? cfg.band : (BANDS[TIERS[type] || 1] || [0, 1]);
+      const lo = Math.round((band[0] || 0) * castleMaxDist);
+      const hi = Math.round((band[1] != null ? band[1] : 1) * castleMaxDist);
+      const inBand    = (k) => depositable[hexes.get(k).terrain] && distOf(k) >= lo && distOf(k) <= hi;
+      const inRelaxed = (k) => depositable[hexes.get(k).terrain] && distOf(k) <= hi;  // min dropped to 0
       for (let i = 0; i < (cfg.count || 0); i++) {
-        let pool = all.filter(h => depositable[h.terrain] && HexMath.dist(0, 0, h.q, h.r) >= (cfg.ring || 0))
-                        .map(h => HexMath.key(h.q, h.r));
-        if (nearCap != null) {   // B: bias the seed toward the castle (inner band), keep full pool as fallback
-          const inner = pool.filter(k => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r) <= nearCap; });
-          if (inner.length) pool = inner;
+        let pool = all.filter(h => inBand(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
+        let takable = inBand;
+        if (!pool.length) {   // band clipped by the board edge — relax the near bound
+          pool = all.filter(h => inRelaxed(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
+          takable = inRelaxed;
         }
         if (!pool.length) break;
         const start = pool[Math.floor(rng() * pool.length)];
@@ -13074,8 +13088,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.40.0";
+  const GAME_VERSION = "0.41.0";
   const PATCH_NOTES = [
+    { v: "0.41.0", notes: [
+      "Resources now spawn in distance TIERS from your castle: T1 (stone — plus wood, fish and farmland) can appear anywhere; T2 (clay, coal) in the outer two-thirds; T3 (iron, gold) only in the far third — so expanding outward is rewarded",
+      "Your castle no longer always sits dead-center — it now spawns at a randomized, off-center spot on every map (still on connected, buildable land)",
+      "Presets can bend the rule: the Highlands mining world pulls its coal & iron closer in, while gold still sits far out",
+    ] },
     { v: "0.40.0", notes: [
       "Economy overhaul — resources are now whole units everywhere (no more fractions in your warehouse); a building banks the fractional leftover and rolls it into the next batch, so nothing is lost",
       "Buildings now produce in BATCHES on a timer (gatherers every 8s, workshops every 12s) instead of trickling every tick — same output rate, delivered in chunks",
