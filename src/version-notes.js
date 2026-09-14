@@ -1,6 +1,15 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.48.0";
+  const GAME_VERSION = "0.49.0";
   const PATCH_NOTES = [
+    { v: "0.49.0", notes: [
+      "CONSTRUCTION takes time now: every building fills a progress bar. Progress is the lesser of build-time and materials delivered — so a house with 8/10 wood delivered stalls at 80% until the rest arrives; with everything on hand a T1 building finishes in ~6s (longer for higher tiers/upgrades)",
+      "T1 buildings cost WOOD (hut, lumberjack, potato farm 10 each; sawmill 20), delivered from the city’s own stock by its haulers. A NEW CITY starts with 40 wood",
+      "The building detail panel is redesigned to match the reference (production chain, worker portraits, action row)",
+      "City cards are compact — a colored badge with the city number; HOLD SHIFT to reveal each city’s Give/Take controls",
+      "Fog of war shrunk so the starting view is a cozy pocket, not half the map",
+      "Trade carts now DETOUR around mountains and water when off-road (no more cutting straight through peaks)",
+      "Internal porters carry at most 10 at a time",
+    ] },
     { v: "0.48.0", notes: [
       "UI PASS: the HUD is reworked — the game name is gone, the top-right now shows a game CLOCK, speed controls, version and menu; the top-left groups your gold with a 🔬 Research and a 🏰 Castle button (Castle centres the map and opens the castle menu)",
       "Selecting a building now HIGHLIGHTS it on the map so you can tell which one you’re looking at",

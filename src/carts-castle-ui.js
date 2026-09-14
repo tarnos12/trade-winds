@@ -656,7 +656,16 @@
     const cardsEl = document.getElementById("cityCards");
     const kingdomGoldEl = document.getElementById("kingdomGold");
     const SIZEc = (CONFIG.map && CONFIG.map.hexSize) || 24;
-    const cards = new Map();   // townId -> { root, avatar, name, gold, hFill, hPct, give, take, cool }
+    const cards = new Map();   // townId -> { root, avatar, name, gold, hFill, hPct, btns, give, take, cool }
+
+    // v0.49: compact cards by default; holding SHIFT reveals the Give/Take controls
+    // (and the cooldown line) below each card.
+    let revealBtns = false;
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", (e) => { if (e.key === "Shift" && !revealBtns) { revealBtns = true; refresh(); } });
+      window.addEventListener("keyup",   (e) => { if (e.key === "Shift" &&  revealBtns) { revealBtns = false; refresh(); } });
+      window.addEventListener("blur",    () => { if (revealBtns) { revealBtns = false; refresh(); } });
+    }
 
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
@@ -720,10 +729,14 @@
         gold: root.querySelector(".cc-gold"),
         hFill: root.querySelector(".cc-happy-fill"),
         hPct: root.querySelector(".cc-happy-pct"),
+        btns: root.querySelector(".cc-btns"),   // v0.49: hidden until Shift is held
         give: root.querySelector(".cc-give"),
         take: root.querySelector(".cc-take"),
         cool: root.querySelector(".cc-cool"),
       };
+      // v0.49: the avatar carries the city NUMBER (an "image with just a number");
+      // Give/Take stay hidden until the player holds Shift (revealBtns below).
+      parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
       parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
       parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
       root.addEventListener("click", () => focus(town));
@@ -749,6 +762,8 @@
         prev = c.root;
 
         c.avatar.style.background = cityColor(town.id);
+        c.avatar.textContent = town.id;                 // v0.49: number on the avatar image
+        if (c.btns) c.btns.style.display = revealBtns ? "flex" : "none";   // v0.49: Give/Take only while Shift held
         c.name.textContent = "City #" + town.id;
         c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
         const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
@@ -769,7 +784,7 @@
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
           const mm = Math.floor(secs / 60), ss = secs % 60;
           c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
-          c.cool.style.display = "";
+          c.cool.style.display = revealBtns ? "" : "none";   // v0.49: only with the revealed controls
         } else {
           c.cool.style.display = "none";
         }
