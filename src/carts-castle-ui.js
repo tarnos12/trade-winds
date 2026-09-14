@@ -543,8 +543,10 @@
   });
 
   function openCastlePanel() {
-    // mutually exclusive with the town panel
+    // v0.48: mutually exclusive with the town / building panels and scout selection
     if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
+    if (window.TownUI && typeof window.TownUI.closeBuildingPanel === "function") window.TownUI.closeBuildingPanel();
+    if (window.Scouts && window.Scouts.selectedId != null && typeof window.Scouts.deselect === "function") window.Scouts.deselect();
     castleOpen = true;
     castleEl.classList.remove("hidden");
     castleEl.setAttribute("aria-hidden", "false");

@@ -642,6 +642,8 @@
 
   function openTownPanel(town) {
     activeTown = ensureTown(town);
+    if (bpBuilding || rcPanelOpen) closeBuildingPanel();   // v0.48: one panel at a time
+    dismissOtherPanels();                                  // v0.48: close castle panel / deselect scout
     panelEl.classList.remove("hidden");
     panelEl.setAttribute("aria-hidden", "false");
     renderTownPanel(true);   // PP-B: force a full first paint
@@ -1220,10 +1222,18 @@
     return null;
   }
 
+  // v0.48: ONE panel visible at a time — dismiss the castle panel and any selected
+  // scout when a town/building panel opens (town-ui's own panels already close each
+  // other; this reaches the panels owned by other modules).
+  function dismissOtherPanels() {
+    if (window.CastleUI && typeof window.CastleUI.closeCastlePanel === "function") window.CastleUI.closeCastlePanel();
+    if (window.Scouts && window.Scouts.selectedId != null && typeof window.Scouts.deselect === "function") window.Scouts.deselect();
+  }
   function openBuildingPanel(town, b) {
     bpTown = town; bpBuilding = b;
     rcPanelOpen = false;                 // RESEARCH CENTER (Slice C): shares this DOM panel — exclusive
     closeTownPanel();                    // one detail panel at a time
+    dismissOtherPanels();                // v0.48: also close castle panel / deselect scout
     bpEl.classList.remove("hidden");
     bpEl.setAttribute("aria-hidden", "false");
     renderBuildingPanel();
@@ -1298,6 +1308,64 @@
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // v0.48: the visual production chain at the top of a producer's detail panel:
+  //   [inputs / source]  →  [process wheel + cycle time + live %]  →  [output + stock bar]
+  // Mirrors the reference UI. Live % + colours read the same batch timer the map
+  // progress bar uses (Sim.buildingProgress). Self-contained inline styles.
+  const CHAIN_TERRAIN_GLYPH = { forest: "🌲", fertile: "🌱", stone_deposit: "🪨", clay_deposit: "🧱",
+    iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
+  function renderProducerChain(town, b, def) {
+    const out = def.output.goodId, oc = goodColor(out);
+    const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
+    const cycleSec = Math.max(1, Math.round(psec[def.kind] || 0)) || 1;
+    const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+    const intervalTicks = Math.max(1, Math.round((psec[def.kind] || 0) * (1000 / baseTickMs)));
+    const workers = b.workers || 0;
+    const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
+    const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
+    const pct = pr ? Math.round(pr.prog * 100) : 0;
+    const barCol = !workers ? "#8a8574" : (pr && pr.starved ? "#e0a63c" : "#7fc24b");
+    const perBatchOut = Math.max(1, Math.round((def.output.ratePerWorker || 0) * Math.max(1, workers) * outMult * intervalTicks));
+    const cap = (CONFIG.town && CONFIG.town.storageCap) || 0;
+    const stock = Math.floor((town.stock && town.stock[out]) || 0);
+    const capPct = cap ? Math.max(0, Math.min(100, Math.round(stock / cap * 100))) : 0;
+    const chip = "display:inline-flex;align-items:center;gap:3px;padding:3px 7px;margin:2px 0;border-radius:8px;background:#1c160f;border:1px solid var(--panel-edge);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap";
+    let inHtml = "";
+    if (def.inputs && Object.keys(def.inputs).length) {
+      for (const gid in def.inputs) {
+        const need = Math.max(1, Math.round(def.inputs[gid] * Math.max(1, workers) * intervalTicks));
+        const have = Math.floor((town.stock && town.stock[gid]) || 0);
+        const okc = have >= need ? "#a6e0a8" : "#e0844a";
+        inHtml += `<span style="${chip};border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch">${goodIcon(gid)} <b style="color:${okc}">${have}</b><span style="opacity:.6">/${need}</span></span>`;
+      }
+    } else {
+      const srcTerr = def.terrain || def.adjacent || "";
+      const g = CHAIN_TERRAIN_GLYPH[srcTerr] || "🗺️";
+      inHtml = `<span style="${chip};font-size:18px" title="Extracted from ${esc(String(srcTerr).replace(/_/g, " ") || "the land")}">${g}</span>`;
+    }
+    const arrow = `<span style="opacity:.45;font-size:17px;flex:0 0 auto">→</span>`;
+    return `<div class="tp-sec">Production</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin:5px 0 4px">
+        <div style="display:flex;flex-direction:column;align-items:stretch;gap:2px">${inHtml}</div>
+        ${arrow}
+        <div style="text-align:center;min-width:74px;flex:0 0 auto">
+          <div style="font-size:11px;opacity:.85;font-variant-numeric:tabular-nums">${cycleSec}s (${pct}%)</div>
+          <div style="font-size:21px;line-height:1.1">⚙️</div>
+          <div style="height:5px;border-radius:3px;background:#120f0a;border:1px solid var(--panel-edge);overflow:hidden;margin-top:2px"><span style="display:block;height:100%;width:${pct}%;background:${barCol};transition:width .25s"></span></div>
+        </div>
+        ${arrow}
+        <div style="display:flex;align-items:center;gap:6px;flex:0 0 auto">
+          <span style="font-size:22px;color:${oc}">${goodIcon(out)}</span>
+          <div>
+            <div style="font-weight:bold;font-variant-numeric:tabular-nums">+${perBatchOut}</div>
+            <div style="font-size:10.5px;opacity:.8;font-variant-numeric:tabular-nums">${stock}/${cap}</div>
+            <div style="height:4px;width:56px;border-radius:2px;background:#120f0a;border:1px solid var(--panel-edge);overflow:hidden;margin-top:1px"><span style="display:block;height:100%;width:${capPct}%;background:var(--accent)"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="tp-hint2">${workers > 0 ? (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s.") : "Idle — assign a worker below."}</div>`;
+  }
+
   function renderBuildingPanel() {
     const b = bpBuilding, town = bpTown;
     if (!b) return;
@@ -1332,25 +1400,20 @@
     }
 
     // --- output / inputs / housing ---
-    if (def.output) {
+    // v0.48: producers show a VISUAL production chain (inputs → process+timer →
+    // output+stock bar) like the reference UI; only non-worker outputs fall back.
+    if (def.output && def.workerTier && bpIsBuilt(b)) {
+      html += renderProducerChain(town, b, def);
+    } else if (def.output) {
       const c = goodColor(def.output.goodId);
-      // AC: current production SPEED at this building's actual staffing + upgrades —
-      // ratePerWorker × workers × upgrade outputMult, per minute (the analog of the
-      // per-resident consumption houses show). The per-worker base stays below it.
-      const workers = b.workers || 0;
-      const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
-      const curOut = (def.output.ratePerWorker || 0) * workers * outMult;
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k">Producing now</span><span class="v">${workers > 0
-          ? fmt(perMin(curOut)) + " " + goodIcon(def.output.goodId) + "/min"
-          : "<span class=\"tp-dim\">idle — no workers</span>"}</span></div>
         <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perMin(def.output.ratePerWorker))}/wkr/min</span></div>`;
-    }
-    if (def.inputs && Object.keys(def.inputs).length) {
-      html += `<div class="tp-sec">Inputs / worker / min</div>`;
-      for (const gid in def.inputs) {
-        const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perMin(def.inputs[gid]))}</span></div>`;
+      if (def.inputs && Object.keys(def.inputs).length) {
+        html += `<div class="tp-sec">Inputs / worker / min</div>`;
+        for (const gid in def.inputs) {
+          const ci = goodColor(gid);
+          html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${ci}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perMin(def.inputs[gid]))}</span></div>`;
+        }
       }
     }
     // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
@@ -1653,7 +1716,9 @@
   // === /CB-C ===
 
   // Expose for headless smoke test / console debugging.
-  window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
+  window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel, closeBuildingPanel,
+                    // v0.48: the currently panel-selected building {q,r} (or null) — renderer highlights it on the map
+                    get selectedBuilding() { return (bpBuilding && !bpEl.classList.contains("hidden")) ? { q: bpBuilding.q, r: bpBuilding.r } : null; },
                     startPlacing, cancelPlacing, tryPlaceBuilding,
                     // RESEARCH CENTER (Slice C): the Center's own placement session.
                     startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,

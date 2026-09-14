@@ -31,6 +31,13 @@
 
   const fpsEl = document.getElementById("fps");
   const statEl = document.getElementById("stat");
+  const gameTimerEl = document.getElementById("gameTimer");   // v0.48: elapsed game-time clock (top-right)
+  let _lastClockSec = -1;
+  function fmtClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
 
   function frame(now) {
     const dt = Math.min(100, now - lastTime);
@@ -107,6 +114,11 @@
         fpsEl.className = "fps" + (fpsSmoothed < 50 ? " warn" : "");
         statEl.textContent =
           `${state.map.hexes.size} hexes · ${state.towns.length} towns · ${state.roads.size} roads · z${state.zoom.toFixed(2)}`;
+        // v0.48: elapsed game time — 2 economy ticks = 1 game-second (see CONFIG.econ.baseTickMs).
+        if (gameTimerEl) {
+          const gs = Math.floor((state.tick || 0) / 2);
+          if (gs !== _lastClockSec) { _lastClockSec = gs; gameTimerEl.textContent = fmtClock(gs); }
+        }
       }
     }
     requestAnimationFrame(frame);

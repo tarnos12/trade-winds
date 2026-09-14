@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.47.0";
+  const GAME_VERSION = "0.48.0";
   const PATCH_NOTES = [
+    { v: "0.48.0", notes: [
+      "UI PASS: the HUD is reworked — the game name is gone, the top-right now shows a game CLOCK, speed controls, version and menu; the top-left groups your gold with a 🔬 Research and a 🏰 Castle button (Castle centres the map and opens the castle menu)",
+      "Selecting a building now HIGHLIGHTS it on the map so you can tell which one you’re looking at",
+      "Producer detail panels show a visual PRODUCTION CHAIN — inputs → a process wheel with the cycle time & live %, → the output with its batch size and stock bar",
+      "Only ONE panel shows at a time now — opening a building, city or castle (or selecting a scout) closes the others",
+      "Research is reachable from the top-left even before you’ve built a Research Center (you just can’t run research until it’s built)",
+    ] },
     { v: "0.47.0", notes: [
       "MORE ORE: every ore type (stone, clay, iron, coal, gold) now spawns as several clusters — no more maps with a single gold node. Resource density is a setting: Low 3 / Normal 6 / High 10 clusters per type (min 3 guaranteed)",
       "Deposits look more natural — nodes scatter with the odd 1–2 tile gap and rocky ores intermix (iron beside coal/stone) instead of forming solid single-type blocks",

@@ -427,6 +427,11 @@
 
     function select(id) {
       selectedId = id; armed = false;
+      // v0.48: one panel at a time — close town / building / castle panels on select
+      try {
+        if (window.TownUI) { window.TownUI.closeTownPanel && window.TownUI.closeTownPanel(); window.TownUI.closeBuildingPanel && window.TownUI.closeBuildingPanel(); }
+        if (window.CastleUI && window.CastleUI.closeCastlePanel) window.CastleUI.closeCastlePanel();
+      } catch (e) {}
       updateBar(); updatePanel();
     }
     function deselect() { selectedId = null; armed = false; updateBar(); updatePanel(); }

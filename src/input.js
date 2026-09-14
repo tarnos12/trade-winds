@@ -514,3 +514,10 @@
     ensureCamTargets();
     camTarget.x = 0; camTarget.y = 0;
   });
+  // v0.48: top-left castle icon — ease to the castle (world origin) AND open its menu.
+  const btnCastleCenter = document.getElementById("btnCastleCenter");
+  if (btnCastleCenter) btnCastleCenter.addEventListener("click", () => {
+    ensureCamTargets();
+    camTarget.x = 0; camTarget.y = 0;
+    if (window.CastleUI && typeof window.CastleUI.openCastlePanel === "function") window.CastleUI.openCastlePanel();
+  });

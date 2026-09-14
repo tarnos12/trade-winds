@@ -516,12 +516,29 @@
 
   // Draw every town's placed buildings as a small labelled token on its hex.
   function drawBuildings() {
+    // v0.48: the building whose detail panel is open — highlighted below so the
+    // player can tell which one is selected.
+    const sel = (typeof window !== "undefined" && window.TownUI && window.TownUI.selectedBuilding) || null;
     for (const t of state.towns) {
       if (!Array.isArray(t.buildings)) continue;
       for (const b of t.buildings) {
         const def = CONFIG.buildings[b.typeId];
         if (!def) continue;
         const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+        const isSelected = !!(sel && sel.q === b.q && sel.r === b.r);
+        if (isSelected) {   // selection ring under the token (hex outline + soft glow)
+          const gp = hexCorners(p.x, p.y);
+          ctx.save();
+          ctx.beginPath(); ctx.moveTo(gp[0][0], gp[0][1]);
+          for (let i = 1; i < 6; i++) ctx.lineTo(gp[i][0], gp[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(255,243,208,0.16)";
+          ctx.fill();
+          ctx.lineWidth = 3; ctx.strokeStyle = "#fff3d0";
+          ctx.shadowColor = "rgba(255,243,208,0.9)"; ctx.shadowBlur = 12;
+          ctx.stroke();
+          ctx.restore();
+        }
         const st = BUILDING_STYLE[def.kind] || BUILDING_STYLE.processor;
         const rad = SIZE * 0.3;
         // === CB-B: under-construction look (unfinished until b.built !== false) ===
