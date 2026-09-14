@@ -381,7 +381,7 @@ ok("map.lakeSize is a [lo,hi] range", Array.isArray(CONFIG.map.lakeSize) && CONF
 ok("map.depositAffinity: clay->water, ore->barren/mountains", (() => { const a = CONFIG.map.depositAffinity;
   return a && a.clay.indexOf("water") >= 0 && ["stone", "iron", "gold", "coal"].every(t => a[t] && a[t].indexOf("mountains") >= 0); })());
 ok("fog.startReveal scales small<normal<large", (() => { const s = CONFIG.fog.startReveal;
-  return s && s.small === 10 && s.normal === 15 && s.large === 20; })());
+  return s && s.small === 6 && s.normal === 8 && s.large === 10; })());
 
 // --- the two NEW custom axes ---
 ok("new tier axes lakes/rivers present (4 options each)", ["lakes", "rivers"]
@@ -452,11 +452,11 @@ ok("reveal-radius area always has fertile+forest (every preset & seed)", presetI
     return near.some(h => h.terrain === "fertile") && near.some(h => h.terrain === "forest");
   });
 }));
-ok("generate() returns a size-based revealRadius (10/15/20)", (() => {
+ok("generate() returns a size-based revealRadius (6/8/10)", (() => {
   const s = MapGen.generate("harbor", null, "custom", { base: "fertile", size: "small" }).revealRadius;
   const n = MapGen.generate("harbor", 14, "fertile").revealRadius;
   const l = MapGen.generate("harbor", null, "custom", { base: "fertile", size: "large" }).revealRadius;
-  return s === 10 && n === 15 && l === 20;
+  return s === 6 && n === 8 && l === 10;
 })());
 
 console.log("\nterrain histogram (seed 'harbor', fertile):");

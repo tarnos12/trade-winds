@@ -99,6 +99,34 @@ Buildings.constructionNeed = function (b) {
   }
   return out;
 };
+// === v0.49: timed construction ============================================
+// Seconds to fully build this building at 100% delivery — by tier, +per upgrade
+// level, capped. (T1/peasant = 6s by default.)
+Buildings.buildTime = function (b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  const cfg = CONFIG.build || {};
+  if (!def) return cfg.defaultSec || 8;
+  const tier = def.workerTier || def.houseTier || "peasant";
+  let s = (cfg.baseSec && cfg.baseSec[tier]) || cfg.defaultSec || 8;
+  s += Math.max(0, (b.upgradeLevel || 1) - 1) * (cfg.perUpgradeSec || 2);
+  return Math.min(cfg.maxSec || 20, s);
+};
+// Read-only construction status for a building under construction (built===false):
+//   deliveredFrac — materials delivered / total resource cost (caps how far it builds)
+//   timeFrac      — build-timer elapsed / buildTime
+//   frac          — effective progress = min(deliveredFrac, timeFrac)
+// A built (or legacy/instant) building reports frac 1. Pure.
+Buildings.constructionProgress = function (b) {
+  if (!b || b.built !== false) return { built: true, frac: 1, deliveredFrac: 1, timeFrac: 1 };
+  const def = CONFIG.buildings[b.typeId];
+  const rc = Buildings.resourceCost(def);
+  let need = 0, have = 0; const dv = b.delivered || {};
+  for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], dv[gid] || 0); }
+  const deliveredFrac = need > 0 ? have / need : 1;
+  const bt = Buildings.buildTime(b);
+  const timeFrac = bt > 0 ? Math.min(1, (b._buildT || 0) / bt) : 1;
+  return { built: false, frac: Math.min(deliveredFrac, timeFrac), deliveredFrac, timeFrac };
+};
 // === /CB-A ===================================================================
 
 // === RU-A: per-building upgrade data + pure helpers =========================

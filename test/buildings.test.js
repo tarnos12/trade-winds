@@ -75,24 +75,27 @@ ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q 
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
 // EV3: a new city starts with 20 wood (a basic peasant need — firewood).
-ok("CONFIG.town.startStock is { wood: 20 }", CONFIG.town.startStock.wood === 20);
+ok("CONFIG.town.startStock is { wood: 40 }", CONFIG.town.startStock.wood === 40);
 // EV3: per-city storage cap.
 ok("CONFIG.town.storageCap === 80", CONFIG.town.storageCap === 80);
 ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);
 ok("basic house (hut) shelters 2", CONFIG.buildings.hut.houseCapacity === 2);
-// EV3: the three starters (lumberjack/farm/hut) cost GOLD ONLY at level 1.
-ok("starter buildings are gold-only (lumberjack/farm/hut)", [
-  "lumberjack", "farm", "hut",
-].every(id => { const c = CONFIG.buildings[id].cost; return c.gold > 0 && !c.wood && !c.stone && !c.planks; }));
-// EV3: exact costs.
-ok("starter costs: lumberjack 100 / hut 200 / farm 250 (gold)",
-  CONFIG.buildings.lumberjack.cost.gold === 100 && CONFIG.buildings.hut.cost.gold === 200 && CONFIG.buildings.farm.cost.gold === 250);
-// EV3: potato_farm — a startUnlocked, gold-only food extractor on fertile terrain.
-ok("potato_farm exists (fertile extractor → potato, startUnlocked, gold-only)", (() => {
+// v0.49: T1 starters now cost WOOD (built over time), delivered from the city's
+// stock. farm (a research unlock) stays gold-only.
+ok("T1 starters cost wood (lumberjack/hut/potato_farm)", [
+  "lumberjack", "hut", "potato_farm",
+].every(id => { const c = CONFIG.buildings[id].cost; return c.wood > 0 && !c.gold; }));
+ok("farm stays gold-only", (() => { const c = CONFIG.buildings.farm.cost; return c.gold > 0 && !c.wood; })());
+// v0.49: exact wood costs.
+ok("starter costs: lumberjack 10 / hut 10 / potato_farm 10 / sawmill 20 (wood)",
+  CONFIG.buildings.lumberjack.cost.wood === 10 && CONFIG.buildings.hut.cost.wood === 10 &&
+  CONFIG.buildings.potato_farm.cost.wood === 10 && CONFIG.buildings.sawmill.cost.wood === 20);
+// v0.49: potato_farm — a startUnlocked wood-cost food extractor on fertile terrain.
+ok("potato_farm exists (fertile extractor → potato, startUnlocked, wood cost)", (() => {
   const p = CONFIG.buildings.potato_farm;
   return p && p.kind === "extractor" && p.terrain === "fertile" && p.workerTier === "peasant" &&
     p.output && p.output.goodId === "potato" && p.startUnlocked === true &&
-    p.cost && p.cost.gold > 0 && !p.cost.wood && !p.cost.stone && !p.cost.planks;
+    p.cost && p.cost.wood > 0 && !p.cost.gold;
 })());
 const kinds = Object.values(CONFIG.buildings).map(b => b.kind);
 ok("catalog has extractors/processors/houses", kinds.includes("extractor") && kinds.includes("processor") && kinds.includes("house"));
@@ -347,8 +350,11 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   st.treasury = 0;                 // Kingdom is broke → gold cost unaffordable
   const town = makeTown();
   st.towns.push(town);
-  const noGold = Buildings.canPlaceBuilding(st, "lumberjack", 6, 0);
+  // v0.49: starters cost no gold, so test the gold gate with a gold-cost building (mill).
+  const noGold = Buildings.canPlaceBuilding(st, "mill", 5, -1);
   ok("empty treasury → not ok + 'gold'", noGold.ok === false && /gold/i.test(noGold.reason));
+  // v0.49: a wood-cost starter IS placeable with an empty treasury (no gold required).
+  ok("wood-cost starter places with empty treasury", Buildings.canPlaceBuilding(st, "lumberjack", 6, 0).ok === true);
 
   // CB-A: a city missing a required RESOURCE (mill needs stone) is NO LONGER
   // rejected — gold is sufficient, so placement is allowed (traders will buy it).
@@ -478,15 +484,17 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
     millRC.wood === CONFIG.buildings.mill.cost.wood &&
     millRC.stone === CONFIG.buildings.mill.cost.stone && !("gold" in millRC));
   ok("resourceCost of a gold-only building is empty",
-    Object.keys(Buildings.resourceCost(CONFIG.buildings.hut)).length === 0);
+    Object.keys(Buildings.resourceCost(CONFIG.buildings.farm)).length === 0);
   ok("resourceCost handles a def with no cost", (() => {
     const r = Buildings.resourceCost({});
     return r && typeof r === "object" && Object.keys(r).length === 0;
   })());
 
   // isInstant: gold-only / free → instant; any material cost → not instant.
-  ok("isInstant true for gold-only starters (hut/lumberjack/farm)",
-    ["hut", "lumberjack", "farm"].every(id => Buildings.isInstant(CONFIG.buildings[id]) === true));
+  // v0.49: T1 starters now cost wood → NOT instant; farm (gold-only) is instant.
+  ok("isInstant true for a gold-only building (farm)", Buildings.isInstant(CONFIG.buildings.farm) === true);
+  ok("isInstant false for wood-cost starters (hut/lumberjack/potato_farm)",
+    ["hut", "lumberjack", "potato_farm"].every(id => Buildings.isInstant(CONFIG.buildings[id]) === false));
   ok("isInstant false for buildings with a resource cost (mill/sawmill/cottage)",
     ["mill", "sawmill", "cottage"].every(id => Buildings.isInstant(CONFIG.buildings[id]) === false));
 

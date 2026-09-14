@@ -37,7 +37,10 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
   // just halves their speed (road === false ⇒ roads are 2× faster). cost is the
   // hex distance ×2 so it reflects the ~2× travel time, and the nearest-seller
   // tiebreak still prefers a road-connected seller when one is comparably close.
-  function offRoadRoute(fromKey, toKey) {
+  // Straight hex line between the endpoints (no terrain awareness). Used when the
+  // state carries no terrain map (unit tests / bare state), and as the last-resort
+  // fallback when the two points are genuinely disconnected over land.
+  function straightLine(fromKey, toKey) {
     const a = parseKey(fromKey), b = parseKey(toKey);
     const N = HexMath.dist(a.q, a.r, b.q, b.r);
     const path = [];
@@ -50,6 +53,39 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     if (path[0] !== fromKey) path.unshift(fromKey);
     if (path[path.length - 1] !== toKey) path.push(toKey);
     return { path, cost: N * 2, road: false };
+  }
+  // v0.49: off-road carts now DETOUR around mountains/water. BFS over ROAD-passable
+  // terrain (CONFIG.terrain[t].road; the two endpoints are always allowed) with a
+  // fixed neighbour order ⇒ deterministic. cost = steps × 2 (~2× road travel time).
+  // Falls back to the straight line when there is no terrain map (tests) or the
+  // points are genuinely disconnected over land (a real island), so route() still
+  // ALWAYS returns a path.
+  function offRoadRoute(state, fromKey, toKey) {
+    const map = state && state.map && state.map.hexes;
+    if (!map || typeof CONFIG === "undefined" || !CONFIG.terrain) return straightLine(fromKey, toKey);
+    const passable = (k) => {
+      if (k === fromKey || k === toKey) return true;
+      const h = map.get(k); if (!h) return false;
+      const td = CONFIG.terrain[h.terrain];
+      return !!(td && td.road);
+    };
+    const prev = new Map(); prev.set(fromKey, null);
+    const queue = [fromKey]; let head = 0, found = false;
+    while (head < queue.length) {
+      const k = queue[head++];
+      if (k === toKey) { found = true; break; }
+      const p = parseKey(k);
+      for (const n of HexMath.neighbors(p.q, p.r)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (prev.has(nk) || !passable(nk)) continue;
+        prev.set(nk, k); queue.push(nk);
+      }
+    }
+    if (!found) return straightLine(fromKey, toKey);
+    const path = [];
+    for (let cur = toKey; cur != null; cur = prev.get(cur)) path.push(cur);
+    path.reverse();
+    return { path, cost: (path.length - 1) * 2, road: false };
   }
 
   // Dijkstra from fromKey to toKey over the road graph. Uniform edge cost 1.
@@ -99,7 +135,7 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
     }
 
     // No ROAD path → fall back to off-road so trade still happens (just slower).
-    if (!result) result = offRoadRoute(fromKey, toKey);
+    if (!result) result = offRoadRoute(state, fromKey, toKey);
 
     cache.set(ck, result);
     return result;

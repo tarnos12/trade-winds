@@ -74,7 +74,7 @@
               townId: t.id, bq: b.q, br: b.r, good,
               // v0.47: carry the whole-unit BATCH that's waiting (Sim releases output
               // in +N chunks), not a flat 1 — so the porter visibly hauls e.g. 4 wood.
-              amount: Math.max(1, Math.min(20, Math.floor(have))),
+              amount: Math.max(1, Math.min(10, Math.floor(have))),
               pts: hexLinePixels(b.q, b.r, t.q, t.r),   // L: tile-to-tile hex path
               t: Math.random(),                 // desynced start along the leg
               dir: Math.random() < 0.5 ? 1 : -1,
@@ -85,7 +85,7 @@
             roster.set(key, tr);
           } else {
             tr.good = good;                     // cheap refresh (output rarely changes)
-            tr.amount = Math.max(1, Math.min(20, Math.floor(have)));   // v0.47: keep the carried batch in step with the current surplus
+            tr.amount = Math.max(1, Math.min(10, Math.floor(have)));   // v0.47: keep the carried batch in step with the current surplus
             tr.leaving = false;                 // MD: re-wanted mid-fade-out — resume fading back in, don't vanish
           }
           cityCount++; total++;

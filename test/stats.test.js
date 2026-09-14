@@ -128,15 +128,15 @@ function constructSawmillState() {
   const s = { treasury: 1000, towns: [{ id: 1, q: 0, r: 0, level: 1, gold: 0,
     pop: { peasants: 0, workers: 0, burghers: 0 }, stock: {}, prices: {}, demand: {}, buildings: [] }] };
   const town = s.towns[0];
-  Buildings.chargeBuilding(s, town, "hut");        // instant (gold-only)
-  ok("chargeBuilding: instant hut counts once at placement", get(s, "stats.constructed.total") === 1);
-  ok("chargeBuilding: instant hut recorded byType", get(s, "stats.constructed.byType.hut") === 1);
-  Buildings.chargeBuilding(s, town, "farm");       // instant
-  ok("chargeBuilding: a second instant build bumps total to 2", get(s, "stats.constructed.total") === 2);
-  ok("chargeBuilding: byType splits instant builds", get(s, "stats.constructed.byType.farm") === 1);
+  // v0.49: farm (gold-only) is instant; the wood-cost starters (hut/sawmill) are not.
+  Buildings.chargeBuilding(s, town, "farm");       // instant (gold-only)
+  ok("chargeBuilding: instant build counts once at placement", get(s, "stats.constructed.total") === 1);
+  ok("chargeBuilding: instant build recorded byType", get(s, "stats.constructed.byType.farm") === 1);
+  Buildings.chargeBuilding(s, town, "hut");        // v0.49: NON-instant (costs wood) → counted at delivery, not here
+  ok("chargeBuilding: non-instant hut NOT counted at charge", get(s, "stats.constructed.total") === 1 && get(s, "stats.constructed.byType.hut") === undefined);
   Buildings.chargeBuilding(s, town, "sawmill");    // NON-instant: counted at delivery, NOT here
   ok("chargeBuilding: non-instant sawmill NOT counted at charge (waits for delivery)",
-     get(s, "stats.constructed.total") === 2 && get(s, "stats.constructed.byType.sawmill") === undefined);
+     get(s, "stats.constructed.total") === 1 && get(s, "stats.constructed.byType.sawmill") === undefined);
 }
 
 // ========================================================================

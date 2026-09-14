@@ -461,11 +461,22 @@ Sim.tick = function (State) {
           if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
         }
         const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        let done = true;
-        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
-        if (done) {
-          if (t.kind === "build") { b.built = true; Sim.statConstructed(State, b.typeId); }   // MISSION-STATS: construction complete (built false→true)
-          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; Sim.statUpgraded(State, b.typeId); }   // MISSION-STATS: upgrade applied
+        let matDone = true;
+        for (const gid in remain) { matDone = false; addDemand(gid, remain[gid]); }
+        if (t.kind === "build") {
+          // v0.49: timed construction. Advance the build timer by this tick's seconds,
+          // but CAPPED at deliveredFrac×buildTime so delivery limits how far it builds
+          // (8/10 wood ⇒ stalls at 80%). Finish only when materials AND time are done.
+          const bt = (Buildings.buildTime ? Buildings.buildTime(b) : 6);
+          const rc = Buildings.resourceCost(CONFIG.buildings[b.typeId]);
+          let need = 0, have = 0; const dv = b.delivered || {};
+          for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], dv[gid] || 0); }
+          const dFrac = need > 0 ? have / need : 1;
+          const tickSec = baseTickMs / 1000;
+          b._buildT = Math.min((b._buildT || 0) + tickSec, dFrac * bt);
+          if (dFrac >= 1 - 1e-9 && (b._buildT || 0) >= bt - 1e-9) { b.built = true; Sim.statConstructed(State, b.typeId); }   // MISSION-STATS: construction complete
+        } else if (matDone) {
+          b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; Sim.statUpgraded(State, b.typeId);   // MISSION-STATS: upgrade applied
         }
       }
     }

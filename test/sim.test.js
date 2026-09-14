@@ -466,12 +466,16 @@ function place(typeId, q, r, over) {
 // CB-A.5) A gold-only founding-kit starter comes out built:true and functions
 // EXACTLY as a legacy building (no built field) — same production.
 {
-  ok("CB-A: gold-only starter is instant (built:true on placement)",
-     place("potato_farm", 0, 1).built === true && place("hut", 0, 2).built === true);
-  const houses = () => [place("hut", 0, 2), place("hut", 0, 3), place("hut", 0, 4)];
+  // v0.49: starters now cost wood → they CONSTRUCT over time (not instant). A
+  // gold-only building is still instant; a resource-cost one is built:false.
+  ok("CB-A: gold-only building is instant (built:true on placement)",
+     place("farm", 0, 1).built === true);
+  ok("CB-A: resource-cost starter constructs over time (built:false on placement)",
+     place("potato_farm", 0, 1).built === false && place("hut", 0, 2).built === false);
+  const houses = () => [place("hut", 0, 2, { built: true }), place("hut", 0, 3, { built: true }), place("hut", 0, 4, { built: true })];
   const modern = town({ id: 1, pop: { peasants: 3, workers: 0, burghers: 0 },
                         stock: { wood: 100000 },
-                        buildings: [place("potato_farm", 0, 1), ...houses()] });
+                        buildings: [place("potato_farm", 0, 1, { built: true }), ...houses()] });
   const legacy = town({ id: 2, pop: { peasants: 3, workers: 0, burghers: 0 },
                         stock: { wood: 100000 },
                         buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
@@ -486,14 +490,14 @@ function place(typeId, q, r, over) {
 {
   const t = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
-                   buildings: [place("lumberjack", 0, 1, { closedSlots: 1 })] });
+                   buildings: [place("lumberjack", 0, 1, { closedSlots: 1, built: true })] });
   Sim.tick({ towns: [t] });
-  const full = CONFIG.buildings.lumberjack.workerSlots; // 3
+  const full = CONFIG.buildings.lumberjack.workerSlots; // 2
   ok("CB-A: closedSlots:1 → assigned workers = slots − 1", t.buildings[0].workers === full - 1);
 
   const t2 = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
                     stock: { wood: 100000 },
-                    buildings: [place("lumberjack", 0, 1, { closedSlots: full + 5 })] });
+                    buildings: [place("lumberjack", 0, 1, { closedSlots: full + 5, built: true })] });
   Sim.tick({ towns: [t2] });
   ok("CB-A: closedSlots ≥ slots → 0 workers (never negative)", t2.buildings[0].workers === 0);
 }
@@ -505,8 +509,8 @@ function place(typeId, q, r, over) {
   const t = town({ pop: { peasants: 2, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
                    buildings: [
-                     place("lumberjack", 0, 1, { priority: false }),  // earlier in array
-                     place("lumberjack", 0, 2, { priority: true }),   // but priority
+                     place("lumberjack", 0, 1, { priority: false, built: true }),  // earlier in array
+                     place("lumberjack", 0, 2, { priority: true, built: true }),   // but priority
                    ] });
   Sim.tick({ towns: [t] });
   ok("CB-A: priority building staffed first (gets the whole pool)", t.buildings[1].workers === 2);
@@ -555,7 +559,7 @@ function place(typeId, q, r, over) {
       level: 3, pop: { peasants: 12, workers: 0, burghers: 0 },
       stock: { wood: 60, potato: 60, fish: 60, wool: 60 },
       buildings: [
-        place("hut", 0, 1, { upgradeLevel: lvl }),
+        place("hut", 0, 1, { upgradeLevel: lvl, built: true }),
         place("potato_farm", 0, 2, { built: true }),
         place("lumberjack", 0, 3, { built: true }),
         place("fishery", 1, 1, { built: true }),
@@ -574,7 +578,7 @@ function place(typeId, q, r, over) {
     const mk = (lvl) => town({
       pop: { peasants: 2, workers: 0, burghers: 0 },
       stock: { wood: 50, potato: 50, fish: 50, wool: 50 },
-      buildings: [place("hut", 0, 1, { upgradeLevel: lvl })],
+      buildings: [place("hut", 0, 1, { upgradeLevel: lvl, built: true })],
     });
     const tHi = mk(1), tLo = mk(4);   // L4 hut cuts basic consumption to 0.7×
     Sim.tick({ towns: [tHi] });
@@ -625,8 +629,10 @@ function place(typeId, q, r, over) {
 
   // -- transporter-scaled construction delivery: L4 delivers more/tick than L1. --
   {
+    // v0.49: use mill (wood 25 + stone 15 = 40 total) so its cost exceeds even the
+    // L4 per-tick budget (35), keeping the L1<L4 delivery comparison meaningful.
     const mk = (lvl) => town({ level: lvl, pop: { peasants: 0, workers: 0, burghers: 0 },
-                               stock: { wood: 200 }, buildings: [place("sawmill", 0, 1)] });
+                               stock: { wood: 200 }, buildings: [place("mill", 0, 1)] });
     const t1 = mk(1), t4 = mk(4);
     Sim.tick({ towns: [t1] }); Sim.tick({ towns: [t4] });
     const d1 = t1.buildings[0].delivered.wood || 0, d4 = t4.buildings[0].delivered.wood || 0;
@@ -676,8 +682,8 @@ function place(typeId, q, r, over) {
 
   // -- houseIncome attributes a tier's income across its houses by capacity share. --
   {
-    const bigHut = place("hut", 0, 3, { upgradeLevel: 2 });   // +1 capacity from L2 (cap 3)
-    const smallHut = place("hut", 1, 3);                       // base cap 2
+    const bigHut = place("hut", 0, 3, { upgradeLevel: 2, built: true });   // +1 capacity from L2 (cap 3)
+    const smallHut = place("hut", 1, 3, { built: true });                       // base cap 2
     const t = town({ level: 1, gold: 0,
       pop: { peasants: 5, workers: 0, burghers: 0 },
       stock: { wood: 200, potato: 200, fish: 200, wool: 200 },

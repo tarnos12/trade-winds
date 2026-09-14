@@ -575,6 +575,17 @@
           }
           // missing-resource chips (hide when far out, mirroring drawCarts' zoomedOut)
           if (!(state.zoom < 0.6)) drawConstructionNeed(b, p, rad);
+          // v0.49: build progress bar (effective % = min(time, delivered) — see Buildings.constructionProgress)
+          if (!(state.zoom < 0.6) && typeof Buildings !== "undefined" && Buildings.constructionProgress) {
+            const cp = Buildings.constructionProgress(b);
+            const bw = rad * 1.8, bh = Math.max(3, SIZE * 0.12);
+            const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.16);
+            ctx.fillStyle = "rgba(18,14,9,0.82)"; ctx.fillRect(bx, by, bw, bh);
+            // delivered cap shown faintly behind the filled (time) progress
+            ctx.fillStyle = "rgba(224,166,60,0.35)"; ctx.fillRect(bx, by, bw * cp.deliveredFrac, bh);
+            ctx.fillStyle = "#ffce4d"; ctx.fillRect(bx, by, bw * cp.frac, bh);
+            ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+          }
           continue;
         }
         // === /CB-B ===

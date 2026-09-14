@@ -179,7 +179,7 @@ const CONFIG = {
   // === v0.43: fog reveal at NEW-GAME scales with board size (startReveal), so a
   // big board still opens with a workable viewport. `castleReveal` is the legacy
   // fallback (used if a map carries no size-derived radius). townReveal unchanged.
-  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 10, normal: 15, large: 20 } },
+  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
     // === Bulk production (v0.39): a producing building banks its output and
@@ -189,6 +189,12 @@ const CONFIG = {
     // lost. Keyed by building `kind`; a kind not listed here releases whatever
     // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
     productionIntervalSec: { extractor: 8, processor: 12 } },
+  // === Construction build time (v0.49) ===  A placed building fills a progress bar
+  // to completion. Progress = min(time elapsed / buildTime, materials delivered /
+  // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
+  // with everything delivered instantly, a building still takes `buildTime` seconds.
+  // buildTime = baseSec[tier] + (upgradeLevel-1)×perUpgradeSec, capped at maxSec.
+  build: { baseSec: { peasant: 6, worker: 10, burgher: 14, aristocrat: 18 }, defaultSec: 8, perUpgradeSec: 2, maxSec: 20 },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.
   // road      = a road segment may cross this hex (traders/pathing).

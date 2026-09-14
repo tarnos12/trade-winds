@@ -65,9 +65,9 @@ Object.assign(CONFIG, {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
       output: { goodId: "wood", ratePerWorker: 0.25 },
-      // EV3: starter — GOLD ONLY at level 1 (no resource cost).
+      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { gold: 100 },
+      workerSlots: 2, cost: { wood: 10 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
@@ -83,9 +83,9 @@ Object.assign(CONFIG, {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "potato", ratePerWorker: 0.25 },
-      // EV3: starter food building — the basic peasant staple. GOLD ONLY.
+      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { gold: 120 },
+      workerSlots: 2, cost: { wood: 10 },
     },
     // === TV2: renamed from "miner"; sits on iron_deposit, worker-staffed T2 ===
     iron_mine: {
@@ -151,10 +151,9 @@ Object.assign(CONFIG, {
       id: "sawmill", name: "Sawmill", kind: "processor",
       terrain: null, workerTier: "peasant",
       inputs: { wood: 0.083333 }, output: { goodId: "planks", ratePerWorker: 0.041667 },
-      // BAL: starter — the one basic processor, wood only so a fresh city can raise
-      // it from its founding wood and start refining planks immediately.
+      // v0.49: costs 20 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { wood: 30, gold: 60 },
+      workerSlots: 2, cost: { wood: 20 },
     },
     mill: {
       id: "mill", name: "Mill", kind: "processor",
@@ -303,9 +302,9 @@ Object.assign(CONFIG, {
       id: "hut", name: "Hut", kind: "house",
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // EV3: starter — GOLD ONLY at level 1.
+      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      cost: { gold: 200 },
+      cost: { wood: 10 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
@@ -347,9 +346,10 @@ Object.assign(CONFIG, {
     // EV3: per-city storage cap — a city holds at most this many of EACH good.
     // Enforced wherever stock increases (Sim production, trade delivery).
     storageCap: 80,
-    // EV3: a new city starts with a little WOOD (a basic peasant need — firewood).
-    // Starter buildings are now GOLD-only, so no wood is needed to build them.
-    startStock: { wood: 20 },
+    // v0.49: a new city starts with 40 wood — enough to raise its first few starter
+    // buildings (hut/lumberjack/potato farm 10 each, sawmill 20), whose resource
+    // cost the city's transporters deliver from this stock as they construct.
+    startStock: { wood: 40 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
