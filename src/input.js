@@ -196,14 +196,46 @@
     state.treasury = (state.treasury || 0) - Buildings.roadCost();
     return true;
   }
+  // v0.47: shortest route from A to B over ROAD-ELIGIBLE ground (BFS), so the road
+  // bends AROUND mountains/water instead of the old straight line that punched
+  // through them and left broken, unwalkable gaps. Returns [{q,r}...] inclusive, or
+  // null if B can't be reached over roadable terrain.
+  function roadRouteAB(a, b) {
+    if (!roadEligible(b.q, b.r)) return null;
+    const ak = HexMath.key(a.q, a.r), bk = HexMath.key(b.q, b.r);
+    const prev = new Map(); prev.set(ak, null);
+    const queue = [ak]; let head = 0;
+    while (head < queue.length) {
+      const k = queue[head++];
+      if (k === bk) break;
+      const c = k.indexOf(","); const cq = +k.slice(0, c), cr = +k.slice(c + 1);
+      for (const n of HexMath.neighbors(cq, cr)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (prev.has(nk) || !roadEligible(n.q, n.r)) continue;
+        prev.set(nk, k); queue.push(nk);
+      }
+    }
+    if (!prev.has(bk)) return null;
+    const path = [];
+    for (let cur = bk; cur != null; cur = prev.get(cur)) { const c = cur.indexOf(","); path.push({ q: +cur.slice(0, c), r: +cur.slice(c + 1) }); }
+    return path.reverse();
+  }
   function placeRoadPath(a, b) {
-    const N = HexMath.dist(a.q, a.r, b.q, b.r);
     let laid = 0;
-    for (let i = 0; i <= N; i++) {
-      const t = N === 0 ? 0 : i / N;
-      const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
-      if ((state.treasury || 0) < Buildings.roadCost()) break;   // out of gold — stop
-      if (layRoad(h.q, h.r)) laid++;   // ineligible/water hexes are skipped, not blocking
+    const route = roadRouteAB(a, b);
+    if (route) {                          // roadable path found — lay along it (continuous, no gaps)
+      for (const h of route) {
+        if ((state.treasury || 0) < Buildings.roadCost()) break;
+        if (layRoad(h.q, h.r)) laid++;
+      }
+    } else {                              // B unreachable over land — fall back to the straight line (skips obstacles)
+      const N = HexMath.dist(a.q, a.r, b.q, b.r);
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
+        if ((state.treasury || 0) < Buildings.roadCost()) break;
+        if (layRoad(h.q, h.r)) laid++;
+      }
     }
     if (laid) { Pathing.invalidate(); if (typeof updateTreasuryHud === "function") updateTreasuryHud(); SFX.playThrottled("place", 90); }
     return laid;
@@ -326,8 +358,15 @@
       // v0.45: give Scouts first refusal on a plain (pan-mode) click — selecting a
       // scout, or setting an explore target for the selected one. Returns true if
       // it consumed the click, so it doesn't also place/select something else.
-      if (state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick
-          && Scouts.handleClick(h.q, h.r, e)) { /* consumed by Scouts */ }
+      if (state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick) {
+        if (Scouts.handleClick(h.q, h.r, e)) { /* consumed by Scouts */ }
+        else {
+          // v0.47: clicking anything else deselects the scout (so its panel closes
+          // when you select a building/city/castle instead).
+          if (Scouts.selectedId != null && Scouts.deselect) Scouts.deselect();
+          place(h.q, h.r);
+        }
+      }
       else if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
       else place(h.q, h.r);
     }

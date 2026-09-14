@@ -64,6 +64,7 @@
     state.scouts = [];           // v0.45: Scout units (Scouts.ensure creates the starting Red scout)
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
+    state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };

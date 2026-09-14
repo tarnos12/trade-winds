@@ -170,6 +170,15 @@ const MapGen = {
                (CONFIG.mapPresets && CONFIG.mapPresets[CONFIG.mapPresetDefault]) || {};
     }
     radius = radius || preset.radius || CONFIG.map.radius;
+    // === Resource DENSITY (v0.47) === per-type ore CLUSTER count. Level comes from
+    // the Custom "resources" axis (tiers.resources) or the preset's declared tier,
+    // defaulting to Normal; every ore type gets at least this many clusters, so no
+    // map is ore-starved (fixes "only 1 gold node"). Min floor 3 is baked into the
+    // Low level. Same (seed, tiers) still => same map (perType only scales the loop).
+    const DENS = (CONFIG.map && CONFIG.map.depositDensity) || { low: 3, normal: 6, high: 10 };
+    const RES2DENS = { scarce: "low", normal: "normal", rich: "high" };
+    const resSel = (tiers && tiers.resources) || (preset.tiers && preset.tiers.resources) || "normal";
+    const perType = Math.max(3, DENS[RES2DENS[resSel] || "normal"] || DENS.normal || 6);
     const seed = hashSeed(seedInput);
     // Single seeded stream (seed ^ presetId) consumed in a FIXED order below.
     // For custom maps presetId is the constant "custom" — the tiers change the
@@ -225,24 +234,33 @@ const MapGen = {
     // single peaks. Budget = mountainFrac of the land; seed ridges at the highest
     // remaining land hexes and grow blobs from them. Reachability is guaranteed
     // afterwards (ensureReachable) so a range can never permanently wall off land. ----
+    // (v0.47) Ranges are placed in SEVERAL semi-random regions, not one central
+    // massif. Seeds are drawn by rng from the upper-elevation land (ranges still
+    // favour high ground) but a minimum separation spreads them across the board.
+    // mtnSeeds is remembered so ore can co-spawn against the ranges (phase 8).
     const mtnFrac = preset.mountainFrac || 0;
+    const mtnSeeds = [];
     if (mtnFrac > 0) {
       const land0 = all.filter(h => h.terrain === null);
       const budget = Math.round(land0.length * mtnFrac);
       if (budget > 0 && land0.length) {
         const byElev = land0.slice().sort((a, b) => b.elevation - a.elevation ||
           (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1));
-        let placed = 0, si = 0;
-        while (placed < budget && si < byElev.length) {
-          let seed = null;
-          while (si < byElev.length) { const h = byElev[si++]; if (h.terrain === null) { seed = h; break; } }
-          if (!seed) break;
+        const topPool = byElev.slice(0, Math.max(1, Math.floor(byElev.length * 0.6)));   // upper 60% by elevation
+        const minSep = 5;                       // hexes between range seeds → several distinct ranges
+        let placed = 0, tries = 0;
+        while (placed < budget && tries < 400 && topPool.length) {
+          tries++;
+          const pick = topPool[Math.floor(rng() * topPool.length)];
+          if (pick.terrain !== null) continue;   // already part of a range
+          // reject seeds too close to an existing range — but relax after enough
+          // tries so the mountain budget always fills even on a small board.
+          if (tries < 220 && mtnSeeds.some(s => HexMath.dist(s.q, s.r, pick.q, pick.r) < minSep)) continue;
           const remaining = budget - placed;
           const rsize = Math.min(remaining, 4 + Math.floor(rng() * 8));   // ridge blob 4..11
-          const taken = MapGen.growPatch(hexes, HexMath.key(seed.q, seed.r), rsize,
+          const taken = MapGen.growPatch(hexes, HexMath.key(pick.q, pick.r), rsize,
             k => hexes.get(k).terrain === null, (kk) => { hexes.get(kk).terrain = "mountains"; }, rng);
-          placed += taken.size || 0;
-          if (!taken.size) break;   // safety: nothing grew (shouldn't happen)
+          if (taken.size) { mtnSeeds.push({ q: pick.q, r: pick.r }); placed += taken.size; }
         }
       }
     }
@@ -355,10 +373,23 @@ const MapGen = {
     const BANDS = (CONFIG.map && CONFIG.map.depositBands) || {};
     const AFF = (CONFIG.map && CONFIG.map.depositAffinity) || {};
     const distOf = (k) => { const p = MapGen.parseKey(k); return HexMath.dist(0, 0, p.q, p.r); };
+    const bandFor = (t) => { const c = deps[t]; return (c && Array.isArray(c.band)) ? c.band : (BANDS[TIERS[t] || 1] || [0, 1]); };
+    // (v0.47) MIXING: within a rocky cluster a tile may swap to a SIBLING rocky ore
+    // (so iron shows up beside coal / stone rather than a pure block), but ONLY to a
+    // sibling whose own distance band contains that tile — the tier rules still hold,
+    // so metals never leak next to the castle. Clay (water) and gold (precious, far)
+    // stay pure. The cluster SEED always keeps its own type ⇒ >= perType of each ore.
+    const MIX = ["stone", "coal", "iron"];
+    const MIXCHANCE = 0.28;
+    const pickMixType = (primary, df) => {
+      if (MIX.indexOf(primary) < 0 || rng() >= MIXCHANCE) return primary;
+      const sibs = MIX.filter(s => { const b = bandFor(s); return df >= (b[0] || 0) && df <= (b[1] != null ? b[1] : 1); });
+      return sibs.length ? sibs[Math.floor(rng() * sibs.length)] : primary;
+    };
     for (const type of ["stone", "clay", "iron", "coal", "gold"]) {   // fixed order ⇒ reproducible rng
-      const cfg = deps[type]; if (!cfg) continue;
+      const cfg = deps[type] || {};
       const terr = DEP_TERRAIN[type];
-      const band = Array.isArray(cfg.band) ? cfg.band : (BANDS[TIERS[type] || 1] || [0, 1]);
+      const band = bandFor(type);
       const lo = Math.round((band[0] || 0) * castleMaxDist);
       const hi = Math.round((band[1] != null ? band[1] : 1) * castleMaxDist);
       const inBand    = (k) => depositable[hexes.get(k).terrain] && distOf(k) >= lo && distOf(k) <= hi;
@@ -367,7 +398,7 @@ const MapGen = {
       const affMatch = (k) => { const p = MapGen.parseKey(k);
         return HexMath.neighbors(p.q, p.r).some(n => { const nh = hexes.get(HexMath.key(n.q, n.r));
           return nh && affTerr.indexOf(nh.terrain) >= 0; }); };
-      for (let i = 0; i < (cfg.count || 0); i++) {
+      for (let i = 0; i < perType; i++) {   // (v0.47) DENSITY: perType clusters of every ore type
         let pool = all.filter(h => inBand(HexMath.key(h.q, h.r))).map(h => HexMath.key(h.q, h.r));
         let takable = inBand;
         if (!pool.length) {   // band clipped by the board edge — relax the near bound
@@ -375,13 +406,30 @@ const MapGen = {
           takable = inRelaxed;
         }
         if (!pool.length) break;
-        if (affTerr && affTerr.length) {   // AFFINITY: prefer hexes next to the matching terrain
+        if (affTerr && affTerr.length) {   // AFFINITY: prefer hexes next to the matching terrain (metals hug mountains)
           const affPool = pool.filter(affMatch);
           if (affPool.length) pool = affPool;
         }
-        const start = pool[Math.floor(rng() * pool.length)];
-        const size = 1 + Math.floor(rng() * 3);   // 1..3
-        MapGen.growPatch(hexes, start, size, takable, (kk) => { hexes.get(kk).terrain = terr; }, rng);
+        const startKey = pool[Math.floor(rng() * pool.length)];
+        hexes.get(startKey).terrain = terr;                 // SEED keeps the pure type
+        const size = 1 + Math.floor(rng() * 3);             // 1..3 tiles per node
+        // SCATTER: the extra tiles sit within hex-dist 2 of the seed, biased to
+        // adjacency but SOMETIMES a tile or two away (natural gaps, not a solid block).
+        const sp = MapGen.parseKey(startKey);
+        let cand = all.filter(h => { const k = HexMath.key(h.q, h.r); const d = HexMath.dist(sp.q, sp.r, h.q, h.r);
+          return d >= 1 && d <= 2 && takable(k); }).map(h => HexMath.key(h.q, h.r));
+        let placedTiles = 1;
+        while (placedTiles < size && cand.length) {
+          const wantAdj = rng() < 0.6;   // 60% tight (adjacent), 40% gapped (dist 2)
+          let idx = cand.findIndex(k => { const p = MapGen.parseKey(k); return (HexMath.dist(sp.q, sp.r, p.q, p.r) === 1) === wantAdj; });
+          if (idx < 0) idx = Math.floor(rng() * cand.length);
+          const ck = cand.splice(idx, 1)[0];
+          if (!takable(ck)) continue;    // taken by an earlier tile this cluster
+          const cp = MapGen.parseKey(ck);
+          const df = castleMaxDist ? HexMath.dist(0, 0, cp.q, cp.r) / castleMaxDist : 0;
+          hexes.get(ck).terrain = DEP_TERRAIN[pickMixType(type, df)];
+          placedTiles++;
+        }
       }
     }
 

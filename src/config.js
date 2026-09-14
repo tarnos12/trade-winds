@@ -19,6 +19,11 @@ const CONFIG = {
     // a good via `deposits.<good>.band = [lo,hi]` (e.g. Highlands pulls ore inward).
     depositTiers: { stone: 1, clay: 2, coal: 2, iron: 3, gold: 3 },
     depositBands: { 1: [0.0, 1.0], 2: [0.33, 1.0], 3: [0.66, 1.0] },
+    // === Resource DENSITY (v0.47) ===  How many deposit CLUSTERS of EACH ore type
+    // (stone, clay, iron, coal, gold) spawn on the map. The Custom "resources" axis
+    // and each preset's declared resources tier pick a level; a healthy minimum of
+    // 3 of every type is always guaranteed so no map is starved of (e.g.) gold.
+    depositDensity: { low: 3, normal: 6, high: 10 },
     // === v0.43 MapGen overhaul ===
     // PATCH PARADIGM: the background/filler biomes (barren/desert/snow, plus
     // water/mountains) fill MOST of the map; fertile & forest appear as discrete
@@ -29,8 +34,12 @@ const CONFIG = {
     // deposit prefers seed hexes whose neighbourhood contains one of these
     // terrains (falls back to the plain in-band pool when none match). Clay hugs
     // water; the metals/stone favour rocky barren/mountain country.
-    depositAffinity: { clay: ["water"], stone: ["barren", "mountains"],
-      iron: ["barren", "mountains"], gold: ["barren", "mountains"], coal: ["barren", "mountains"] },
+    // (v0.47) Metals hug the mountain RANGES — iron & gold spawn against mountains,
+    // so ore reads as coming out of the ranges; stone & coal prefer mountains but
+    // accept barren too, so they are SOMETIMES found away from the peaks. Clay hugs
+    // water. When no in-band hex matches, generation falls back to the plain pool.
+    depositAffinity: { clay: ["water"], stone: ["mountains", "barren"],
+      iron: ["mountains"], gold: ["mountains"], coal: ["mountains", "barren"] },
     // LAKES: inland water blobs (separate from the rim/center SEA which the Sea
     // Level axis controls). COUNT keyed by a preset's `lakes` LEVEL string; SIZE
     // range per blob. Placed on land, kept clear of the immediate castle core.
@@ -137,10 +146,12 @@ const CONFIG = {
       { id: "normal", label: "Normal", waterFrac: 0.18 },
       { id: "high",   label: "High",   waterFrac: 0.30 },
     ] },
+    // (v0.47) `density` = clusters of EACH ore type (see CONFIG.map.depositDensity):
+    // Low 3 · Normal 6 · High 10. ringMul still nudges how far ore sits from spawn.
     resources: { label: "Resources", default: "normal", options: [
-      { id: "scarce", label: "Scarce", countMul: 0.6, ringMul: 1.2 },
-      { id: "normal", label: "Normal", countMul: 1.0, ringMul: 1.0 },
-      { id: "rich",   label: "Rich",   countMul: 1.6, ringMul: 0.8 },
+      { id: "scarce", label: "Low (3)",    density: "low",    ringMul: 1.2 },
+      { id: "normal", label: "Normal (6)", density: "normal", ringMul: 1.0 },
+      { id: "rich",   label: "High (10)",  density: "high",   ringMul: 0.8 },
     ] },
     size: { label: "Size", default: "normal", options: [
       { id: "small",  label: "Small",  rect: { width: 36, height: 18 } },

@@ -696,6 +696,7 @@
     { id: "worker",     icon: "🔨", label: "Worker",     kind: "tier", tier: "worker"  },
     { id: "burgher",    icon: "🎩", label: "Citizen",    kind: "tier", tier: "burgher" },
     { id: "aristocrat", icon: "👑", label: "Aristocrat", kind: "tier", tier: "aristocrat" },  // === CC: shown once aristocrat_home unlocks ===
+    { id: "special",    icon: "⭐", label: "Special",    kind: "castle" },  // === SPECIAL: castle-adjacent buildings (Research Center · Advanced Provisioner) ===
   ];
   // BAL: per-building availability. A building is available iff it is a starter
   // (startUnlocked) or its unlockedBy research node has been unlocked.
@@ -744,6 +745,7 @@
   function bbCatVisible(cat) {
     if (!cat) return true;
     if (cat.kind === "special") return true;
+    if (cat.kind === "castle") return true;   // === SPECIAL: always visible (per-item availability shown inside the flyout) ===
     return bbTierBuildings(cat.tier).some(bbBuildingAvailable);
   }
   // Reflect visibility/open state on the category buttons (research can unlock live).
@@ -777,19 +779,50 @@
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
         { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
-      // v0.46: Advanced Provisioner — shown only once researched and not yet built.
-      const apCfg = CONFIG.advancedProvisioner || {};
-      const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
-      if (apResearched && !state.advancedProvisioner) {
-        const g = (apCfg.build && apCfg.build.gold) || 0;
-        items.push({ action: "advProvisioner", name: "Advanced Provisioner", sub: `🍲 ${g}g`,
-          tip: "Placement — click a hex next to the castle to build it (1 fish + 1 potato → 2 provisions)." });
-      }
+      // v0.46: Advanced Provisioner now lives in the ⭐ Special category flyout
+      // (see the cat.kind === "castle" branch below) — no longer here in Build.
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
         const active = !it.disabled && state.mode === it.action;
         html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}${active ? " active" : ""}"
           data-action="${esc(it.action)}"${it.disabled ? " aria-disabled=\"true\"" : ""} title="${esc(it.tip)}">
+          <span class="bb-name">${esc(it.name)}</span>
+          <span class="bb-cost">${esc(it.sub)}</span></button>`;
+      }
+      buildBarFlyoutEl.innerHTML = html;
+      return;
+    }
+    // === SPECIAL: castle-adjacent buildings — Research Center + Advanced Provisioner.
+    // Each is a unique, castle-owned building placed via its own placement session
+    // (not a per-town charge). Items appear only while available; when none are,
+    // a small hint keeps the flyout non-empty.
+    if (cat.kind === "castle") {
+      const items = [];
+      // Research Center — one only; the placement item disappears once it's built.
+      const rcCfg = CONFIG.researchCenter || {};
+      if (!state.researchCenter) {
+        const rg = (rcCfg.build && rcCfg.build.gold) || 0;
+        items.push({ action: "researchCenter", name: "Research Center", sub: `${rg}g`,
+          active: !!placingResearchCenter,
+          tip: "Placement — click a hex next to the castle to build the Research Center." });
+      }
+      // Advanced Provisioner — shown only once researched and not yet built.
+      const apCfg = CONFIG.advancedProvisioner || {};
+      const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
+      if (apResearched && !state.advancedProvisioner) {
+        const g = (apCfg.build && apCfg.build.gold) || 0;
+        items.push({ action: "advProvisioner", name: "Advanced Provisioner", sub: `🍲 ${g}g`,
+          active: state.mode === "advProvisioner",
+          tip: "Click a hex next to the castle to build it (1 fish + 1 potato → 2 provisions)." });
+      }
+      let html = `<div class="bb-fly-title">⭐ Special</div>`;
+      if (items.length === 0) {
+        html += `<div class="bb-fly-lock">No special buildings available yet.</div>`;
+      }
+      for (const it of items) {
+        const active = !!it.active;
+        html += `<button type="button" class="bb-btn${active ? " active" : ""}"
+          data-action="${esc(it.action)}" title="${esc(it.tip)}">
           <span class="bb-name">${esc(it.name)}</span>
           <span class="bb-cost">${esc(it.sub)}</span></button>`;
       }
@@ -995,6 +1028,13 @@
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
+    // === SPECIAL: Research Center is a placement session, not a build mode.
+    if (action === "researchCenter") {
+      cancelPlacing();          // exclusive with town-building placement
+      closeFlyout();
+      startPlacingResearchCenter();
+      return;
+    }
     if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();

@@ -850,6 +850,33 @@ Sim.houseIncome = function (town, building) {
 };
 // === /PP-A ===
 
+// (v0.47) Read-only production progress for the map + panel progress bars. Returns
+// { prog, working, starved, kind, out } for a producing building, or null for a
+// house / non-producer. `prog` (0..1) is how far this building is toward its next
+// whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick advances); at
+// interval 0 (release-every-tick kinds) it reports the banked fraction. `starved`
+// = a processor that lacks its full input recipe in the town stock right now. Pure.
+Sim.buildingProgress = function (state, town, b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+  const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
+  const intervalTicks = Math.round((psec[def.kind] || 0) * (1000 / baseTickMs));
+  const working = (b.workers || 0) > 0 && b.built !== false;
+  let prog = 0;
+  if (intervalTicks > 0) {
+    const t = (typeof b._prodTimer === "number") ? b._prodTimer : intervalTicks;
+    prog = Math.max(0, Math.min(1, 1 - t / intervalTicks));
+  } else {
+    prog = Math.max(0, Math.min(1, (b._prodAcc || 0) % 1));
+  }
+  let starved = false;
+  if (def.inputs && town && town.stock) {
+    for (const gid in def.inputs) if ((town.stock[gid] || 0) < def.inputs[gid]) { starved = true; break; }
+  }
+  return { prog: working ? prog : 0, working, starved, intervalTicks, kind: def.kind, out: def.output.goodId };
+};
+
 // === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can
 // drive it). Renames retired/renamed good ids across every good-keyed map in a
 // loaded save, summing collisions, and remaps the retired weaver building. The

@@ -28,8 +28,10 @@ Object.assign(CONFIG, {
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
     // === RSF: the castle opens with a small material stock so the FIRST research
     // nodes never hard-stall while young cities have no surplus to sell. Covers
-    // any single peasant-band root node's materials.
-    starterStock: { wood: 40, stone: 20 },
+    // any single peasant-band root node's materials. (v0.47) also seeds potato so
+    // the provisioner starts converting immediately, and keeps >=10 stone/wood/
+    // potato — the small early cushion the player expects at the castle.
+    starterStock: { wood: 40, stone: 20, potato: 10 },
   },
 });
 

@@ -1,6 +1,16 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.46.0";
+  const GAME_VERSION = "0.47.0";
   const PATCH_NOTES = [
+    { v: "0.47.0", notes: [
+      "MORE ORE: every ore type (stone, clay, iron, coal, gold) now spawns as several clusters — no more maps with a single gold node. Resource density is a setting: Low 3 / Normal 6 / High 10 clusters per type (min 3 guaranteed)",
+      "Deposits look more natural — nodes scatter with the odd 1–2 tile gap and rocky ores intermix (iron beside coal/stone) instead of forming solid single-type blocks",
+      "Mountains now form several semi-random RANGES across the map (not one central massif), and iron/gold spawn against them (stone/coal too, but sometimes out in barren country)",
+      "NEW: every producer shows a PROGRESS BAR — it fills toward each whole-unit batch (green = producing, amber = waiting on inputs); porters now carry the whole batch",
+      "The castle starts with 10 potato (plus its wood/stone) so provisions start flowing right away",
+      "NEW build-bar section ‘⭐ Special’ holds the castle buildings (Research Center, Advanced Provisioner)",
+      "Roads now bend AROUND mountains/water when you drag A→B (no more broken road lines cutting through peaks)",
+      "Fixes: a fresh game no longer starts with the City tool pre-selected; Scout ‘Explore’ now moves the scout to any tile you click; the scout panel sits bottom-left so it stops covering the build bar; the tile under your cursor is always highlighted",
+    ] },
     { v: "0.46.0", notes: [
       "NEW: the ADVANCED PROVISIONER \u2014 research it (Logistics branch), then build it next to your castle from the \ud83c\udfd7 Build menu. It runs alongside the built-in provisioner, turning 1 fish + 1 potato \u2192 2 provisions (and the castle starts buying fish automatically)",
     ] },

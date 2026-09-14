@@ -262,14 +262,25 @@ ok("climate:cold -> snow rows 4 + desert folded into barren", (() => {
   const p = MapGen.applyTiers(FBASE, { climate: "cold" });
   return p.snow.mode === "pole" && p.snow.rows === 4 && (p.groundMix.desert || 0) === 0;
 })());
-ok("resources:rich has more stone than scarce", (() => {
-  const rich = MapGen.applyTiers(FBASE, { resources: "rich" }).deposits.stone.count;
-  const scarce = MapGen.applyTiers(FBASE, { resources: "scarce" }).deposits.stone.count;
-  return rich > scarce && scarce >= 1;
+// (v0.47) Deposit COUNT is now density-driven in generate() (per-type cluster
+// count from CONFIG.map.depositDensity), not scaled on the preset via applyTiers.
+const ORE_TERRAINS = { stone: "stone_deposit", clay: "clay_deposit", iron: "iron_deposit", coal: "coal_deposit", gold: "gold_deposit" };
+function oreTileCount(tiersSel, type, seed) {
+  const g = MapGen.generate(seed || "harbor", null, "custom", Object.assign({ base: "fertile" }, tiersSel));
+  let n = 0; for (const h of g.hexes.values()) if (h.terrain === ORE_TERRAINS[type]) n++;
+  return n;
+}
+ok("resources:rich yields more stone deposits than scarce", (() => {
+  const rich = oreTileCount({ resources: "rich" }, "stone");
+  const scarce = oreTileCount({ resources: "scarce" }, "stone");
+  return rich > scarce && scarce >= 3;
 })());
-ok("resources:scarce never zeroes a deposit type (min 1)", (() => {
-  const d = MapGen.applyTiers(FBASE, { resources: "scarce" }).deposits;
-  return ["stone", "clay", "iron", "coal", "gold"].every(k => (d[k].count || 0) >= 1);
+ok("resources:scarce still spawns >= 3 of EVERY ore type (min density)", (() => {
+  return ["stone", "clay", "iron", "coal", "gold"].every(k => oreTileCount({ resources: "scarce" }, k) >= 3);
+})());
+ok("depositDensity levels are Low 3 / Normal 6 / High 10", (() => {
+  const d = CONFIG.map.depositDensity;
+  return d.low === 3 && d.normal === 6 && d.high === 10;
 })());
 
 // --- guardrails hold across a broad sweep of tier combos on every base preset ---

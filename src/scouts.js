@@ -128,7 +128,10 @@
         for (const n of HexMath.neighbors(p.q, p.r)) {
           const nk = HexMath.key(n.q, n.r);
           if (visited.has(nk)) continue;
-          if (!state.map.hexes.has(nk) || !isVisible(nk)) continue;   // never route through fog
+          const nh = state.map.hexes.get(nk);
+          if (!nh || !isVisible(nk)) continue;                        // never route through fog
+          const td = CONFIG.terrain[nh.terrain];
+          if (!td || !td.road) continue;                              // v0.47: mountains/water are impassable — never walk through them
           const step = (state.roads && state.roads.has(nk)) ? 0.6 : 1;
           const nd = curD + step;
           if (nd < (dist.has(nk) ? dist.get(nk) : Infinity)) {
@@ -213,11 +216,22 @@
       if (s.prov <= 0) { beginReturn(s); return; }
       if (!s.path) {
         const stand = findStop(s);
-        if (!stand) { s.target = null; s.mode = "idle"; return; }        // nothing left near the flag
-        if (stand.q === s.q && stand.r === s.r) { beginReveal(s); return; }
-        const path = plan(s, HexMath.key(stand.q, stand.r));
-        if (!path || path.length < 2) { beginReveal(s); return; }        // already adjacent / unroutable
-        s.path = path; s.leg = 0; s.legT = 0;
+        if (stand) {                                                     // fog to uncover near the flag
+          if (stand.q === s.q && stand.r === s.r) { beginReveal(s); return; }
+          const path = plan(s, HexMath.key(stand.q, stand.r));
+          if (!path || path.length < 2) { beginReveal(s); return; }      // already adjacent / unroutable
+          s.path = path; s.leg = 0; s.legT = 0;
+        } else {
+          // No fog left near the flag — WALK to the clicked target tile itself
+          // (so "explore here" always moves the scout, even across discovered
+          // ground), then reveal on arrival. Idle only once we're there.
+          const tgt = s.target;
+          if (tgt && (tgt.q !== s.q || tgt.r !== s.r)) {
+            const path = plan(s, HexMath.key(tgt.q, tgt.r));
+            if (!path || path.length < 2) { s.target = null; s.mode = "idle"; return; }   // unreachable
+            s.path = path; s.leg = 0; s.legT = 0;
+          } else { s.target = null; s.mode = "idle"; return; }           // arrived; nothing to reveal
+        }
       }
       advance(s, dt);
       if (arrived(s)) { s.path = null; beginReveal(s); }
@@ -461,7 +475,7 @@
         text-shadow: 0 1px 1px rgba(0,0,0,0.6); transition: transform .1s, box-shadow .1s; }
       .scout-ico:hover { transform: translateY(-1px); }
       .scout-ico.sel { box-shadow: 0 0 0 2px #fff3d0, 0 0 8px rgba(255,243,208,0.6); }
-      #scoutPanel { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px;
+      #scoutPanel { position: fixed; left: 12px; bottom: 12px;
         z-index: 33; min-width: 244px; padding: 10px 12px; border-radius: 12px;
         background: rgba(28,22,15,0.92); border: 1px solid #6b5636;
         box-shadow: 0 6px 22px rgba(0,0,0,0.5); color: #f2e6cf;
@@ -515,6 +529,11 @@
         s.target = null; armed = false; beginReturn(s); updatePanel();
       });
       // Guard is intentionally disabled (tooltip explains why).
+      // v0.47: deselect the scout with ESC or a right-click anywhere on the map.
+      window.addEventListener("keydown", (e) => { if (e.key === "Escape" && selectedId != null) deselect(); });
+      document.addEventListener("contextmenu", (e) => {
+        if (selectedId != null && e.target && e.target.tagName === "CANVAS") deselect();
+      });
     }
 
     function updateBar() {

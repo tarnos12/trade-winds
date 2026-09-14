@@ -574,6 +574,22 @@
         if (!(state.zoom < 0.6)) {
           drawUpgradeBadge(b, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
+          // v0.47: production/consumption progress bar under producers — fills as the
+          // building nears its next whole-unit batch (green = producing, amber =
+          // waiting on inputs). Houses/non-producers return null and get no bar.
+          if (typeof Sim !== "undefined" && Sim.buildingProgress) {
+            const pr = Sim.buildingProgress(state, t, b);
+            if (pr) {
+              const bw = rad * 1.7, bh = Math.max(2.5, SIZE * 0.1);
+              const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.14);
+              ctx.fillStyle = "rgba(18,14,9,0.78)";
+              ctx.fillRect(bx, by, bw, bh);
+              ctx.fillStyle = !pr.working ? "#8a8574" : (pr.starved ? "#e0a63c" : "#7fc24b");
+              ctx.fillRect(bx, by, bw * pr.prog, bh);
+              ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1;
+              ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+            }
+          }
         }
         // === /RU-B ===
       }
@@ -808,17 +824,28 @@
   }
 
   function drawHoverGhost() {
-    if (!hoverHex || state.mode === "pan") return;
+    if (!hoverHex) return;
     const k = HexMath.key(hoverHex.q, hoverHex.r);
     const hex = state.map.hexes.get(k);
     if (!hex || !isVisible(k)) return;
+    // building / research-center placement draws its own valid/invalid ghost in
+    // drawPlacementOverlay — don't double-draw here.
+    if (placing || placingResearchCenter) return;
     const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
     const pts = hexCorners(p.x, p.y);
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
-    const ok = canPlace(hoverHex.q, hoverHex.r);
+    if (state.mode === "pan") {   // v0.47: ALWAYS highlight the tile under the cursor (neutral) when no tool is active
+      ctx.fillStyle = "rgba(255,245,215,0.10)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,243,208,0.55)";
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    const ok = canPlace(hoverHex.q, hoverHex.r);   // map tool (town / road / erase)
     ctx.fillStyle = ok ? "rgba(230,200,120,0.35)" : "rgba(224,80,60,0.30)";
     ctx.fill();
     ctx.lineWidth = 2;
