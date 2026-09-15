@@ -5377,6 +5377,28 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       for (const it of cargo) { totalQty += it.qty; totalGold += it.unitBuy * it.qty; }
       home.gold = (home.gold || 0) - totalGold;   // carry the whole cargo's gold up front
 
+      // v0.51 (H): the SAME trader also SELLS on this trip — fill spare capacity with
+      // home's surplus goods that the DESTINATION city is short on, so a run can be
+      // "buy 5 wood, sell 5 potato". Town sellers only (not the castle). The goods ship
+      // out of home's stock now; they're paid for on arrival (minted tariff, §8), and any
+      // the destination can't take/afford come straight back to home.
+      const sellCargo = [];
+      if (!sellerIsCastle && pick.seller) {
+        let sellCap = cartCapacity;
+        for (const gid in CONFIG.goods) {
+          if (sellCap < 1) break;
+          const homeSurplus = (home.stock[gid] || 0) - reservedOf(home, gid) - needOf(home, gid);
+          if (homeSurplus < 1) continue;
+          const sellerShort = needOf(pick.seller, gid) - (pick.seller.stock[gid] || 0);
+          if (sellerShort < 1) continue;
+          const q = Math.floor(Math.min(sellCap, homeSurplus, sellerShort));
+          if (q < 1) continue;
+          home.stock[gid] = (home.stock[gid] || 0) - q;              // ship it out now
+          sellCargo.push({ goodId: gid, qty: q, unitSell: priceOf(pick.seller, gid) });
+          sellCap -= q;
+        }
+      }
+
       state.carts.push({
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
         kind: "external",                     // TR-B renders external vs internal traders
@@ -5387,6 +5409,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         // render / hover / not-yet-updated tests keep reading a single-good shape.
         goodId: cargo[0].goodId, qty: cargo[0].qty, unitBuy: cargo[0].unitBuy, agreedGold: totalGold,
         cargo: cargo, totalQty: totalQty,     // PP-A: full multi-good cargo + total units
+        sellCargo: sellCargo.length ? sellCargo : null,   // v0.51 (H): goods home sells TO the destination this trip
         path: pick.route.path.slice(),        // buyer → seller hex keys (contract shape)
         road: pick.route.road !== false,      // OFFROAD: false ⇒ no road link ⇒ half speed
         progress: 0, phase: "outbound", done: false,
@@ -5519,6 +5542,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (!sellerIsCastle && !seller) {
           const carried = cart.agreedGold || cargo.reduce((s, it) => s + (it.unitBuy || 0) * it.qty, 0);
           if (buyer) buyer.gold = (buyer.gold || 0) + carried;
+          // v0.51 (H): the destination is gone, so its unsold sell-cargo comes home too.
+          if (buyer && cart.sellCargo) { if (!buyer.stock) buyer.stock = {}; for (const it of cart.sellCargo) buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + (it.qty || 0); }
           cart.done = true; continue;
         }
         let liveQty = 0;
@@ -5567,6 +5592,32 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           item.qty = take;            // carry only what was actually bought
           item.unloaded = 0;
           liveQty += take;
+        }
+        // v0.51 (H): SELL home's outbound cargo to this destination on the same arrival.
+        // Destination pays (up to its room + gold); home keeps the full sale and the
+        // tariff is MINTED to the treasury (§8). Anything unsold returns to home now.
+        if (cart.sellCargo && cart.sellCargo.length && seller) {
+          for (const it of cart.sellCargo) {
+            const capG2 = (CONFIG.town && CONFIG.town.storageCap);
+            const room = capG2 ? Math.max(0, capG2 - (seller.stock[it.goodId] || 0)) : it.qty;
+            const unit = it.unitSell || 0;
+            let sell = Math.min(it.qty, room);
+            if (unit > 0 && (seller.gold || 0) < unit * sell) sell = Math.floor((seller.gold || 0) / unit);
+            if (sell < 0) sell = 0;
+            const value = unit * sell;
+            if (sell > 0) {
+              if (!seller.stock) seller.stock = {};
+              seller.stock[it.goodId] = (seller.stock[it.goodId] || 0) + sell;
+              seller.gold = (seller.gold || 0) - value;
+              if (buyer) buyer.gold = (buyer.gold || 0) + value;              // home keeps the whole sale
+              state.treasury += tariffRate * value;                          // minted tariff
+              if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariffRate * value);
+              if (typeof Ledger !== "undefined") { Ledger.record(buyer, "sales", value); Ledger.record(seller, "buys", value); }
+            }
+            const back = it.qty - sell;
+            if (back > 0 && buyer) { if (!buyer.stock) buyer.stock = {}; buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + back; }
+          }
+          cart.sellCargo = null;
         }
         cart.cargo = cargo.filter(it => it.qty > 0);          // drop fully-undelivered items
         cart.totalQty = liveQty;
@@ -15496,8 +15547,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.18";
+  const GAME_VERSION = "0.51.19";
   const PATCH_NOTES = [
+    { v: "0.51.19", notes: [
+      "Traders now BUY and SELL on the same trip: when a city sends a trader to buy something, it also loads up any surplus the destination is short on and sells it there — e.g. fetch 5 wood while dropping off 5 potato. One caravan, two deals; anything the destination can't take or afford rides back home.",
+    ] },
     { v: "0.51.18", notes: [
       "Placing a building is now one-and-done: it drops the building and deselects the tool, so a stray click can't keep dropping copies. Hold SHIFT while placing to stay armed and lay several in a row.",
       "Holding SHIFT while a build/erase tool (or a building) is selected no longer pops the city Give/Take gold controls — those only appear when no tool is active.",
