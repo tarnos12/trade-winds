@@ -1550,6 +1550,10 @@ const CONFIG = {
   fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
+    // v0.51: global real-time pace. 2 = the whole economy runs at half speed (things
+    // were happening too fast). Ratios/game-seconds and headless tests are unchanged;
+    // this only stretches wall-clock time per tick (see mainloop accumulator).
+    paceMult: 2,
     // === Bulk production (v0.39): a producing building banks its output and
     // releases it in WHOLE units every N game-seconds instead of trickling a
     // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
@@ -5009,7 +5013,7 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
-    transferRate: 5,           // items/sec (game time) a parked trader loads/unloads — trades are NOT instant
+    transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
     buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader
@@ -7469,7 +7473,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   function drawTowns() {
-    const bt = (CONFIG.town && CONFIG.town.baseTickMs) ? 0 : 0;   // (kept for clarity; buildSec below uses econ base)
     const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
       const p = HexMath.hexToPixel(t.q, t.r, SIZE);
@@ -9072,7 +9075,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // economy clock — paused when tab hidden (GDD §9.2 default)
     if (state.gameSpeed > 0 && !document.hidden) {
       econAcc += dt * state.gameSpeed;
-      const step = CONFIG.econ.baseTickMs;
+      // v0.51: paceMult stretches the REAL-TIME per economy tick (default 2 = the whole
+      // economy — production, population, trade, porters — runs at half speed) without
+      // changing any tick-count logic, so game-second ratios and headless tests are
+      // untouched. The 1×/2×/4× buttons still multiply on top via gameSpeed.
+      const step = CONFIG.econ.baseTickMs * ((CONFIG.econ && CONFIG.econ.paceMult) || 1);
       let guard = 0;
       while (econAcc >= step && guard++ < 8) {
         Sim.tick(state);
@@ -11201,7 +11208,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // never reads/writes cart.progress or the sim tick, only the cached pixel
     // position in `cartRender`.
     const frameDt = Math.max(0, Number(dt) || 16);
-    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / Math.max(0.05, state.gameSpeed || 1));
+    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) * ((CONFIG.econ && CONFIG.econ.paceMult) || 1) / Math.max(0.05, state.gameSpeed || 1));
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
@@ -15412,8 +15419,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.14";
+  const GAME_VERSION = "0.51.15";
   const PATCH_NOTES = [
+    { v: "0.51.15", notes: [
+      "SLOWER, more readable pace: the whole economy now runs at half speed by default (production, population, trade and porters) so you can actually watch it unfold — the 1×/2×/4× buttons still speed it up from there. Traders also load and unload their cargo more slowly, so a trade takes visible time at the dock.",
+    ] },
     { v: "0.51.14", notes: [
       "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
       "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",

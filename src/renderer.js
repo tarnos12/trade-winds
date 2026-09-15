@@ -381,7 +381,6 @@
   }
 
   function drawTowns() {
-    const bt = (CONFIG.town && CONFIG.town.baseTickMs) ? 0 : 0;   // (kept for clarity; buildSec below uses econ base)
     const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
       const p = HexMath.hexToPixel(t.q, t.r, SIZE);

@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.14";
+  const GAME_VERSION = "0.51.15";
   const PATCH_NOTES = [
+    { v: "0.51.15", notes: [
+      "SLOWER, more readable pace: the whole economy now runs at half speed by default (production, population, trade and porters) so you can actually watch it unfold — the 1×/2×/4× buttons still speed it up from there. Traders also load and unload their cargo more slowly, so a trade takes visible time at the dock.",
+    ] },
     { v: "0.51.14", notes: [
       "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
       "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",

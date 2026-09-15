@@ -26,7 +26,7 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
-    transferRate: 5,           // items/sec (game time) a parked trader loads/unloads — trades are NOT instant
+    transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
     buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader

@@ -441,7 +441,7 @@ Pathing.invalidate();
   const st = ctrlState(1, 100, 5, [buyer]);
   Trade.tick(st);                                   // dispatch (qty 10)
   const perTick = CONFIG.trade.transferRate * (CONFIG.econ.baseTickMs / 1000); // 5 × 0.5 = 2.5
-  ok("gradual: transferRate is configured (items/sec)", CONFIG.trade.transferRate === 5);
+  ok("gradual: transferRate is configured (items/sec)", CONFIG.trade.transferRate === 2.5);
   // Advance until the buyer first receives ANY grain, counting ticks + phases seen.
   const phases = new Set();
   let ticksToFirstDelivery = 0, first = 0;

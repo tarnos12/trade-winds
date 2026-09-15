@@ -182,6 +182,10 @@ const CONFIG = {
   fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
+    // v0.51: global real-time pace. 2 = the whole economy runs at half speed (things
+    // were happening too fast). Ratios/game-seconds and headless tests are unchanged;
+    // this only stretches wall-clock time per tick (see mainloop accumulator).
+    paceMult: 2,
     // === Bulk production (v0.39): a producing building banks its output and
     // releases it in WHOLE units every N game-seconds instead of trickling a
     // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
