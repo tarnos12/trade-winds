@@ -2525,7 +2525,9 @@ Object.assign(CONFIG, {
     lumberjack: {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
-      output: { goodId: "wood", ratePerWorker: 0.25 },
+      // v0.51 §1 REFERENCE RATE: 8 wood every 4 s at 2 workers (0.5/worker/tick × 2 ×
+      // 8-tick cycle = 8); 1 worker ⇒ 8 wood per 8 s. cycleSec overrides the per-kind default.
+      output: { goodId: "wood", ratePerWorker: 0.5 }, cycleSec: 4,
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },
@@ -3255,7 +3257,14 @@ Sim.tick = function (State) {
   // release whole units every tick.
   const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
   const prodIntervalSec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || { extractor: 8, processor: 12 };
-  const intervalTicksFor = (kind) => Math.round((prodIntervalSec[kind] || 0) * (1000 / baseTickMs));
+  // v0.51 §1: cycle length is PER-BUILDING when the type declares `cycleSec`
+  // (e.g. lumberjack = 4s → the reference "8 wood / 4s at 2 workers"); otherwise it
+  // falls back to the per-kind default. Batch = ratePerWorker × workers × cycleSeconds.
+  const intervalTicksFor = (type) => {
+    const sec = (type && typeof type.cycleSec === "number") ? type.cycleSec
+              : (prodIntervalSec[type && type.kind] || 0);
+    return Math.round(sec * (1000 / baseTickMs));
+  };
 
   for (const town of State.towns) {
     if (!town) continue;
@@ -3400,7 +3409,7 @@ Sim.tick = function (State) {
       if (!type || !type.output) continue;
       const out = type.output;
       const inputs = type.inputs;
-      const intervalTicks = intervalTicksFor(type.kind);
+      const intervalTicks = intervalTicksFor(type);
       if (typeof b._prodTimer !== "number") b._prodTimer = intervalTicks;
       if (typeof b._prodAcc !== "number") b._prodAcc = 0;
       if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};
@@ -14991,8 +15000,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.4";
+  const GAME_VERSION = "0.51.5";
   const PATCH_NOTES = [
+    { v: "0.51.5", notes: [
+      "PRODUCTION IN CYCLES (economy overhaul): the lumberjack is now the reference producer — 8 wood every 4 seconds with 2 workers (8 wood per 8 s with 1). Each producing building can run on its own cycle length; a batch = per-worker rate × workers × cycle, so staffing scales output linearly and the numbers match what the panel shows",
+    ] },
     { v: "0.51.4", notes: [
       "HOUSES WAIT FOR A FULL PANTRY (economy overhaul): a home now consumes its basic goods only when ALL of them are on hand — if it's missing even one basic it holds the rest instead of burning them, so a city no longer wastes the potato it has while starving for wood. Demand and happiness still reflect the shortage, so the missing good is imported and the family eats again once the basket is complete",
     ] },

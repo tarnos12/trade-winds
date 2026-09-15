@@ -364,7 +364,14 @@ Sim.tick = function (State) {
   // release whole units every tick.
   const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
   const prodIntervalSec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || { extractor: 8, processor: 12 };
-  const intervalTicksFor = (kind) => Math.round((prodIntervalSec[kind] || 0) * (1000 / baseTickMs));
+  // v0.51 §1: cycle length is PER-BUILDING when the type declares `cycleSec`
+  // (e.g. lumberjack = 4s → the reference "8 wood / 4s at 2 workers"); otherwise it
+  // falls back to the per-kind default. Batch = ratePerWorker × workers × cycleSeconds.
+  const intervalTicksFor = (type) => {
+    const sec = (type && typeof type.cycleSec === "number") ? type.cycleSec
+              : (prodIntervalSec[type && type.kind] || 0);
+    return Math.round(sec * (1000 / baseTickMs));
+  };
 
   for (const town of State.towns) {
     if (!town) continue;
@@ -509,7 +516,7 @@ Sim.tick = function (State) {
       if (!type || !type.output) continue;
       const out = type.output;
       const inputs = type.inputs;
-      const intervalTicks = intervalTicksFor(type.kind);
+      const intervalTicks = intervalTicksFor(type);
       if (typeof b._prodTimer !== "number") b._prodTimer = intervalTicks;
       if (typeof b._prodAcc !== "number") b._prodAcc = 0;
       if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};

@@ -976,7 +976,10 @@ function place(typeId, q, r, over) {
   // (c) Batch cadence from CONFIG: an always-staffed extractor releases on the
   //     extractor interval (intervalSec × 1000/baseTickMs ticks). Peasants staff a
   //     lumberjack; count the ticks between successive `wood` jumps.
-  const secs = (CONFIG.econ.productionIntervalSec && CONFIG.econ.productionIntervalSec.extractor) || 8;
+  // v0.51 §1: a building's own cycleSec overrides the per-kind default (lumberjack = 4s).
+  const lj = CONFIG.buildings.lumberjack;
+  const secs = (typeof lj.cycleSec === "number") ? lj.cycleSec
+             : ((CONFIG.econ.productionIntervalSec && CONFIG.econ.productionIntervalSec.extractor) || 8);
   const expectTicks = Math.round(secs * (1000 / CONFIG.econ.baseTickMs));
   const t4 = town({ pop: { peasants: 3, workers: 0, burghers: 0 }, stock: { potato: 1e5, wood: 0 },
     buildings: [place("lumberjack", 0, 1, { built: true }), place("hut", 0, 2, { built: true }),

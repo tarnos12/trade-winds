@@ -64,7 +64,9 @@ Object.assign(CONFIG, {
     lumberjack: {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
-      output: { goodId: "wood", ratePerWorker: 0.25 },
+      // v0.51 §1 REFERENCE RATE: 8 wood every 4 s at 2 workers (0.5/worker/tick × 2 ×
+      // 8-tick cycle = 8); 1 worker ⇒ 8 wood per 8 s. cycleSec overrides the per-kind default.
+      output: { goodId: "wood", ratePerWorker: 0.5 }, cycleSec: 4,
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },

@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.4";
+  const GAME_VERSION = "0.51.5";
   const PATCH_NOTES = [
+    { v: "0.51.5", notes: [
+      "PRODUCTION IN CYCLES (economy overhaul): the lumberjack is now the reference producer — 8 wood every 4 seconds with 2 workers (8 wood per 8 s with 1). Each producing building can run on its own cycle length; a batch = per-worker rate × workers × cycle, so staffing scales output linearly and the numbers match what the panel shows",
+    ] },
     { v: "0.51.4", notes: [
       "HOUSES WAIT FOR A FULL PANTRY (economy overhaul): a home now consumes its basic goods only when ALL of them are on hand — if it's missing even one basic it holds the rest instead of burning them, so a city no longer wastes the potato it has while starving for wood. Demand and happiness still reflect the shortage, so the missing good is imported and the family eats again once the basket is complete",
     ] },
