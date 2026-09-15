@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.16";
+  const GAME_VERSION = "0.51.17";
   const PATCH_NOTES = [
+    { v: "0.51.17", notes: [
+      "Trader & porter cargo now reads at a glance: an internal porter on its way to COLLECT shows the good it's about to pick up, faint/translucent; once it's carrying, the good goes solid with its count. A buyer trader heading out shows a 🪙 gold-coin chip (the money it will spend) alongside the faint good it intends to buy, and switches to the solid goods once it's hauling them home.",
+    ] },
     { v: "0.51.16", notes: [
       "BIG BALANCE REWORK — production and consumption are now tuned in sensible per-minute numbers. A lumberjack makes 15 wood/minute (2 workers, 16s cycle); a potato farm makes 12/minute, so one farm feeds 8–10 peasants. A peasant eats 1.3 potato + 0.9 wood per minute. Every other building and good was rescaled to match, giving a slower, more legible economy.",
       "The whole game clock is back to real-time at 1× (the slow rates set the pace now); the 1×/2×/4× buttons speed it up. External traders travel 2× slower and internal porters are slower too.",

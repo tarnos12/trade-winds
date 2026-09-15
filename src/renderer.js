@@ -460,7 +460,7 @@
     opts = opts || {};
     const alpha = opts.alpha == null ? 1 : opts.alpha;
     const muted = !!opts.muted;
-    const label = String(num);
+    const label = opts.hideNum ? "" : String(num);   // v0.51 (F/G): icon-only chip (e.g. a hauler on its way to pick up)
     const fontPx = Math.max(9, Math.round(SIZE * 0.19));
     const icoPx = Math.max(10, Math.round(SIZE * 0.22));   // ICONS: emoji glyph replaces the color dot
     const ico = goodIcon(gid);
@@ -488,6 +488,30 @@
     ctx.fillText(label, bx + padX + iw + gap, cy + 0.5);
     ctx.restore();
   }
+  // v0.51 (G): a small gold-coin chip (🪙 + amount) — drawn on a BUYER trader heading
+  // out, so it visibly carries the money it will spend (alongside the muted target good).
+  function drawCoinChip(cx, cy, amount) {
+    const label = String(Math.round(amount || 0));
+    const fontPx = Math.max(9, Math.round(SIZE * 0.19));
+    const icoPx = Math.max(10, Math.round(SIZE * 0.22));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width;
+    ctx.font = icoPx + "px system-ui, sans-serif";
+    const iw = ctx.measureText("🪙").width;
+    const padX = Math.max(2, SIZE * 0.05), gap = Math.max(2, SIZE * 0.05);
+    const totalW = padX * 2 + iw + gap + tw, totalH = Math.max(icoPx + 3, fontPx + 3);
+    const bx = cx - totalW / 2, by = cy - totalH / 2;
+    ctx.fillStyle = "rgba(40,30,5,0.72)";
+    cbChipRect(bx, by, totalW, totalH, totalH * 0.5); ctx.fill();
+    ctx.fillText("🪙", bx + padX, cy + 0.5);
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.fillStyle = "#ffe08a";
+    ctx.fillText(label, bx + padX + iw + gap, cy + 0.5);
+    ctx.restore();
+  }
+
   // Stack the top-3 owed goods for an under-construction building above its circle.
   function drawConstructionNeed(b, p, rad) {
     const need = (typeof Buildings !== "undefined" && Buildings.constructionNeed)

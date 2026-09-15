@@ -65,13 +65,18 @@
     // carried good's cargo chip — the same chip external carts use, so a porter reads
     // its cargo exactly like a trade cart, only smaller and cooler-toned.
     const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
-    function drawToken(x, y, good, amount) {
+    function drawToken(x, y, good, amount, muted) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      if (good && amount > 0 && typeof drawGoodChip === "function") drawGoodChip(x, y - r * 2.3, good, amount);
+      // v0.51 (F): carrying → solid chip with the count; heading OUT to fetch → the
+      // same good shown MUTED/translucent (it's going to pick this up, not holding it).
+      if (good && typeof drawGoodChip === "function") {
+        if (muted) drawGoodChip(x, y - r * 2.3, good, "", { alpha: 0.45, muted: true, hideNum: true });
+        else if (amount > 0) drawGoodChip(x, y - r * 2.3, good, amount);
+      }
     }
 
     function draw() {
@@ -100,8 +105,10 @@
           const a = pts[0], c = pts[pts.length - 1];
           const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
           const j = (((i % 5) - 2) * 0.22) * SIZE * 0.3;
+          // carrying → solid good+count; heading out to fetch → the good it's going
+          // to collect, shown muted (F).
           drawToken(pos.x + (-dy / len) * j, pos.y + (dx / len) * j,
-                    carrying ? p.good : null, carrying ? p.qty : 0);
+                    p.good || null, carrying ? p.qty : 0, !carrying);
         }
       }
       // prune vis entries for porters that no longer exist / went idle

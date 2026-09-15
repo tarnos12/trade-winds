@@ -161,6 +161,12 @@
             { alpha: requested ? 0.5 : 1, muted: requested });
           shown++;
         }
+        // v0.51 (G): a BUYER heading out carries the money it will spend — show a gold
+        // coin chip under the wagon so it reads as "off to buy" (the goods above are muted).
+        if (requested && typeof drawCoinChip === "function") {
+          const gold = cart.agreedGold || ((cart.unitBuy || 0) * (cart.qty || 0));
+          if (gold > 0) drawCoinChip(rp.x, rp.y + SIZE * 0.42, gold);
+        }
         // owner label ("City #N" / "Castle") — only when zoomed in well; the
         // string is cached per cart so nothing is allocated per frame.
         if (state.zoom >= 0.8) {
