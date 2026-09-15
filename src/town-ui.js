@@ -257,7 +257,9 @@
       const tip = `Upgrade to Level ${t.level + 1} (+build slots, +traders/transporters): needs ` +
         `${req.pop} pop (have ${Math.round(Town.popTotal(t))}) and ${req.gold}🪙 city gold (have ${Math.floor(t.gold || 0)})` +
         (res.ok ? "" : " — " + res.reason);
-      upBtn = `<button data-town-upgrade ${res.ok ? "" : "disabled"} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
+      // v0.51: dimmed (not disabled) so the styled cost tooltip still shows when the
+      // city can't yet afford it; Town.upgrade gates the click.
+      upBtn = `<button data-town-upgrade data-tip="cityUpgrade"${res.ok ? "" : ' style="opacity:.5"'} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
     }
     const cooling = (t.cooldownUntil || 0) > (state.tick || 0);
     let coolStr = "";
@@ -1254,14 +1256,44 @@
       (rows || "<div style='opacity:.7'>none</div>") +
       (up && !up.ok && up.reason ? `<div style="margin-top:6px;color:#e0b34c">${esc(up.reason)}</div>` : `<div style="margin-top:6px;opacity:.7">Click to start — materials are delivered from the city.</div>`);
   }
-  bpEl.addEventListener("mousemove", (e) => {
+  // v0.51: styled tooltip for the CITY upgrade button — requirements (pop, gold),
+  // have/need, and what the level grants.
+  function cityUpgradeTipHtml(t) {
+    if (!t || typeof Town === "undefined" || !Town.upgradeReq) return "Upgrade the city";
+    const req = Town.upgradeReq(t);
+    if (!req) return "City is at maximum level.";
+    const res = (Town.canUpgrade ? Town.canUpgrade(t) : { ok: false });
+    const havePop = Math.round(Town.popTotal ? Town.popTotal(t) : 0), haveGold = Math.floor(t.gold || 0);
+    const row = (label, valHtml) => `<div style="display:flex;justify-content:space-between;gap:14px"><span>${label}</span><span style="font-variant-numeric:tabular-nums">${valHtml}</span></div>`;
+    const col = (ok) => ok ? "#a6e0a8" : "#e0844a";
+    let rows = "";
+    if (req.pop)  rows += row("👥 Population", `<span style="color:${col(havePop >= req.pop)}">${havePop}/${req.pop}</span>`);
+    if (req.gold) rows += row("🪙 City gold", `<span style="color:${col(haveGold >= req.gold)}">${haveGold}/${req.gold}</span>`);
+    for (const gid in req) {
+      if (gid === "pop" || gid === "gold" || typeof req[gid] !== "number") continue;
+      const have = Math.floor((t.stock && t.stock[gid]) || 0);
+      rows += row(`${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}`, `<span style="color:${col(have >= req[gid])}">${have}/${req[gid]}</span>`);
+    }
+    return `<div style="font-weight:bold;color:var(--accent,#c98a3c);margin-bottom:3px">⬆ Upgrade to Level ${(t.level || 1) + 1}</div>` +
+      `<div style="opacity:.9;margin-bottom:6px">+build slots · +traders &amp; transporters</div>` +
+      `<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.6;margin-bottom:2px">Requirements</div>` +
+      rows +
+      (res.ok ? `<div style="margin-top:6px;opacity:.7">Click to upgrade.</div>` : `<div style="margin-top:6px;color:#e0b34c">${esc(res.reason || "")}</div>`);
+  }
+  // Shared styled-tooltip driver for both the building panel and the city panel.
+  function bpTipMove(e) {
     const el = e.target.closest("[data-tip]");
     if (!el) { bpHideTip(); return; }
     const v = el.getAttribute("data-tip");
-    const html = (v === "upgrade") ? bpUpgradeTipHtml(bpTown, bpBuilding) : esc(v || "");
+    let html;
+    if (v === "upgrade") html = bpUpgradeTipHtml(bpTown, bpBuilding);
+    else if (v === "cityUpgrade") html = cityUpgradeTipHtml(activeTown);
+    else html = esc(v || "");
     if (html) bpShowTip(html, e.clientX, e.clientY); else bpHideTip();
-  });
+  }
+  bpEl.addEventListener("mousemove", bpTipMove);
   bpEl.addEventListener("mouseleave", bpHideTip);
+  if (panelEl) { panelEl.addEventListener("mousemove", bpTipMove); panelEl.addEventListener("mouseleave", bpHideTip); }
 
   // Local fallbacks: use CB-A's helpers when present, otherwise compute inline so
   // this slice works standalone (and never throws on boot).
@@ -1452,9 +1484,9 @@
     return { has: true, ok: !!can.ok, reason: can.reason };
   }
 
-  // Reference-style action-icon row under the header. Producers get 3 buttons
-  // (⭐ priority · ⬆️ upgrade · 🗑 demolish); houses get 2 (⬆️ upgrade · 🗑 demolish).
-  // Every button reuses an existing hook: data-priority, data-upgrade, data-demolish.
+  // Reference-style action-icon row under the header: ⭐ priority (producers) and
+  // ⬆️ upgrade. NO demolish button — destroying is done from the build bar's Destroy
+  // tool, not from the detail panel. Buttons reuse data-priority / data-upgrade.
   function bpActionRow(town, b, def, isHouse) {
     const up = bpUpgradeState(town, b);
     const upTip = up.has ? (up.ok ? "Upgrade this building" : (up.reason || "Upgrade unavailable"))
@@ -1468,7 +1500,6 @@
     // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
     // shows the styled cost breakdown; title is the plain-text a11y fallback.
     btns += `<button class="bp-act${up.ok ? "" : " dim"}" data-upgrade data-tip="upgrade" title="${escAttr(upTip)}">⬆️</button>`;
-    btns += `<button class="bp-act danger" data-demolish data-tip="Demolish — enter destroy mode, then click this building" title="Demolish">🗑</button>`;
     return `<div class="bp-actions">${btns}</div>`;
   }
 

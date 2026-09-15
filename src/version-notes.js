@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.1";
+  const GAME_VERSION = "0.51.2";
   const PATCH_NOTES = [
+    { v: "0.51.2", notes: [
+      "Removed the Demolish button from the building panel — destroying is done from the build bar's Destroy tool (it never belonged on the detail card)",
+      "The CITY panel's upgrade button now has the same styled tooltip — hover ‘⬆ Lv N’ to see the requirements (population, gold) with have/need and what the level grants",
+    ] },
     { v: "0.51.1", notes: [
       "The ⬆️ upgrade button now has a STYLED tooltip showing the next level, its effect, and the exact resources needed (have/need + gold) — hover it even when you can't yet afford it to see what's required",
       "The city centre now counts as a building slot, so a fresh city reads 1/8",
