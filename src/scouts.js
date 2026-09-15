@@ -452,10 +452,9 @@
         try { if (typeof showToast === "function") showToast("Pick a discovered tile to explore."); } catch (ex) {}
         return true;   // stay armed, swallow the click
       }
-      // 3) a scout is selected → a click on open discovered ground redirects it
-      if (sc && state.map.hexes.has(key) && isVisible(key) && !occupiedByBuild(q, r)) {
-        setExploreTarget(sc, q, r); return true;
-      }
+      // (v0.51) NOTE: no "redirect a selected scout on any click" here — that hijacked
+      // pan-drags. Retargeting requires pressing Explore first (armed), which is the
+      // explicit intent. A plain click with a scout merely selected falls through to pan.
       return false;
     }
 

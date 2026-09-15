@@ -352,22 +352,23 @@
     dragging = true; dragPanned = false;
     panButton = isPanGesture(e);
     last = { x: e.clientX, y: e.clientY };
+    // v0.51: scouts get FIRST REFUSAL on a left-click, even in pan mode. In pan mode a
+    // left-click is a pan GESTURE (panButton=true), so the old `!panButton` gate below
+    // skipped scout targeting entirely — clicking a tile to Explore did nothing. Handle
+    // scouts up front; if a scout consumes the click (select, or armed explore target)
+    // it is NOT a pan.
+    if (e.button === 0 && state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      if (Scouts.handleClick(h.q, h.r, e)) {
+        panButton = false; dragging = false;
+        canvas.classList.remove("panning");
+        return;
+      }
+    }
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      // v0.45: give Scouts first refusal on a plain (pan-mode) click — selecting a
-      // scout, or setting an explore target for the selected one. Returns true if
-      // it consumed the click, so it doesn't also place/select something else.
-      if (state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick) {
-        if (Scouts.handleClick(h.q, h.r, e)) { /* consumed by Scouts */ }
-        else {
-          // v0.47: clicking anything else deselects the scout (so its panel closes
-          // when you select a building/city/castle instead).
-          if (Scouts.selectedId != null && Scouts.deselect) Scouts.deselect();
-          place(h.q, h.r);
-        }
-      }
-      else if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
       else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
