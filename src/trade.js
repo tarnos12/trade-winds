@@ -25,7 +25,7 @@ Object.assign(CONFIG, {
     profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
-    cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
+    cartSpeed: 0.25,           // v0.51: progress (0..1 along the path) per tick — halved so external traders travel 2× slower
     transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
@@ -55,7 +55,7 @@ Object.assign(CONFIG, {
     // charge more); when it has a surplus offered but UNSOLD it ticks DOWN (glut →
     // cut the price to move it). Bounded + smoothed + deterministic. Net effect: near,
     // in-demand cities charge more; far cities that sell little drop prices. ===
-    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35 },
+    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35, graceTicks: 40 },
   },
 });
 
@@ -155,6 +155,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (!Array.isArray(state.carts)) state.carts = [];
     if (typeof state.treasury !== "number") state.treasury = 0;
     if (typeof state.tradeSeed !== "number") state.tradeSeed = 0;
+    state._tradeTick = (state._tradeTick || 0) + 1;   // v0.51 §3: monotonic trade-tick clock for sales-pressure grace window
     if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // MISSION-STATS: counter shape
     const cfg = CONFIG.trade;
     const towns = state.towns || [];
@@ -561,6 +562,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               // v0.51 §3: a completed sale is UP pressure — this good is in demand
               // here, so the seller may charge more next time (bounded by SP.max).
               if (!seller.salesAdj) seller.salesAdj = {};
+              if (!seller._soldMark) seller._soldMark = {};
+              seller._soldMark[item.goodId] = state._tradeTick;   // §3: this good is actively selling
               const _sp = cfg.salesPressure || { up: 0.05, max: 1.35 };
               seller.salesAdj[item.goodId] = Math.min(_sp.max,
                 ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
@@ -609,9 +612,18 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (a > 1) adj[gid] = Math.max(1, a - SP.down);
         else if (a < 1) adj[gid] = Math.min(1, a + SP.down);
       }
+      const grace = SP.graceTicks || 40;
       for (const gid in CONFIG.goods) {                        // glut pressure on offered surpluses
         const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
         if (surplus <= 0) continue;
+        // §3 refinement: a surplus that is ACTIVELY SELLING (a sale settled within the
+        // grace window) is NOT a glut — leave its price where the sale bumped it. Only a
+        // surplus that's sitting UNSOLD gets marked down. This keeps a brisk, in-demand
+        // good priced up instead of the per-tick glut decay always winning over the
+        // per-trip sale bump.
+        const sold = seller._soldMark && seller._soldMark[gid];
+        const selling = (typeof sold === "number") && (state._tradeTick - sold) <= grace;
+        if (selling) continue;
         const a = (typeof adj[gid] === "number" && adj[gid] > 0) ? adj[gid] : 1;
         adj[gid] = Math.max(SP.min, a - SP.down);
       }

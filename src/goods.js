@@ -66,7 +66,7 @@ Object.assign(CONFIG, {
       terrain: "forest", workerTier: "peasant",
       // v0.51 §1 REFERENCE RATE: 8 wood every 4 s at 2 workers (0.5/worker/tick × 2 ×
       // 8-tick cycle = 8); 1 worker ⇒ 8 wood per 8 s. cycleSec overrides the per-kind default.
-      output: { goodId: "wood", ratePerWorker: 0.5 }, cycleSec: 4,
+      output: { goodId: "wood", ratePerWorker: 0.0625 }, cycleSec: 16,
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },
@@ -74,7 +74,7 @@ Object.assign(CONFIG, {
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
-      output: { goodId: "grain", ratePerWorker: 0.25 },
+      output: { goodId: "grain", ratePerWorker: 0.05 },
       // === TV2: wheat is a T2 resource unlocked by research (worker band of the
       // tree) yet still worked by peasants. researchBand overrides the tree lane
       // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
@@ -84,7 +84,7 @@ Object.assign(CONFIG, {
     potato_farm: {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
-      output: { goodId: "potato", ratePerWorker: 0.25 },
+      output: { goodId: "potato", ratePerWorker: 0.05 }, cycleSec: 16,   // v0.51: 6/worker/min → 12/min at 2 workers
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },
@@ -93,14 +93,14 @@ Object.assign(CONFIG, {
     iron_mine: {
       id: "iron_mine", name: "Iron Mine", kind: "extractor",
       terrain: "iron_deposit", workerTier: "worker",
-      output: { goodId: "iron", ratePerWorker: 0.083333 },
+      output: { goodId: "iron", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_iron_mine",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
       terrain: "stone_deposit", workerTier: "peasant",   // === TV2: mountains → stone_deposit ===
-      output: { goodId: "stone", ratePerWorker: 0.083333 },
+      output: { goodId: "stone", ratePerWorker: 0.033333 },
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
       unlockedBy: "unlock_quarry",   // RT-A: per-building unlock node
@@ -115,14 +115,14 @@ Object.assign(CONFIG, {
       // once an oil_maker (2 fish/oil) was also pulling, so the WORKER fish basic
       // was chronically starved and worker happiness capped below 70. Matches the
       // 2/worker yield of the other staple extractors (potato_farm/farm). ===
-      output: { goodId: "fish", ratePerWorker: 0.125 },
+      output: { goodId: "fish", ratePerWorker: 0.05 },
       unlockedBy: "unlock_fishery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
       id: "shepherd", name: "Sheep Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",   // === TV2: meadow → fertile ===
-      output: { goodId: "wool", ratePerWorker: 0.1875 },
+      output: { goodId: "wool", ratePerWorker: 0.041667 },
       unlockedBy: "unlock_shepherd",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 20, stone: 5, gold: 60 },
     },
@@ -130,21 +130,21 @@ Object.assign(CONFIG, {
     clay_pit: {
       id: "clay_pit", name: "Clay Pit", kind: "extractor",
       terrain: "clay_deposit", workerTier: "worker",
-      output: { goodId: "clay", ratePerWorker: 0.083333 },
+      output: { goodId: "clay", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_clay_pit",
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     coal_mine: {
       id: "coal_mine", name: "Coal Mine", kind: "extractor",
       terrain: "coal_deposit", workerTier: "worker",
-      output: { goodId: "coal", ratePerWorker: 0.083333 },
+      output: { goodId: "coal", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_coal_mine",
       workerSlots: 2, cost: { wood: 30, stone: 20, gold: 120 },
     },
     gold_mine: {
       id: "gold_mine", name: "Gold Mine", kind: "extractor",
       terrain: "gold_deposit", workerTier: "worker",
-      output: { goodId: "gold", ratePerWorker: 0.083333 },
+      output: { goodId: "gold", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_gold_mine",
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
     },
@@ -152,7 +152,7 @@ Object.assign(CONFIG, {
     sawmill: {
       id: "sawmill", name: "Sawmill", kind: "processor",
       terrain: null, workerTier: "peasant",
-      inputs: { wood: 0.083333 }, output: { goodId: "planks", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.0208 }, output: { goodId: "planks", ratePerWorker: 0.0208 }, cycleSec: 16,   // v0.51: ~5/min at 2 workers, 1 wood → 1 plank
       // v0.49: costs 20 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 20 },
@@ -160,21 +160,21 @@ Object.assign(CONFIG, {
     mill: {
       id: "mill", name: "Mill", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { grain: 0.083333 }, output: { goodId: "flour", ratePerWorker: 0.041667 },
+      inputs: { grain: 0.033333 }, output: { goodId: "flour", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_mill",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     bakery: {
       id: "bakery", name: "Bakery", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { flour: 0.083333 }, output: { goodId: "bread", ratePerWorker: 0.041667 },
+      inputs: { flour: 0.033333 }, output: { goodId: "bread", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_bakery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 5, gold: 150 },
     },
     brewery: {
       id: "brewery", name: "Brewery", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { grain: 0.083333 }, output: { goodId: "mead", ratePerWorker: 0.041667 },   // === CC: beer → mead ===
+      inputs: { grain: 0.033333 }, output: { goodId: "mead", ratePerWorker: 0.033333 },   // === CC: beer → mead ===
       unlockedBy: "unlock_brewery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 100 },
     },
@@ -184,7 +184,7 @@ Object.assign(CONFIG, {
     brickworks: {
       id: "brickworks", name: "Brickworks", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { clay: 0.083333 }, output: { goodId: "bricks", ratePerWorker: 0.041667 },
+      inputs: { clay: 0.033333 }, output: { goodId: "bricks", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_brickworks",
       workerSlots: 2, cost: { wood: 25, stone: 20, gold: 110 },
     },
@@ -192,7 +192,7 @@ Object.assign(CONFIG, {
     tailoring: {
       id: "tailoring", name: "Tailoring", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { wool: 0.083333 }, output: { goodId: "clothes", ratePerWorker: 0.041667 },
+      inputs: { wool: 0.033333 }, output: { goodId: "clothes", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_tailoring",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
@@ -204,21 +204,21 @@ Object.assign(CONFIG, {
       terrain: null, workerTier: "peasant", researchBand: "worker",
       // BAL2: 1:1 wood→coal — at 2:1 the burner out-ate the peasants' own
       // wood (their BASIC need) and crashed peasant happiness in playthroughs.
-      inputs: { wood: 0.041667 }, output: { goodId: "coal", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.033333 }, output: { goodId: "coal", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_charcoal_burner",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
     stonetool_maker: {
       id: "stonetool_maker", name: "StoneTools Maker", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { planks: 0.041667, stone: 0.041667 }, output: { goodId: "stone_tools", ratePerWorker: 0.041667 },
+      inputs: { planks: 0.033333, stone: 0.033333 }, output: { goodId: "stone_tools", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_stonetool_maker",
       workerSlots: 2, cost: { wood: 30, stone: 15, gold: 110 },
     },
     oil_maker: {
       id: "oil_maker", name: "Oil Maker", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { fish: 0.083333 }, output: { goodId: "oil", ratePerWorker: 0.041667 },
+      inputs: { fish: 0.033333 }, output: { goodId: "oil", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_oil_maker",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
@@ -226,14 +226,14 @@ Object.assign(CONFIG, {
     forge: {
       id: "forge", name: "Forge", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { wood: 0.041667, iron: 0.041667 }, output: { goodId: "iron_tool", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.033333, iron: 0.033333 }, output: { goodId: "iron_tool", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_forge",
       workerSlots: 2, cost: { wood: 30, stone: 25, gold: 160 },
     },
     armory: {
       id: "armory", name: "Armory", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { coal: 0.083333, iron: 0.083333 }, output: { goodId: "iron_armor", ratePerWorker: 0.041667 },
+      inputs: { coal: 0.033333, iron: 0.033333 }, output: { goodId: "iron_armor", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_armory",
       workerSlots: 2, cost: { wood: 35, stone: 30, bricks: 10, gold: 220 },
     },
@@ -244,14 +244,14 @@ Object.assign(CONFIG, {
       // isn't self-locked; research stays in the burgher band via researchBand
       // (lamp_maker precedent). ===
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { clay: 0.083333 }, output: { goodId: "pottery", ratePerWorker: 0.041667 },
+      inputs: { clay: 0.033333 }, output: { goodId: "pottery", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_pottery_workshop",
       workerSlots: 2, cost: { wood: 30, stone: 20, bricks: 5, gold: 140 },
     },
     distillery: {
       id: "distillery", name: "Distillery", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { mead: 0.083333, pottery: 0.041667 }, output: { goodId: "brandy", ratePerWorker: 0.041667 },
+      inputs: { mead: 0.033333, pottery: 0.033333 }, output: { goodId: "brandy", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_distillery",
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 180 },
     },
@@ -268,7 +268,7 @@ Object.assign(CONFIG, {
       // Inputs (gold/iron_tool) sit near their storage cap in the run, so the extra
       // yield converts to rings rather than stalling. ===
       terrain: null, workerTier: "burgher",
-      inputs: { gold: 0.041667, iron_tool: 0.041667 }, output: { goodId: "gold_ring", ratePerWorker: 0.125 },
+      inputs: { gold: 0.033333, iron_tool: 0.033333 }, output: { goodId: "gold_ring", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_goldsmith",
       workerSlots: 2, cost: { wood: 30, stone: 25, bricks: 10, gold: 200 },
     },
@@ -277,7 +277,7 @@ Object.assign(CONFIG, {
       // BAL2: lamps are a CITIZEN BASIC need — worker-staffed so citizens can
       // bootstrap; research stays in the citizen band via researchBand.
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { oil: 0.083333 }, output: { goodId: "lamp", ratePerWorker: 0.041667 },
+      inputs: { oil: 0.033333 }, output: { goodId: "lamp", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_lamp_maker",
       workerSlots: 2, cost: { wood: 30, stone: 20, gold: 150 },
     },
@@ -288,14 +288,14 @@ Object.assign(CONFIG, {
       // staffed so the aristocrat gate doesn't hang on burgher-only supply. Research
       // stays in the burgher band via researchBand (lamp_maker precedent). ===
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { planks: 0.083333, oil: 0.041667 }, output: { goodId: "chairs", ratePerWorker: 0.041667 },
+      inputs: { planks: 0.033333, oil: 0.033333 }, output: { goodId: "chairs", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_carpentry",
       workerSlots: 2, cost: { wood: 35, stone: 20, planks: 10, gold: 180 },
     },
     luxury_tailor: {
       id: "luxury_tailor", name: "Luxury Tailor", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { clothes: 0.083333, gold_ring: 0.041667 }, output: { goodId: "luxury_clothes", ratePerWorker: 0.041667 },
+      inputs: { clothes: 0.033333, gold_ring: 0.033333 }, output: { goodId: "luxury_clothes", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_luxury_tailor",
       workerSlots: 2, cost: { wood: 35, stone: 25, bricks: 10, gold: 240 },
     },

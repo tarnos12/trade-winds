@@ -19,14 +19,17 @@ Object.assign(CONFIG, {
     //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
     //   tier's population GROWTH (all luxuries must be available to grow).
     tiers: {
+      // v0.51 balance rework — per-capita consumption expressed in GAME-MINUTES / 120
+      // (2 ticks = 1 game-second). Peasant anchor: 1.3 potato/min + 0.9 wood/min.
+      // Other tiers' basics ~1.08/min (0.009), all extras ~0.6/min (0.005).
       peasants:    { basic: ["potato", "wood"], extra: ["fish", "wool"],
-                     perCapita: { potato: 0.020833, wood: 0.020833, fish: 0.0125, wool: 0.0125 } },
+                     perCapita: { potato: 0.010833, wood: 0.0075, fish: 0.005, wool: 0.005 } },
       workers:     { basic: ["fish", "coal"], extra: ["clothes", "bread", "mead"],
-                     perCapita: { fish: 0.020833, coal: 0.020833, clothes: 0.0125, bread: 0.0125, mead: 0.0125 } },
+                     perCapita: { fish: 0.009, coal: 0.009, clothes: 0.005, bread: 0.005, mead: 0.005 } },
       burghers:    { basic: ["lamp", "bread", "mead", "clothes"], extra: ["chairs", "pottery", "gold_ring"],
-                     perCapita: { lamp: 0.020833, bread: 0.020833, mead: 0.020833, clothes: 0.020833, chairs: 0.0125, pottery: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, bread: 0.009, mead: 0.009, clothes: 0.009, chairs: 0.005, pottery: 0.005, gold_ring: 0.005 } },
       aristocrats: { basic: ["lamp", "mead", "iron_armor", "chairs", "pottery"], extra: ["brandy", "luxury_clothes", "gold_ring"],
-                     perCapita: { lamp: 0.020833, mead: 0.020833, iron_armor: 0.020833, chairs: 0.020833, pottery: 0.020833, brandy: 0.0125, luxury_clothes: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, mead: 0.009, iron_armor: 0.009, chairs: 0.009, pottery: 0.009, brandy: 0.005, luxury_clothes: 0.005, gold_ring: 0.005 } },
     },
     // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
     //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.

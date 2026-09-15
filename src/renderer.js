@@ -39,6 +39,19 @@
 
   function isVisible(k) { return state.revealAll || state.revealed.has(k); }
 
+  // v0.51 (N): reveal the ring around each building/city ONCE it finishes construction
+  // (not when placed). Idempotent via a per-object _fogSeen flag; called each frame.
+  function revealConstructed() {
+    const R = (CONFIG.fog && CONFIG.fog.buildReveal) || 1;
+    for (const t of (state.towns || [])) {
+      if (!t) continue;
+      if (t.built !== false && !t._fogSeen) { reveal(t.q, t.r, R); t._fogSeen = true; }
+      for (const b of (Array.isArray(t.buildings) ? t.buildings : [])) {
+        if (b && b.built !== false && !b._fogSeen) { reveal(b.q, b.r, R); b._fogSeen = true; }
+      }
+    }
+  }
+
   // === TILE-ICONS ===
   // Small, code-drawn terrain motifs baked into the offscreen terrain layer
   // (drawn once per fog-reveal / resize, 0 extra cost per frame). Kept quiet and

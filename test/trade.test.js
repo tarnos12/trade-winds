@@ -418,7 +418,7 @@ Pathing.invalidate();
   const sellerGold0 = townById(st, 100).gold;
   // Gradual trade: travel (2) + load dwell (ceil(10/2.5)=4) + travel (2) + unload
   // dwell (4) ≈ 12 ticks. Run enough ticks for the round trip to fully complete.
-  for (let i = 0; i < 20; i++) Trade.tick(st);       // let the trader arrive, load, return, unload
+  for (let i = 0; i < 48; i++) Trade.tick(st);       // let the trader arrive, load, return, unload (v0.51: slower carts)
   ok("EC-D: buyer pays only the agreed amount despite the spike (gold stays 950)",
     townById(st, 1).gold === 950);
   ok("EC-D: buyer receives the 10 grain after the round trip", townById(st, 1).stock.grain === 10);
@@ -457,7 +457,7 @@ Pathing.invalidate();
   ok("gradual: the first delivery is a partial load, not the whole 10 at once",
     first > 0 && first <= perTick + 1e-9);
   // Finish the run; the full 10 still arrives.
-  for (let i = 0; i < 20; i++) Trade.tick(st);
+  for (let i = 0; i < 48; i++) Trade.tick(st);
   ok("gradual: the full quantity is delivered once unloading completes",
     (townById(st, 1).stock.grain || 0) === 10);
 }
@@ -799,7 +799,7 @@ Pathing.invalidate();
   const s2 = mkTown({ id: 2, q: 3, r: 0, stock: { grain: 1e6 }, prices: { grain: 5 }, demand: {} });
   const st2 = { towns: [buyer, s2], carts: [], treasury: 0, tradeSeed: 7 };
   let soldUp = false;
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < 2000; i++) {
     buyer.demand = { grain: 40 };                    // keep the standing shortfall (no Sim to republish it)
     Trade.tick(st2);
     const a = s2.salesAdj && s2.salesAdj.grain;

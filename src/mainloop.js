@@ -144,6 +144,7 @@
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
     drawRoads();
+    if (typeof revealConstructed === "function") revealConstructed();   // v0.51 (N): reveal a building/city's ring once it finishes building
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
