@@ -911,8 +911,12 @@ function place(typeId, q, r, over) {
        "before p2t=" + before.p2t.toFixed(1));
     ok("SAW: smoothing at least halves the sawtooth (a stable plateau)", after.p2t < before.p2t * 0.5,
        "after p2t=" + after.p2t.toFixed(2) + " vs before " + before.p2t.toFixed(1));
-    ok("SAW: smoothing does NOT lower the mean (mean preserved within 2 pts — no trivialize/regress)",
-       Math.abs(after.mean - before.mean) < 2, `before mean=${before.mean.toFixed(1)} after=${after.mean.toFixed(1)}`);
+    // v0.51 §6: the all-basics-present consumption gate lets a bursty estate hold its
+    // basics until the whole basket is on the shelf, so smoothing can RAISE the mean
+    // (fewer wasted partial meals). The invariant we lock is directional — smoothing
+    // must never LOWER the steady-state mean (no trivialize/regress); a rise is fine.
+    ok("SAW: smoothing does NOT lower the mean (no trivialize/regress)",
+       after.mean >= before.mean - 2, `before mean=${before.mean.toFixed(1)} after=${after.mean.toFixed(1)}`);
   }
 
   // (c) Determinism: identical bursty drives give bit-identical happiness stats.

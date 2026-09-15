@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.3";
+  const GAME_VERSION = "0.51.4";
   const PATCH_NOTES = [
+    { v: "0.51.4", notes: [
+      "HOUSES WAIT FOR A FULL PANTRY (economy overhaul): a home now consumes its basic goods only when ALL of them are on hand — if it's missing even one basic it holds the rest instead of burning them, so a city no longer wastes the potato it has while starving for wood. Demand and happiness still reflect the shortage, so the missing good is imported and the family eats again once the basket is complete",
+    ] },
     { v: "0.51.3", notes: [
       "NO-WASTE PRODUCTION (economy overhaul): a producing building now banks its output in its own internal store — once that store is full the building STALLS (it stops consuming inputs and stops producing) instead of throwing away the excess. Output flows into the city warehouse only up to the warehouse's room, so a city never produces more than it can hold and nothing is ever wasted",
     ] },

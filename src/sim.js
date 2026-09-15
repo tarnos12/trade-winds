@@ -606,7 +606,8 @@ Sim.tick = function (State) {
     // AND for Trade shortfalls), then roll them into basicSat/extraSat.
     const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0) + (pop.aristocrats || 0);  // === CC ===
 
-    const required = {};                 // goodId -> units the population wants this tick
+    const required = {};                 // goodId -> units the population wants this tick (DEMAND: prices/trade/happiness)
+    const consume  = {};                 // v0.51 §6: goodId -> units to PHYSICALLY remove (basics gated on all-present)
     const tierReq = { peasants: {}, workers: {}, burghers: {}, aristocrats: {} };  // === PP-A / CC === per-tier required
     // === RU-A: capacity-weighted basic-consumption reduction from house upgrades.
     // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
@@ -623,11 +624,19 @@ Sim.tick = function (State) {
       const rates = spec.perCapita;
       const tierBcm = bcm[tierKey] || 1;
       const tierLcm = lcm[tierKey] || 1;
+      // v0.51 §6: a tier eats its BASICS only when ALL of them are present — otherwise
+      // it WAITS (no partial consumption), so a house never burns the one basic it has
+      // while starving for another. Extras stay independent. Demand + satisfaction below
+      // still read the full `required`, so a gated shortage lowers happiness and pulls
+      // imports for the missing good.
+      let basicsOk = true;
+      for (const gid of spec.basic) { if ((stock[gid] || 0) <= 0) { basicsOk = false; break; } }
       for (const gid in rates) {
         const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
         const amt = rates[gid] * n * (isBasic ? tierBcm : tierLcm);   // v0.51: extra-need goods scaled by luxury mult
         required[gid] = (required[gid] || 0) + amt;
         tierReq[tierKey][gid] = (tierReq[tierKey][gid] || 0) + amt;  // === PP-A ===
+        if (!isBasic || basicsOk) consume[gid] = (consume[gid] || 0) + amt;   // §6 gate: basics only when all present
       }
     }
     // === /RU-A + /CC ===
@@ -645,7 +654,7 @@ Sim.tick = function (State) {
       addDemand(gid, req);
       const have = stock[gid] || 0;
       gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
-      const cc = (town._consCarry[gid] || 0) + req;             // accrue fractional demand
+      const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
       let take = Math.floor(cc);
       if (take > have) take = have;                             // clamp ≥0 — can't consume what isn't there
       if (take > 0) stock[gid] = have - take;
