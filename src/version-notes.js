@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.6";
+  const GAME_VERSION = "0.51.7";
   const PATCH_NOTES = [
+    { v: "0.51.7", notes: [
+      "CITIES ANNOUNCE WHAT THEY SELL + PRICES REACT TO DEMAND (economy overhaul): every city now posts each surplus good to a shared market board that all traders read. Prices adjust from sales pressure — a good that keeps selling is marked UP (it's in demand here), while a surplus nobody buys is marked DOWN toward a floor to move it. Over time near, in-demand cities charge more and distant gluts get cheaper, settling into a natural distance-vs-supply equilibrium",
+    ] },
     { v: "0.51.6", notes: [
       "REAL INTERNAL PORTERS (economy overhaul): the little haulers you see inside a city are no longer decoration — they physically move goods. A producer banks its output in its OWN store; a porter then walks to that building, loads up (max 10), and carries it back to the warehouse. The warehouse now fills ONLY through porters (and outside trade), so hauling is a real part of the supply chain. The city still never holds more than its cap and never wastes a unit — surplus waits in the building's store or in a porter's arms until there's room",
     ] },

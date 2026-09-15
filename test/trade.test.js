@@ -761,5 +761,48 @@ Pathing.invalidate();
 })();
 // === /SAWTOOTH FIX ============================================================
 
+// === v0.51 §3 — BULLETIN BOARD + SALES-PRESSURE PRICING =======================
+(function () {
+  // (a) The board is published every tick: one entry per (seller, surplus good).
+  const seller = mkTown({ id: 100, q: 0, r: 0, stock: { grain: 100 }, prices: { grain: 5 }, demand: {} });
+  const st = { towns: [seller], carts: [], treasury: 0, tradeSeed: 1 };
+  Trade.tick(st);
+  const board = st.market && st.market.board;
+  ok("§3: a shared market board is published", Array.isArray(board));
+  const gEntry = board.find(e => e.goodId === "grain" && e.sellerId === 100);
+  ok("§3: the seller POSTS its grain surplus to the board", !!gEntry && gEntry.qty > 0);
+  ok("§3: board entry carries sellerId, coords, qty and price",
+     gEntry && gEntry.q === 0 && gEntry.r === 0 && typeof gEntry.price === "number");
+
+  // (b) First-tick offers price at FACE value (pressure lags one tick), so exact-price
+  //     mechanics elsewhere are undisturbed.
+  ok("§3: a fresh market prices at face value (no first-tick perturbation)",
+     Math.abs(gEntry.price - 5) < 1e-9);
+
+  // (c) A persistent UNSOLD surplus drives the price DOWN toward the floor.
+  for (let i = 0; i < 60; i++) Trade.tick(st);
+  const adj = seller.salesAdj && seller.salesAdj.grain;
+  const SP = CONFIG.trade.salesPressure;
+  ok("§3: an unsold glut lowers the seller's price to the floor", Math.abs(adj - SP.min) < 1e-6);
+  const glutEntry = st.market.board.find(e => e.goodId === "grain" && e.sellerId === 100);
+  ok("§3: the board reflects the reduced (glut) price", glutEntry.price < 5);
+
+  // (d) A completed SALE raises the price. Drive Trade alone (no Sim, so the buyer's
+  //     demand isn't recomputed to 0) with a standing grain shortfall; trade may route
+  //     off-road. Once a purchase settles, the seller's grain multiplier must exceed 1.
+  Pathing.invalidate();
+  const buyer = mkTown({ id: 1, q: 0, r: 0, gold: 1e6, stock: {}, prices: { grain: 5 }, demand: { grain: 40 } });
+  const s2 = mkTown({ id: 2, q: 3, r: 0, stock: { grain: 1e6 }, prices: { grain: 5 }, demand: {} });
+  const st2 = { towns: [buyer, s2], carts: [], treasury: 0, tradeSeed: 7 };
+  let soldUp = false;
+  for (let i = 0; i < 600; i++) {
+    buyer.demand = { grain: 40 };                    // keep the standing shortfall (no Sim to republish it)
+    Trade.tick(st2);
+    const a = s2.salesAdj && s2.salesAdj.grain;
+    if (typeof a === "number" && a > 1) { soldUp = true; break; }
+  }
+  ok("§3: a good that keeps selling is priced UP (sales pressure > 1)", soldUp);
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

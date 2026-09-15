@@ -49,6 +49,13 @@ Object.assign(CONFIG, {
     // already paid; Sim's overstock cap clamps the excess). Money-conserving; prevents
     // silent cargo loss without minting gold.
     unloadTimeoutMult: 4,
+    // === v0.51 §3 SALES-PRESSURE PRICING (bulletin board). A seller keeps a
+    // per-good price multiplier (town.salesAdj[gid]) layered on top of Sim.priceFor:
+    // when its offered good gets BOUGHT the multiplier ticks UP (rising demand →
+    // charge more); when it has a surplus offered but UNSOLD it ticks DOWN (glut →
+    // cut the price to move it). Bounded + smoothed + deterministic. Net effect: near,
+    // in-demand cities charge more; far cities that sell little drop prices. ===
+    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35 },
   },
 });
 
@@ -71,6 +78,12 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   // committed trade's goods aren't sold out from under it. A reservation is placed
   // at DISPATCH (when the trader leaves carrying the agreed gold) and released on
   // arrival at the seller — or refunded/released if the trade is invalidated.
+  // v0.51 §3: a seller's sales-pressure price multiplier for a good (default 1).
+  // Updated once per tick in Trade.tick (down for an unsold surplus, up on a sale).
+  function salesAdjOf(t, gid) {
+    const a = t && t.salesAdj && t.salesAdj[gid];
+    return (typeof a === "number" && a > 0) ? a : 1;
+  }
   function reservedOf(t, gid) { return (t && t.reserved && t.reserved[gid]) || 0; }
   function reserve(t, gid, n) { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; }
   function release(t, gid, n) { if (t && t.reserved) t.reserved[gid] = Math.max(0, (t.reserved[gid] || 0) - n); }
@@ -110,7 +123,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
   }
   function sellPrice(state, seller, gid, isCastle) {
-    return isCastle ? castleSellPrice(gid) : priceOf(seller, gid);
+    return isCastle ? castleSellPrice(gid) : priceOf(seller, gid) * salesAdjOf(seller, gid);
   }
   function sellReserve(state, seller, gid, n, isCastle) {
     if (isCastle) castleReserve(state, gid, n); else reserve(seller, gid, n);
@@ -181,6 +194,34 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       return d > 0 ? Math.max(d * buffer, minStock) : 0;
     };
 
+    // --- 0. BULLETIN BOARD (v0.51 §3) — every city POSTS an offer per surplus good
+    // to a shared board that all traders read. Published with the CURRENT sales-
+    // pressure multiplier (updated at tick END, below), so this tick's dispatch prices
+    // this good exactly as its last-settled pressure said — a fresh market prices at
+    // face value. Deterministic; does not draw from the rng stream.
+    const SP = cfg.salesPressure || { up: 0.05, down: 0.015, min: 0.75, max: 1.35 };
+    if (!state.market || typeof state.market !== "object") state.market = {};
+    const board = [];
+    for (const seller of towns) {
+      if (!seller || !seller.stock) continue;
+      for (const gid in CONFIG.goods) {
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus > 0) board.push({ sellerId: seller.id, q: seller.q, r: seller.r, goodId: gid,
+                       qty: Math.floor(surplus), price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
+      }
+    }
+    if (state.castleTrade && typeof ResearchEconomy !== "undefined") {
+      for (const gid in state.castleTrade) {
+        const avail = castleSellAvailable(state, gid);
+        if (avail > 0) {
+          const ch = ResearchEconomy.castleHex ? ResearchEconomy.castleHex() : null;
+          board.push({ sellerId: SELLER_CASTLE_ID, castle: true, q: ch ? ch.q : 0, r: ch ? ch.r : 0,
+                       goodId: gid, qty: Math.floor(avail), price: castleSellPrice(gid) });
+        }
+      }
+    }
+    state.market.board = board;
+
     // --- 1. Dispatch: each city's ONE external trader BUYS its biggest shortfall
     //        from a road-connected city with a real surplus (available at L1). ---
     for (const home of towns) {
@@ -232,7 +273,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (surplus <= 0) continue;
           const route = Pathing.route(state, fromKey, townKey(seller));
           if (!route) continue;
-          out.push({ seller, surplus, route, price: priceOf(seller, gid) });
+          out.push({ seller, surplus, route, price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
         }
         addCastleOffer(state, out, fromKey, gid);   // PP-A: castle sells enabled goods
         return out;
@@ -468,6 +509,12 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
               state.treasury += tariff;                                             // → player's treasury
+              // v0.51 §3: a completed sale is UP pressure — this good is in demand
+              // here, so the seller may charge more next time (bounded by SP.max).
+              if (!seller.salesAdj) seller.salesAdj = {};
+              const _sp = cfg.salesPressure || { up: 0.05, max: 1.35 };
+              seller.salesAdj[item.goodId] = Math.min(_sp.max,
+                ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
               if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
               if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value - tariff);  // PP-A ledger
             }
@@ -495,6 +542,31 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
     // --- 3. Prune retired carts ---------------------------------------------
     if (state.carts.some(c => c.done)) state.carts = state.carts.filter(c => !c.done);
+
+    // --- 4. Sales-pressure UPDATE for NEXT tick (v0.51 §3) -------------------
+    // A sale already nudged the good UP at settlement (above). Here, a good still
+    // sitting as an unsold surplus nudges DOWN (glut → cheaper next time); a good with
+    // no surplus relaxes back toward neutral. Applied AFTER dispatch/settlement so this
+    // tick's offers used the prior multiplier (a fresh market trades at face value, and
+    // exact-price mechanics are undisturbed). Deterministic; no rng draw.
+    for (const seller of towns) {
+      if (!seller || !seller.stock) continue;
+      if (!seller.salesAdj || typeof seller.salesAdj !== "object") seller.salesAdj = {};
+      const adj = seller.salesAdj;
+      for (const gid in adj) {                                 // relax any tracked good with no surplus
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus > 0) continue;                             // handled below (surplus branch)
+        const a = adj[gid];
+        if (a > 1) adj[gid] = Math.max(1, a - SP.down);
+        else if (a < 1) adj[gid] = Math.min(1, a + SP.down);
+      }
+      for (const gid in CONFIG.goods) {                        // glut pressure on offered surpluses
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus <= 0) continue;
+        const a = (typeof adj[gid] === "number" && adj[gid] > 0) ? adj[gid] : 1;
+        adj[gid] = Math.max(SP.min, a - SP.down);
+      }
+    }
 
     return state;
   };
