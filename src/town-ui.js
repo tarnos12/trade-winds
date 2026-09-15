@@ -1428,17 +1428,21 @@
   function renderProducerChain(town, b, def) {
     const out = def.output.goodId, oc = goodColor(out);
     const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
-    const cycleSec = Math.max(1, Math.round(psec[def.kind] || 0)) || 1;
+    // v0.51 §1: honour the building's own cycleSec override (e.g. lumberjack = 4s).
+    const cycSec = (typeof def.cycleSec === "number") ? def.cycleSec : (psec[def.kind] || 0);
+    const cycleSec = Math.max(1, Math.round(cycSec)) || 1;
     const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
-    const intervalTicks = Math.max(1, Math.round((psec[def.kind] || 0) * (1000 / baseTickMs)));
+    const intervalTicks = Math.max(1, Math.round(cycSec * (1000 / baseTickMs)));
     const workers = b.workers || 0;
     const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
     const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
     const pct = pr ? Math.round(pr.prog * 100) : 0;
     const barCol = !workers ? "#8a8574" : (pr && pr.starved ? "#e0a63c" : "#7fc24b");
     const perBatchOut = Math.max(1, Math.round((def.output.ratePerWorker || 0) * Math.max(1, workers) * outMult * intervalTicks));
-    const cap = (CONFIG.town && CONFIG.town.storageCap) || 0;
-    const stock = Math.floor((town.stock && town.stock[out]) || 0);
+    // v0.51 §2: the output bar shows this building's OWN store (what porters collect),
+    // not the shared warehouse — the "x/cap" per building the reference shows.
+    const cap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+    const stock = Math.floor((b.store && b.store[out]) || 0);
     const capPct = cap ? Math.max(0, Math.min(100, Math.round(stock / cap * 100))) : 0;
     let inHtml = "";
     if (def.inputs && Object.keys(def.inputs).length) {
@@ -1467,12 +1471,15 @@
           <span class="bp-out-icon" style="color:${oc}">${goodIcon(out)}</span>
           <div>
             <div class="bp-out-amt">+${perBatchOut}</div>
-            <div class="bp-out-stock">${stock}/${cap}</div>
+            <div class="bp-out-stock" title="This building's own store — internal porters carry it to the city warehouse">${stock}/${cap} 🎒</div>
             <div class="bp-stockbar"><span style="width:${capPct}%"></span></div>
           </div>
         </div>
       </div>
-      <div class="tp-hint2">${workers > 0 ? (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s.") : "Idle — assign a worker below."}</div>`;
+      <div class="tp-hint2">${workers > 0
+        ? (stock >= cap ? "Store full — waiting for a porter to collect."
+          : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
+        : "Idle — assign a worker below."}</div>`;
   }
 
   // Building level shown in the header banner badge (upgrade level, min 1).

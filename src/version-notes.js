@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.11";
+  const GAME_VERSION = "0.51.12";
   const PATCH_NOTES = [
+    { v: "0.51.12", notes: [
+      "SEE EACH BUILDING'S STORE: a producer's detail panel now shows its OWN internal store (x/cap 🎒) — the goods waiting for a porter — instead of the shared warehouse, and the panel's cycle time honours the building's real cycle (the lumberjack reads 4s). On the map, a small bar under each producer fills teal as its store fills and turns amber when it's full and stalled, so you can see at a glance which buildings need more porters",
+    ] },
     { v: "0.51.11", notes: [
       "THE CASTLE NEEDS A PROVISIONER (economy overhaul): the castle no longer makes provisions for free. Build a Provisioner (⭐ Special build menu, placed next to the castle) to run the basic line — 2 potato → 1 provision — and switch on castle potato-buying. The castle still starts with a 15-provision buffer, so your first scouts can get moving while you set it up",
     ] },

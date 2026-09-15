@@ -618,6 +618,21 @@
               ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
             }
           }
+          // v0.51 §2: internal-STORE fill bar (what porters collect) — sits just below
+          // the production bar. Teal = goods waiting for a porter; amber = store FULL
+          // (the building has stalled until a porter frees room).
+          if (def.output && b.store && b.built !== false) {
+            const scap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+            const sfill = Math.max(0, Math.min(1, ((b.store[def.output.goodId] || 0) / scap)));
+            if (sfill > 0.001) {
+              const bw = rad * 1.7, bh = Math.max(2, SIZE * 0.07);
+              const bx = p.x - bw / 2;
+              const by = p.y + rad + Math.max(2, SIZE * 0.14) + Math.max(2.5, SIZE * 0.1) + 1.5;
+              ctx.fillStyle = "rgba(18,14,9,0.7)"; ctx.fillRect(bx, by, bw, bh);
+              ctx.fillStyle = sfill >= 0.999 ? "#e0a63c" : "#3fa0a6";
+              ctx.fillRect(bx, by, bw * sfill, bh);
+            }
+          }
         }
         // === /RU-B ===
       }
