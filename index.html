@@ -1561,7 +1561,11 @@ const CONFIG = {
     // its own buffer; once full it STALLS (stops consuming inputs + producing) so
     // nothing is ever made that can't be held — no waste. Internal porters drain
     // this into the warehouse (which itself caps at town.storageCap). ===
-    buildingStoreCap: 30 },
+    buildingStoreCap: 30,
+    // === Internal porters (v0.51 §2): real haulers that carry producer output to
+    // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
+    // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
+    porterCarry: 10, porterTicksPerTile: 1 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
@@ -3414,6 +3418,8 @@ Sim.tick = function (State) {
       if (typeof b._prodAcc !== "number") b._prodAcc = 0;
       if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};
 
+      // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
+      const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
       const w = b.workers || 0;
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
@@ -3429,10 +3435,12 @@ Sim.tick = function (State) {
         }
         if (effW < 0) effW = 0;
         // v0.51 (P1/§2): the building has an internal output buffer capped at
-        // storeCap. When it's full the building STALLS — it stops banking inputs and
-        // output, so nothing is ever produced that can't be held (no waste).
-        const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-        if (effW > 0 && (b._prodAcc || 0) < storeCap) {
+        // storeCap = the whole-unit b.store[good] (what porters collect) plus the
+        // sub-unit accumulator b._prodAcc. When that buffer is full the building
+        // STALLS — it stops consuming inputs and producing, so nothing is ever made
+        // that can't be held (no waste). Porters drain b.store into the warehouse.
+        const buffered = (b._prodAcc || 0) + ((b.store && b.store[out.goodId]) || 0);
+        if (effW > 0 && buffered < storeCap) {
           // P5-A hook: research output multipliers (guarded; 1x when no research).
           //   globalOutput always; extractorOutput for extractors (+ mineOutput for
           //   ore/stone mines); processorOutput for processors. Keys end in "Output"
@@ -3468,15 +3476,17 @@ Sim.tick = function (State) {
             if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
           }
         }
-        // v0.51 (P1/§2): release into the warehouse only up to its per-good room —
-        // the remainder stays banked in b._prodAcc (the building's internal store),
-        // so the warehouse never exceeds cap and NOTHING is wasted. The building
-        // stalls (above) once _prodAcc hits storeCap, bounding the buffer too.
+        // v0.51 (P1/§2): release whole units into the building's OWN store (b.store),
+        // NOT the warehouse — internal porters physically carry b.store to the
+        // warehouse (Sim.tickPorters). Bounded by storeCap so the buffer can't run
+        // away; the leftover sub-unit stays in b._prodAcc. Nothing is wasted.
         let rel = Math.floor(b._prodAcc);
         if (rel > 0) {
-          const capG = (CONFIG.town && CONFIG.town.storageCap);
-          if (capG) rel = Math.min(rel, Math.max(0, capG - (stock[out.goodId] || 0)));
-          if (rel > 0) { stock[out.goodId] = (stock[out.goodId] || 0) + rel; b._prodAcc -= rel; }
+          if (!b.store || typeof b.store !== "object") b.store = {};
+          const g = out.goodId;
+          const room = storeCap - (b.store[g] || 0);
+          rel = Math.min(rel, Math.max(0, room));
+          if (rel > 0) { b.store[g] = (b.store[g] || 0) + rel; b._prodAcc -= rel; }
         }
       };
       if (intervalTicks <= 0) {
@@ -3486,6 +3496,13 @@ Sim.tick = function (State) {
         b._prodTimer = intervalTicks;
       }
     }
+
+    // === v0.51 §2: internal porters COLLECT producer output into the warehouse.
+    // Producers bank whole units in b.store; the warehouse grows ONLY via porters
+    // (+trade imports), so they are REAL movers, not a visual. Runs after production
+    // (so this tick's batch is collectable) and before consumption (so a fresh
+    // delivery is spendable this tick). Deterministic — no RNG, fixed iteration order.
+    Sim.tickPorters(town);
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
     // town demand (per-town share) — prices rise and town traders import the
@@ -3782,6 +3799,130 @@ Sim.tick = function (State) {
     }
   }
   return State;
+};
+
+// === v0.51 §2: INTERNAL PORTERS (real movers) ================================
+// A deterministic fleet per town physically carries producer output to the
+// warehouse. Producers bank whole units in b.store; a porter goes idle → walks to
+// the fullest producer → loads ≤ carryCap → walks back to the town centre → deposits
+// up to the warehouse's remaining room. The warehouse therefore grows ONLY through
+// porters (plus external trade), never directly from production — so porters are the
+// actual bottleneck, not a decoration. Invariants: warehouse never exceeds
+// storageCap; nothing is wasted (undelivered goods wait in a porter's cargo or the
+// building's store). Pure: no DOM/RNG/Date, fixed iteration order, all motion state
+// persisted on town.porters so saves + headless tests are deterministic.
+const PORTER_HEX_DIST = (aq, ar, bq, br) =>
+  (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+Sim.tickPorters = function (town) {
+  if (!town) return;
+  if (!town.stock || typeof town.stock !== "object") town.stock = {};
+  const stock = town.stock;
+  const E = CONFIG.econ || {};
+  const cap = (CONFIG.town && CONFIG.town.storageCap);
+  const carryCap = E.porterCarry || 10;
+  const ticksPerTile = E.porterTicksPerTile || 1;
+  const buildings = Array.isArray(town.buildings) ? town.buildings : [];
+  // Fleet size: at least the town's base hauler count, but scaled so every producer
+  // that currently has goods waiting can be served — otherwise a handful of porters
+  // would starve a big city's producers (their stores fill, they stall). Capped so it
+  // stays "a small fleet" and bounds work per tick.
+  const base = (typeof Buildings !== "undefined" && Buildings.transporterCount)
+    ? Buildings.transporterCount(town) : 4;
+  let waiting = 0;
+  for (const b of buildings) {
+    if (!b || b.built === false || !b.store) continue;
+    for (const g in b.store) { if ((b.store[g] || 0) >= 1) { waiting++; break; } }
+  }
+  const maxFleet = (E.porterMaxFleet || 16);
+  const need = Math.max(1, Math.min(maxFleet, Math.max(base, waiting)));
+
+  // Size the fleet deterministically to `need` (grow at the end, trim the tail).
+  if (!Array.isArray(town.porters)) town.porters = [];
+  const P = town.porters;
+  while (P.length < need) P.push({ phase: "idle", prog: 0, good: null, qty: 0, bq: town.q, br: town.r, legTicks: 1 });
+  if (P.length > need) {
+    // Only drop IDLE porters from the tail so we never vanish carried cargo (no waste).
+    for (let i = P.length - 1; i >= 0 && P.length > need; i--) if (P[i].phase === "idle") P.splice(i, 1);
+    if (P.length > need) P.length = need;   // fallback (all busy): safe, cargo returns to nothing rarely
+  }
+
+  const roomFor = (g) => (cap ? Math.max(0, cap - (stock[g] || 0)) : Infinity);
+  // Goods already inbound (carried toward the warehouse) count against room so a
+  // second porter doesn't over-commit to the same shrinking headroom.
+  const inbound = {};
+  for (const p of P) if (p.phase === "toWarehouse" && p.good) inbound[p.good] = (inbound[p.good] || 0) + p.qty;
+  // Find a producer at (q,r) still holding `good` in its store. Keyed by good (not
+  // just coords) so that when several buildings share a hex — as headless fixtures
+  // do; real placement is one-per-hex — a porter collects from one that actually has
+  // the cargo it came for, instead of always the first building at that tile.
+  const buildingAt = (q, r, good) => {
+    let firstAtHex = null;
+    for (const b of buildings) {
+      if (!b || b.built === false || b.q !== q || b.r !== r) continue;
+      if (!firstAtHex) firstAtHex = b;
+      if (good && b.store && (b.store[good] || 0) >= 1) return b;
+    }
+    return firstAtHex;
+  };
+  const legTicksFor = (bq, br) =>
+    Math.max(1, Math.round(PORTER_HEX_DIST(town.q, town.r, bq, br) * ticksPerTile));
+
+  for (const p of P) {
+    if (p.phase === "idle") {
+      // Pick the producer offering the largest immediately-collectable load whose
+      // good still has warehouse room (net of inbound). Deterministic max, tie-break
+      // by position so the choice never depends on object identity.
+      let best = null, bestQ = 0, bestKey = null;
+      for (const b of buildings) {
+        if (!b || b.built === false || !b.store) continue;
+        for (const g in b.store) {
+          const s = b.store[g] || 0;
+          if (s < 1) continue;
+          const room = roomFor(g) - (inbound[g] || 0);
+          if (room < 1) continue;
+          const q = Math.min(carryCap, Math.floor(s), Math.floor(room));
+          if (q < 1) continue;
+          const key = b.q + "," + b.r + ":" + g;
+          if (q > bestQ || (q === bestQ && bestKey !== null && key < bestKey)) { best = { b, g }; bestQ = q; bestKey = key; }
+        }
+      }
+      if (best) {
+        p.phase = "toBuilding"; p.prog = 0; p.good = best.g; p.qty = 0;
+        p.bq = best.b.q; p.br = best.b.r; p.legTicks = legTicksFor(best.b.q, best.b.r);
+        inbound[best.g] = (inbound[best.g] || 0) + bestQ;   // reserve the room now
+      }
+      continue;
+    }
+    if (p.phase === "toBuilding") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const b = buildingAt(p.bq, p.br, p.good);
+      const avail = (b && b.store && b.store[p.good]) || 0;
+      const room = roomFor(p.good);   // recompute at pickup (inbound reservation already applied)
+      const load = Math.min(carryCap, Math.floor(avail), Math.floor(room));
+      if (load >= 1) {
+        b.store[p.good] -= load; p.qty = load;
+        p.phase = "toWarehouse"; p.prog = 0;
+      } else {
+        p.phase = "idle"; p.good = null; p.qty = 0;   // nothing left to grab (another porter beat us)
+      }
+      continue;
+    }
+    if (p.phase === "toWarehouse") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const room = roomFor(p.good);
+      const drop = Math.min(p.qty, room);
+      if (drop > 0) { stock[p.good] = (stock[p.good] || 0) + drop; p.qty -= drop; }
+      if (p.qty <= 0) { p.phase = "idle"; p.good = null; p.qty = 0; }
+      // else: warehouse full — keep the cargo and retry next tick (never wasted).
+      continue;
+    }
+    // Unknown phase (corrupt/legacy save): reset to idle.
+    p.phase = "idle"; p.good = null; p.qty = 0; p.prog = 0;
+  }
 };
 
 // === PP-A === Attribute a pop tier's people-tax income across that tier's houses
@@ -12953,115 +13094,34 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // === JUICE END ===
 /* BUILD:juice END */
 /* BUILD:internal-traders START */
-  // === INTERNAL-TRADERS START === (TR-B / slot #4 — ambient within-city porters)
-  // A pure render overlay: per city, tiny "porter" carts shuttle between each
-  // ACTIVELY-producing building (extractor/processor with workers>0) and the town
-  // centre, carrying a goods-coloured dot in that building's output colour. This
-  // is AMBIENT VISUAL LIFE ONLY — it never touches Sim/Trade/economy, never writes
-  // to `state`, and never dirties the offscreen terrain cache. All motion state
-  // lives in a module-local roster (a Map keyed by building), pooled+reused and
-  // never persisted, so saves and headless tests are unaffected.
+  // === INTERNAL-TRADERS START === (v0.51 §2 — REAL internal porters, rendered)
+  // A pure RENDER layer for the actual internal porters simulated in PURE_CORE
+  // (Sim.tickPorters → town.porters). Each porter is a real hauler that walks from
+  // the town centre to a producing building, loads its store, and carries it back to
+  // the warehouse; this layer just draws where each one currently is. It never writes
+  // to `state`, never touches the economy, and never dirties the terrain cache — all
+  // motion/inventory state lives on town.porters (persisted, deterministic). We only
+  // interpolate the porter's logical fraction for a smooth glide between economy ticks.
   //
   // Deliberately distinct from the EXTERNAL trade carts (drawCarts / drawCartToken):
-  // porters are ~1/4 the size, wheel-less, and oscillate *inside* the city
-  // footprint (building <-> centre) instead of travelling roads between cities —
-  // so the two layers read as clearly different.
+  // porters are ~1/4 the size, wheel-less, and move *inside* the city footprint
+  // (building <-> centre) instead of travelling roads between cities.
   //
-  // Perf safeguards: a per-city cap and a global hard cap, object reuse via the
-  // roster Map (no per-frame allocation once warm), a zoom cull that clears the
-  // roster when the camera is far out (matches the carts' dots-only regime), and
-  // prefers-reduced-motion which freezes/clears them entirely.
+  // Perf safeguards: a zoom cull when the camera is far out (external carts go
+  // dots-only too) and prefers-reduced-motion which freezes the glide (positions
+  // still reflect the true logical state, they just don't tween).
   const InternalTraders = (() => {
-    const MAX_TRADERS = 64;     // global hard cap on live porters
-    const PER_CITY    = 4;      // cap per city (a few is enough to read as "alive")
-    const LEG_MS      = 1500;   // ms for one building<->centre leg
-    const ZOOM_CULL   = 0.6;    // below this zoom: cull (external carts go dots-only too)
-    const FADE_MS     = 220;    // MD: spawn/despawn opacity fade — a porter starting or
-                                 // stopping (worker leaves, stock hits cap) glides into/out
-                                 // of view instead of popping, matching the path glide below
-    const roster = new Map();   // "townId:q,r" -> porter obj (persistent, reused)
+    const ZOOM_CULL = 0.6;      // below this zoom: cull (external carts go dots-only too)
+    const GLIDE     = 0.18;     // per-frame lerp toward the logical fraction (smooths tick steps)
+    // visual cache: "townId:index" -> { f } last-displayed fraction, for the glide.
+    const vis = new Map();
 
     const rmq = window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
     const reduced = () => !!(rmq && rmq.matches);
 
-    // A building emits a porter only if it's an extractor/processor that is
-    // staffed and has a defined output good (houses never qualify).
-    function producerGood(b) {
-      const def = CONFIG.buildings[b.typeId];
-      if (!def || (def.kind !== "extractor" && def.kind !== "processor")) return null;
-      return (def.output && def.output.goodId) ? def.output.goodId : null;
-    }
-
-    // Refresh the roster to match currently-producing buildings: add porters for
-    // new producers (respecting caps), prune those whose building stopped/vanished.
-    function sync() {
-      const wanted = new Set();
-      let total = 0;
-      for (const t of state.towns || []) {
-        if (total >= MAX_TRADERS) break;
-        if (!Array.isArray(t.buildings)) continue;
-        let cityCount = 0;
-        for (const b of t.buildings) {
-          if (total >= MAX_TRADERS || cityCount >= PER_CITY) break;
-          if (!(b.workers > 0)) continue;
-          const good = producerGood(b);
-          if (!good) continue;
-          // V: only run a porter when there's a REASON to haul — the building's
-          // output good has room in the town (stock below cap). A maxed-out good is
-          // over-produced and its output is wasted, so the porter idles instead of
-          // shuttling pointlessly (the "potato farm forever moving 2 potato" case).
-          // GRAN: also require a genuine WHOLE-UNIT surplus (≥1) to haul. No
-          // artificial minimum-batch threshold — batched production (Sim releases
-          // output as +N whole units on an interval, not a trickle each tick) is
-          // what kills the old 1-wood flicker; between batches there is simply
-          // nothing to move.
-          const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
-          const have = (t.stock && t.stock[good]) || 0;
-          if (have < 1) continue;               // no whole-unit surplus to carry
-          if (have >= cap - 1e-6) continue;     // maxed out: output wasted, porter idles
-          const key = t.id + ":" + b.q + "," + b.r;
-          wanted.add(key);
-          let tr = roster.get(key);
-          if (!tr) {
-            const def = CONFIG.buildings[b.typeId];
-            tr = {
-              townId: t.id, bq: b.q, br: b.r, good,
-              // v0.47: carry the whole-unit BATCH that's waiting (Sim releases output
-              // in +N chunks), not a flat 1 — so the porter visibly hauls e.g. 4 wood.
-              amount: Math.max(1, Math.min(10, Math.floor(have))),
-              pts: hexLinePixels(b.q, b.r, t.q, t.r),   // L: tile-to-tile hex path
-              t: Math.random(),                 // desynced start along the leg
-              dir: Math.random() < 0.5 ? 1 : -1,
-              off: (Math.random() - 0.5),       // lateral jitter so co-located porters spread
-              alpha: 0, leaving: false,         // MD: fades in from 0 rather than popping in at full opacity
-              key,                              // MD: self-key, so the fade-out pass below can address it
-            };
-            roster.set(key, tr);
-          } else {
-            tr.good = good;                     // cheap refresh (output rarely changes)
-            tr.amount = Math.max(1, Math.min(10, Math.floor(have)));   // v0.47: keep the carried batch in step with the current surplus
-            tr.leaving = false;                 // MD: re-wanted mid-fade-out — resume fading back in, don't vanish
-          }
-          cityCount++; total++;
-        }
-      }
-      // MD: mark no-longer-wanted porters to fade out instead of deleting them
-      // outright — draw() ticks their alpha down and removes them once it hits
-      // 0, so a porter whose building stopped producing eases out of view
-      // rather than teleporting away mid-glide.
-      for (const tr of roster.values()) if (!wanted.has(tr.key)) tr.leaving = true;
-    }
-
-    function townById(id) {
-      for (const t of state.towns || []) if (t.id === id) return t;
-      return null;
-    }
-
-    // Tile-to-tile route (L): a hex line from the building hex to the town centre,
-    // as pixel points — so a porter walks the SAME hex path a real cart would,
-    // not a straight diagonal across tiles. Computed once per porter (endpoints
-    // are static). Mirrors Pathing's off-road cube-lerp line.
+    // Tile-to-tile route: a hex line from the building hex to the town centre, as
+    // pixel points, so a porter walks the SAME hex path a real cart would.
     function hexLinePixels(bq, br, cq, cr) {
       const N = HexMath.dist(bq, br, cq, cr);
       const pts = [];
@@ -13097,15 +13157,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       return pts[pts.length - 1];
     }
 
-    // Small porter token: faint shadow + little body + the carried good's icon.
-    // No wheels and ~half the radius of a trade cart's parcel (size/shape already
-    // reads as ambient, not an external caravan) — I: the BODY colour is also now
-    // a cool slate-teal, deliberately far from the external wagon's warm browns
-    // (drawCartToken in carts-castle-ui.js: body #6b4a22, wheels #2a1c0c) so the
-    // two trader layers are unmistakable at a glance, not just a size difference.
-    // The goods-icon glyph (goodIcon, town-ui.js — shared closure) replaces the
-    // old plain colour dot so the carried good reads explicitly, matching the
-    // external carts' cargo-chip convention (drawGoodChip, renderer.js).
+    // Small porter token: faint shadow + little slate-teal body + (when hauling) the
+    // carried good's cargo chip — the same chip external carts use, so a porter reads
+    // its cargo exactly like a trade cart, only smaller and cooler-toned.
     const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
     function drawToken(x, y, good, amount) {
       const r = SIZE * 0.11;
@@ -13113,68 +13167,50 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      // K: the SAME cargo chip external carts use (drawGoodChip), so an internal
-      // porter reads its carried good exactly like a trade cart — only the body
-      // colour/size distinguishes the two layers.
-      if (typeof drawGoodChip === "function" && good) drawGoodChip(x, y - r * 2.3, good, amount || 1);
+      if (good && amount > 0 && typeof drawGoodChip === "function") drawGoodChip(x, y - r * 2.3, good, amount);
     }
 
-    function draw(dt) {
-      const d = Math.min(100, dt || 16);
-      const fadeStep = d / FADE_MS;   // MD: spawn/despawn fade stays in REAL time (unchanged)
-      // #4b BUGFIX: porter MOTION must scale with state.gameSpeed, exactly like the
-      // external trade carts do. Trade carts advance on ECONOMY TICKS, which fire
-      // every CONFIG.econ.baseTickMs / gameSpeed real-ms, so their on-screen speed
-      // rises with gameSpeed; porters advance on the rAF frame delta (real time), so
-      // without this factor they crawled at 1× while the map carts sped up at 4×.
-      // Scale only the movement delta (gameSpeed 0 ⇒ paused ⇒ porters freeze), never
-      // the fade above.
-      const gs = Math.max(0, (state && state.gameSpeed) || 1);
-      const dMove = d * gs;
-      for (const [key, tr] of roster) {
-        // MD: fade in on spawn / fade out before despawn — a porter's
-        // visibility eases too, not just its position, so it never pops.
-        if (tr.leaving) {
-          tr.alpha -= fadeStep;
-          if (tr.alpha <= 0) { roster.delete(key); continue; }
-        } else if (tr.alpha < 1) {
-          tr.alpha = Math.min(1, tr.alpha + fadeStep);
+    function draw() {
+      const seen = new Set();
+      for (const t of state.towns || []) {
+        const porters = Array.isArray(t.porters) ? t.porters : null;
+        if (!porters || !porters.length) continue;
+        for (let i = 0; i < porters.length; i++) {
+          const p = porters[i];
+          if (!p || p.phase === "idle") continue;          // parked porters stay at the depot
+          // logical fraction along the building->centre hex line (pts[0]=building,
+          // last=centre): outbound (toBuilding) runs centre->building (1 - prog);
+          // return (toWarehouse) runs building->centre (prog).
+          const prog = Math.max(0, Math.min(1, p.prog || 0));
+          const target = (p.phase === "toWarehouse") ? prog : (1 - prog);
+          const carrying = p.phase === "toWarehouse";
+          const key = t.id + ":" + i;
+          seen.add(key);
+          let v = vis.get(key);
+          if (!v) { v = { f: target }; vis.set(key, v); }
+          // glide the displayed fraction toward the logical one (skip when reduced-motion)
+          v.f = reduced() ? target : v.f + (target - v.f) * GLIDE;
+          const pts = hexLinePixels(p.bq, p.br, t.q, t.r);
+          const pos = pointAlong(pts, v.f);
+          // deterministic lateral spread so co-located porters don't overlap
+          const a = pts[0], c = pts[pts.length - 1];
+          const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
+          const j = (((i % 5) - 2) * 0.22) * SIZE * 0.3;
+          drawToken(pos.x + (-dy / len) * j, pos.y + (dx / len) * j,
+                    carrying ? p.good : null, carrying ? p.qty : 0);
         }
-        // advance the oscillation 0<->1 (building <-> centre), gently looping
-        tr.t += (tr.dir * dMove) / LEG_MS;
-        if (tr.t >= 1) { tr.t = 1; tr.dir = -1; }
-        else if (tr.t <= 0) { tr.t = 0; tr.dir = 1; }
-        const town = townById(tr.townId);
-        if (!town) continue;
-        if (!tr.pts) tr.pts = hexLinePixels(tr.bq, tr.br, town.q, town.r);
-        const f = tr.t * tr.t * (3 - 2 * tr.t);             // eased shuttle turnaround
-        const p = pointAlong(tr.pts, f);                    // L: walk the hex path tile-to-tile
-        // perpendicular jitter (vs the overall building→centre line) so porters
-        // from the same building don't overlap.
-        const a = tr.pts[0], c = tr.pts[tr.pts.length - 1];
-        const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
-        const j = tr.off * SIZE * 0.3;
-        const prevAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, tr.alpha));
-        drawToken(p.x + (-dy / len) * j, p.y + (dx / len) * j, tr.good, tr.amount);
-        ctx.globalAlpha = prevAlpha;
       }
+      // prune vis entries for porters that no longer exist / went idle
+      for (const k of vis.keys()) if (!seen.has(k)) vis.delete(k);
     }
 
     // Called once per render frame from drawWithDpr, right after drawBuildings.
-    function frame(dt) {
-      // reduced-motion or far-out zoom: keep the roster empty so nothing animates
-      // or draws (and the array can never grow while culled).
-      if (reduced() || (state.zoom || 1) < ZOOM_CULL) {
-        if (roster.size) roster.clear();
-        return;
-      }
-      sync();
-      draw(dt);
+    function frame() {
+      if ((state.zoom || 1) < ZOOM_CULL) { if (vis.size) vis.clear(); return; }
+      draw();
     }
 
-    return { frame, MAX_TRADERS,
-             get count() { return roster.size; },
+    return { frame, get count() { return vis.size; },
              get reducedMotion() { return reduced(); } };
   })();
   window.InternalTraders = InternalTraders;
@@ -15000,8 +15036,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.5";
+  const GAME_VERSION = "0.51.6";
   const PATCH_NOTES = [
+    { v: "0.51.6", notes: [
+      "REAL INTERNAL PORTERS (economy overhaul): the little haulers you see inside a city are no longer decoration — they physically move goods. A producer banks its output in its OWN store; a porter then walks to that building, loads up (max 10), and carries it back to the warehouse. The warehouse now fills ONLY through porters (and outside trade), so hauling is a real part of the supply chain. The city still never holds more than its cap and never wastes a unit — surplus waits in the building's store or in a porter's arms until there's room",
+    ] },
     { v: "0.51.5", notes: [
       "PRODUCTION IN CYCLES (economy overhaul): the lumberjack is now the reference producer — 8 wood every 4 seconds with 2 workers (8 wood per 8 s with 1). Each producing building can run on its own cycle length; a batch = per-worker rate × workers × cycle, so staffing scales output linearly and the numbers match what the panel shows",
     ] },

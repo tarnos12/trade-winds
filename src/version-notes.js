@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.5";
+  const GAME_VERSION = "0.51.6";
   const PATCH_NOTES = [
+    { v: "0.51.6", notes: [
+      "REAL INTERNAL PORTERS (economy overhaul): the little haulers you see inside a city are no longer decoration — they physically move goods. A producer banks its output in its OWN store; a porter then walks to that building, loads up (max 10), and carries it back to the warehouse. The warehouse now fills ONLY through porters (and outside trade), so hauling is a real part of the supply chain. The city still never holds more than its cap and never wastes a unit — surplus waits in the building's store or in a porter's arms until there's room",
+    ] },
     { v: "0.51.5", notes: [
       "PRODUCTION IN CYCLES (economy overhaul): the lumberjack is now the reference producer — 8 wood every 4 seconds with 2 workers (8 wood per 8 s with 1). Each producing building can run on its own cycle length; a batch = per-worker rate × workers × cycle, so staffing scales output linearly and the numbers match what the panel shows",
     ] },

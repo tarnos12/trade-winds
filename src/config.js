@@ -193,7 +193,11 @@ const CONFIG = {
     // its own buffer; once full it STALLS (stops consuming inputs + producing) so
     // nothing is ever made that can't be held — no waste. Internal porters drain
     // this into the warehouse (which itself caps at town.storageCap). ===
-    buildingStoreCap: 30 },
+    buildingStoreCap: 30,
+    // === Internal porters (v0.51 §2): real haulers that carry producer output to
+    // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
+    // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
+    porterCarry: 10, porterTicksPerTile: 1 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,

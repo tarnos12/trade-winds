@@ -521,6 +521,8 @@ Sim.tick = function (State) {
       if (typeof b._prodAcc !== "number") b._prodAcc = 0;
       if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};
 
+      // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
+      const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
       const w = b.workers || 0;
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
@@ -536,10 +538,12 @@ Sim.tick = function (State) {
         }
         if (effW < 0) effW = 0;
         // v0.51 (P1/§2): the building has an internal output buffer capped at
-        // storeCap. When it's full the building STALLS — it stops banking inputs and
-        // output, so nothing is ever produced that can't be held (no waste).
-        const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-        if (effW > 0 && (b._prodAcc || 0) < storeCap) {
+        // storeCap = the whole-unit b.store[good] (what porters collect) plus the
+        // sub-unit accumulator b._prodAcc. When that buffer is full the building
+        // STALLS — it stops consuming inputs and producing, so nothing is ever made
+        // that can't be held (no waste). Porters drain b.store into the warehouse.
+        const buffered = (b._prodAcc || 0) + ((b.store && b.store[out.goodId]) || 0);
+        if (effW > 0 && buffered < storeCap) {
           // P5-A hook: research output multipliers (guarded; 1x when no research).
           //   globalOutput always; extractorOutput for extractors (+ mineOutput for
           //   ore/stone mines); processorOutput for processors. Keys end in "Output"
@@ -575,15 +579,17 @@ Sim.tick = function (State) {
             if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
           }
         }
-        // v0.51 (P1/§2): release into the warehouse only up to its per-good room —
-        // the remainder stays banked in b._prodAcc (the building's internal store),
-        // so the warehouse never exceeds cap and NOTHING is wasted. The building
-        // stalls (above) once _prodAcc hits storeCap, bounding the buffer too.
+        // v0.51 (P1/§2): release whole units into the building's OWN store (b.store),
+        // NOT the warehouse — internal porters physically carry b.store to the
+        // warehouse (Sim.tickPorters). Bounded by storeCap so the buffer can't run
+        // away; the leftover sub-unit stays in b._prodAcc. Nothing is wasted.
         let rel = Math.floor(b._prodAcc);
         if (rel > 0) {
-          const capG = (CONFIG.town && CONFIG.town.storageCap);
-          if (capG) rel = Math.min(rel, Math.max(0, capG - (stock[out.goodId] || 0)));
-          if (rel > 0) { stock[out.goodId] = (stock[out.goodId] || 0) + rel; b._prodAcc -= rel; }
+          if (!b.store || typeof b.store !== "object") b.store = {};
+          const g = out.goodId;
+          const room = storeCap - (b.store[g] || 0);
+          rel = Math.min(rel, Math.max(0, room));
+          if (rel > 0) { b.store[g] = (b.store[g] || 0) + rel; b._prodAcc -= rel; }
         }
       };
       if (intervalTicks <= 0) {
@@ -593,6 +599,13 @@ Sim.tick = function (State) {
         b._prodTimer = intervalTicks;
       }
     }
+
+    // === v0.51 §2: internal porters COLLECT producer output into the warehouse.
+    // Producers bank whole units in b.store; the warehouse grows ONLY via porters
+    // (+trade imports), so they are REAL movers, not a visual. Runs after production
+    // (so this tick's batch is collectable) and before consumption (so a fresh
+    // delivery is spendable this tick). Deterministic — no RNG, fixed iteration order.
+    Sim.tickPorters(town);
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
     // town demand (per-town share) — prices rise and town traders import the
@@ -889,6 +902,130 @@ Sim.tick = function (State) {
     }
   }
   return State;
+};
+
+// === v0.51 §2: INTERNAL PORTERS (real movers) ================================
+// A deterministic fleet per town physically carries producer output to the
+// warehouse. Producers bank whole units in b.store; a porter goes idle → walks to
+// the fullest producer → loads ≤ carryCap → walks back to the town centre → deposits
+// up to the warehouse's remaining room. The warehouse therefore grows ONLY through
+// porters (plus external trade), never directly from production — so porters are the
+// actual bottleneck, not a decoration. Invariants: warehouse never exceeds
+// storageCap; nothing is wasted (undelivered goods wait in a porter's cargo or the
+// building's store). Pure: no DOM/RNG/Date, fixed iteration order, all motion state
+// persisted on town.porters so saves + headless tests are deterministic.
+const PORTER_HEX_DIST = (aq, ar, bq, br) =>
+  (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+Sim.tickPorters = function (town) {
+  if (!town) return;
+  if (!town.stock || typeof town.stock !== "object") town.stock = {};
+  const stock = town.stock;
+  const E = CONFIG.econ || {};
+  const cap = (CONFIG.town && CONFIG.town.storageCap);
+  const carryCap = E.porterCarry || 10;
+  const ticksPerTile = E.porterTicksPerTile || 1;
+  const buildings = Array.isArray(town.buildings) ? town.buildings : [];
+  // Fleet size: at least the town's base hauler count, but scaled so every producer
+  // that currently has goods waiting can be served — otherwise a handful of porters
+  // would starve a big city's producers (their stores fill, they stall). Capped so it
+  // stays "a small fleet" and bounds work per tick.
+  const base = (typeof Buildings !== "undefined" && Buildings.transporterCount)
+    ? Buildings.transporterCount(town) : 4;
+  let waiting = 0;
+  for (const b of buildings) {
+    if (!b || b.built === false || !b.store) continue;
+    for (const g in b.store) { if ((b.store[g] || 0) >= 1) { waiting++; break; } }
+  }
+  const maxFleet = (E.porterMaxFleet || 16);
+  const need = Math.max(1, Math.min(maxFleet, Math.max(base, waiting)));
+
+  // Size the fleet deterministically to `need` (grow at the end, trim the tail).
+  if (!Array.isArray(town.porters)) town.porters = [];
+  const P = town.porters;
+  while (P.length < need) P.push({ phase: "idle", prog: 0, good: null, qty: 0, bq: town.q, br: town.r, legTicks: 1 });
+  if (P.length > need) {
+    // Only drop IDLE porters from the tail so we never vanish carried cargo (no waste).
+    for (let i = P.length - 1; i >= 0 && P.length > need; i--) if (P[i].phase === "idle") P.splice(i, 1);
+    if (P.length > need) P.length = need;   // fallback (all busy): safe, cargo returns to nothing rarely
+  }
+
+  const roomFor = (g) => (cap ? Math.max(0, cap - (stock[g] || 0)) : Infinity);
+  // Goods already inbound (carried toward the warehouse) count against room so a
+  // second porter doesn't over-commit to the same shrinking headroom.
+  const inbound = {};
+  for (const p of P) if (p.phase === "toWarehouse" && p.good) inbound[p.good] = (inbound[p.good] || 0) + p.qty;
+  // Find a producer at (q,r) still holding `good` in its store. Keyed by good (not
+  // just coords) so that when several buildings share a hex — as headless fixtures
+  // do; real placement is one-per-hex — a porter collects from one that actually has
+  // the cargo it came for, instead of always the first building at that tile.
+  const buildingAt = (q, r, good) => {
+    let firstAtHex = null;
+    for (const b of buildings) {
+      if (!b || b.built === false || b.q !== q || b.r !== r) continue;
+      if (!firstAtHex) firstAtHex = b;
+      if (good && b.store && (b.store[good] || 0) >= 1) return b;
+    }
+    return firstAtHex;
+  };
+  const legTicksFor = (bq, br) =>
+    Math.max(1, Math.round(PORTER_HEX_DIST(town.q, town.r, bq, br) * ticksPerTile));
+
+  for (const p of P) {
+    if (p.phase === "idle") {
+      // Pick the producer offering the largest immediately-collectable load whose
+      // good still has warehouse room (net of inbound). Deterministic max, tie-break
+      // by position so the choice never depends on object identity.
+      let best = null, bestQ = 0, bestKey = null;
+      for (const b of buildings) {
+        if (!b || b.built === false || !b.store) continue;
+        for (const g in b.store) {
+          const s = b.store[g] || 0;
+          if (s < 1) continue;
+          const room = roomFor(g) - (inbound[g] || 0);
+          if (room < 1) continue;
+          const q = Math.min(carryCap, Math.floor(s), Math.floor(room));
+          if (q < 1) continue;
+          const key = b.q + "," + b.r + ":" + g;
+          if (q > bestQ || (q === bestQ && bestKey !== null && key < bestKey)) { best = { b, g }; bestQ = q; bestKey = key; }
+        }
+      }
+      if (best) {
+        p.phase = "toBuilding"; p.prog = 0; p.good = best.g; p.qty = 0;
+        p.bq = best.b.q; p.br = best.b.r; p.legTicks = legTicksFor(best.b.q, best.b.r);
+        inbound[best.g] = (inbound[best.g] || 0) + bestQ;   // reserve the room now
+      }
+      continue;
+    }
+    if (p.phase === "toBuilding") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const b = buildingAt(p.bq, p.br, p.good);
+      const avail = (b && b.store && b.store[p.good]) || 0;
+      const room = roomFor(p.good);   // recompute at pickup (inbound reservation already applied)
+      const load = Math.min(carryCap, Math.floor(avail), Math.floor(room));
+      if (load >= 1) {
+        b.store[p.good] -= load; p.qty = load;
+        p.phase = "toWarehouse"; p.prog = 0;
+      } else {
+        p.phase = "idle"; p.good = null; p.qty = 0;   // nothing left to grab (another porter beat us)
+      }
+      continue;
+    }
+    if (p.phase === "toWarehouse") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const room = roomFor(p.good);
+      const drop = Math.min(p.qty, room);
+      if (drop > 0) { stock[p.good] = (stock[p.good] || 0) + drop; p.qty -= drop; }
+      if (p.qty <= 0) { p.phase = "idle"; p.good = null; p.qty = 0; }
+      // else: warehouse full — keep the cargo and retry next tick (never wasted).
+      continue;
+    }
+    // Unknown phase (corrupt/legacy save): reset to idle.
+    p.phase = "idle"; p.good = null; p.qty = 0; p.prog = 0;
+  }
 };
 
 // === PP-A === Attribute a pop tier's people-tax income across that tier's houses
