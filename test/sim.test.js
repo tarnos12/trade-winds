@@ -136,6 +136,15 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   // exactly the cap and it never exceeds it.
   ok("potato production reaches the storage cap (80) and is clamped there", maxPotato === CAP);
   ok("no good ever exceeds the storage cap", Object.values(t.stock).every(v => v <= CAP + 1e-9));
+  // v0.51 (P1 §2): NO WASTE. With the warehouse full, the producer STALLS — its
+  // internal output buffer (_prodAcc) is bounded by storeCap and never grows
+  // unbounded, so no production is discarded (it just waits for warehouse room).
+  const storeCap = (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+  // The stall gate checks BEFORE banking, so a single tick can overshoot the cap
+  // by at most one tick's production (<1); the buffer is bounded (no runaway) —
+  // without the no-waste change it would just be clamped away (wasted) instead.
+  ok("full-warehouse producer buffer stays bounded by storeCap (no waste, no runaway)",
+     (t.buildings[0]._prodAcc || 0) <= storeCap + 1);
 }
 
 // Storage cap also clamps a directly-oversized stockpile down on the next tick.

@@ -188,7 +188,12 @@ const CONFIG = {
     // and the fractional remainder carries into the next batch so nothing is
     // lost. Keyed by building `kind`; a kind not listed here releases whatever
     // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
-    productionIntervalSec: { extractor: 8, processor: 12 } },
+    productionIntervalSec: { extractor: 8, processor: 12 },
+    // === Per-building internal store (v0.51 / P1 §2): a producer banks output in
+    // its own buffer; once full it STALLS (stops consuming inputs + producing) so
+    // nothing is ever made that can't be held — no waste. Internal porters drain
+    // this into the warehouse (which itself caps at town.storageCap). ===
+    buildingStoreCap: 30 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,

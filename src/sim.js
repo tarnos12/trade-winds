@@ -528,7 +528,11 @@ Sim.tick = function (State) {
           }
         }
         if (effW < 0) effW = 0;
-        if (effW > 0) {
+        // v0.51 (P1/§2): the building has an internal output buffer capped at
+        // storeCap. When it's full the building STALLS — it stops banking inputs and
+        // output, so nothing is ever produced that can't be held (no waste).
+        const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+        if (effW > 0 && (b._prodAcc || 0) < storeCap) {
           // P5-A hook: research output multipliers (guarded; 1x when no research).
           //   globalOutput always; extractorOutput for extractors (+ mineOutput for
           //   ore/stone mines); processorOutput for processors. Keys end in "Output"
@@ -564,8 +568,16 @@ Sim.tick = function (State) {
             if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
           }
         }
-        const rel = Math.floor(b._prodAcc);
-        if (rel > 0) { stock[out.goodId] = (stock[out.goodId] || 0) + rel; b._prodAcc -= rel; }
+        // v0.51 (P1/§2): release into the warehouse only up to its per-good room —
+        // the remainder stays banked in b._prodAcc (the building's internal store),
+        // so the warehouse never exceeds cap and NOTHING is wasted. The building
+        // stalls (above) once _prodAcc hits storeCap, bounding the buffer too.
+        let rel = Math.floor(b._prodAcc);
+        if (rel > 0) {
+          const capG = (CONFIG.town && CONFIG.town.storageCap);
+          if (capG) rel = Math.min(rel, Math.max(0, capG - (stock[out.goodId] || 0)));
+          if (rel > 0) { stock[out.goodId] = (stock[out.goodId] || 0) + rel; b._prodAcc -= rel; }
+        }
       };
       if (intervalTicks <= 0) {
         releaseBatch();

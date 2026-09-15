@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.2";
+  const GAME_VERSION = "0.51.3";
   const PATCH_NOTES = [
+    { v: "0.51.3", notes: [
+      "NO-WASTE PRODUCTION (economy overhaul): a producing building now banks its output in its own internal store — once that store is full the building STALLS (it stops consuming inputs and stops producing) instead of throwing away the excess. Output flows into the city warehouse only up to the warehouse's room, so a city never produces more than it can hold and nothing is ever wasted",
+    ] },
     { v: "0.51.2", notes: [
       "Removed the Demolish button from the building panel — destroying is done from the build bar's Destroy tool (it never belonged on the detail card)",
       "The CITY panel's upgrade button now has the same styled tooltip — hover ‘⬆ Lv N’ to see the requirements (population, gold) with have/need and what the level grants",
