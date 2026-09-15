@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.0";
+  const GAME_VERSION = "0.51.1";
   const PATCH_NOTES = [
+    { v: "0.51.1", notes: [
+      "The ⬆️ upgrade button now has a STYLED tooltip showing the next level, its effect, and the exact resources needed (have/need + gold) — hover it even when you can't yet afford it to see what's required",
+      "The city centre now counts as a building slot, so a fresh city reads 1/8",
+      "Castle buildings (Research Center, Advanced Provisioner) keep a gap — no city or building may be placed touching them, and two castle buildings never touch",
+    ] },
     { v: "0.51.0", notes: [
       "HOUSE UPGRADES (peasant homes, P1 of the economy overhaul): Sturdy Hut (L2) and Fine Hut (L3) each add a housing slot; Grand Hut (L4) cuts basic-resource use −30%; Manor Hut (L5) cuts luxury use −30%. Materials are delivered from the city (or bought in) — L2 30 wood + 10 planks; L3 30 stone + 20 planks + 5 stone tools; L4 30 bricks + 20 stone + 10 stone tools; L5 60 bricks + 30 iron + 10 iron tools",
       "A peasant home now costs 10 wood + 300 gold to build",

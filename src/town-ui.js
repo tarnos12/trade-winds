@@ -1195,6 +1195,74 @@
   let bpBuilding = null;     // the town.buildings[] entry currently shown
   let bpTown = null;         // its owning town
 
+  // v0.51: styled hover tooltips for the building panel (matches the game's panel
+  // look instead of the browser's native title box). An element with data-tip shows
+  // a floating card; data-tip="upgrade" builds a RICH cost breakdown from the current
+  // building; any other data-tip value is shown as plain text.
+  let bpTipEl = null;
+  function bpTip() {
+    if (bpTipEl) return bpTipEl;
+    bpTipEl = document.createElement("div");
+    bpTipEl.id = "bpTip";
+    bpTipEl.style.cssText = "position:fixed;z-index:90;max-width:250px;pointer-events:none;display:none;" +
+      "background:var(--panel,#1c160f);border:1px solid var(--accent,#c98a3c);border-radius:8px;padding:8px 10px;" +
+      "font-size:12px;line-height:1.5;color:var(--paper,#f2e6cf);box-shadow:0 6px 22px rgba(0,0,0,0.55)";
+    document.body.appendChild(bpTipEl);
+    return bpTipEl;
+  }
+  function bpShowTip(html, x, y) {
+    const t = bpTip(); t.innerHTML = html; t.style.display = "block";
+    const w = t.offsetWidth, h = t.offsetHeight;
+    let px = x + 14, py = y + 16;
+    if (px + w > window.innerWidth - 8) px = x - w - 14;
+    if (py + h > window.innerHeight - 8) py = y - h - 16;
+    t.style.left = Math.max(8, px) + "px"; t.style.top = Math.max(8, py) + "px";
+  }
+  function bpHideTip() { if (bpTipEl) bpTipEl.style.display = "none"; }
+  // Rich upgrade tooltip: next level, its effect, and the resources needed (have/need).
+  function bpUpgradeTipHtml(town, b) {
+    if (!b || typeof Buildings === "undefined") return "Upgrade";
+    if (b.pendingUpgrade) return "Upgrade already in progress…";
+    const ladder = Buildings.upgradeLadder ? Buildings.upgradeLadder(b.typeId) : [];
+    if (!ladder || !ladder.length) return "No upgrades for this building.";
+    const nxt = Buildings.nextUpgrade ? Buildings.nextUpgrade(state, b) : null;
+    if (!nxt) {
+      const lvl = b.upgradeLevel || 1;
+      const locked = Buildings.upgradeAt ? Buildings.upgradeAt(b.typeId, lvl + 1) : null;
+      if (locked) {
+        let nm = locked.unlockedBy;
+        const node = (typeof Research !== "undefined" && Research.get) ? Research.get(locked.unlockedBy) : null;
+        if (node && node.name) nm = node.name;
+        return `🔒 Research <b>${esc(nm || "")}</b> to unlock Lv${locked.level}.`;
+      }
+      return "Max level — fully upgraded.";
+    }
+    const rc = Buildings.upgradeResourceCost ? Buildings.upgradeResourceCost(b.typeId, nxt.level) : {};
+    const gold = (nxt.cost && nxt.cost.gold) || 0;
+    const stock = (town && town.stock) || {};
+    let rows = "";
+    for (const gid in rc) {
+      const have = Math.floor(stock[gid] || 0), need = rc[gid], okc = have >= need ? "#a6e0a8" : "#e0844a";
+      rows += `<div style="display:flex;justify-content:space-between;gap:14px"><span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span style="font-variant-numeric:tabular-nums;color:${okc}">${have}/${need}</span></div>`;
+    }
+    if (gold) rows += `<div style="display:flex;justify-content:space-between;gap:14px"><span>🪙 Gold</span><span style="font-variant-numeric:tabular-nums">${fmt(gold)}</span></div>`;
+    const eff = bpEffectSummary(nxt.effect);
+    const up = bpUpgradeState(town, b);
+    return `<div style="font-weight:bold;color:var(--accent,#c98a3c);margin-bottom:3px">⬆ ${esc(nxt.name)} (Lv${nxt.level})</div>` +
+      (eff ? `<div style="opacity:.9;margin-bottom:6px">${esc(eff)}</div>` : "") +
+      `<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.6;margin-bottom:2px">Resources needed</div>` +
+      (rows || "<div style='opacity:.7'>none</div>") +
+      (up && !up.ok && up.reason ? `<div style="margin-top:6px;color:#e0b34c">${esc(up.reason)}</div>` : `<div style="margin-top:6px;opacity:.7">Click to start — materials are delivered from the city.</div>`);
+  }
+  bpEl.addEventListener("mousemove", (e) => {
+    const el = e.target.closest("[data-tip]");
+    if (!el) { bpHideTip(); return; }
+    const v = el.getAttribute("data-tip");
+    const html = (v === "upgrade") ? bpUpgradeTipHtml(bpTown, bpBuilding) : esc(v || "");
+    if (html) bpShowTip(html, e.clientX, e.clientY); else bpHideTip();
+  });
+  bpEl.addEventListener("mouseleave", bpHideTip);
+
   // Local fallbacks: use CB-A's helpers when present, otherwise compute inline so
   // this slice works standalone (and never throws on boot).
   function bpResourceCost(def) {
@@ -1396,8 +1464,11 @@
       const pri = !!b.priority;
       btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first">${pri ? "⭐" : "☆"}</button>`;
     }
-    btns += `<button class="bp-act" data-upgrade ${up.ok ? "" : "disabled"} title="${escAttr(upTip)}">⬆️</button>`;
-    btns += `<button class="bp-act danger" data-demolish title="Demolish — enter destroy mode, then click this building">🗑</button>`;
+    // v0.51: NOT the disabled attribute (a disabled button swallows hover, hiding the
+    // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
+    // shows the styled cost breakdown; title is the plain-text a11y fallback.
+    btns += `<button class="bp-act${up.ok ? "" : " dim"}" data-upgrade data-tip="upgrade" title="${escAttr(upTip)}">⬆️</button>`;
+    btns += `<button class="bp-act danger" data-demolish data-tip="Demolish — enter destroy mode, then click this building" title="Demolish">🗑</button>`;
     return `<div class="bp-actions">${btns}</div>`;
   }
 

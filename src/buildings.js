@@ -21,9 +21,10 @@ Buildings.slotCap = function (level, state) {
   return cap;
 };
 
-// Every placed building — house or producer — consumes one slot.
+// Every placed building — house or producer — consumes one slot, AND the city
+// centre itself occupies one (v0.51: a fresh city reads 1/cap).
 Buildings.usedSlots = function (town) {
-  return (town && Array.isArray(town.buildings)) ? town.buildings.length : 0;
+  return 1 + ((town && Array.isArray(town.buildings)) ? town.buildings.length : 0);
 };
 
 // === PP-A === Internal haulers a town runs — scales the construction/upgrade
@@ -354,6 +355,26 @@ Buildings.touchesCastle = function (state, q, r) {
   if (c.q === q && c.r === r) return true;
   return HexMath.neighbors(q, r).some(n => n.q === c.q && n.r === c.r);
 };
+// v0.51: the castle's SPECIAL buildings (Research Center, Advanced Provisioner, and
+// a placed Provisioner) each carry the same no-touch gap as the castle — nothing may
+// be placed on or beside them, so cities and castle buildings never fuse together.
+Buildings.castleBuildingHexes = function (state) {
+  const out = [];
+  if (!state) return out;
+  const rc = state.researchCenter, ap = state.advancedProvisioner, pv = state.provisionerBuilding;
+  if (rc && typeof rc.q === "number") out.push(rc);
+  if (ap && typeof ap.q === "number") out.push(ap);
+  if (pv && typeof pv.q === "number") out.push(pv);
+  return out;
+};
+Buildings.touchesCastleBuilding = function (state, q, r, ignore) {
+  for (const h of Buildings.castleBuildingHexes(state)) {
+    if (ignore && h.q === ignore.q && h.r === ignore.r) continue;   // skip the building being placed/queried
+    if (h.q === q && h.r === r) return true;
+    if (HexMath.neighbors(q, r).some(n => n.q === h.q && n.r === h.r)) return true;
+  }
+  return false;
+};
 
 // May `typeId` be built at hex (q,r)? Resolves the OWNING city by footprint
 // adjacency. Returns { ok:true, town } (town = the city that gains the building)
@@ -411,6 +432,8 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
 
   // (4) keep the gap to the castle.
   if (Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Too close to the castle" };
+  // (4b) v0.51: keep the gap to the castle's own buildings (Research Center, etc.).
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to a castle building" };
 
   // (5) slot cap of the OWNING town (P5-A: town_charters research grants +1 slot).
   if (Buildings.usedSlots(owner) >= Buildings.slotCap(owner.level, state)) {
@@ -466,6 +489,9 @@ Buildings.canPlaceTown = function (state, q, r) {
   }
   if (Buildings.touchesCastle(state, q, r)) {
     return { ok: false, reason: "Too close to the castle" };
+  }
+  if (Buildings.touchesCastleBuilding(state, q, r)) {   // v0.51: cities never touch a castle building
+    return { ok: false, reason: "Too close to a castle building" };
   }
   return { ok: true };
 };
@@ -556,6 +582,8 @@ Buildings.canPlaceResearchCenter = function (state, q, r) {
   const castle = Buildings.castleHex();
   if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  // v0.51: castle buildings never touch each other.
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
 
   // (2) buildable land (same terrain gate a processor/house uses).
   const terrDef = CONFIG.terrain[hex.terrain];
@@ -644,6 +672,7 @@ Buildings.canPlaceAdvancedProvisioner = function (state, q, r) {
   const castle = Buildings.castleHex();
   if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };   // v0.51
   const terrDef = CONFIG.terrain[hex.terrain];
   if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
   const key = HexMath.key(q, r);

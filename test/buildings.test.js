@@ -333,10 +333,11 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   // the usedSlots count matters here, so the filler hexes need not be valid placements.)
   const CAP1 = Buildings.slotCap(1);
   const fill = [];
-  for (let i = 0; i < CAP1; i++) fill.push({ typeId: "hut", q: 10 + i, r: 3, workers: 0 });
+  // v0.51: the city centre occupies one slot, so CAP1-1 buildings fills the cap.
+  for (let i = 0; i < CAP1 - 1; i++) fill.push({ typeId: "hut", q: 10 + i, r: 3, workers: 0 });
   const town = makeTown({ level: 1, buildings: fill });
   st.towns.push(town);
-  ok("usedSlots counts all placed buildings", Buildings.usedSlots(town) === CAP1);
+  ok("usedSlots counts the city centre + placed buildings", Buildings.usedSlots(town) === CAP1);
   // (4,1) borders the center → contiguous, but the level-1 cap (3) is full.
   const capped = Buildings.canPlaceBuilding(st, "cottage", 4, 1);
   ok("over slot cap → not ok + 'slot'", capped.ok === false && /slot/i.test(capped.reason));
