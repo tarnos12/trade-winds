@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.7";
+  const GAME_VERSION = "0.51.8";
   const PATCH_NOTES = [
+    { v: "0.51.8", notes: [
+      "A STARVING city buys smart: when a city is almost out of a basic good, its trader now favours the CLOSEST seller with stock over the cheapest one — it would rather pay a bit more and get fed sooner than hold out for a bargain and starve",
+    ] },
     { v: "0.51.7", notes: [
       "CITIES ANNOUNCE WHAT THEY SELL + PRICES REACT TO DEMAND (economy overhaul): every city now posts each surplus good to a shared market board that all traders read. Prices adjust from sales pressure — a good that keeps selling is marked UP (it's in demand here), while a surplus nobody buys is marked DOWN toward a floor to move it. Over time near, in-demand cities charge more and distant gluts get cheaper, settling into a natural distance-vs-supply equilibrium",
     ] },

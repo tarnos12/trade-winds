@@ -293,10 +293,17 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const want = chosen.gap;
       const offers = chosen.offers;
       // === /TRADEFIX ===
+      // v0.51 §3: a STARVING buyer (a BASIC need almost entirely unmet) values getting
+      // the good FAST over getting it cheap — it will pay more to a CLOSER seller rather
+      // than starve. Detect starvation on the chosen good, then let route distance
+      // outrank price in the sort. Non-basic / well-stocked goods keep the cheap-first order.
+      const basics = (CONFIG.needs && CONFIG.needs.basicNeeds) || [];
+      const isBasic = basics.indexOf(want.gid) >= 0;
+      const starving = isBasic && ((home.stock[want.gid] || 0) + (incoming[want.gid] || 0)) < needOf(home, want.gid) * 0.25;
       offers.sort((a, b) =>
         b.surplus - a.surplus ||
-        a.price - b.price ||
-        a.route.cost - b.route.cost ||
+        (starving ? (a.route.cost - b.route.cost || a.price - b.price)
+                  : (a.price - b.price || a.route.cost - b.route.cost)) ||
         (a.sellerCastle ? SELLER_CASTLE_ID : a.seller.id) - (b.sellerCastle ? SELLER_CASTLE_ID : b.seller.id));
       const slate = offers.slice(0, cfg.topRandom);
       const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))]; // one draw
