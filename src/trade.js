@@ -21,7 +21,7 @@
 // `kind:'external'` so TR-B can render internal vs external traders distinctly.
 Object.assign(CONFIG, {
   trade: {
-    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3). v0.51 note: user wants 30% MINTED (seller keeps full sale) — implemented in P2 (trade rewrite) to balance conservation tests coherently.
+    tariffRate: 0.30,          // v0.51 §8: 30% of every inter-town transaction, MINTED into the treasury (the seller keeps the full sale; the tax is new money, not a deduction). Player-adjustable via state.tariffRate; clamped [0.10, 0.40].
     profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
@@ -551,8 +551,13 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
-              seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
-              state.treasury += tariff;                                             // → player's treasury
+              // v0.51 §8 MINTED TARIFF: the seller keeps the FULL sale price; the tariff
+              // is MINTED as new money into the treasury (it is NOT deducted from the
+              // seller). The buyer still paid `value`, so each trade nets +tariff into
+              // the world's gold supply (deliberate inflation — the crown taxes trade
+              // without taking from the merchants).
+              seller.gold = (seller.gold || 0) + value;                             // seller keeps the whole sale
+              state.treasury += tariff;                                             // minted → player's treasury
               // v0.51 §3: a completed sale is UP pressure — this good is in demand
               // here, so the seller may charge more next time (bounded by SP.max).
               if (!seller.salesAdj) seller.salesAdj = {};
@@ -560,7 +565,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               seller.salesAdj[item.goodId] = Math.min(_sp.max,
                 ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
               if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
-              if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value - tariff);  // PP-A ledger
+              if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value);  // v0.51 §8: seller keeps the full sale
             }
           }
           if (buyer && carriedForItem > value) buyer.gold = (buyer.gold || 0) + (carriedForItem - value);  // refund undelivered

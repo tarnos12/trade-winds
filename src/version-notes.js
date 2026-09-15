@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.12";
+  const GAME_VERSION = "0.51.13";
   const PATCH_NOTES = [
+    { v: "0.51.13", notes: [
+      "THE CROWN'S CUT IS MINTED (economy overhaul): the trade tariff is now 30% and it's MINTED — the selling city keeps the FULL sale price, and the treasury gets 30% of the value as brand-new money on top. Trade grows the kingdom's money supply instead of shuffling it around, so a busy trade network steadily funds the crown. You can still tune the rate (10–40%) with the tariff slider",
+    ] },
     { v: "0.51.12", notes: [
       "SEE EACH BUILDING'S STORE: a producer's detail panel now shows its OWN internal store (x/cap 🎒) — the goods waiting for a porter — instead of the shared warehouse, and the panel's cycle time honours the building's real cycle (the lumberjack reads 4s). On the map, a small bar under each producer fills teal as its store fills and turns amber when it's full and stalled, so you can see at a glance which buildings need more porters",
     ] },

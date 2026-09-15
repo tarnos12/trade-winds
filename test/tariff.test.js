@@ -88,12 +88,12 @@ function treasuryAfter(seed, n, over) {
 const SEED = 4242, N = 240;
 
 // =========================================================================
-// 0) Baseline: an absent tariffRate behaves exactly as the old CONFIG constant (0.25).
+// 0) Baseline: an absent tariffRate behaves exactly as the CONFIG default (v0.51 §8: 0.30).
 // =========================================================================
 {
   const noField = treasuryAfter(SEED, N, {});                       // state.tariffRate absent
-  const explicit25 = treasuryAfter(SEED, N, { tariffRate: 0.25 }); // == CONFIG.trade.tariffRate
-  ok("absent tariffRate == explicit 0.25 (default behaviour unchanged)", approx(noField, explicit25));
+  const explicitDefault = treasuryAfter(SEED, N, { tariffRate: CONFIG.trade.tariffRate });
+  ok("absent tariffRate == explicit default (default behaviour unchanged)", approx(noField, explicitDefault));
   ok("baseline earns treasury on the connected network", noField > 0);
 }
 
@@ -137,8 +137,8 @@ const SEED = 4242, N = 240;
   // And it still composes with the default base (absent tariffRate) exactly as before.
   const defWithRes = treasuryAfter(SEED, N, {
     research: { unlocked: ["tax_ledgers"], active: null, progress: 0, spent: 0 } });
-  const asPlain28 = treasuryAfter(SEED, N, { tariffRate: 0.28 });
-  ok("default base + tariffBonus unchanged (0.25 + 0.03 == 0.28)", approx(defWithRes, asPlain28));
+  const asPlainSum = treasuryAfter(SEED, N, { tariffRate: CONFIG.trade.tariffRate + 0.03 });
+  ok("default base + tariffBonus composes (default + 0.03)", approx(defWithRes, asPlainSum));
 }
 
 // =========================================================================

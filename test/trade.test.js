@@ -114,7 +114,7 @@ function run(st, n) { for (let i = 0; i < n; i++) { Sim.tick(st); Trade.tick(st)
 // 0) API surface + config contract.
 // =========================================================================
 ok("Trade.tick is a function", typeof Trade.tick === "function");
-ok("CONFIG.trade merged in (non-destructive)", !!CONFIG.trade && CONFIG.trade.tariffRate === 0.25);
+ok("CONFIG.trade merged in (non-destructive)", !!CONFIG.trade && CONFIG.trade.tariffRate === 0.30);
 ok("CONFIG.trade has the contract keys",
   ["profitThreshold", "distanceCostPerStep", "cartCapacity", "cartSpeed", "maxCartsPerTown", "topRandom", "buyThreshold"]
     .every(k => typeof CONFIG.trade[k] === "number"));
@@ -422,12 +422,13 @@ Pathing.invalidate();
   ok("EC-D: buyer pays only the agreed amount despite the spike (gold stays 950)",
     townById(st, 1).gold === 950);
   ok("EC-D: buyer receives the 10 grain after the round trip", townById(st, 1).stock.grain === 10);
-  // Seller settled at the agreed unit (5), not the spiked price (100): value 50,
-  // tariff = 0.25 × 50 = 12.5, seller nets 37.5.
-  ok("EC-D: seller settles at agreed unit price (nets value − tariff = 37.5)",
-    Math.abs((townById(st, 100).gold - sellerGold0) - 37.5) < 1e-9);
+  // Seller settled at the agreed unit (5), not the spiked price (100): value 50.
+  // v0.51 §8 MINTED tariff (default 0.30): the seller KEEPS the full 50; the treasury
+  // gets 0.30 × 50 = 15 as newly-minted money (not deducted from the seller).
+  ok("EC-D: seller keeps the full agreed sale (value = 50, minted tariff)",
+    Math.abs((townById(st, 100).gold - sellerGold0) - 50) < 1e-9);
   ok("EC-D: reservation released after the sale", (townById(st, 100).reserved.grain || 0) === 0);
-  ok("EC-D: treasury got the tariff on the agreed value (12.5)", Math.abs(st.treasury - 12.5) < 1e-9);
+  ok("EC-D: treasury minted the tariff on the agreed value (0.30 × 50 = 15)", Math.abs(st.treasury - 15) < 1e-9);
 }
 
 // (c2) Gradual transfer — a trade is NOT instant: the trader parks to LOAD at the
@@ -667,8 +668,11 @@ Pathing.invalidate();
   ok("CAPFIX: near-cap unload FORCE-DELIVERS the paid-for remainder (buyer ends above cap, no silent loss)",
      (buyer.stock.grain || 0) >= capG + boughtQty - 1e-6);
   ok("CAPFIX: seller fully supplied the cart (setup — clean conservation baseline)", sellerFullySupplies);
-  ok("CAPFIX: total kingdom gold CONSERVED across dispatch→settle→unload incl. the timeout (no minted gold)",
-     Math.abs(after - before) < 1e-6);
+  // v0.51 §8: the tariff is now MINTED, so world gold GROWS by exactly the minted
+  // amount — the treasury (started at 0) holds all of it, and buyer↔seller are
+  // otherwise conserved (no silent loss, no gold created anywhere but the mint).
+  ok("§8: world gold grows by EXACTLY the minted tariff (buyer/seller conserved, treasury minted)",
+     Math.abs((after - before) - (st.treasury || 0)) < 1e-6 && (st.treasury || 0) > 0);
 })();
 
 // (legacy single-good cart path) — an in-flight pre-PP-A cart (no `cargo` array)
