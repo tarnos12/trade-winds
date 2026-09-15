@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.50.0";
+  const GAME_VERSION = "0.50.1";
   const PATCH_NOTES = [
+    { v: "0.50.1", notes: [
+      "Fixed: Scout EXPLORE now works — select a scout, press Explore, then click a discovered tile and it marches there and lifts the fog (clicking a tile did nothing before)",
+      "Scout roster moved to the top-center so it no longer overlaps the resources panel",
+      "City cards are compact — a colored badge with the city number; hold SHIFT to reveal Give/Take",
+    ] },
     { v: "0.50.0", notes: [
       "Cities no longer stall at 0 workers: even a house with no food/wood keeps a tiny core crew — at least 1 worker, ~10% of capacity. When basics are totally missing that crew works on a DUTY CYCLE (present 1 of every 4 cycles) so a starved city can still bootstrap food/wood and recover",
       "A new city now starts with 60 wood + 20 potato (was 40 wood)",

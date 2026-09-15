@@ -21,7 +21,7 @@
 // `kind:'external'` so TR-B can render internal vs external traders distinctly.
 Object.assign(CONFIG, {
   trade: {
-    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3)
+    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3). v0.51 note: user wants 30% MINTED (seller keeps full sale) — implemented in P2 (trade rewrite) to balance conservation tests coherently.
     profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
