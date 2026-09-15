@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.50.1";
+  const GAME_VERSION = "0.50.2";
   const PATCH_NOTES = [
+    { v: "0.50.2", notes: [
+      "Scouts explore smarter: with provisions to spare (3+), a scout now picks a nearby spot that uncovers MORE fog at once instead of always trickling 1–2 tiles — it still marches to the closest frontier first, then favours high-reveal stops",
+      "Scouts never stand on or walk through water or mountains",
+    ] },
     { v: "0.50.1", notes: [
       "Fixed: Scout EXPLORE now works — select a scout, press Explore, then click a discovered tile and it marches there and lifts the fog (clicking a tile did nothing before)",
       "Scout roster moved to the top-center so it no longer overlaps the resources panel",

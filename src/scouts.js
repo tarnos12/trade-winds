@@ -148,31 +148,44 @@
     }
 
     // ---- frontier: pick the next tile to STAND on and reveal from ------------
-    // A frontier tile = an UNDISCOVERED hex within exploreRadius of the flag that
-    // has at least one discovered neighbour (so a scout can stand beside it). We
-    // pick the frontier nearest the flag (marching the scout toward it), and its
-    // discovered neighbour nearest the SCOUT as the stand tile. Returns {q,r} or null.
+    // A stand = a DISCOVERED hex within exploreRadius of the flag that borders fog
+    // (so revealing from it uncovers >=1 tile). We march toward the flag, but among
+    // nearby stands we PREFER the one that reveals the MOST fog at once (its reveal
+    // ring holds more undiscovered tiles) — so a scout with provisions to spare
+    // uncovers 3 tiles from one stop instead of trickling 1 at a time. The yield
+    // bonus is capped by remaining provisions (you can't reveal more than you can pay
+    // for) and by a distance term, so a big-reveal tile only wins when it's close.
+    // Returns {q,r} or null. Deterministic (fixed hex iteration order, numeric score).
     function findStop(s) {
       const flag = s.target || { q: s.q, r: s.r };
-      let bestStand = null, bestScore = Infinity;
+      const R = cfg.revealRing || 1;
+      const prov = s.prov || 0;
+      // Yield weight: chase multi-reveal spots hard when we can afford >=3 reveals,
+      // gently otherwise (a low-provision scout can't cash in a big reveal anyway).
+      const YW = prov >= 3 ? 55 : 18;
+      const DFW = 100, SDW = 1;   // flag-distance dominates; walk distance is a tiebreak
+      let best = null, bestScore = Infinity;
       for (const hex of state.map.hexes.values()) {
         const k = HexMath.key(hex.q, hex.r);
-        if (isVisible(k)) continue;                                   // must be fog
+        if (!isVisible(k)) continue;                                  // stand on discovered ground
+        const td = CONFIG.terrain[hex.terrain];
+        if (!td || !td.road) continue;                                // never stand on water / mountains / fish
         const df = HexMath.dist(flag.q, flag.r, hex.q, hex.r);
         if (df > cfg.exploreRadius) continue;                         // only near the flag
-        let stand = null, sd = Infinity;
-        for (const nb of HexMath.neighbors(hex.q, hex.r)) {
-          const nk = HexMath.key(nb.q, nb.r);
-          if (state.map.hexes.has(nk) && isVisible(nk)) {
-            const d = HexMath.dist(s.q, s.r, nb.q, nb.r);
-            if (d < sd) { sd = d; stand = nb; }
-          }
+        // reveal yield = fog tiles this stand would uncover (its reveal ring)
+        let yld = 0;
+        for (const h of HexMath.range(hex.q, hex.r, R)) {
+          if (h.q === hex.q && h.r === hex.r) continue;
+          const hk = HexMath.key(h.q, h.r);
+          if (state.map.hexes.has(hk) && !isVisible(hk)) yld++;
         }
-        if (!stand) continue;
-        const score = df * 1000 + sd;   // nearest-to-flag first, then shortest walk
-        if (score < bestScore) { bestScore = score; bestStand = stand; }
+        if (yld <= 0) continue;                                       // nothing new to reveal here
+        const capped = prov > 0 ? Math.min(yld, prov) : yld;          // can't reveal more than provisions allow
+        const sd = HexMath.dist(s.q, s.r, hex.q, hex.r);
+        const score = df * DFW - capped * YW + sd * SDW;              // near the flag, but reward big reveals
+        if (score < bestScore) { bestScore = score; best = { q: hex.q, r: hex.r }; }
       }
-      return bestStand;
+      return best;
     }
 
     // Reveal ring-1 fog around the scout, nearest-to-flag first, capped by
