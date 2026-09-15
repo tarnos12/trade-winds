@@ -128,28 +128,28 @@ function constructSawmillState() {
   const s = { treasury: 1000, towns: [{ id: 1, q: 0, r: 0, level: 1, gold: 0,
     pop: { peasants: 0, workers: 0, burghers: 0 }, stock: {}, prices: {}, demand: {}, buildings: [] }] };
   const town = s.towns[0];
-  Buildings.chargeBuilding(s, town, "hut");        // instant (gold-only)
-  ok("chargeBuilding: instant hut counts once at placement", get(s, "stats.constructed.total") === 1);
-  ok("chargeBuilding: instant hut recorded byType", get(s, "stats.constructed.byType.hut") === 1);
-  Buildings.chargeBuilding(s, town, "farm");       // instant
-  ok("chargeBuilding: a second instant build bumps total to 2", get(s, "stats.constructed.total") === 2);
-  ok("chargeBuilding: byType splits instant builds", get(s, "stats.constructed.byType.farm") === 1);
+  // v0.49: farm (gold-only) is instant; the wood-cost starters (hut/sawmill) are not.
+  Buildings.chargeBuilding(s, town, "farm");       // instant (gold-only)
+  ok("chargeBuilding: instant build counts once at placement", get(s, "stats.constructed.total") === 1);
+  ok("chargeBuilding: instant build recorded byType", get(s, "stats.constructed.byType.farm") === 1);
+  Buildings.chargeBuilding(s, town, "hut");        // v0.49: NON-instant (costs wood) → counted at delivery, not here
+  ok("chargeBuilding: non-instant hut NOT counted at charge", get(s, "stats.constructed.total") === 1 && get(s, "stats.constructed.byType.hut") === undefined);
   Buildings.chargeBuilding(s, town, "sawmill");    // NON-instant: counted at delivery, NOT here
   ok("chargeBuilding: non-instant sawmill NOT counted at charge (waits for delivery)",
-     get(s, "stats.constructed.total") === 2 && get(s, "stats.constructed.byType.sawmill") === undefined);
+     get(s, "stats.constructed.total") === 1 && get(s, "stats.constructed.byType.sawmill") === undefined);
 }
 
 // ========================================================================
 // 2) upgraded — a pendingUpgrade APPLIES (upgradeLevel increments).
 // ========================================================================
-// hut L1->L2 needs research unlock "upg_hut_l2" + gold + wood:20 delivered by Sim.
+// v0.51: hut L1->L2 needs research unlock "upg_hut_l2" + wood:30 + planks:10 delivered by Sim (material-only, no gold).
 function upgradeHutState() {
   const hut = { typeId: "hut", q: 0, r: 0, workers: 0, built: true, upgradeLevel: 1, pendingUpgrade: null, delivered: {} };
   return { treasury: 100000, research: { unlocked: ["upg_hut_l2"], active: null, progress: 0, spent: 0 },
     towns: [{
       id: 1, q: 0, r: 0, level: 1, gold: 0,
       pop: { peasants: 0, workers: 0, burghers: 0 },
-      stock: { wood: 50 }, prices: {}, demand: {}, buildings: [hut], happiness: undefined,
+      stock: { wood: 50, planks: 20 }, prices: {}, demand: {}, buildings: [hut], happiness: undefined,
     }] };
 }
 {

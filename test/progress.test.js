@@ -71,36 +71,12 @@ function mkTown(over) {
 })();
 
 // ---- 2. Castle upgrade is GOLD-ONLY (King's Quests retired → no prestige) ----
+// ---- 4/5. Castle UPGRADES were removed (v0.44) ------------------------------
+// The castle is a fixed-capacity hub now (warehouse + traders don't depend on a
+// level); there is no Castle.canUpgrade/upgrade. Victory is unchanged: a built
+// aristocrat_home at 100% aristocrat happiness (see §6 + test/victory.test.js).
 (function () {
-  const req2 = CONFIG.castle.levels[2];
-  ok("castle L2 requirement defined", req2 && req2.goldReq > 0);
-
-  const state = { castleLevel: 1, treasury: 0 };
-  ok("castle upgrade blocked when broke", Castle.canUpgrade(state).ok === false);
-
-  // Gold alone gates it now — prestige is not required or consumed.
-  state.treasury = req2.goldReq + 100;
-  ok("castle upgrade allowed on gold alone", Castle.canUpgrade(state).ok === true);
-
-  const res = Castle.upgrade(state);
-  ok("castle upgrade succeeds", res.ok === true);
-  ok("castle level increments to 2", state.castleLevel === 2);
-  ok("castle upgrade consumes gold", state.treasury === 100);
-  ok("castle L2 is not victory", state.victory !== true);
-})();
-
-// ---- 5. Reaching level 5 does NOT win (victory moved to aristocrat_home @100%) --
-// The win condition is no longer castle L5 — it is a built aristocrat_home at 100%
-// aristocrat happiness (see §6 + test/victory.test.js). Castle L5 stays a milestone /
-// prestige sink; Castle.upgrade must NOT flip state.victory nor return a truthy .victory.
-(function () {
-  const state = { castleLevel: 1, treasury: 100000 };
-  let last = null, guard = 0;
-  while (Castle.canUpgrade(state).ok && guard++ < 10) last = Castle.upgrade(state);
-  ok("castle reaches max level 5", state.castleLevel === CONFIG.castle.maxLevel);
-  ok("castle level 5 does NOT flag victory", state.victory !== true);
-  ok("Castle.upgrade return carries no truthy .victory", !(last && last.victory));
-  ok("no upgrade past max", Castle.canUpgrade(state).ok === false);
+  ok("castle upgrade API removed", typeof Castle.canUpgrade === "undefined" && typeof Castle.upgrade === "undefined");
 })();
 
 // ---- 6. Aristocrat house at 100% happiness flags victory (the NEW win) -------

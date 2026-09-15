@@ -36,6 +36,14 @@ Object.assign(CONFIG, {
     // population target DOWN (target = round(cap × min(1, happiness/capacityFullAt)));
     // at/above 70 = full capacity, and the surplus happiness pays extra people-tax. ===
     capacityFullAt: 70,
+    // v0.50: even a house with NO food/wood shelters a small core workforce, so a
+    // fresh (or starved) city never sits at exactly 0 workers — floor = this fraction
+    // of the tier's housing capacity, at least 1 whenever there is any capacity.
+    // But at real 0-happiness (basics unmet) that crew runs on a DUTY CYCLE: present
+    // for `onCycles` of every (on+off) cycles, absent otherwise — so a starved city
+    // gets just enough intermittent labour to bootstrap food/wood, not a free crew.
+    // A cycle is `cycleTicks` (16 ticks ≈ 8 game-seconds ≈ one extractor batch).
+    emptyHouseFrac: 0.10, emptyHouseCycleTicks: 16, emptyHouseOnCycles: 1, emptyHouseOffCycles: 3,
     growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
@@ -44,6 +52,27 @@ Object.assign(CONFIG, {
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
     happyEase: 0.10,         // lerp toward the happiness target each tick (anti-jump)
+    // === SAWTOOTH FIX (post-victory happiness plateau) === Happiness reads whether
+    // the population's demand was MET this tick (per-good satisfaction gsat = consumed
+    // / required). Inter-city imports arrive in BURSTS — a cart dumps a load, stock
+    // spikes, then drains to ~0 before the next cart — so a good's instantaneous gsat
+    // sawtooths (1 when freshly stocked, <1 when the shelf momentarily empties), and
+    // happiness inherits it (~56↔99 on a supplied aristocrat estate). We feed
+    // happiness a SMOOTHED per-good satisfaction: a moving average (EMA) of gsat kept
+    // on the town (town.satEMA), so momentary between-cart dips don't crater happiness
+    // while a genuinely under-supplied good (gsat low for a sustained stretch) still
+    // pulls the average — and happiness — down. A soft low-pass strictly REDUCES
+    // variance (it cannot resonate/amplify like a hard reserve), and it is
+    // mean-preserving: a truly supplied estate (gsat≈1) still averages to ~100, so the
+    // win threshold is unaffected and scarcity is not trivialized. The EMA is
+    // SNAP-initialised (first sample = gsat), so the first tick and any steady/
+    // plentiful state are bit-identical to the old instantaneous model — only bursty
+    // transients are smoothed. satSmoothing is the EMA weight on the NEW sample per
+    // tick (smaller ⇒ smoother / longer memory); it composes with happyEase below to
+    // form a two-stage low-pass. This channel affects HAPPINESS only — consumption,
+    // stock, prices, trade and pop capacity are untouched.
+    satSmoothing: 0.05,      // EMA weight for the per-good satisfaction feeding happiness
+
     // === CC: people-tax — every tier produces ONLY gold (tax); higher tiers pay
     // MORE per capita (ratePerTier). At happyBase the multiplier is 1; every point
     // above happyBase adds bonusPerPoint (so happier cities fund trade faster).
@@ -328,6 +357,21 @@ Sim.tick = function (State) {
   const N = CONFIG.needs;
   const base = (CONFIG.town && CONFIG.town.baseWorkers) || {};
   const clamp0 = (x) => (x > 0 ? x : 0);
+  // === GRAN: bulk-production release intervals (whole-unit batches). Per-kind
+  // interval (GAME-SECONDS) from CONFIG.econ.productionIntervalSec; fall back to
+  // the design defaults only if the key is ever absent. intervalTicks = intervalSec
+  // × (1000/baseTickMs) (= ×2 at the 500ms base step). A kind not listed ⇒ 0 ⇒
+  // release whole units every tick.
+  const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+  const prodIntervalSec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || { extractor: 8, processor: 12 };
+  // v0.51 §1: cycle length is PER-BUILDING when the type declares `cycleSec`
+  // (e.g. lumberjack = 4s → the reference "8 wood / 4s at 2 workers"); otherwise it
+  // falls back to the per-kind default. Batch = ratePerWorker × workers × cycleSeconds.
+  const intervalTicksFor = (type) => {
+    const sec = (type && typeof type.cycleSec === "number") ? type.cycleSec
+              : (prodIntervalSec[type && type.kind] || 0);
+    return Math.round(sec * (1000 / baseTickMs));
+  };
 
   for (const town of State.towns) {
     if (!town) continue;
@@ -432,62 +476,136 @@ Sim.tick = function (State) {
           if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
         }
         const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
-        let done = true;
-        for (const gid in remain) { done = false; addDemand(gid, remain[gid]); }
-        if (done) {
-          if (t.kind === "build") { b.built = true; Sim.statConstructed(State, b.typeId); }   // MISSION-STATS: construction complete (built false→true)
-          else { b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; Sim.statUpgraded(State, b.typeId); }   // MISSION-STATS: upgrade applied
+        let matDone = true;
+        for (const gid in remain) { matDone = false; addDemand(gid, remain[gid]); }
+        if (t.kind === "build") {
+          // v0.49: timed construction. Advance the build timer by this tick's seconds,
+          // but CAPPED at deliveredFrac×buildTime so delivery limits how far it builds
+          // (8/10 wood ⇒ stalls at 80%). Finish only when materials AND time are done.
+          const bt = (Buildings.buildTime ? Buildings.buildTime(b) : 6);
+          const rc = Buildings.resourceCost(CONFIG.buildings[b.typeId]);
+          let need = 0, have = 0; const dv = b.delivered || {};
+          for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], dv[gid] || 0); }
+          const dFrac = need > 0 ? have / need : 1;
+          const tickSec = baseTickMs / 1000;
+          b._buildT = Math.min((b._buildT || 0) + tickSec, dFrac * bt);
+          if (dFrac >= 1 - 1e-9 && (b._buildT || 0) >= bt - 1e-9) { b.built = true; Sim.statConstructed(State, b.typeId); }   // MISSION-STATS: construction complete
+        } else if (matDone) {
+          b.upgradeLevel = b.pendingUpgrade.toLevel; b.pendingUpgrade = null; Sim.statUpgraded(State, b.typeId);   // MISSION-STATS: upgrade applied
         }
       }
     }
     // === /CB-A + /RU-A (moved above production by WOODFIX) ============
 
-    // --- 1. Production -------------------------------------------------
-    // Each staffed building outputs ratePerWorker × assignedWorkers × happiness,
-    // consuming its inputs (processors); throughput is throttled by missing inputs.
+    // --- 1. Production (GRAN: fractional carry + whole-unit BULK release) ------
+    // Each producing building BANKS its per-tick output into a float accumulator
+    // (b._prodAcc) and, for processors, its per-tick input draw into b._inAcc — no
+    // stock moves per tick. A per-building countdown (b._prodTimer, started at
+    // intervalTicks and thus STAGGERED by build time) RELEASES Math.floor of each
+    // accumulator into/out of town.stock every intervalTicks, carrying the
+    // fractional remainder to the next batch — so town.stock only ever moves in
+    // WHOLE units while the underlying economy math stays fractional and smooth
+    // (e.g. lumberjack 0.5/tick × 16 ticks = 8.0 → +8 wood every 8s; a leftover
+    // 0.5 carries so the next batch is 8, matching the "2.5/s ⇒ 2 then 3" design).
+    // Interval 0 (a kind not listed) releases whole units every tick. Determinism
+    // is unchanged: no RNG here, and the accumulators/timer are pure functions of
+    // state (default 0 / intervalTicks) initialised deterministically.
     for (const b of buildings) {
       if (!b || b.built === false) continue;   // CB-A: unbuilt buildings don't produce; !b guards a null array element (matches assignWorkers/target-loop siblings) so a corrupt entry can't deref null → throw
       const type = CONFIG.buildings[b.typeId];
       if (!type || !type.output) continue;
-      const w = b.workers || 0;
-      if (w <= 0) continue;
-      // Inputs cap effective workers; record full desired input as demand.
-      let effW = w;
-      const inputs = type.inputs;
-      if (inputs) {
-        for (const gid in inputs) {
-          const qty = inputs[gid];
-          if (qty > 0) effW = Math.min(effW, (stock[gid] || 0) / qty);
-          addDemand(gid, qty * w);
-        }
-      }
-      if (effW <= 0) continue;          // inputs missing → building idles this tick
-      if (inputs) for (const gid in inputs) stock[gid] = clamp0((stock[gid] || 0) - inputs[gid] * effW);
       const out = type.output;
-      // P4-C hook: a "bumper harvest" event boosts farm output (light, guarded).
-      const evMult = (type.id === "farm" && typeof Events !== "undefined" && Events.farmMultiplier)
-        ? Events.farmMultiplier(State) : 1;
-      // P5-A hook: research output multipliers (guarded; 1x when no research).
-      //   globalOutput always; extractorOutput for extractors (+ mineOutput for
-      //   ore/stone mines); processorOutput for processors. Keys end in "Output"
-      //   so Research.effect multiplies unlocked nodes, defaulting to 1.
-      let resMult = 1;
-      if (typeof Research !== "undefined" && Research.effect) {
-        resMult = Research.effect(State, "globalOutput", 1);
-        if (type.kind === "extractor") {
-          resMult *= Research.effect(State, "extractorOutput", 1);
-          if (MINE_TERRAINS[type.terrain]) {   // === TV2: deposit-tile mines & quarries ===
-            resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: mines & quarries
+      const inputs = type.inputs;
+      const intervalTicks = intervalTicksFor(type);
+      if (typeof b._prodTimer !== "number") b._prodTimer = intervalTicks;
+      if (typeof b._prodAcc !== "number") b._prodAcc = 0;
+      if (inputs && (!b._inAcc || typeof b._inAcc !== "object")) b._inAcc = {};
+
+      // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
+      const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+      const w = b.workers || 0;
+      if (w > 0) {
+        // Inputs cap effective workers (throttled against stock NOT YET claimed by
+        // this building's banked-but-unreleased draw); record full desired input as
+        // demand every tick, exactly as the per-tick model did.
+        let effW = w;
+        if (inputs) {
+          for (const gid in inputs) {
+            const qty = inputs[gid];
+            if (qty > 0) effW = Math.min(effW, ((stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
+            addDemand(gid, qty * w);
           }
-        } else if (type.kind === "processor") {
-          resMult *= Research.effect(State, "processorOutput", 1);
+        }
+        if (effW < 0) effW = 0;
+        // v0.51 (P1/§2): the building has an internal output buffer capped at
+        // storeCap = the whole-unit b.store[good] (what porters collect) plus the
+        // sub-unit accumulator b._prodAcc. When that buffer is full the building
+        // STALLS — it stops consuming inputs and producing, so nothing is ever made
+        // that can't be held (no waste). Porters drain b.store into the warehouse.
+        const buffered = (b._prodAcc || 0) + ((b.store && b.store[out.goodId]) || 0);
+        if (effW > 0 && buffered < storeCap) {
+          // P5-A hook: research output multipliers (guarded; 1x when no research).
+          //   globalOutput always; extractorOutput for extractors (+ mineOutput for
+          //   ore/stone mines); processorOutput for processors. Keys end in "Output"
+          //   so Research.effect multiplies unlocked nodes, defaulting to 1.
+          let resMult = 1;
+          if (typeof Research !== "undefined" && Research.effect) {
+            resMult = Research.effect(State, "globalOutput", 1);
+            if (type.kind === "extractor") {
+              resMult *= Research.effect(State, "extractorOutput", 1);
+              if (MINE_TERRAINS[type.terrain]) {   // === TV2: deposit-tile mines & quarries ===
+                resMult *= Research.effect(State, "mineOutput", 1);  // deep veins: mines & quarries
+              }
+            } else if (type.kind === "processor") {
+              resMult *= Research.effect(State, "processorOutput", 1);
+            }
+          }
+          // === RU-A: compose per-building upgrade outputMult ===
+          const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+          // BANK this tick's flows (float); nothing enters/leaves stock until release.
+          if (inputs) for (const gid in inputs) b._inAcc[gid] = (b._inAcc[gid] || 0) + inputs[gid] * effW;
+          b._prodAcc += out.ratePerWorker * effW * hf * resMult * upgMult;
+          // === /RU-A ===
         }
       }
-      // === RU-A: compose per-building upgrade outputMult ===
-      const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
-      stock[out.goodId] = (stock[out.goodId] || 0) + out.ratePerWorker * effW * hf * evMult * resMult * upgMult;
-      // === /RU-A ===
+
+      // RELEASE whole units on the batch boundary (or every tick when interval 0).
+      // Processors flush banked input-consumption and output-production together, so
+      // both sides of the recipe stay integer and on the same cadence.
+      const releaseBatch = () => {
+        if (inputs) {
+          for (const gid in inputs) {
+            const consumed = Math.floor(b._inAcc[gid] || 0);
+            if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
+          }
+        }
+        // v0.51 (P1/§2): release whole units into the building's OWN store (b.store),
+        // NOT the warehouse — internal porters physically carry b.store to the
+        // warehouse (Sim.tickPorters). Bounded by storeCap so the buffer can't run
+        // away; the leftover sub-unit stays in b._prodAcc. Nothing is wasted.
+        let rel = Math.floor(b._prodAcc);
+        if (rel > 0) {
+          if (!b.store || typeof b.store !== "object") b.store = {};
+          const g = out.goodId;
+          const room = storeCap - (b.store[g] || 0);
+          rel = Math.min(rel, Math.max(0, room));
+          if (rel > 0) { b.store[g] = (b.store[g] || 0) + rel; b._prodAcc -= rel; }
+        }
+      };
+      if (intervalTicks <= 0) {
+        releaseBatch();
+      } else if (--b._prodTimer <= 0) {
+        releaseBatch();
+        b._prodTimer = intervalTicks;
+      }
     }
+
+    // === v0.51 §2: internal porters COLLECT producer output into the warehouse.
+    // Producers bank whole units in b.store; the warehouse grows ONLY via porters
+    // (+trade imports), so they are REAL movers, not a visual. Runs after production
+    // (so this tick's batch is collectable) and before consumption (so a fresh
+    // delivery is spendable this tick). Deterministic — no RNG, fixed iteration order.
+    Sim.tickPorters(town);
 
     // === RSF: the ACTIVE research node's still-needed castle materials feed
     // town demand (per-town share) — prices rise and town traders import the
@@ -508,12 +626,16 @@ Sim.tick = function (State) {
     // AND for Trade shortfalls), then roll them into basicSat/extraSat.
     const totalPop = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0) + (pop.aristocrats || 0);  // === CC ===
 
-    const required = {};                 // goodId -> units the population wants this tick
+    const required = {};                 // goodId -> units the population wants this tick (DEMAND: prices/trade/happiness)
+    const consume  = {};                 // v0.51 §6: goodId -> units to PHYSICALLY remove (basics gated on all-present)
     const tierReq = { peasants: {}, workers: {}, burghers: {}, aristocrats: {} };  // === PP-A / CC === per-tier required
     // === RU-A: capacity-weighted basic-consumption reduction from house upgrades.
     // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
     const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
       ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+    // v0.51: LUXURY-consumption reduction from the L5 house upgrade (extra-need goods only).
+    const lcm = (typeof Buildings !== "undefined" && Buildings.luxuryConsumptionMult)
+      ? Buildings.luxuryConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
     // === CC: iterate per-tier lists (tiers[k].perCapita + per-tier basic classification) ===
     for (const tierKey in N.tiers) {
       const n = pop[tierKey] || 0;
@@ -521,22 +643,60 @@ Sim.tick = function (State) {
       const spec = N.tiers[tierKey];
       const rates = spec.perCapita;
       const tierBcm = bcm[tierKey] || 1;
+      const tierLcm = lcm[tierKey] || 1;
+      // v0.51 §6: a tier eats its BASICS only when ALL of them are present — otherwise
+      // it WAITS (no partial consumption), so a house never burns the one basic it has
+      // while starving for another. Extras stay independent. Demand + satisfaction below
+      // still read the full `required`, so a gated shortage lowers happiness and pulls
+      // imports for the missing good.
+      let basicsOk = true;
+      for (const gid of spec.basic) { if ((stock[gid] || 0) <= 0) { basicsOk = false; break; } }
       for (const gid in rates) {
         const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
-        const amt = rates[gid] * n * (isBasic ? tierBcm : 1);
+        const amt = rates[gid] * n * (isBasic ? tierBcm : tierLcm);   // v0.51: extra-need goods scaled by luxury mult
         required[gid] = (required[gid] || 0) + amt;
         tierReq[tierKey][gid] = (tierReq[tierKey][gid] || 0) + amt;  // === PP-A ===
+        if (!isBasic || basicsOk) consume[gid] = (consume[gid] || 0) + amt;   // §6 gate: basics only when all present
       }
     }
     // === /RU-A + /CC ===
-    const gsat = {};                     // per-good satisfaction (0..1) for demanded goods
+    // === GRAN: integer consumption with per-town carry. gsatRaw is STILL the REAL
+    // fractional demand-vs-shelf (min(have,req)/req) so the satEMA smoothing below —
+    // and thus happiness — is unchanged and stays smooth; only the PHYSICAL stock
+    // decrement is integer-quantized: fractional demand accrues in town._consCarry
+    // and we subtract Math.floor of it (clamped to available stock, never negative),
+    // carrying the sub-unit remainder. No demand backlog builds during a shortage
+    // (unmet whole-unit demand is dropped, exactly as the old min() did).
+    if (!town._consCarry || typeof town._consCarry !== "object") town._consCarry = {};
+    const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
       addDemand(gid, req);
       const have = stock[gid] || 0;
-      const consume = Math.min(have, req);
-      stock[gid] = have - consume;
-      gsat[gid] = req > 0 ? consume / req : 1;
+      gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
+      const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
+      let take = Math.floor(cc);
+      if (take > have) take = have;                             // clamp ≥0 — can't consume what isn't there
+      if (take > 0) stock[gid] = have - take;
+      town._consCarry[gid] = cc - Math.floor(cc);               // carry only the sub-unit remainder
+    }
+    // === SAWTOOTH FIX === smooth the per-good satisfaction that HAPPINESS reads with a
+    // town-persisted EMA (town.satEMA), so momentary between-cart shelf dips don't
+    // crater happiness. Snap-initialised (first sample = raw) so a first/plentiful tick
+    // is bit-identical to the old instantaneous model; satSmoothing ≤ 0 (or missing) ⇒
+    // the old model exactly. Only demanded goods are smoothed; `gsat` (used by the
+    // happiness class-sat helpers below) is the SMOOTHED value. Consumption/stock above
+    // are unchanged, so prices, trade and pop capacity see the true instantaneous stock.
+    if (!town.satEMA || typeof town.satEMA !== "object") town.satEMA = {};
+    const satEMA = town.satEMA;
+    const satAlpha = (N.satSmoothing > 0) ? Math.min(1, N.satSmoothing) : 1;
+    const gsat = {};                     // per-good SMOOTHED satisfaction feeding happiness
+    for (const gid in gsatRaw) {
+      const raw = gsatRaw[gid];
+      const prev = satEMA[gid];
+      const sm = (typeof prev === "number") ? prev + (raw - prev) * satAlpha : raw;   // snap on first sample
+      satEMA[gid] = sm;
+      gsat[gid] = sm;
     }
     // Demand-weighted class satisfaction; null when the class isn't demanded at all.
     const classSat = (list) => {
@@ -668,7 +828,22 @@ Sim.tick = function (State) {
         th = N.basicHappy * availFrac(tl.basic) + N.extraHappy * availFrac(tl.extra);
       }
       const capFrac = Math.min(1, Math.max(0, Math.min(100, th)) / N.capacityFullAt);
-      const target = Math.round(cap * capFrac);
+      const naturalTarget = Math.round(cap * capFrac);
+      // v0.50: minimal core workforce for an empty/starved house (>=10% of capacity,
+      // at least 1). When the natural target is BELOW that floor (basics unmet), the
+      // crew runs on a duty cycle — present onCycles of every (on+off) cycles — so the
+      // city gets intermittent labour to bootstrap food/wood, then can grow normally.
+      const floorN = cap > 0 ? Math.max(1, Math.floor(cap * (N.emptyHouseFrac || 0.10))) : 0;
+      if (cap > 0 && naturalTarget < floorN) {
+        const C = N.emptyHouseCycleTicks || 16;
+        const period = C * ((N.emptyHouseOnCycles || 1) + (N.emptyHouseOffCycles || 3));
+        const onLen = C * (N.emptyHouseOnCycles || 1);
+        const onNow = period > 0 ? ((((State.tick || 0) % period) + period) % period) < onLen : true;
+        pop[tier] = onNow ? Math.min(floorN, cap) : 0;   // crisp on/off (bypass easing)
+        town._lowSat[tier] = 0;
+        continue;
+      }
+      const target = naturalTarget;
       let n = pop[tier] || 0;
       if (n < target) {
         town._lowSat[tier] = 0;
@@ -713,11 +888,6 @@ Sim.tick = function (State) {
     // === /PP-A ===
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
-    // P4-C hook: a "demand craze" event triples one good's demand (price rises).
-    if (typeof Events !== "undefined" && Events.crazeGood) {
-      const cg = Events.crazeGood(State);
-      if (cg) demand[cg] = Events.adjustDemand(State, cg, demand[cg] || 0);
-    }
     town.demand = demand;
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
@@ -732,6 +902,130 @@ Sim.tick = function (State) {
     }
   }
   return State;
+};
+
+// === v0.51 §2: INTERNAL PORTERS (real movers) ================================
+// A deterministic fleet per town physically carries producer output to the
+// warehouse. Producers bank whole units in b.store; a porter goes idle → walks to
+// the fullest producer → loads ≤ carryCap → walks back to the town centre → deposits
+// up to the warehouse's remaining room. The warehouse therefore grows ONLY through
+// porters (plus external trade), never directly from production — so porters are the
+// actual bottleneck, not a decoration. Invariants: warehouse never exceeds
+// storageCap; nothing is wasted (undelivered goods wait in a porter's cargo or the
+// building's store). Pure: no DOM/RNG/Date, fixed iteration order, all motion state
+// persisted on town.porters so saves + headless tests are deterministic.
+const PORTER_HEX_DIST = (aq, ar, bq, br) =>
+  (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+Sim.tickPorters = function (town) {
+  if (!town) return;
+  if (!town.stock || typeof town.stock !== "object") town.stock = {};
+  const stock = town.stock;
+  const E = CONFIG.econ || {};
+  const cap = (CONFIG.town && CONFIG.town.storageCap);
+  const carryCap = E.porterCarry || 10;
+  const ticksPerTile = E.porterTicksPerTile || 1;
+  const buildings = Array.isArray(town.buildings) ? town.buildings : [];
+  // Fleet size: at least the town's base hauler count, but scaled so every producer
+  // that currently has goods waiting can be served — otherwise a handful of porters
+  // would starve a big city's producers (their stores fill, they stall). Capped so it
+  // stays "a small fleet" and bounds work per tick.
+  const base = (typeof Buildings !== "undefined" && Buildings.transporterCount)
+    ? Buildings.transporterCount(town) : 4;
+  let waiting = 0;
+  for (const b of buildings) {
+    if (!b || b.built === false || !b.store) continue;
+    for (const g in b.store) { if ((b.store[g] || 0) >= 1) { waiting++; break; } }
+  }
+  const maxFleet = (E.porterMaxFleet || 16);
+  const need = Math.max(1, Math.min(maxFleet, Math.max(base, waiting)));
+
+  // Size the fleet deterministically to `need` (grow at the end, trim the tail).
+  if (!Array.isArray(town.porters)) town.porters = [];
+  const P = town.porters;
+  while (P.length < need) P.push({ phase: "idle", prog: 0, good: null, qty: 0, bq: town.q, br: town.r, legTicks: 1 });
+  if (P.length > need) {
+    // Only drop IDLE porters from the tail so we never vanish carried cargo (no waste).
+    for (let i = P.length - 1; i >= 0 && P.length > need; i--) if (P[i].phase === "idle") P.splice(i, 1);
+    if (P.length > need) P.length = need;   // fallback (all busy): safe, cargo returns to nothing rarely
+  }
+
+  const roomFor = (g) => (cap ? Math.max(0, cap - (stock[g] || 0)) : Infinity);
+  // Goods already inbound (carried toward the warehouse) count against room so a
+  // second porter doesn't over-commit to the same shrinking headroom.
+  const inbound = {};
+  for (const p of P) if (p.phase === "toWarehouse" && p.good) inbound[p.good] = (inbound[p.good] || 0) + p.qty;
+  // Find a producer at (q,r) still holding `good` in its store. Keyed by good (not
+  // just coords) so that when several buildings share a hex — as headless fixtures
+  // do; real placement is one-per-hex — a porter collects from one that actually has
+  // the cargo it came for, instead of always the first building at that tile.
+  const buildingAt = (q, r, good) => {
+    let firstAtHex = null;
+    for (const b of buildings) {
+      if (!b || b.built === false || b.q !== q || b.r !== r) continue;
+      if (!firstAtHex) firstAtHex = b;
+      if (good && b.store && (b.store[good] || 0) >= 1) return b;
+    }
+    return firstAtHex;
+  };
+  const legTicksFor = (bq, br) =>
+    Math.max(1, Math.round(PORTER_HEX_DIST(town.q, town.r, bq, br) * ticksPerTile));
+
+  for (const p of P) {
+    if (p.phase === "idle") {
+      // Pick the producer offering the largest immediately-collectable load whose
+      // good still has warehouse room (net of inbound). Deterministic max, tie-break
+      // by position so the choice never depends on object identity.
+      let best = null, bestQ = 0, bestKey = null;
+      for (const b of buildings) {
+        if (!b || b.built === false || !b.store) continue;
+        for (const g in b.store) {
+          const s = b.store[g] || 0;
+          if (s < 1) continue;
+          const room = roomFor(g) - (inbound[g] || 0);
+          if (room < 1) continue;
+          const q = Math.min(carryCap, Math.floor(s), Math.floor(room));
+          if (q < 1) continue;
+          const key = b.q + "," + b.r + ":" + g;
+          if (q > bestQ || (q === bestQ && bestKey !== null && key < bestKey)) { best = { b, g }; bestQ = q; bestKey = key; }
+        }
+      }
+      if (best) {
+        p.phase = "toBuilding"; p.prog = 0; p.good = best.g; p.qty = 0;
+        p.bq = best.b.q; p.br = best.b.r; p.legTicks = legTicksFor(best.b.q, best.b.r);
+        inbound[best.g] = (inbound[best.g] || 0) + bestQ;   // reserve the room now
+      }
+      continue;
+    }
+    if (p.phase === "toBuilding") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const b = buildingAt(p.bq, p.br, p.good);
+      const avail = (b && b.store && b.store[p.good]) || 0;
+      const room = roomFor(p.good);   // recompute at pickup (inbound reservation already applied)
+      const load = Math.min(carryCap, Math.floor(avail), Math.floor(room));
+      if (load >= 1) {
+        b.store[p.good] -= load; p.qty = load;
+        p.phase = "toWarehouse"; p.prog = 0;
+      } else {
+        p.phase = "idle"; p.good = null; p.qty = 0;   // nothing left to grab (another porter beat us)
+      }
+      continue;
+    }
+    if (p.phase === "toWarehouse") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const room = roomFor(p.good);
+      const drop = Math.min(p.qty, room);
+      if (drop > 0) { stock[p.good] = (stock[p.good] || 0) + drop; p.qty -= drop; }
+      if (p.qty <= 0) { p.phase = "idle"; p.good = null; p.qty = 0; }
+      // else: warehouse full — keep the cargo and retry next tick (never wasted).
+      continue;
+    }
+    // Unknown phase (corrupt/legacy save): reset to idle.
+    p.phase = "idle"; p.good = null; p.qty = 0; p.prog = 0;
+  }
 };
 
 // === PP-A === Attribute a pop tier's people-tax income across that tier's houses
@@ -758,6 +1052,33 @@ Sim.houseIncome = function (town, building) {
   return totalCap > 0 ? tierInc * (thisCap / totalCap) : 0;
 };
 // === /PP-A ===
+
+// (v0.47) Read-only production progress for the map + panel progress bars. Returns
+// { prog, working, starved, kind, out } for a producing building, or null for a
+// house / non-producer. `prog` (0..1) is how far this building is toward its next
+// whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick advances); at
+// interval 0 (release-every-tick kinds) it reports the banked fraction. `starved`
+// = a processor that lacks its full input recipe in the town stock right now. Pure.
+Sim.buildingProgress = function (state, town, b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+  const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
+  const intervalTicks = Math.round((psec[def.kind] || 0) * (1000 / baseTickMs));
+  const working = (b.workers || 0) > 0 && b.built !== false;
+  let prog = 0;
+  if (intervalTicks > 0) {
+    const t = (typeof b._prodTimer === "number") ? b._prodTimer : intervalTicks;
+    prog = Math.max(0, Math.min(1, 1 - t / intervalTicks));
+  } else {
+    prog = Math.max(0, Math.min(1, (b._prodAcc || 0) % 1));
+  }
+  let starved = false;
+  if (def.inputs && town && town.stock) {
+    for (const gid in def.inputs) if ((town.stock[gid] || 0) < def.inputs[gid]) { starved = true; break; }
+  }
+  return { prog: working ? prog : 0, working, starved, intervalTicks, kind: def.kind, out: def.output.goodId };
+};
 
 // === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can
 // drive it). Renames retired/renamed good ids across every good-keyed map in a

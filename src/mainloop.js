@@ -27,9 +27,17 @@
   let renderAcc = 0;                 // AB: render-frame accumulator (60fps cap)
   const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
+  let _prevBuilds = -1;              // JUICE/AUDIO: edge-detect building/upgrade completions for the "construct" cue
 
   const fpsEl = document.getElementById("fps");
   const statEl = document.getElementById("stat");
+  const gameTimerEl = document.getElementById("gameTimer");   // v0.48: elapsed game-time clock (top-right)
+  let _lastClockSec = -1;
+  function fmtClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
 
   function frame(now) {
     const dt = Math.min(100, now - lastTime);
@@ -59,6 +67,9 @@
         // PP-A: castle MARKET buyers run AFTER research buyers (research materials
         // get first pick of the shared fleet), buying player-enabled goods to limit.
         if (typeof CastleMarket !== "undefined") CastleMarket.tick(state);
+        // v0.44: the castle provisioner turns bought potato (+ fish for the
+        // Advanced Provisioner) into provisions, AFTER the market buys the inputs.
+        if (typeof Provisioner !== "undefined" && Provisioner.tick) Provisioner.tick(state);
         // Slice A: deliver materials from castleStock into the Research Center
         // (build/upgrade) AFTER the buyers stocked the castle, BEFORE research runs.
         if (typeof Research !== "undefined" && Research.tickCenter) Research.tickCenter(state);
@@ -69,12 +80,18 @@
         // intermittent sound"). Engine, cue, and reward stream all removed; the
         // castle now levels on gold alone. The mission system keeps its own
         // audible cues (Tutorial), which have visible UI.
-        if (typeof Events !== "undefined" && Events.tick) {   // P4-C: random events after trade
-          Events.tick(state);
-          if (state._eventNotice) { handleEventNotice(state._eventNotice); state._eventNotice = null; }
-        }
         if (typeof Tutorial !== "undefined") Tutorial.tick(state);  // P5D-C: advance onboarding coach
         econAcc -= step;
+      }
+      // JUICE/AUDIO: play the build-complete cue when a construction or upgrade
+      // finishes this frame (stats totals rise on both timed + instant completion;
+      // see Sim.statConstructed/statUpgraded). Skip the first sample so a loaded
+      // save doesn't fanfare its existing buildings.
+      if (typeof SFX !== "undefined" && SFX.play) {
+        const st = (state && state.stats) || {};
+        const nb = ((st.constructed && st.constructed.total) || 0) + ((st.upgraded && st.upgraded.total) || 0);
+        if (_prevBuilds >= 0 && nb > _prevBuilds) SFX.play("construct", "build complete");
+        _prevBuilds = nb;
       }
     }
 
@@ -97,6 +114,11 @@
         fpsEl.className = "fps" + (fpsSmoothed < 50 ? " warn" : "");
         statEl.textContent =
           `${state.map.hexes.size} hexes · ${state.towns.length} towns · ${state.roads.size} roads · z${state.zoom.toFixed(2)}`;
+        // v0.48: elapsed game time — 2 economy ticks = 1 game-second (see CONFIG.econ.baseTickMs).
+        if (gameTimerEl) {
+          const gs = Math.floor((state.tick || 0) / 2);
+          if (gs !== _lastClockSec) { _lastClockSec = gs; gameTimerEl.textContent = fmtClock(gs); }
+        }
       }
     }
     requestAnimationFrame(frame);
@@ -121,10 +143,12 @@
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
+    if (typeof Scouts !== "undefined" && Scouts.frame) Scouts.frame(dt);  // v0.45: scout units (move/reveal/draw), scaled by gameSpeed internally
     drawAlerts();     // P4-C: subtle status icons over towns in a bad state
     drawCarts(dt);    // CARTS (T9): live trade carts, drawn right after towns
     drawCastle();
     drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
+    if (typeof drawAdvancedProvisioner === "function") drawAdvancedProvisioner();   // v0.46: Advanced Provisioner token + placement highlight
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)

@@ -21,9 +21,10 @@ Buildings.slotCap = function (level, state) {
   return cap;
 };
 
-// Every placed building — house or producer — consumes one slot.
+// Every placed building — house or producer — consumes one slot, AND the city
+// centre itself occupies one (v0.51: a fresh city reads 1/cap).
 Buildings.usedSlots = function (town) {
-  return (town && Array.isArray(town.buildings)) ? town.buildings.length : 0;
+  return 1 + ((town && Array.isArray(town.buildings)) ? town.buildings.length : 0);
 };
 
 // === PP-A === Internal haulers a town runs — scales the construction/upgrade
@@ -99,6 +100,34 @@ Buildings.constructionNeed = function (b) {
   }
   return out;
 };
+// === v0.49: timed construction ============================================
+// Seconds to fully build this building at 100% delivery — by tier, +per upgrade
+// level, capped. (T1/peasant = 6s by default.)
+Buildings.buildTime = function (b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  const cfg = CONFIG.build || {};
+  if (!def) return cfg.defaultSec || 8;
+  const tier = def.workerTier || def.houseTier || "peasant";
+  let s = (cfg.baseSec && cfg.baseSec[tier]) || cfg.defaultSec || 8;
+  s += Math.max(0, (b.upgradeLevel || 1) - 1) * (cfg.perUpgradeSec || 2);
+  return Math.min(cfg.maxSec || 20, s);
+};
+// Read-only construction status for a building under construction (built===false):
+//   deliveredFrac — materials delivered / total resource cost (caps how far it builds)
+//   timeFrac      — build-timer elapsed / buildTime
+//   frac          — effective progress = min(deliveredFrac, timeFrac)
+// A built (or legacy/instant) building reports frac 1. Pure.
+Buildings.constructionProgress = function (b) {
+  if (!b || b.built !== false) return { built: true, frac: 1, deliveredFrac: 1, timeFrac: 1 };
+  const def = CONFIG.buildings[b.typeId];
+  const rc = Buildings.resourceCost(def);
+  let need = 0, have = 0; const dv = b.delivered || {};
+  for (const gid in rc) { need += rc[gid]; have += Math.min(rc[gid], dv[gid] || 0); }
+  const deliveredFrac = need > 0 ? have / need : 1;
+  const bt = Buildings.buildTime(b);
+  const timeFrac = bt > 0 ? Math.min(1, (b._buildT || 0) / bt) : 1;
+  return { built: false, frac: Math.min(deliveredFrac, timeFrac), deliveredFrac, timeFrac };
+};
 // === /CB-A ===================================================================
 
 // === RU-A: per-building upgrade data + pure helpers =========================
@@ -113,10 +142,14 @@ Buildings.constructionNeed = function (b) {
 Object.assign(CONFIG, {
   upgrades: {
     // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
+    // v0.51: peasant house ladder — L2/L3 add a housing slot (+1 resident), L4 cuts
+    // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
+    // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",   unlockedBy: "upg_hut_l2", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",     unlockedBy: "upg_hut_l3", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",    unlockedBy: "upg_hut_l4", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -219,7 +252,7 @@ Buildings.upgradeConstructionNeed = function (b) {
 // capacityPlus/slotPlus are SUMMED (default 0); outputMult/basicConsumptionMult
 // are MULTIPLIED (default 1). Identity when b is missing or still at level 1.
 Buildings.upgradeEffect = function (b) {
-  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1 };
+  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1, luxuryConsumptionMult: 1 };
   if (!b) return agg;
   const lvl = b.upgradeLevel || 1;
   if (lvl < 2) return agg;
@@ -231,6 +264,7 @@ Buildings.upgradeEffect = function (b) {
     if (typeof e.effect.slotPlus === "number") agg.slotPlus += e.effect.slotPlus;
     if (typeof e.effect.outputMult === "number") agg.outputMult *= e.effect.outputMult;
     if (typeof e.effect.basicConsumptionMult === "number") agg.basicConsumptionMult *= e.effect.basicConsumptionMult;
+    if (typeof e.effect.luxuryConsumptionMult === "number") agg.luxuryConsumptionMult *= e.effect.luxuryConsumptionMult;   // v0.51: L5 house −30% luxury
   }
   return agg;
 };
@@ -253,6 +287,27 @@ Buildings.basicConsumptionMult = function (town) {
     if (cap <= 0) continue;
     acc[key].w += cap;
     acc[key].wm += cap * eff.basicConsumptionMult;
+  }
+  for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
+  return res;
+};
+// v0.51: capacity-weighted LUXURY-consumption multiplier per tier (mirrors
+// basicConsumptionMult; driven by the L5 house upgrade's luxuryConsumptionMult).
+Buildings.luxuryConsumptionMult = function (town) {
+  const res = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
+  const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  for (const b of list) {
+    if (!b || b.built === false) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.kind !== "house") continue;
+    const key = BUILDINGS_TIER_KEY[def.houseTier];
+    if (!key) continue;
+    const eff = Buildings.upgradeEffect(b);
+    const cap = (def.houseCapacity || 0) + eff.capacityPlus;
+    if (cap <= 0) continue;
+    acc[key].w += cap;
+    acc[key].wm += cap * (eff.luxuryConsumptionMult != null ? eff.luxuryConsumptionMult : 1);
   }
   for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
   return res;
@@ -282,6 +337,38 @@ Buildings.footprint = function (town) {
   return keys;
 };
 
+// v0.51 §11: connectivity cascade. A building is linked to its city only while its
+// hex is reachable from the town centre by ADJACENCY through the footprint (centre +
+// other buildings) — the same graph placement grows. Given a set of hex keys being
+// removed, return the buildings that become ORPHANED (no path back to the centre) and
+// so must fall too. If the CENTRE itself is removed, every building is orphaned.
+// Pure: reads only the town + HexMath; no DOM/RNG/mutation.
+Buildings.cascadeOrphans = function (town, removedKeys) {
+  const removed = (removedKeys instanceof Set) ? removedKeys : new Set(removedKeys || []);
+  const list = Array.isArray(town && town.buildings) ? town.buildings : [];
+  const centreKey = HexMath.key(town.q, town.r);
+  const nodes = new Map();   // surviving hex key -> { q, r, b|null }
+  if (!removed.has(centreKey)) nodes.set(centreKey, { q: town.q, r: town.r, b: null });
+  for (const b of list) {
+    const k = HexMath.key(b.q, b.r);
+    if (!removed.has(k)) nodes.set(k, { q: b.q, r: b.r, b: b });
+  }
+  const reach = new Set();
+  if (nodes.has(centreKey)) {
+    const stack = [centreKey]; reach.add(centreKey);
+    while (stack.length) {
+      const nd = nodes.get(stack.pop());
+      for (const nb of HexMath.neighbors(nd.q, nd.r)) {
+        const nk = HexMath.key(nb.q, nb.r);
+        if (nodes.has(nk) && !reach.has(nk)) { reach.add(nk); stack.push(nk); }
+      }
+    }
+  }
+  const orphans = [];
+  for (const [k, nd] of nodes) if (nd.b && !reach.has(k)) orphans.push(nd.b);
+  return { orphans: orphans };
+};
+
 // The DISTINCT towns whose footprint is adjacent to (q,r). Returns an array of
 // 0 (touches no city), 1 (the owner), or ≥2 (would fuse cities — invalid) towns.
 Buildings.footprintCitiesAdjacent = function (state, q, r) {
@@ -299,6 +386,26 @@ Buildings.touchesCastle = function (state, q, r) {
   const c = Buildings.castleHex();
   if (c.q === q && c.r === r) return true;
   return HexMath.neighbors(q, r).some(n => n.q === c.q && n.r === c.r);
+};
+// v0.51: the castle's SPECIAL buildings (Research Center, Advanced Provisioner, and
+// a placed Provisioner) each carry the same no-touch gap as the castle — nothing may
+// be placed on or beside them, so cities and castle buildings never fuse together.
+Buildings.castleBuildingHexes = function (state) {
+  const out = [];
+  if (!state) return out;
+  const rc = state.researchCenter, ap = state.advancedProvisioner, pv = state.provisionerBuilding;
+  if (rc && typeof rc.q === "number") out.push(rc);
+  if (ap && typeof ap.q === "number") out.push(ap);
+  if (pv && typeof pv.q === "number") out.push(pv);
+  return out;
+};
+Buildings.touchesCastleBuilding = function (state, q, r, ignore) {
+  for (const h of Buildings.castleBuildingHexes(state)) {
+    if (ignore && h.q === ignore.q && h.r === ignore.r) continue;   // skip the building being placed/queried
+    if (h.q === q && h.r === r) return true;
+    if (HexMath.neighbors(q, r).some(n => n.q === h.q && n.r === h.r)) return true;
+  }
+  return false;
 };
 
 // May `typeId` be built at hex (q,r)? Resolves the OWNING city by footprint
@@ -357,6 +464,8 @@ Buildings.canPlaceBuilding = function (state, typeId, q, r) {
 
   // (4) keep the gap to the castle.
   if (Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Too close to the castle" };
+  // (4b) v0.51: keep the gap to the castle's own buildings (Research Center, etc.).
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to a castle building" };
 
   // (5) slot cap of the OWNING town (P5-A: town_charters research grants +1 slot).
   if (Buildings.usedSlots(owner) >= Buildings.slotCap(owner.level, state)) {
@@ -384,6 +493,12 @@ Buildings.canPlaceTown = function (state, q, r) {
   const terrDef = CONFIG.terrain[hex.terrain];
   if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
 
+  // City cap: base (CONFIG.town.baseCityCap) + research cityCapBonus. Founded
+  // cities are state.towns; the castle is separate and does not count.
+  const cap = Buildings.cityCap(state);
+  const have = Array.isArray(state.towns) ? state.towns.length : 0;
+  if (have >= cap) return { ok: false, reason: "City limit reached (" + have + "/" + cap + ") — research more charters" };
+
   // EC-A: founding a city is paid from the Kingdom treasury.
   const foundCost = Buildings.foundCost();
   if ((state.treasury || 0) < foundCost) return { ok: false, reason: "Treasury too low — need " + foundCost + " gold to found" };
@@ -406,6 +521,9 @@ Buildings.canPlaceTown = function (state, q, r) {
   }
   if (Buildings.touchesCastle(state, q, r)) {
     return { ok: false, reason: "Too close to the castle" };
+  }
+  if (Buildings.touchesCastleBuilding(state, q, r)) {   // v0.51: cities never touch a castle building
+    return { ok: false, reason: "Too close to a castle building" };
   }
   return { ok: true };
 };
@@ -430,6 +548,13 @@ Buildings.canPlace = function (state, town, typeId, q, r) {
 // Treasury gold required to found a new city center.
 Buildings.foundCost = function () {
   return (CONFIG.town && CONFIG.town.foundCost) || 1000;
+};
+
+// Max cities the player may found: base cap + research `cityCapBonus` (additive).
+Buildings.cityCap = function (state) {
+  const base = (CONFIG.town && CONFIG.town.baseCityCap) || 4;
+  const bonus = (typeof Research !== "undefined" && Research.effect) ? (Research.effect(state, "cityCapBonus", 0) || 0) : 0;
+  return base + bonus;
 };
 
 // Deduct a building's cost at placement: only the GOLD → state.treasury (CB-A).
@@ -489,6 +614,8 @@ Buildings.canPlaceResearchCenter = function (state, q, r) {
   const castle = Buildings.castleHex();
   if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
   if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  // v0.51: castle buildings never touch each other.
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
 
   // (2) buildable land (same terrain gate a processor/house uses).
   const terrDef = CONFIG.terrain[hex.terrain];
@@ -561,4 +688,92 @@ Buildings.startCenterUpgrade = function (state) {
   return { ok: true };
 };
 // === /RESEARCH CENTER (Slice B) ==============================================
+
+// === ADVANCED PROVISIONER (v0.46) — a research-unlocked, castle-adjacent building.
+// Placed like the Research Center (beside the castle, on buildable land), but built
+// INSTANTLY on gold payment. Once built it runs the Provisioner `advanced` line
+// (1 fish + 1 potato → 2 provisions) and switches on castle fish-buying.
+Buildings.canPlaceAdvancedProvisioner = function (state, q, r) {
+  if (state && state.advancedProvisioner) return { ok: false, reason: "Advanced Provisioner already built" };
+  const need = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.research);
+  if (need && typeof Research !== "undefined" && Research.has && !Research.has(state, need))
+    return { ok: false, reason: "Research Advanced Provisioner first" };
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };   // v0.51
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
+  return { ok: true };
+};
+Buildings.placeAdvancedProvisioner = function (state, q, r) {
+  const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+  if (!res.ok) return res;
+  const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
+  state.treasury = (state.treasury || 0) - buildGold;
+  state.advancedProvisioner = { q, r, built: true };
+  // switch on castle fish-buying so the advanced line has its second input.
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
+  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  return { ok: true };
+};
+// === /ADVANCED PROVISIONER ===================================================
+
+// === BASIC PROVISIONER (v0.51 §9) — a castle-adjacent building (no research) that
+// enables the basic provision line (2 potato → 1). Placed like the Advanced one and
+// built instantly on gold; the castle keeps its starting provisions either way.
+Buildings.canPlaceProvisioner = function (state, q, r) {
+  if (state && state.provisionerBuilding) return { ok: false, reason: "Provisioner already built" };
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  const buildGold = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.build && CONFIG.basicProvisioner.build.gold) || 0;
+  if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
+  return { ok: true };
+};
+Buildings.placeProvisioner = function (state, q, r) {
+  const res = Buildings.canPlaceProvisioner(state, q, r);
+  if (!res.ok) return res;
+  const buildGold = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.build && CONFIG.basicProvisioner.build.gold) || 0;
+  state.treasury = (state.treasury || 0) - buildGold;
+  state.provisionerBuilding = { q, r, built: true };
+  // switch on castle potato-buying so the basic line has its input.
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const lim = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.potatoLimit) || 40;
+  if (!state.castleTrade.potato || !state.castleTrade.potato.enabled) state.castleTrade.potato = { enabled: true, limit: lim };
+  return { ok: true };
+};
+// === /BASIC PROVISIONER ======================================================
 // === BUILDINGS-CORE END ===

@@ -70,10 +70,10 @@ const MANIFEST = [
   { name: "research",         file: "research.js" },          // tech tree data + engine
   { name: "research-economy", file: "research-economy.js" },  // castle research economy
   { name: "progress",         file: "progress.js" },          // leveling / quests / prestige
-  { name: "events",           file: "events.js" },            // cozy market events
   { name: "kingdom-market",   file: "kingdom-market.js" },    // KR-A kingdom resource market (Market)
   { name: "ledger",           file: "ledger.js" },            // PP-A city gold ledger (Ledger)
   { name: "castle-market",    file: "castle-market.js" },     // castle material market (CastleMarket)
+  { name: "provisions",       file: "provisions.js" },        // castle provisioner: raw goods → provisions
   // --- Impure browser shell (Phase 2). These live inside the single browser IIFE
   //     below PURE_CORE_END; the IIFE scaffold + `state` + boot tail stay INLINE.
   //     Not covered by the pure-core suites — verified by headless browser boot.
@@ -88,6 +88,7 @@ const MANIFEST = [
   { name: "kingdom-events-ui", file: "kingdom-events-ui.js" }, // kingdom screen + town alerts + event banners
   { name: "juice",             file: "juice.js" },             // cozy micro-animation canvas overlay
   { name: "internal-traders",  file: "internal-traders.js" },  // ambient within-city porter render layer
+  { name: "scouts",            file: "scouts.js" },            // Scout units: select/explore/reveal fog + castle refill
   { name: "ppe-chatter",       file: "ppe-chatter.js" },       // LTT-style ambient city-chatter map juice
   { name: "audio",             file: "audio.js" },             // procedural WebAudio SFX + mute
   { name: "start-screen",      file: "start-screen.js" },      // New Game / Continue start overlay

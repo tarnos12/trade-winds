@@ -77,33 +77,11 @@ Town.upgrade = function (town) {
   return { ok: true, level: town.level };
 };
 
-// --- Castle leveling (pure gate + apply) ------------------------------------
+// --- Castle ------------------------------------------------------------------
+// Castle UPGRADES were removed (v0.44): they only raised a cosmetic level and
+// gated nothing (warehouse capacity + trader count are independent). The castle
+// is a fixed-capacity hub now; state.castleLevel stays 1 for save compatibility.
 var Castle = (typeof Castle !== "undefined" && Castle) || {};
-Castle.nextReq = function (state) {
-  const lvl = (state && state.castleLevel) || 1;
-  if (lvl >= CONFIG.castle.maxLevel) return null;
-  return (CONFIG.castle.levels || [])[lvl + 1] || null;
-};
-Castle.canUpgrade = function (state) {
-  const req = Castle.nextReq(state);
-  if (!req) return { ok: false, reason: "Castle at maximum" };
-  // Quests retired → GOLD ONLY (prestige had no other source). prestigeReq in the
-  // level table is now vestigial and ignored.
-  if ((state.treasury || 0) < req.goldReq) return { ok: false, reason: "Needs " + req.goldReq + " g" };
-  return { ok: true };
-};
-// Consume treasury and raise state.castleLevel. Reaching maxLevel (5) is a
-// MILESTONE only — it no longer wins the game (BALPV Phase 2A: the victory is now
-// a 100%-happy aristocrat estate, see Victory.check). Returns the gate result
-// (+ level on success). Deliberately does NOT set/return state.victory.
-Castle.upgrade = function (state) {
-  const res = Castle.canUpgrade(state);
-  if (!res.ok) return res;
-  const req = Castle.nextReq(state);
-  state.treasury = (state.treasury || 0) - req.goldReq;
-  state.castleLevel = (state.castleLevel || 1) + 1;
-  return { ok: true, level: state.castleLevel };
-};
 
 // --- Victory: a fully-happy aristocrat estate (BALPV Phase 2A) ---------------
 // The game is won when ANY town has a BUILT aristocrat_home AND that town's

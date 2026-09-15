@@ -55,7 +55,11 @@ function stockAfterTick(typeId, good, unlocked) {
   const state = { towns: [town] };
   if (unlocked) state.research = withResearch(unlocked);
   Sim.tick(state);
-  return town.stock[good] || 0;
+  // GRAN: production is banked (b._prodAcc) and flushed to stock in whole-unit
+  // batches on the per-kind interval, so one tick leaves stock at 0. The research
+  // OUTPUT multipliers scale the banked flow directly, so measure released stock +
+  // the carried remainder = the true one-tick production the multiplier acts on.
+  return (town.stock[good] || 0) + (town.buildings[0]._prodAcc || 0);
 }
 
 // =========================================================================

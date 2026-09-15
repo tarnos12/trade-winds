@@ -5,13 +5,12 @@
   // (rendered by renderCastlePanel's up-box). These getElementByIds are null now;
   // updateProgressHud null-guards them and refreshes the panel when it's open.
   const prestigeValEl = document.getElementById("prestigeVal");
-  const castleLvlValEl = document.getElementById("castleLvlVal");
   const winNoticeEl = document.getElementById("winNotice");
 
   function updateProgressHud() {
     if (prestigeValEl) prestigeValEl.textContent = Math.floor(state.prestige || 0).toLocaleString();
-    if (castleLvlValEl) castleLvlValEl.textContent = state.castleLevel || 1;
-    // CP: prestige + castle level are shown in the castle panel — refresh it if open.
+    // castle level removed (v0.44) — castle is fixed capacity now.
+    // CP: prestige is shown in the castle panel — refresh it if open.
     if (window.CastleUI && window.CastleUI.isOpen) window.CastleUI.refresh();
   }
   // King's-Quest banner retired — no renderQuestBanner (quests removed entirely).

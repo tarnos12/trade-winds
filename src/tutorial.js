@@ -164,7 +164,12 @@
       const primary = activeMissions[0];
       const pr = ev.byId[primary.id];
       const met = pr.objectives.filter(o => o.met).length;
-      elStep.innerHTML = '<div class="tut-now">▶ ' + esc(primary.name) + "</div>" +
+      // The panel header already shows the mission name+icon when a single
+      // mission is active, so don't repeat it here — just show progress. With
+      // several active, name the primary one so the count is unambiguous.
+      const nameLine = activeMissions.length === 1
+        ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
+      elStep.innerHTML = nameLine +
         '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>";
 
       let html = "";

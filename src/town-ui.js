@@ -257,7 +257,9 @@
       const tip = `Upgrade to Level ${t.level + 1} (+build slots, +traders/transporters): needs ` +
         `${req.pop} pop (have ${Math.round(Town.popTotal(t))}) and ${req.gold}🪙 city gold (have ${Math.floor(t.gold || 0)})` +
         (res.ok ? "" : " — " + res.reason);
-      upBtn = `<button data-town-upgrade ${res.ok ? "" : "disabled"} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
+      // v0.51: dimmed (not disabled) so the styled cost tooltip still shows when the
+      // city can't yet afford it; Town.upgrade gates the click.
+      upBtn = `<button data-town-upgrade data-tip="cityUpgrade"${res.ok ? "" : ' style="opacity:.5"'} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
     }
     const cooling = (t.cooldownUntil || 0) > (state.tick || 0);
     let coolStr = "";
@@ -642,6 +644,8 @@
 
   function openTownPanel(town) {
     activeTown = ensureTown(town);
+    if (bpBuilding || rcPanelOpen) closeBuildingPanel();   // v0.48: one panel at a time
+    dismissOtherPanels();                                  // v0.48: close castle panel / deselect scout
     panelEl.classList.remove("hidden");
     panelEl.setAttribute("aria-hidden", "false");
     renderTownPanel(true);   // PP-B: force a full first paint
@@ -696,6 +700,7 @@
     { id: "worker",     icon: "🔨", label: "Worker",     kind: "tier", tier: "worker"  },
     { id: "burgher",    icon: "🎩", label: "Citizen",    kind: "tier", tier: "burgher" },
     { id: "aristocrat", icon: "👑", label: "Aristocrat", kind: "tier", tier: "aristocrat" },  // === CC: shown once aristocrat_home unlocks ===
+    { id: "special",    icon: "⭐", label: "Special",    kind: "castle" },  // === SPECIAL: castle-adjacent buildings (Research Center · Advanced Provisioner) ===
   ];
   // BAL: per-building availability. A building is available iff it is a starter
   // (startUnlocked) or its unlockedBy research node has been unlocked.
@@ -744,6 +749,7 @@
   function bbCatVisible(cat) {
     if (!cat) return true;
     if (cat.kind === "special") return true;
+    if (cat.kind === "castle") return true;   // === SPECIAL: always visible (per-item availability shown inside the flyout) ===
     return bbTierBuildings(cat.tier).some(bbBuildingAvailable);
   }
   // Reflect visibility/open state on the category buttons (research can unlock live).
@@ -764,18 +770,71 @@
       // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
       // needs no confirmation (matches the existing road-erase behaviour);
       // destroying a building always confirms via uiConfirm before removing it.
+      // City cap: show founded/cap and disable the tool once the cap is reached.
+      const cityCap = (Buildings.cityCap ? Buildings.cityCap(state) : 4);
+      const cityHave = Array.isArray(state.towns) ? state.towns.length : 0;
+      const cityFull = cityHave >= cityCap;
       const items = [
-        { action: "town", name: "City", sub: "Found a new city", tip: "Enter town mode — click a valid site to found a city." },
+        { action: "town", name: "City", sub: `Found a city · ${cityHave}/${cityCap}`, disabled: cityFull,
+          tip: cityFull ? `City limit reached (${cityHave}/${cityCap}) — research Township Grants / Provincial Rule / Imperial Domain to raise it.`
+                        : "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
         { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
         { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
+      // v0.46: Advanced Provisioner now lives in the ⭐ Special category flyout
+      // (see the cat.kind === "castle" branch below) — no longer here in Build.
       let html = `<div class="bb-fly-title">🏗 Build</div>`;
       for (const it of items) {
         const active = !it.disabled && state.mode === it.action;
         html += `<button type="button" class="bb-btn${it.disabled ? " disabled" : ""}${active ? " active" : ""}"
           data-action="${esc(it.action)}"${it.disabled ? " aria-disabled=\"true\"" : ""} title="${esc(it.tip)}">
+          <span class="bb-name">${esc(it.name)}</span>
+          <span class="bb-cost">${esc(it.sub)}</span></button>`;
+      }
+      buildBarFlyoutEl.innerHTML = html;
+      return;
+    }
+    // === SPECIAL: castle-adjacent buildings — Research Center + Advanced Provisioner.
+    // Each is a unique, castle-owned building placed via its own placement session
+    // (not a per-town charge). Items appear only while available; when none are,
+    // a small hint keeps the flyout non-empty.
+    if (cat.kind === "castle") {
+      const items = [];
+      // Research Center — one only; the placement item disappears once it's built.
+      const rcCfg = CONFIG.researchCenter || {};
+      if (!state.researchCenter) {
+        const rg = (rcCfg.build && rcCfg.build.gold) || 0;
+        items.push({ action: "researchCenter", name: "Research Center", sub: `${rg}g`,
+          active: !!placingResearchCenter,
+          tip: "Placement — click a hex next to the castle to build the Research Center." });
+      }
+      // Basic Provisioner (v0.51 §9) — no research; shown until one is built.
+      const pvCfg = CONFIG.basicProvisioner || {};
+      if (!state.provisionerBuilding) {
+        const g = (pvCfg.build && pvCfg.build.gold) || 0;
+        items.push({ action: "provisioner", name: "Provisioner", sub: `🍲 ${g}g`,
+          active: state.mode === "provisioner",
+          tip: "Click a hex next to the castle to build it (2 potato → 1 provision). The castle needs this to make provisions." });
+      }
+      // Advanced Provisioner — shown only once researched and not yet built.
+      const apCfg = CONFIG.advancedProvisioner || {};
+      const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
+      if (apResearched && !state.advancedProvisioner) {
+        const g = (apCfg.build && apCfg.build.gold) || 0;
+        items.push({ action: "advProvisioner", name: "Advanced Provisioner", sub: `🍲 ${g}g`,
+          active: state.mode === "advProvisioner",
+          tip: "Click a hex next to the castle to build it (1 fish + 1 potato → 2 provisions)." });
+      }
+      let html = `<div class="bb-fly-title">⭐ Special</div>`;
+      if (items.length === 0) {
+        html += `<div class="bb-fly-lock">No special buildings available yet.</div>`;
+      }
+      for (const it of items) {
+        const active = !!it.active;
+        html += `<button type="button" class="bb-btn${active ? " active" : ""}"
+          data-action="${esc(it.action)}" title="${esc(it.tip)}">
           <span class="bb-name">${esc(it.name)}</span>
           <span class="bb-cost">${esc(it.sub)}</span></button>`;
       }
@@ -981,7 +1040,14 @@
     if (!btn || btn.classList.contains("disabled")) return;
     if (btn.dataset.typeid) { startPlacing(btn.dataset.typeid); return; }
     const action = btn.dataset.action;
-    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding") {
+    // === SPECIAL: Research Center is a placement session, not a build mode.
+    if (action === "researchCenter") {
+      cancelPlacing();          // exclusive with town-building placement
+      closeFlyout();
+      startPlacingResearchCenter();
+      return;
+    }
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner" || action === "provisioner") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
@@ -990,7 +1056,9 @@
         action === "town" ? "Click a valid site to found a city."
         : action === "road" ? "Drag across land to lay roads."
         : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
-        : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
+        : action === "advProvisioner" ? "Click a hex next to the castle to build the Advanced Provisioner."
+        : action === "provisioner" ? "Click a hex next to the castle to build the Provisioner."
+        : "Click a building or a city centre to destroy it — confirmation required. Gold is refunded.";
     }
   });
   buildBarCancelEl.addEventListener("click", () => cancelPlacing());
@@ -1138,6 +1206,104 @@
   let bpBuilding = null;     // the town.buildings[] entry currently shown
   let bpTown = null;         // its owning town
 
+  // v0.51: styled hover tooltips for the building panel (matches the game's panel
+  // look instead of the browser's native title box). An element with data-tip shows
+  // a floating card; data-tip="upgrade" builds a RICH cost breakdown from the current
+  // building; any other data-tip value is shown as plain text.
+  let bpTipEl = null;
+  function bpTip() {
+    if (bpTipEl) return bpTipEl;
+    bpTipEl = document.createElement("div");
+    bpTipEl.id = "bpTip";
+    bpTipEl.style.cssText = "position:fixed;z-index:90;max-width:250px;pointer-events:none;display:none;" +
+      "background:var(--panel,#1c160f);border:1px solid var(--accent,#c98a3c);border-radius:8px;padding:8px 10px;" +
+      "font-size:12px;line-height:1.5;color:var(--paper,#f2e6cf);box-shadow:0 6px 22px rgba(0,0,0,0.55)";
+    document.body.appendChild(bpTipEl);
+    return bpTipEl;
+  }
+  function bpShowTip(html, x, y) {
+    const t = bpTip(); t.innerHTML = html; t.style.display = "block";
+    const w = t.offsetWidth, h = t.offsetHeight;
+    let px = x + 14, py = y + 16;
+    if (px + w > window.innerWidth - 8) px = x - w - 14;
+    if (py + h > window.innerHeight - 8) py = y - h - 16;
+    t.style.left = Math.max(8, px) + "px"; t.style.top = Math.max(8, py) + "px";
+  }
+  function bpHideTip() { if (bpTipEl) bpTipEl.style.display = "none"; }
+  // Rich upgrade tooltip: next level, its effect, and the resources needed (have/need).
+  function bpUpgradeTipHtml(town, b) {
+    if (!b || typeof Buildings === "undefined") return "Upgrade";
+    if (b.pendingUpgrade) return "Upgrade already in progress…";
+    const ladder = Buildings.upgradeLadder ? Buildings.upgradeLadder(b.typeId) : [];
+    if (!ladder || !ladder.length) return "No upgrades for this building.";
+    const nxt = Buildings.nextUpgrade ? Buildings.nextUpgrade(state, b) : null;
+    if (!nxt) {
+      const lvl = b.upgradeLevel || 1;
+      const locked = Buildings.upgradeAt ? Buildings.upgradeAt(b.typeId, lvl + 1) : null;
+      if (locked) {
+        let nm = locked.unlockedBy;
+        const node = (typeof Research !== "undefined" && Research.get) ? Research.get(locked.unlockedBy) : null;
+        if (node && node.name) nm = node.name;
+        return `🔒 Research <b>${esc(nm || "")}</b> to unlock Lv${locked.level}.`;
+      }
+      return "Max level — fully upgraded.";
+    }
+    const rc = Buildings.upgradeResourceCost ? Buildings.upgradeResourceCost(b.typeId, nxt.level) : {};
+    const gold = (nxt.cost && nxt.cost.gold) || 0;
+    const stock = (town && town.stock) || {};
+    let rows = "";
+    for (const gid in rc) {
+      const have = Math.floor(stock[gid] || 0), need = rc[gid], okc = have >= need ? "#a6e0a8" : "#e0844a";
+      rows += `<div style="display:flex;justify-content:space-between;gap:14px"><span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span style="font-variant-numeric:tabular-nums;color:${okc}">${have}/${need}</span></div>`;
+    }
+    if (gold) rows += `<div style="display:flex;justify-content:space-between;gap:14px"><span>🪙 Gold</span><span style="font-variant-numeric:tabular-nums">${fmt(gold)}</span></div>`;
+    const eff = bpEffectSummary(nxt.effect);
+    const up = bpUpgradeState(town, b);
+    return `<div style="font-weight:bold;color:var(--accent,#c98a3c);margin-bottom:3px">⬆ ${esc(nxt.name)} (Lv${nxt.level})</div>` +
+      (eff ? `<div style="opacity:.9;margin-bottom:6px">${esc(eff)}</div>` : "") +
+      `<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.6;margin-bottom:2px">Resources needed</div>` +
+      (rows || "<div style='opacity:.7'>none</div>") +
+      (up && !up.ok && up.reason ? `<div style="margin-top:6px;color:#e0b34c">${esc(up.reason)}</div>` : `<div style="margin-top:6px;opacity:.7">Click to start — materials are delivered from the city.</div>`);
+  }
+  // v0.51: styled tooltip for the CITY upgrade button — requirements (pop, gold),
+  // have/need, and what the level grants.
+  function cityUpgradeTipHtml(t) {
+    if (!t || typeof Town === "undefined" || !Town.upgradeReq) return "Upgrade the city";
+    const req = Town.upgradeReq(t);
+    if (!req) return "City is at maximum level.";
+    const res = (Town.canUpgrade ? Town.canUpgrade(t) : { ok: false });
+    const havePop = Math.round(Town.popTotal ? Town.popTotal(t) : 0), haveGold = Math.floor(t.gold || 0);
+    const row = (label, valHtml) => `<div style="display:flex;justify-content:space-between;gap:14px"><span>${label}</span><span style="font-variant-numeric:tabular-nums">${valHtml}</span></div>`;
+    const col = (ok) => ok ? "#a6e0a8" : "#e0844a";
+    let rows = "";
+    if (req.pop)  rows += row("👥 Population", `<span style="color:${col(havePop >= req.pop)}">${havePop}/${req.pop}</span>`);
+    if (req.gold) rows += row("🪙 City gold", `<span style="color:${col(haveGold >= req.gold)}">${haveGold}/${req.gold}</span>`);
+    for (const gid in req) {
+      if (gid === "pop" || gid === "gold" || typeof req[gid] !== "number") continue;
+      const have = Math.floor((t.stock && t.stock[gid]) || 0);
+      rows += row(`${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}`, `<span style="color:${col(have >= req[gid])}">${have}/${req[gid]}</span>`);
+    }
+    return `<div style="font-weight:bold;color:var(--accent,#c98a3c);margin-bottom:3px">⬆ Upgrade to Level ${(t.level || 1) + 1}</div>` +
+      `<div style="opacity:.9;margin-bottom:6px">+build slots · +traders &amp; transporters</div>` +
+      `<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.6;margin-bottom:2px">Requirements</div>` +
+      rows +
+      (res.ok ? `<div style="margin-top:6px;opacity:.7">Click to upgrade.</div>` : `<div style="margin-top:6px;color:#e0b34c">${esc(res.reason || "")}</div>`);
+  }
+  // Shared styled-tooltip driver for both the building panel and the city panel.
+  function bpTipMove(e) {
+    const el = e.target.closest("[data-tip]");
+    if (!el) { bpHideTip(); return; }
+    const v = el.getAttribute("data-tip");
+    let html;
+    if (v === "upgrade") html = bpUpgradeTipHtml(bpTown, bpBuilding);
+    else if (v === "cityUpgrade") html = cityUpgradeTipHtml(activeTown);
+    else html = esc(v || "");
+    if (html) bpShowTip(html, e.clientX, e.clientY); else bpHideTip();
+  }
+  bpEl.addEventListener("mousemove", bpTipMove);
+  bpEl.addEventListener("mouseleave", bpHideTip);
+  if (panelEl) { panelEl.addEventListener("mousemove", bpTipMove); panelEl.addEventListener("mouseleave", bpHideTip); }
+
   // Local fallbacks: use CB-A's helpers when present, otherwise compute inline so
   // this slice works standalone (and never throws on boot).
   function bpResourceCost(def) {
@@ -1165,10 +1331,18 @@
     return null;
   }
 
+  // v0.48: ONE panel visible at a time — dismiss the castle panel and any selected
+  // scout when a town/building panel opens (town-ui's own panels already close each
+  // other; this reaches the panels owned by other modules).
+  function dismissOtherPanels() {
+    if (window.CastleUI && typeof window.CastleUI.closeCastlePanel === "function") window.CastleUI.closeCastlePanel();
+    if (window.Scouts && window.Scouts.selectedId != null && typeof window.Scouts.deselect === "function") window.Scouts.deselect();
+  }
   function openBuildingPanel(town, b) {
     bpTown = town; bpBuilding = b;
     rcPanelOpen = false;                 // RESEARCH CENTER (Slice C): shares this DOM panel — exclusive
     closeTownPanel();                    // one detail panel at a time
+    dismissOtherPanels();                // v0.48: also close castle panel / deselect scout
     bpEl.classList.remove("hidden");
     bpEl.setAttribute("aria-hidden", "false");
     renderBuildingPanel();
@@ -1200,7 +1374,9 @@
     const c = state.researchCenter;
     if (!c) { closeBuildingPanel(); return; }   // outlived its Center (shouldn't happen — unique/permanent)
     bpNameEl.textContent = (CONFIG.researchCenter && CONFIG.researchCenter.name) || "Research Center";
-    bpTierEl.textContent = c.built ? ("Level " + (c.level || 1)) : "Under construction";
+    // Header banner badge shows the level number (matches producer/home panels);
+    // "Under construction" is communicated by the body section below.
+    bpTierEl.textContent = String(c.level || 1);
 
     let html = `<div class="tp-row"><span class="k">Hex</span><span class="v">${c.q}, ${c.r}</span></div>`;
 
@@ -1243,6 +1419,106 @@
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // v0.48: the visual production chain at the top of a producer's detail panel:
+  //   [inputs / source]  →  [process wheel + cycle time + live %]  →  [output + stock bar]
+  // Mirrors the reference UI. Live % + colours read the same batch timer the map
+  // progress bar uses (Sim.buildingProgress). Self-contained inline styles.
+  const CHAIN_TERRAIN_GLYPH = { forest: "🌲", fertile: "🌱", stone_deposit: "🪨", clay_deposit: "🧱",
+    iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
+  function renderProducerChain(town, b, def) {
+    const out = def.output.goodId, oc = goodColor(out);
+    const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
+    // v0.51 §1: honour the building's own cycleSec override (e.g. lumberjack = 4s).
+    const cycSec = (typeof def.cycleSec === "number") ? def.cycleSec : (psec[def.kind] || 0);
+    const cycleSec = Math.max(1, Math.round(cycSec)) || 1;
+    const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
+    const intervalTicks = Math.max(1, Math.round(cycSec * (1000 / baseTickMs)));
+    const workers = b.workers || 0;
+    const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
+    const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
+    const pct = pr ? Math.round(pr.prog * 100) : 0;
+    const barCol = !workers ? "#8a8574" : (pr && pr.starved ? "#e0a63c" : "#7fc24b");
+    const perBatchOut = Math.max(1, Math.round((def.output.ratePerWorker || 0) * Math.max(1, workers) * outMult * intervalTicks));
+    // v0.51 §2: the output bar shows this building's OWN store (what porters collect),
+    // not the shared warehouse — the "x/cap" per building the reference shows.
+    const cap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+    const stock = Math.floor((b.store && b.store[out]) || 0);
+    const capPct = cap ? Math.max(0, Math.min(100, Math.round(stock / cap * 100))) : 0;
+    let inHtml = "";
+    if (def.inputs && Object.keys(def.inputs).length) {
+      for (const gid in def.inputs) {
+        const need = Math.max(1, Math.round(def.inputs[gid] * Math.max(1, workers) * intervalTicks));
+        const have = Math.floor((town.stock && town.stock[gid]) || 0);
+        const okc = have >= need ? "#a6e0a8" : "#e0844a";
+        inHtml += `<span class="bp-chip2" style="border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch"><span style="font-size:15px">${goodIcon(gid)}</span> <b style="color:${okc}">${have}</b><span style="opacity:.55">/${need}</span></span>`;
+      }
+    } else {
+      const srcTerr = def.terrain || def.adjacent || "";
+      const g = CHAIN_TERRAIN_GLYPH[srcTerr] || "🗺️";
+      inHtml = `<span class="bp-chip2" style="font-size:20px" title="Extracted from ${esc(String(srcTerr).replace(/_/g, " ") || "the land")}">${g}</span>`;
+    }
+    return `<div class="tp-sec">Production</div>
+      <div class="bp-chain">
+        <div class="bp-chain-col">${inHtml}</div>
+        <span class="bp-arrow">→</span>
+        <div class="bp-proc">
+          <div class="bp-proc-time">${cycleSec}s · ${pct}%</div>
+          <div class="bp-proc-box">⚙️</div>
+          <div class="bp-proc-bar"><span style="width:${pct}%;background:${barCol}"></span></div>
+        </div>
+        <span class="bp-arrow">→</span>
+        <div class="bp-out">
+          <span class="bp-out-icon" style="color:${oc}">${goodIcon(out)}</span>
+          <div>
+            <div class="bp-out-amt">+${perBatchOut}</div>
+            <div class="bp-out-stock" title="This building's own store — internal porters carry it to the city warehouse">${stock}/${cap} 🎒</div>
+            <div class="bp-stockbar"><span style="width:${capPct}%"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="tp-hint2">${workers > 0
+        ? (stock >= cap ? "Store full — waiting for a porter to collect."
+          : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
+        : "Idle — assign a worker below."}</div>`;
+  }
+
+  // Building level shown in the header banner badge (upgrade level, min 1).
+  function bpLevelOf(b) { return Math.max(1, Math.round((b && b.upgradeLevel) || 1)); }
+
+  // Upgrade availability for the action-row ⬆️ button — mirrors the detailed
+  // renderUpgradeSection logic so the button enables exactly when an upgrade can
+  // actually be started (and reuses the SAME data-upgrade hook).
+  function bpUpgradeState(town, b) {
+    if (typeof Buildings === "undefined" || typeof Buildings.upgradeLadder !== "function")
+      return { has: false, ok: false };
+    const ladder = Buildings.upgradeLadder(b.typeId);
+    if (!Array.isArray(ladder) || !ladder.length) return { has: false, ok: false };
+    if (b.pendingUpgrade) return { has: true, ok: false, reason: "Upgrade already in progress" };
+    const nxt = (typeof Buildings.nextUpgrade === "function") ? Buildings.nextUpgrade(state, b) : null;
+    if (!nxt) return { has: true, ok: false, reason: "No further upgrade available" };
+    const can = (typeof Buildings.canStartUpgrade === "function") ? Buildings.canStartUpgrade(state, town, b) : { ok: false };
+    return { has: true, ok: !!can.ok, reason: can.reason };
+  }
+
+  // Reference-style action-icon row under the header: ⭐ priority (producers) and
+  // ⬆️ upgrade. NO demolish button — destroying is done from the build bar's Destroy
+  // tool, not from the detail panel. Buttons reuse data-priority / data-upgrade.
+  function bpActionRow(town, b, def, isHouse) {
+    const up = bpUpgradeState(town, b);
+    const upTip = up.has ? (up.ok ? "Upgrade this building" : (up.reason || "Upgrade unavailable"))
+                         : "No upgrades for this building";
+    let btns = "";
+    if (!isHouse) {
+      const pri = !!b.priority;
+      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first">${pri ? "⭐" : "☆"}</button>`;
+    }
+    // v0.51: NOT the disabled attribute (a disabled button swallows hover, hiding the
+    // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
+    // shows the styled cost breakdown; title is the plain-text a11y fallback.
+    btns += `<button class="bp-act${up.ok ? "" : " dim"}" data-upgrade data-tip="upgrade" title="${escAttr(upTip)}">⬆️</button>`;
+    return `<div class="bp-actions">${btns}</div>`;
+  }
+
   function renderBuildingPanel() {
     const b = bpBuilding, town = bpTown;
     if (!b) return;
@@ -1252,19 +1528,29 @@
       closeBuildingPanel(); return;
     }
     const def = CONFIG.buildings[b.typeId] || {};
-    const tier = def.workerTier || def.houseTier || "";
+    const isHouse = def.kind === "house";
+    // Header: NAME centered, LEVEL banner badge (bpTierEl) at top-left — a number,
+    // not the old "extractor · peasant" descriptor.
     bpNameEl.textContent = def.name || b.typeId;
-    bpTierEl.textContent = (def.kind || "") + (tier ? " · " + tier : "");
+    bpTierEl.textContent = String(bpLevelOf(b));
 
-    let html = `<div class="tp-row"><span class="k">Hex</span><span class="v">${b.q}, ${b.r}</span></div>`;
+    // Action-icon row directly under the header.
+    let html = bpActionRow(town, b, def, isHouse);
 
-    // --- construction status ---
-    if (bpIsBuilt(b)) {
-      html += `<div class="tp-sec">Status</div><div class="bp-status built">✔ Operational</div>`;
-    } else {
+    // --- construction state: prominent labelled progress bar (frac fill +
+    // fainter delivery-cap overlay) using Buildings.constructionProgress ---
+    if (!bpIsBuilt(b)) {
+      const cp = (typeof Buildings !== "undefined" && Buildings.constructionProgress)
+        ? Buildings.constructionProgress(b) : { frac: 0, deliveredFrac: 0 };
+      const fp = Math.max(0, Math.min(100, Math.round((cp.frac || 0) * 100)));
+      const dp = Math.max(0, Math.min(100, Math.round((cp.deliveredFrac || 0) * 100)));
+      html += `<div class="tp-sec">Construction</div>`;
+      html += `<div class="bp-cprog" title="Materials delivered: ${dp}% (delivery cap on build progress)">` +
+        `<span class="bp-cprog-dl" style="width:${dp}%"></span>` +
+        `<span class="bp-cprog-fill" style="width:${fp}%"></span>` +
+        `<span class="bp-cprog-lbl">Building… ${fp}%</span></div>`;
       const rc = bpResourceCost(def);
       const delivered = b.delivered || {};
-      html += `<div class="tp-sec">Under construction</div>`;
       let chips = "";
       for (const gid in rc) {
         const c = goodColor(gid);
@@ -1276,64 +1562,56 @@
       html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
     }
 
-    // --- output / inputs / housing ---
-    if (def.output) {
+    // --- producer body: VISUAL production chain when built; plain output fallback ---
+    if (def.output && def.workerTier && bpIsBuilt(b)) {
+      html += renderProducerChain(town, b, def);
+    } else if (def.output && !isHouse) {
       const c = goodColor(def.output.goodId);
-      // AC: current production SPEED at this building's actual staffing + upgrades —
-      // ratePerWorker × workers × upgrade outputMult, per minute (the analog of the
-      // per-resident consumption houses show). The per-worker base stays below it.
-      const workers = b.workers || 0;
-      const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
-      const curOut = (def.output.ratePerWorker || 0) * workers * outMult;
       html += `<div class="tp-sec">Output</div>
-        <div class="tp-row"><span class="k">Producing now</span><span class="v">${workers > 0
-          ? fmt(perMin(curOut)) + " " + goodIcon(def.output.goodId) + "/min"
-          : "<span class=\"tp-dim\">idle — no workers</span>"}</span></div>
         <div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(def.output.goodId)} ${esc(GOOD_LABEL(def.output.goodId))}</span><span class="v">×${fmt(perMin(def.output.ratePerWorker))}/wkr/min</span></div>`;
-    }
-    if (def.inputs && Object.keys(def.inputs).length) {
-      html += `<div class="tp-sec">Inputs / worker / min</div>`;
-      for (const gid in def.inputs) {
-        const c = goodColor(gid);
-        html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${c}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perMin(def.inputs[gid]))}</span></div>`;
+      if (def.inputs && Object.keys(def.inputs).length) {
+        html += `<div class="tp-sec">Inputs / worker / min</div>`;
+        for (const gid in def.inputs) {
+          const ci = goodColor(gid);
+          html += `<div class="tp-row"><span class="k"><span class="bp-dot" style="background:${ci}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span><span class="v">${fmt(perMin(def.inputs[gid]))}</span></div>`;
+        }
       }
     }
-    // === PP-D === house view (LTT "Peasant Home"): residents, needs rings,
-    // income and a per-tier happiness meter — replaces the old bare Housing
-    // capacity row. Producers keep their existing Output/Inputs body above.
-    if (def.kind === "house") {
-      const tl = PPD_TIER_LABEL[def.houseTier] || tier;
-      bpTierEl.textContent = (def.kind || "") + (tl ? " · " + tl : "");
+
+    // === PP-D === house view: residents strip, needs rings, income, happiness. ===
+    if (isHouse) {
       html += renderHouseBody(town, b, def);
     }
     // === /PP-D ===
 
-    // --- workers + slot pips (producers only; houses have no workerTier) ---
+    // --- workers as PORTRAIT AVATARS (producers only; houses have no workerTier).
+    // Slot count + open/close logic UNCHANGED — each tile keeps data-slot and the
+    // filled/open/closed classes the delegated click handler reads. ---
     if (def.workerTier) {
       const total = def.workerSlots || 0;
       const closed = Math.max(0, Math.min(total, b.closedSlots || 0));
       const effective = total - closed;
       const workers = Math.round(b.workers || 0);
+      const wface = PPD_TIER_GLYPH[def.workerTier] || "👷";
       html += `<div class="tp-sec">Workers — ${workers} / ${effective}${closed ? " · " + closed + " closed" : ""}</div>`;
-      let pips = "";
+      let av = "";
       for (let i = 0; i < total; i++) {
         const isClosed = i >= effective;          // the last `closed` slots are locked
-        if (isClosed) pips += `<div class="bp-slot closed" data-slot title="Closed — click to open">🔒</div>`;
-        else if (i < workers) pips += `<div class="bp-slot filled" data-slot title="Staffed — click to close this slot">👷</div>`;
-        else pips += `<div class="bp-slot open" data-slot title="Open — click to close this slot"></div>`;
+        if (isClosed) av += `<div class="bp-av closed" data-slot title="Closed — click to open">🔒</div>`;
+        else if (i < workers) av += `<div class="bp-av filled" data-slot title="Staffed — click to close this slot">${wface}</div>`;
+        else av += `<div class="bp-av open" data-slot title="Open — click to close this slot"></div>`;
       }
-      html += `<div class="bp-slots">${pips}</div>`;
+      html += `<div class="bp-avatars">${av}</div>`;
       html += `<div class="tp-hint2">Click a slot to open/close it — closed slots take no workers.</div>`;
     }
 
-    // --- priority star ---
-    const pri = !!b.priority;
-    html += `<div class="tp-sec">Priority</div>
-      <button class="bp-star ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button>`;
-
-    // === RU-B: per-building upgrade section (only when this type has a ladder) ===
+    // === RU-B: per-building upgrade section (detailed cost + button) ===
     html += renderUpgradeSection(town, b);
     // === /RU-B ===
+
+    // --- priority star footer (bottom of the panel) ---
+    const pri = !!b.priority;
+    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
 
     bpBodyEl.innerHTML = html;
   }
@@ -1566,7 +1844,15 @@
       renderBuildingPanel();
       return;
     }
-    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); }
+    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); return; }
+    // Demolish: enter the existing destroy-building mode and close this panel; the
+    // player then clicks the building (input.js confirms before removing it).
+    const demo = e.target.closest("[data-demolish]");
+    if (demo && !demo.disabled) {
+      if (typeof setMode === "function") setMode("eraseBuilding");
+      closeBuildingPanel();
+      return;
+    }
     // === RU-B: "Upgrade" button in the Upgrades section ===
     const upgBtn = e.target.closest("[data-upgrade]");
     if (upgBtn && !upgBtn.disabled) {
@@ -1598,7 +1884,9 @@
   // === /CB-C ===
 
   // Expose for headless smoke test / console debugging.
-  window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel,
+  window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel, closeBuildingPanel,
+                    // v0.48: the currently panel-selected building {q,r} (or null) — renderer highlights it on the map
+                    get selectedBuilding() { return (bpBuilding && !bpEl.classList.contains("hidden")) ? { q: bpBuilding.q, r: bpBuilding.r } : null; },
                     startPlacing, cancelPlacing, tryPlaceBuilding,
                     // RESEARCH CENTER (Slice C): the Center's own placement session.
                     startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,

@@ -29,12 +29,21 @@ Object.assign(CONFIG, {
     { id: "extra_caravan",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 2 }, name: "Extra Caravan",     desc: "One more cart can be on the road at once.",        cost: 800,  timeTicks: 45, prereqs: ["larger_carts"],   effect: { extraCarts: 1 } },
     { id: "warehousing",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 3 }, name: "Warehousing",       desc: "The King's warehouse holds more goods.",           cost: 1500, timeTicks: 60, prereqs: ["extra_caravan"],  effect: { warehouseCap: 200 } },
     { id: "trade_network",   branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 4 }, name: "Trade Networks",    desc: "Two more caravans join the roads.",                cost: 3000, timeTicks: 80, prereqs: ["warehousing"],    effect: { extraCarts: 2 } },
+    // Scout-unit chain (T1 → a 2nd scout, T2 → a 3rd). Colors: Red (start), Green, Blue.
+    { id: "scouting_party",  branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 5 }, name: "Scouting Party",    desc: "Commission a second Scout unit to explore the map.", cost: 300,  timeTicks: 25, prereqs: ["paved_roads"], effect: { scoutCount: 1 } },
+    { id: "ranger_lodge",    branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 6 }, name: "Ranger Lodge",      desc: "Commission a third Scout unit.",                     cost: 1200, timeTicks: 50, prereqs: ["scouting_party"], effect: { scoutCount: 1 } },
+    // Advanced Provisioner: unlock a castle-side building (1 fish + 1 potato → 2 provisions).
+    { id: "advanced_provisioner", branch: "logistics", band: "kingdom", kind: "kingdom", pos: { col: 1, row: 7 }, name: "Advanced Provisioner", desc: "Unlocks the Advanced Provisioner (1 fish + 1 potato → 2 provisions).", cost: 900, timeTicks: 45, prereqs: ["scouting_party"], effect: { advancedProvisioner: true } },
     // ---- Administration (kingdom): squeeze more coin & growth from the realm ----
     { id: "tax_ledgers",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 0 }, name: "Tax Ledgers",       desc: "A little extra tariff on every trade.",            cost: 200,  timeTicks: 20, prereqs: [],                 effect: { tariffBonus: 0.03 } },
     { id: "tariff_office",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 1 }, name: "Tariff Office",     desc: "Unlocks a slider to set the tariff rate.",         cost: 450,  timeTicks: 30, prereqs: ["tax_ledgers"],     effect: { tariff_slider: true } },
     { id: "royal_census",    branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 2 }, name: "Royal Census",      desc: "Houses shelter more population.",                  cost: 900,  timeTicks: 45, prereqs: ["tariff_office"],   effect: { housingBonus: 1.15 } },
     { id: "town_charters",   branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 3 }, name: "Town Charters",     desc: "Every town gains an extra build slot.",            cost: 1700, timeTicks: 60, prereqs: ["royal_census"],   effect: { slotBonus: 1 } },
     { id: "bureaucracy",     branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 4 }, name: "Grand Bureaucracy", desc: "A hefty standing tariff bonus.",                   cost: 3400, timeTicks: 80, prereqs: ["town_charters"],  effect: { tariffBonus: 0.07 } },
+    // City-cap chain: raise how many cities you may found (base 4 → 7 → 10 → 12).
+    { id: "township_grants", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 5 }, name: "Township Grants",   desc: "Charter up to 3 more cities (7 total).",           cost: 700,  timeTicks: 45, prereqs: ["town_charters"],   effect: { cityCapBonus: 3 } },
+    { id: "provincial_rule", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 6 }, name: "Provincial Rule",   desc: "Charter up to 3 more cities (10 total).",          cost: 1600, timeTicks: 60, prereqs: ["township_grants"], effect: { cityCapBonus: 3 } },
+    { id: "imperial_domain", branch: "administration", band: "kingdom", kind: "kingdom", pos: { col: 2, row: 7 }, name: "Imperial Domain",   desc: "Charter up to 2 more cities (12 total).",          cost: 3200, timeTicks: 80, prereqs: ["provincial_rule"], effect: { cityCapBonus: 2 } },
 
     // ---- Unlock nodes: one per non-startUnlocked building (effect:{} — gate
     // only). band = building's tier; branch mirrors band for legacy grouping. ----
@@ -81,6 +90,7 @@ Object.assign(CONFIG, {
     { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
     { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
     { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
+    { id: "upg_hut_l5",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 5, pos: { col: 0, row: 0 }, name: "Manor Hut",      desc: "Unlocks the Hut level 5 upgrade (−30% luxury use).", cost: 600, timeTicks: 26, prereqs: ["upg_hut_l4"],            effect: {} },
     { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
     { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
     { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 1, row: 1 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: ["unlock_farm"],           effect: {} },
@@ -112,7 +122,7 @@ const Research = {
     // nodes so old saves keep their unlocked value. Expand, then drop unknowns,
     // then dedupe. Legacy kingdom ids survive the filter unchanged. ===
     const MIGRATE_MAP = {
-      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"],
+      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_hut_l5"],
       lumberjack_upgrades: ["upg_lumberjack_l2", "upg_lumberjack_l3"],
       farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
       sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],
@@ -210,6 +220,19 @@ const Research = {
     state.research.subTick = 0;
     state.research.consumed = {};
     return true;
+  },
+  // v0.51: CANCEL the active project so a stuck player (e.g. it needs a material they
+  // can't yet produce) can switch to something else. Materials already delivered into
+  // the castle for it are NOT refunded (they stay as castleStock); the node can be
+  // picked again later. Returns the cancelled id, or null if nothing was active.
+  cancel(state) {
+    if (!state || !state.research || !state.research.active) return null;
+    const id = state.research.active;
+    state.research.active = null;
+    state.research.completedSec = 0;
+    state.research.subTick = 0;
+    state.research.consumed = {};
+    return id;
   },
 
   // === Slice A: Research Center helpers ===================================

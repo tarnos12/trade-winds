@@ -64,10 +64,12 @@ Object.assign(CONFIG, {
     lumberjack: {
       id: "lumberjack", name: "Lumberjack", kind: "extractor",
       terrain: "forest", workerTier: "peasant",
-      output: { goodId: "wood", ratePerWorker: 0.25 },
-      // EV3: starter — GOLD ONLY at level 1 (no resource cost).
+      // v0.51 §1 REFERENCE RATE: 8 wood every 4 s at 2 workers (0.5/worker/tick × 2 ×
+      // 8-tick cycle = 8); 1 worker ⇒ 8 wood per 8 s. cycleSec overrides the per-kind default.
+      output: { goodId: "wood", ratePerWorker: 0.5 }, cycleSec: 4,
+      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { gold: 100 },
+      workerSlots: 2, cost: { wood: 10 },
     },
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
@@ -83,9 +85,9 @@ Object.assign(CONFIG, {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
       output: { goodId: "potato", ratePerWorker: 0.25 },
-      // EV3: starter food building — the basic peasant staple. GOLD ONLY.
+      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { gold: 120 },
+      workerSlots: 2, cost: { wood: 10 },
     },
     // === TV2: renamed from "miner"; sits on iron_deposit, worker-staffed T2 ===
     iron_mine: {
@@ -151,10 +153,9 @@ Object.assign(CONFIG, {
       id: "sawmill", name: "Sawmill", kind: "processor",
       terrain: null, workerTier: "peasant",
       inputs: { wood: 0.083333 }, output: { goodId: "planks", ratePerWorker: 0.041667 },
-      // BAL: starter — the one basic processor, wood only so a fresh city can raise
-      // it from its founding wood and start refining planks immediately.
+      // v0.49: costs 20 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
-      workerSlots: 2, cost: { wood: 30, gold: 60 },
+      workerSlots: 2, cost: { wood: 20 },
     },
     mill: {
       id: "mill", name: "Mill", kind: "processor",
@@ -303,9 +304,10 @@ Object.assign(CONFIG, {
       id: "hut", name: "Hut", kind: "house",
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // EV3: starter — GOLD ONLY at level 1.
+      // v0.51: 10 wood (delivered from the city's stock) + 300 gold (from the treasury
+      // at placement). Upgrades L2–L5 cost materials only (see CONFIG.upgrades.hut).
       startUnlocked: true,
-      cost: { gold: 200 },
+      cost: { wood: 10, gold: 300 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
@@ -347,12 +349,16 @@ Object.assign(CONFIG, {
     // EV3: per-city storage cap — a city holds at most this many of EACH good.
     // Enforced wherever stock increases (Sim production, trade delivery).
     storageCap: 80,
-    // EV3: a new city starts with a little WOOD (a basic peasant need — firewood).
-    // Starter buildings are now GOLD-only, so no wood is needed to build them.
-    startStock: { wood: 20 },
+    // v0.50: a new city starts with 60 wood + 20 potato — enough to raise its first
+    // buildings (hut/lumberjack/potato farm 10 each, sawmill 20; delivered from this
+    // stock as they construct) and feed early residents until the potato farm runs.
+    startStock: { wood: 60, potato: 20 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    baseCityCap: 4,             // cities you may found before research; +cityCapBonus
+                                // from research raises it (Township Grants +3 → 7,
+                                // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
     roadCost: 5,                // treasury gold per road hex
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
@@ -366,6 +372,12 @@ Object.assign(CONFIG, {
     // × count) = level+3 (L4 7). Out-of-range levels fall back to the formula.
     externalTradersByLevel: [0, 2, 4, 6, 8],
     transportersByLevel:    [0, 4, 5, 6, 7],
+    // === v0.51 §4 LAYERED IMPORT PRIORITY. A city fills needs in priority ORDER —
+    // house basics → production inputs → luxuries → materials — but each layer only up
+    // to a rising threshold before the next, then loops back to raise earlier layers.
+    // priorityFill = the fill bands: first bring everything to 30% (basics first), then
+    // 60%, then 100% — so a city never tops one warehouse while starving another. ===
+    priorityFill: [0.3, 0.6, 1.0],
     // Bounded per-town gold ledger: max samples of town.gold (one per Sim tick)
     // and of per-tick flow snapshots kept for the budget chart.
     ledgerHist: 600,

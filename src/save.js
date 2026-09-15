@@ -8,13 +8,29 @@
   // ---------------------------------------------------------------
   // New game / reset
   // ---------------------------------------------------------------
-  function newGame(seedInput, presetId) {
+  // === Custom Map: `tiers` (optional) is a { base, fertility, worldAge, climate,
+  // seaLevel, resources, size } selection — when present the world is a resolved
+  // CUSTOM preset (MapGen.applyTiers) and state.mapPreset becomes "custom".
+  // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
+  // custom worlds never clobbers an existing save). ===
+  function newGame(seedInput, presetId, tiers, noSave) {
     state.seedInput = seedInput;
+    const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
-    const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
-    state.mapPreset = preset;
-    const pr = CONFIG.mapPresets[preset];
-    state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    if (hasTiers) {
+      const baseId = (tiers.base && CONFIG.mapPresets && CONFIG.mapPresets[tiers.base]) ? tiers.base
+        : ((CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile"));
+      state.mapPreset = "custom";
+      state.mapTiers = Object.assign({}, tiers, { base: baseId });   // normalize the base id into the stored selection
+      // radius null => generate() derives it from the resolved (applyTiers) preset's own rect-scaled radius.
+      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers);
+    } else {
+      const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
+      state.mapPreset = preset;
+      state.mapTiers = null;
+      const pr = CONFIG.mapPresets[preset];
+      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+    }
     state.roads = new Set();
     // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
     // Events bridge collapse/repair ~4747) calls Pathing.invalidate() right
@@ -37,22 +53,30 @@
     state.castleStock = Object.assign({}, (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {});   // CRE + RSF: starter materials so first researches never stall
     state.researchCenter = null;   // Slice B: no Research Center yet — research paused until the player builds one
     state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
-    state.castleTrade = {};      // PP-A: castle market — all goods off by default
+    // v0.51 §9: the castle buys NOTHING by default — potato-buying turns on when a
+    // basic Provisioner is built next to the castle, fish when the Advanced Provisioner
+    // is built. Other goods stay off unless the player enables them.
+    state.castleTrade = {};
+    state.provisionerBuilding = null;   // v0.51 §9: no built-in provisioner — must be placed
     state.castleReserved = {};   // PP-A: castle stock reservations
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
+    state.provisions = (CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15;   // v0.44: start with a small buffer
+    state._provTimers = {};      // v0.44: per-provisioner-line conversion timers
+    state.scouts = [];           // v0.45: Scout units (Scouts.ensure creates the starting Red scout)
     state.prestige = 0;          // P4-B: reset progression on a new map
     state.castleLevel = 1;
+    state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
-    state.event = null;          // P4-C: no event on a fresh map
-    state.eventSeed = (hashSeed(seedInput) ^ 0x1a2b3c4d) | 0;  // deterministic per-game event RNG
-    state.eventCooldown = CONFIG.events.minGapTicks;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
     document.getElementById("seed").value = seedInput;
-    reveal(0, 0, CONFIG.fog.castleReveal);      // clear fog around the castle
+    // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
+    // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
+    // dims; fall back to the legacy castleReveal if a map carries none.
+    reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
-    scheduleSave();
+    if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
   // ---------------------------------------------------------------
@@ -69,6 +93,7 @@
         saveVersion: CONFIG.saveVersion,
         seed: state.seedInput,
         preset: state.mapPreset,           // === TV2: persist chosen map preset ===
+        tiers: state.mapTiers || null,     // === Custom Map: persist the tier selection (null for a plain preset) ===
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -82,6 +107,11 @@
         revealed: Array.from(state.revealed),
         warehouse: state.warehouse,        // CASTLE-UI (T9): player warehouse
         castleStock: state.castleStock,    // CRE: castle research-material stockpile
+        provisions: state.provisions,      // v0.44: castle provision store
+        _provTimers: state._provTimers,    // v0.44: provisioner line timers
+        scouts: state.scouts,              // v0.45: Scout units
+        advancedProvisioner: state.advancedProvisioner, // v0.45: Advanced Provisioner building
+        provisionerBuilding: state.provisionerBuilding, // v0.51 §9: basic Provisioner building
         researchCenter: state.researchCenter, // Slice B: the unique Research Center (or null)
         researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
         castleTrade: state.castleTrade,        // PP-A: castle market config
@@ -92,9 +122,6 @@
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
-        event: state.event,                // P4-C: active event
-        eventSeed: state.eventSeed,        // P4-C: event RNG stream
-        eventCooldown: state.eventCooldown,// P4-C: ticks until next event
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
         market: state.market,              // KR-A: bounded market history ring (≤600/good)
@@ -190,7 +217,12 @@
     data = migrate(data);
     if (!data || !saveShapeOk(data)) return false;
     try {
-    newGame(data.seed, data.preset);   // === TV2: restore the saved preset ===
+    // === TV2 / Custom Map: restore the saved preset — and its tier selection
+    // when it was a custom world. Old saves (no `tiers`, or preset !== "custom")
+    // take the plain-preset path; a "custom" preset with a missing/garbage tiers
+    // object falls back to the default preset inside newGame. ===
+    newGame(data.seed, data.preset,
+      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null);
     // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
     // would slip past saveShapeOk's array-type check, land in the Set, then throw
     // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it
@@ -216,6 +248,12 @@
     if (typeof Market !== "undefined" && Market.normalize) Market.normalize(state);
     else if (!state.market || typeof state.market !== "object") state.market = { hist: {}, head: 0, len: 0 };
     state.castleStock = (data.castleStock && typeof data.castleStock === "object") ? data.castleStock : {};   // CRE
+    state.provisions = (typeof data.provisions === "number") ? data.provisions   // v0.44: castle provisions
+      : ((CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15);
+    state._provTimers = (data._provTimers && typeof data._provTimers === "object") ? data._provTimers : {};
+    state.advancedProvisioner = (data.advancedProvisioner && typeof data.advancedProvisioner === "object") ? data.advancedProvisioner : null;
+    state.provisionerBuilding = (data.provisionerBuilding && typeof data.provisionerBuilding === "object") ? data.provisionerBuilding : null;   // v0.51 §9
+    state.scouts = Array.isArray(data.scouts) ? data.scouts : [];   // v0.45: Scout units (Scouts.ensure tops up to the researched count)
     state.researchCenter = normalizeResearchCenter(data.researchCenter);   // Slice B: the unique Research Center (or null)
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE
     // PP-A: castle market config (normalized), stock reservations, market RNG.
@@ -227,11 +265,6 @@
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    // P4-C: restore events (a bridge event's road is stored removed from roads;
-    // Events.tick re-adds it on expiry, so the road returns after repair).
-    state.event = data.event || null;
-    state.eventSeed = typeof data.eventSeed === "number" ? data.eventSeed : (hashSeed(state.seedInput) ^ 0x1a2b3c4d) | 0;
-    state.eventCooldown = typeof data.eventCooldown === "number" ? data.eventCooldown : CONFIG.events.minGapTicks;
     state.revealAll = !!data.revealAll;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.

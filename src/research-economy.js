@@ -28,8 +28,10 @@ Object.assign(CONFIG, {
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
     // === RSF: the castle opens with a small material stock so the FIRST research
     // nodes never hard-stall while young cities have no surplus to sell. Covers
-    // any single peasant-band root node's materials.
-    starterStock: { wood: 40, stone: 20 },
+    // any single peasant-band root node's materials. (v0.47) also seeds potato so
+    // the provisioner starts converting immediately, and keeps >=10 stone/wood/
+    // potato — the small early cushion the player expects at the castle.
+    starterStock: { wood: 40, stone: 20, potato: 10 },
   },
 });
 
@@ -74,6 +76,12 @@ const RESEARCH_MATERIALS = {
   royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
   town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
   bureaucracy:   { gold_ring: 15, chairs: 25 },    // === CC: jewelry/furniture → gold_ring/chairs ===
+  scouting_party: { planks: 15, wood: 20 },        // scout-unit chain (2nd / 3rd scout)
+  ranger_lodge:   { planks: 25, iron_tool: 15 },
+  advanced_provisioner: { planks: 20, stone: 20 }, // Advanced Provisioner building unlock
+  township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
+  provincial_rule: { iron_tool: 20, chairs: 20 },
+  imperial_domain: { gold_ring: 20, chairs: 30 },
   // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },
@@ -101,6 +109,7 @@ const RESEARCH_MATERIALS = {
   upg_hut_l2:        { wood: 15 },
   upg_hut_l3:        { wood: 20, stone: 10 },
   upg_hut_l4:        { wood: 30, stone: 15 },
+  upg_hut_l5:        { stone: 25, planks: 15 },
   upg_lumberjack_l2: { wood: 20 },
   upg_lumberjack_l3: { wood: 25, stone: 15 },
   upg_farm_l2:       { wood: 20 },

@@ -61,6 +61,12 @@
       // footprint or the castle). Owned by the pure Buildings.canPlaceTown.
       return Buildings.canPlaceTown(state, q, r).ok;
     }
+    if (state.mode === "advProvisioner") {
+      return Buildings.canPlaceAdvancedProvisioner(state, q, r).ok;   // v0.46: castle-adjacent
+    }
+    if (state.mode === "provisioner") {
+      return Buildings.canPlaceProvisioner(state, q, r).ok;   // v0.51 §9: castle-adjacent
+    }
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
@@ -76,6 +82,53 @@
       return !!(typeof buildingAtHex === "function" && buildingAtHex(q, r));
     }
     return false;
+  }
+
+  // v0.51 §11: refund the GOLD portion of a building's cost to the kingdom treasury
+  // (placement bills the treasury; resources are never refunded).
+  function buildingGold(b) {
+    const def = b && CONFIG.buildings[b.typeId];
+    return (def && def.cost && def.cost.gold) || 0;
+  }
+  // Destroy a building AND anything the removal cuts off from the city (cascade),
+  // refunding all their gold. Frees the slots (usedSlots = buildings.length).
+  function destroyBuildingsCascade(town, b) {
+    const list = Array.isArray(town.buildings) ? town.buildings : [];
+    if (list.indexOf(b) < 0) return;   // already gone
+    const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+    const doomed = [b, ...orphans];
+    let refund = 0;
+    for (const d of doomed) {
+      const i = list.indexOf(d);
+      if (i >= 0) { refund += buildingGold(d); list.splice(i, 1); }
+      if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === d) {
+        window.BuildingUI.closeBuildingPanel();
+      }
+    }
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") {
+      const cascadeNote = orphans.length ? " (+" + orphans.length + " cut off)" : "";
+      showToast("🏚️ Destroyed" + cascadeNote + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
+    }
+  }
+  // Destroy a whole city: all its buildings + the centre, refunding the founding gold
+  // plus every building's gold. Resources/population are lost.
+  function destroyCityRefund(town) {
+    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const idx = state.towns.indexOf(town);
+    if (idx < 0) return;
+    state.towns.splice(idx, 1);
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    if (typeof window !== "undefined" && window.TownUI && window.TownUI.closeTownPanel) window.TownUI.closeTownPanel();
+    if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.closeBuildingPanel) window.BuildingUI.closeBuildingPanel();
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") showToast("🏚️ City destroyed" + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
   }
 
   function place(q, r, isPaint) {
@@ -95,7 +148,33 @@
         scheduleSave();
         SFX.play("place");
         if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        // Cities are one-shot: founding is expensive and capped, so exit town mode
+        // after each placement instead of staying "armed" (which made every later
+        // map click drop another city). Re-select City to found the next one.
+        setMode("pan");
       }
+    } else if (state.mode === "advProvisioner") {
+      const res = Buildings.canPlaceAdvancedProvisioner(state, q, r);
+      if (res.ok) {
+        Buildings.placeAdvancedProvisioner(state, q, r);
+        scheduleSave();
+        SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        setMode("pan");   // one-shot placement
+        if (typeof showToast === "function") showToast("🍲 Advanced Provisioner built");
+      } else if (typeof showToast === "function") showToast("✗ " + res.reason);
+    } else if (state.mode === "provisioner") {
+      // v0.51 §9: place the basic Provisioner beside the castle (enables the 2 potato
+      // → 1 provision line + castle potato-buying).
+      const res = Buildings.canPlaceProvisioner(state, q, r);
+      if (res.ok) {
+        Buildings.placeProvisioner(state, q, r);
+        scheduleSave();
+        SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        setMode("pan");   // one-shot placement
+        if (typeof showToast === "function") showToast("🍲 Provisioner built");
+      } else if (typeof showToast === "function") showToast("✗ " + res.reason);
     } else if (state.mode === "erase") {
       let changed = false;
       if (state.roads.delete(k)) { Pathing.invalidate(); changed = true; }
@@ -112,12 +191,9 @@
           const developed = (Array.isArray(t.buildings) && t.buildings.length > 0)
             || ((typeof Town !== "undefined" && Town.popTotal) ? Town.popTotal(t) > 0 : false)
             || (t.gold || 0) > 0;
-          const removeTown = () => {
-            const idx = state.towns.indexOf(t);   // re-find: indices may have shifted since the click
-            if (idx >= 0) { state.towns.splice(idx, 1); Pathing.invalidate(); scheduleSave(); }
-          };
           if (developed) {
-            uiConfirm("Demolish this city? Its buildings, population, and gold will be lost. This cannot be undone.", removeTown);
+            // v0.51 §11: refund the gold spent (city + buildings), lose resources.
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -131,29 +207,30 @@
         Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
       }
     } else if (state.mode === "eraseBuilding") {
-      // === J === Destroy building — ALWAYS confirms via the in-DOM uiConfirm
-      // modal (never native confirm()), single-click only (drag-paint would
-      // stack confirm dialogs, so it's ignored here like the town-erase case
-      // above). Removing the building just splices it out of town.buildings —
-      // that alone frees its build slot (Buildings.usedSlots is buildings.length)
-      // — no refund, matching the existing erase behaviour.
+      // === J / v0.51 §11 === Destroy — ALWAYS confirms via the in-DOM uiConfirm
+      // modal, single-click only (drag-paint would stack dialogs). Now works on a
+      // CITY CENTRE too (destroys the whole city) and refunds the GOLD spent (not
+      // resources), and CASCADES: any building cut off from its city by the removal
+      // is destroyed with it.
       if (isPaint) return;
       const hit = (typeof buildingAtHex === "function") ? buildingAtHex(q, r) : null;
-      if (!hit) return;
-      const { town, b } = hit;
-      const def = CONFIG.buildings[b.typeId];
-      const name = (def && def.name) || b.typeId;
-      uiConfirm("Destroy this " + name + "? This cannot be undone (no refund).", () => {
-        const list = Array.isArray(town.buildings) ? town.buildings : [];
-        const idx = list.indexOf(b);
-        if (idx < 0) return;   // already gone (e.g. town itself was erased meanwhile)
-        list.splice(idx, 1);
-        // Close/refresh any panel currently showing the destroyed building.
-        if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === b) {
-          window.BuildingUI.closeBuildingPanel();
-        }
-        scheduleSave();
-        SFX.play("place");
+      if (hit) {
+        const { town, b } = hit;
+        const def = CONFIG.buildings[b.typeId];
+        const name = (def && def.name) || b.typeId;
+        const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+        const extra = orphans.length ? " This also cuts off " + orphans.length + " connected building" + (orphans.length > 1 ? "s" : "") + "." : "";
+        uiConfirm("Destroy this " + name + "?" + extra + " Gold spent is refunded (resources are not).", () => {
+          destroyBuildingsCascade(town, b);
+        });
+        return;
+      }
+      // No building here — maybe a city centre (Destroy targets cities like Erase).
+      const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
+      if (!t) return;
+      const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+        destroyCityRefund(t);
       });
     }
   }
@@ -179,14 +256,46 @@
     state.treasury = (state.treasury || 0) - Buildings.roadCost();
     return true;
   }
+  // v0.47: shortest route from A to B over ROAD-ELIGIBLE ground (BFS), so the road
+  // bends AROUND mountains/water instead of the old straight line that punched
+  // through them and left broken, unwalkable gaps. Returns [{q,r}...] inclusive, or
+  // null if B can't be reached over roadable terrain.
+  function roadRouteAB(a, b) {
+    if (!roadEligible(b.q, b.r)) return null;
+    const ak = HexMath.key(a.q, a.r), bk = HexMath.key(b.q, b.r);
+    const prev = new Map(); prev.set(ak, null);
+    const queue = [ak]; let head = 0;
+    while (head < queue.length) {
+      const k = queue[head++];
+      if (k === bk) break;
+      const c = k.indexOf(","); const cq = +k.slice(0, c), cr = +k.slice(c + 1);
+      for (const n of HexMath.neighbors(cq, cr)) {
+        const nk = HexMath.key(n.q, n.r);
+        if (prev.has(nk) || !roadEligible(n.q, n.r)) continue;
+        prev.set(nk, k); queue.push(nk);
+      }
+    }
+    if (!prev.has(bk)) return null;
+    const path = [];
+    for (let cur = bk; cur != null; cur = prev.get(cur)) { const c = cur.indexOf(","); path.push({ q: +cur.slice(0, c), r: +cur.slice(c + 1) }); }
+    return path.reverse();
+  }
   function placeRoadPath(a, b) {
-    const N = HexMath.dist(a.q, a.r, b.q, b.r);
     let laid = 0;
-    for (let i = 0; i <= N; i++) {
-      const t = N === 0 ? 0 : i / N;
-      const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
-      if ((state.treasury || 0) < Buildings.roadCost()) break;   // out of gold — stop
-      if (layRoad(h.q, h.r)) laid++;   // ineligible/water hexes are skipped, not blocking
+    const route = roadRouteAB(a, b);
+    if (route) {                          // roadable path found — lay along it (continuous, no gaps)
+      for (const h of route) {
+        if ((state.treasury || 0) < Buildings.roadCost()) break;
+        if (layRoad(h.q, h.r)) laid++;
+      }
+    } else {                              // B unreachable over land — fall back to the straight line (skips obstacles)
+      const N = HexMath.dist(a.q, a.r, b.q, b.r);
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        const h = HexMath.hexRound(a.q + (b.q - a.q) * t, a.r + (b.r - a.r) * t);
+        if ((state.treasury || 0) < Buildings.roadCost()) break;
+        if (layRoad(h.q, h.r)) laid++;
+      }
     }
     if (laid) { Pathing.invalidate(); if (typeof updateTreasuryHud === "function") updateTreasuryHud(); SFX.playThrottled("place", 90); }
     return laid;
@@ -221,11 +330,101 @@
     return e.button === 1 || e.button === 2 || (e.button === 0 && state.mode === "pan");
   }
 
+  // ---------------------------------------------------------------
+  // MD: Eased camera motion (render-clock, presentation-only).
+  // state.cam.x/y and state.zoom are the ACTUAL, rendered camera values —
+  // renderer.js and everything else keep reading them unchanged. WASD, the
+  // recenter button, and wheel-zoom no longer snap those values directly;
+  // instead they move a target (camTarget / zoomTarget) that updateCamera()
+  // damps toward every render frame (called from applyKeyPan, which
+  // mainloop.js already invokes once per rAF with the real frame dt — never
+  // the economy tick). Mouse-drag panning is direct manipulation, so it
+  // keeps 1:1 tracking under the cursor: it writes BOTH the actual cam and
+  // the target in lockstep, so there's no post-drag glide-back and no
+  // fight between "where the mouse dragged it" and "where the ease is
+  // pulling it". This never reads/writes Sim/Trade state — purely state.cam
+  // / state.zoom, which are camera presentation fields, not economy state.
+  const CAM_PAN_EASE_RATE = 10;    // 1/s damping rate for WASD/recenter pan glide
+  const CAM_ZOOM_EASE_RATE = 14;   // 1/s damping rate for wheel-zoom glide
+  const CAM_SNAP_EPS = 0.01;       // close enough to target: snap the remainder (avoids infinite asymptote)
+  const ZOOM_SNAP_EPS = 0.0005;
+  let camTarget = null;      // lazily = {x, y}, matched to state.cam on first use
+  let zoomTarget = null;     // lazily = state.zoom on first use
+  let zoomAnchorScreen = null;   // last wheel screen point to hold fixed while zoom eases in
+  let lastCamX = null, lastCamY = null, lastZoom = null;   // see external-write resync below
+
+  function ensureCamTargets() {
+    if (!camTarget) camTarget = { x: state.cam.x, y: state.cam.y };
+    if (zoomTarget == null) zoomTarget = state.zoom;
+  }
+
+  // Damped exponential ease toward the target, frame-rate independent via dt.
+  function updateCamera(dt) {
+    ensureCamTargets();
+    // MD: another module can still legitimately write state.cam/state.zoom
+    // directly between our frames (save.js resets state.zoom=1 on new game/
+    // load; carts-castle-ui.js jumps state.cam.x/y for a "center on town"
+    // action). Every write WE make below leaves state.cam/state.zoom exactly
+    // at lastCamX/Y/lastZoom, so any mismatch here can only be such an
+    // outside write — resync the target to it instead of gliding back over
+    // it and undoing that jump.
+    if (lastCamX !== null && (state.cam.x !== lastCamX || state.cam.y !== lastCamY)) {
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
+    }
+    if (lastZoom !== null && state.zoom !== lastZoom) {
+      zoomTarget = state.zoom;
+    }
+    const dtS = Math.max(0, dt || 0) / 1000;
+
+    // Zoom glides toward zoomTarget; while it's moving, keep the point under
+    // the last wheel event's cursor position visually fixed (recomputed every
+    // step, not just once on the wheel tick, so the anchor holds through the
+    // whole glide rather than only its first frame).
+    if (Math.abs(zoomTarget - state.zoom) > ZOOM_SNAP_EPS) {
+      const anchor = zoomAnchorScreen;
+      const before = anchor ? screenToWorld(anchor.x, anchor.y) : null;
+      const zT = 1 - Math.exp(-CAM_ZOOM_EASE_RATE * dtS);
+      state.zoom += (zoomTarget - state.zoom) * zT;
+      if (Math.abs(zoomTarget - state.zoom) < ZOOM_SNAP_EPS) state.zoom = zoomTarget;
+      if (before) {
+        const after = screenToWorld(anchor.x, anchor.y);
+        const ax = before.x - after.x, ay = before.y - after.y;
+        state.cam.x += ax; state.cam.y += ay;
+        camTarget.x += ax; camTarget.y += ay;   // keep target in the same frame so pan-ease doesn't fight the zoom
+      }
+    } else {
+      state.zoom = zoomTarget;
+    }
+
+    // Pan glides toward camTarget (WASD / recenter feed it; drag-pan keeps
+    // both in lockstep so it stays 1:1 under the cursor, see above).
+    const pT = 1 - Math.exp(-CAM_PAN_EASE_RATE * dtS);
+    state.cam.x += (camTarget.x - state.cam.x) * pT;
+    state.cam.y += (camTarget.y - state.cam.y) * pT;
+    if (Math.abs(camTarget.x - state.cam.x) < CAM_SNAP_EPS) state.cam.x = camTarget.x;
+    if (Math.abs(camTarget.y - state.cam.y) < CAM_SNAP_EPS) state.cam.y = camTarget.y;
+
+    lastCamX = state.cam.x; lastCamY = state.cam.y; lastZoom = state.zoom;
+  }
+
   canvas.addEventListener("mousedown", (e) => {
     canvas.focus();
     dragging = true; dragPanned = false;
     panButton = isPanGesture(e);
     last = { x: e.clientX, y: e.clientY };
+    // v0.51: scouts get FIRST REFUSAL on a left-click, even in pan mode. In pan mode a
+    // left-click is a pan GESTURE (panButton=true), so the old `!panButton` gate below
+    // skipped scout targeting entirely — clicking a tile to Explore did nothing. Handle
+    // scouts up front; if a scout consumes the click (select, or armed explore target)
+    // it is NOT a pan.
+    if (e.button === 0 && state.mode === "pan" && typeof Scouts !== "undefined" && Scouts.handleClick) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      if (Scouts.handleClick(h.q, h.r, e)) {
+        panButton = false; dragging = false;
+        canvas.classList.remove("panning");
+        return;
+      }
+    }
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
@@ -243,8 +442,12 @@
     if (Math.abs(dx) + Math.abs(dy) > 2) dragPanned = true;
     last = { x: e.clientX, y: e.clientY };
     if (panButton) {
+      // Direct manipulation: 1:1 under the cursor, no easing lag. Move the
+      // target in lockstep so nothing glides once the drag releases.
       state.cam.x -= dx / state.zoom;
       state.cam.y -= dy / state.zoom;
+      ensureCamTargets();
+      camTarget.x = state.cam.x; camTarget.y = state.cam.y;
     } else if (state.mode === "erase" || state.mode === "eraseRoad") {
       // N: road mode no longer drag-paints — it's the click A→B tool. erase/
       // === J === eraseRoad drag-paints like "erase" (roads are safe to
@@ -265,13 +468,14 @@
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const before = screenToWorld(e.clientX, e.clientY);
+    // MD: don't snap state.zoom — set the TARGET and let updateCamera() ease
+    // state.zoom toward it every frame, holding this cursor point fixed
+    // throughout the glide (not just this instant). Repeated ticks just keep
+    // sliding the target/anchor, so a fast scroll still feels responsive.
+    ensureCamTargets();
     const factor = e.deltaY < 0 ? CONFIG.camera.wheelStep : 1 / CONFIG.camera.wheelStep;
-    state.zoom = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, state.zoom * factor));
-    const after = screenToWorld(e.clientX, e.clientY);
-    // keep the point under the cursor fixed while zooming
-    state.cam.x += before.x - after.x;
-    state.cam.y += before.y - after.y;
+    zoomTarget = Math.min(CONFIG.camera.maxZoom, Math.max(CONFIG.camera.minZoom, zoomTarget * factor));
+    zoomAnchorScreen = { x: e.clientX, y: e.clientY };
     scheduleSave();
   }, { passive: false });
 
@@ -305,12 +509,22 @@
     // RT-B: don't drift the map while the full-screen tech tree is open
     // (WASD keydowns still land in `keys` since the overlay doesn't eat them).
     const tt = document.getElementById("techTree");
-    if (tt && !tt.classList.contains("hidden")) return;
-    const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
-    if (keys.has("w")) state.cam.y -= v;
-    if (keys.has("s")) state.cam.y += v;
-    if (keys.has("a")) state.cam.x -= v;
-    if (keys.has("d")) state.cam.x += v;
+    const ttOpen = tt && !tt.classList.contains("hidden");
+    if (!ttOpen) {
+      // MD: WASD moves the TARGET, not state.cam directly — updateCamera()
+      // below glides the actual camera toward it each frame, so starting/
+      // stopping a key no longer snaps.
+      ensureCamTargets();
+      const v = CONFIG.camera.panSpeed / state.zoom * (dt / 1000);
+      if (keys.has("w")) camTarget.y -= v;
+      if (keys.has("s")) camTarget.y += v;
+      if (keys.has("a")) camTarget.x -= v;
+      if (keys.has("d")) camTarget.x += v;
+    }
+    // Always ease toward whatever target is current (finishes any pending
+    // glide even while the tech tree blocks new key input) — render-clock
+    // only, driven by mainloop's per-rAF dt, never the economy tick.
+    updateCamera(dt);
   }
 
   // ---------------------------------------------------------------
@@ -356,5 +570,15 @@
     terrainDirty = true;
   });
   document.getElementById("btnCenter").addEventListener("click", () => {
-    state.cam.x = 0; state.cam.y = 0;
+    // MD: ease to center rather than snapping — set the target, updateCamera()
+    // (driven every frame by applyKeyPan) glides state.cam toward (0,0).
+    ensureCamTargets();
+    camTarget.x = 0; camTarget.y = 0;
+  });
+  // v0.48: top-left castle icon — ease to the castle (world origin) AND open its menu.
+  const btnCastleCenter = document.getElementById("btnCastleCenter");
+  if (btnCastleCenter) btnCastleCenter.addEventListener("click", () => {
+    ensureCamTargets();
+    camTarget.x = 0; camTarget.y = 0;
+    if (window.CastleUI && typeof window.CastleUI.openCastlePanel === "function") window.CastleUI.openCastlePanel();
   });

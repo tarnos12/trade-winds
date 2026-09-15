@@ -516,12 +516,29 @@
 
   // Draw every town's placed buildings as a small labelled token on its hex.
   function drawBuildings() {
+    // v0.48: the building whose detail panel is open — highlighted below so the
+    // player can tell which one is selected.
+    const sel = (typeof window !== "undefined" && window.TownUI && window.TownUI.selectedBuilding) || null;
     for (const t of state.towns) {
       if (!Array.isArray(t.buildings)) continue;
       for (const b of t.buildings) {
         const def = CONFIG.buildings[b.typeId];
         if (!def) continue;
         const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+        const isSelected = !!(sel && sel.q === b.q && sel.r === b.r);
+        if (isSelected) {   // selection ring under the token (hex outline + soft glow)
+          const gp = hexCorners(p.x, p.y);
+          ctx.save();
+          ctx.beginPath(); ctx.moveTo(gp[0][0], gp[0][1]);
+          for (let i = 1; i < 6; i++) ctx.lineTo(gp[i][0], gp[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(255,243,208,0.16)";
+          ctx.fill();
+          ctx.lineWidth = 3; ctx.strokeStyle = "#fff3d0";
+          ctx.shadowColor = "rgba(255,243,208,0.9)"; ctx.shadowBlur = 12;
+          ctx.stroke();
+          ctx.restore();
+        }
         const st = BUILDING_STYLE[def.kind] || BUILDING_STYLE.processor;
         const rad = SIZE * 0.3;
         // === CB-B: under-construction look (unfinished until b.built !== false) ===
@@ -558,6 +575,17 @@
           }
           // missing-resource chips (hide when far out, mirroring drawCarts' zoomedOut)
           if (!(state.zoom < 0.6)) drawConstructionNeed(b, p, rad);
+          // v0.49: build progress bar (effective % = min(time, delivered) — see Buildings.constructionProgress)
+          if (!(state.zoom < 0.6) && typeof Buildings !== "undefined" && Buildings.constructionProgress) {
+            const cp = Buildings.constructionProgress(b);
+            const bw = rad * 1.8, bh = Math.max(3, SIZE * 0.12);
+            const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.16);
+            ctx.fillStyle = "rgba(18,14,9,0.82)"; ctx.fillRect(bx, by, bw, bh);
+            // delivered cap shown faintly behind the filled (time) progress
+            ctx.fillStyle = "rgba(224,166,60,0.35)"; ctx.fillRect(bx, by, bw * cp.deliveredFrac, bh);
+            ctx.fillStyle = "#ffce4d"; ctx.fillRect(bx, by, bw * cp.frac, bh);
+            ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+          }
           continue;
         }
         // === /CB-B ===
@@ -574,6 +602,37 @@
         if (!(state.zoom < 0.6)) {
           drawUpgradeBadge(b, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
+          // v0.47: production/consumption progress bar under producers — fills as the
+          // building nears its next whole-unit batch (green = producing, amber =
+          // waiting on inputs). Houses/non-producers return null and get no bar.
+          if (typeof Sim !== "undefined" && Sim.buildingProgress) {
+            const pr = Sim.buildingProgress(state, t, b);
+            if (pr) {
+              const bw = rad * 1.7, bh = Math.max(2.5, SIZE * 0.1);
+              const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.14);
+              ctx.fillStyle = "rgba(18,14,9,0.78)";
+              ctx.fillRect(bx, by, bw, bh);
+              ctx.fillStyle = !pr.working ? "#8a8574" : (pr.starved ? "#e0a63c" : "#7fc24b");
+              ctx.fillRect(bx, by, bw * pr.prog, bh);
+              ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1;
+              ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+            }
+          }
+          // v0.51 §2: internal-STORE fill bar (what porters collect) — sits just below
+          // the production bar. Teal = goods waiting for a porter; amber = store FULL
+          // (the building has stalled until a porter frees room).
+          if (def.output && b.store && b.built !== false) {
+            const scap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+            const sfill = Math.max(0, Math.min(1, ((b.store[def.output.goodId] || 0) / scap)));
+            if (sfill > 0.001) {
+              const bw = rad * 1.7, bh = Math.max(2, SIZE * 0.07);
+              const bx = p.x - bw / 2;
+              const by = p.y + rad + Math.max(2, SIZE * 0.14) + Math.max(2.5, SIZE * 0.1) + 1.5;
+              ctx.fillStyle = "rgba(18,14,9,0.7)"; ctx.fillRect(bx, by, bw, bh);
+              ctx.fillStyle = sfill >= 0.999 ? "#e0a63c" : "#3fa0a6";
+              ctx.fillRect(bx, by, bw * sfill, bh);
+            }
+          }
         }
         // === /RU-B ===
       }
@@ -777,18 +836,77 @@
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // === ADVANCED PROVISIONER (v0.46) === map token + placement highlight.
+  function drawAdvancedProvisioner() {
+    // placement highlight: tint the castle's 6 neighbours while in place mode.
+    if (state.mode === "advProvisioner") {
+      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+        const k = HexMath.key(n.q, n.r);
+        if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+        const ok = Buildings.canPlaceAdvancedProvisioner(state, n.q, n.r).ok;
+        const p = HexMath.hexToPixel(n.q, n.r, SIZE);
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = ok ? "#6fbf73" : "#e0503c";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    // v0.51 §9: basic Provisioner placement highlight (castle neighbours).
+    if (state.mode === "provisioner") {
+      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+        const k = HexMath.key(n.q, n.r);
+        if (!state.map.hexes.has(k) || !isVisible(k)) continue;
+        const ok = Buildings.canPlaceProvisioner(state, n.q, n.r).ok;
+        const p = HexMath.hexToPixel(n.q, n.r, SIZE);
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = ok ? "#6fbf73" : "#e0503c";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    const provToken = (c, body, edge) => {
+      if (!c || typeof c.q !== "number") return;
+      const p = HexMath.hexToPixel(c.q, c.r, SIZE);
+      const rad = SIZE * 0.3;
+      ctx.fillStyle = body; ctx.strokeStyle = edge; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#f4ecdd";
+      ctx.font = Math.round(SIZE * 0.34) + "px system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🍲", p.x, p.y + 0.5);
+      ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    };
+    provToken(state.provisionerBuilding, "#8a9a4b", "#4f5a26");   // basic — sage green so it reads apart from the advanced token
+    provToken(state.advancedProvisioner, "#b5713a", "#6e3f1b");   // advanced — warm brown (unchanged)
+  }
+
   function drawHoverGhost() {
-    if (!hoverHex || state.mode === "pan") return;
+    if (!hoverHex) return;
     const k = HexMath.key(hoverHex.q, hoverHex.r);
     const hex = state.map.hexes.get(k);
     if (!hex || !isVisible(k)) return;
+    // building / research-center placement draws its own valid/invalid ghost in
+    // drawPlacementOverlay — don't double-draw here.
+    if (placing || placingResearchCenter) return;
     const p = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
     const pts = hexCorners(p.x, p.y);
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
-    const ok = canPlace(hoverHex.q, hoverHex.r);
+    if (state.mode === "pan") {   // v0.47: ALWAYS highlight the tile under the cursor (neutral) when no tool is active
+      ctx.fillStyle = "rgba(255,245,215,0.10)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,243,208,0.55)";
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    const ok = canPlace(hoverHex.q, hoverHex.r);   // map tool (town / road / erase)
     ctx.fillStyle = ok ? "rgba(230,200,120,0.35)" : "rgba(224,80,60,0.30)";
     ctx.fill();
     ctx.lineWidth = 2;

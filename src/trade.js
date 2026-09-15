@@ -11,8 +11,8 @@
 // it. The trader is available from LEVEL 1 (the old `level >= 2` gate is gone),
 // so a connected town trades the moment it has a shortfall and a reachable seller
 // — fixing the "towns stuck at L1 never trade" bug. The player still earns the
-// effective tariff (state.tariffRate + research tariffBonus, × Events multiplier,
-// clamped) on every purchase → state.treasury.
+// effective tariff (state.tariffRate + research tariffBonus, clamped) on every
+// purchase → state.treasury.
 //
 // It only READS prices (Sim.tick already republished them via Sim.priceFor) and
 // mutates only town.stock / town.gold, state.carts and state.treasury. Anti-
@@ -21,7 +21,7 @@
 // `kind:'external'` so TR-B can render internal vs external traders distinctly.
 Object.assign(CONFIG, {
   trade: {
-    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3)
+    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3). v0.51 note: user wants 30% MINTED (seller keeps full sale) — implemented in P2 (trade rewrite) to balance conservation tests coherently.
     profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
@@ -49,6 +49,13 @@ Object.assign(CONFIG, {
     // already paid; Sim's overstock cap clamps the excess). Money-conserving; prevents
     // silent cargo loss without minting gold.
     unloadTimeoutMult: 4,
+    // === v0.51 §3 SALES-PRESSURE PRICING (bulletin board). A seller keeps a
+    // per-good price multiplier (town.salesAdj[gid]) layered on top of Sim.priceFor:
+    // when its offered good gets BOUGHT the multiplier ticks UP (rising demand →
+    // charge more); when it has a surplus offered but UNSOLD it ticks DOWN (glut →
+    // cut the price to move it). Bounded + smoothed + deterministic. Net effect: near,
+    // in-demand cities charge more; far cities that sell little drop prices. ===
+    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35 },
   },
 });
 
@@ -71,6 +78,12 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   // committed trade's goods aren't sold out from under it. A reservation is placed
   // at DISPATCH (when the trader leaves carrying the agreed gold) and released on
   // arrival at the seller — or refunded/released if the trade is invalidated.
+  // v0.51 §3: a seller's sales-pressure price multiplier for a good (default 1).
+  // Updated once per tick in Trade.tick (down for an unsold surplus, up on a sale).
+  function salesAdjOf(t, gid) {
+    const a = t && t.salesAdj && t.salesAdj[gid];
+    return (typeof a === "number" && a > 0) ? a : 1;
+  }
   function reservedOf(t, gid) { return (t && t.reserved && t.reserved[gid]) || 0; }
   function reserve(t, gid, n) { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; }
   function release(t, gid, n) { if (t && t.reserved) t.reserved[gid] = Math.max(0, (t.reserved[gid] || 0) - n); }
@@ -110,7 +123,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
   }
   function sellPrice(state, seller, gid, isCastle) {
-    return isCastle ? castleSellPrice(gid) : priceOf(seller, gid);
+    return isCastle ? castleSellPrice(gid) : priceOf(seller, gid) * salesAdjOf(seller, gid);
   }
   function sellReserve(state, seller, gid, n, isCastle) {
     if (isCastle) castleReserve(state, gid, n); else reserve(seller, gid, n);
@@ -161,8 +174,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
     const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
-    // replaces the CONFIG constant as the base; research tariffBonus still adds on top,
-    // Events.tariffMultiplier still applies below. Clamp the composed rate to [0.10, 0.40]
+    // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
+    // Clamp the composed rate to [0.10, 0.40]
     // (bounded by cfg.maxTariffRate). Falls back to cfg.tariffRate when a state/save
     // predates the slider, so default behaviour stays 0.25.
     const baseTariff = (typeof state.tariffRate === "number") ? state.tariffRate : cfg.tariffRate;
@@ -180,6 +193,34 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const d = (t.demand && t.demand[gid]) || 0;
       return d > 0 ? Math.max(d * buffer, minStock) : 0;
     };
+
+    // --- 0. BULLETIN BOARD (v0.51 §3) — every city POSTS an offer per surplus good
+    // to a shared board that all traders read. Published with the CURRENT sales-
+    // pressure multiplier (updated at tick END, below), so this tick's dispatch prices
+    // this good exactly as its last-settled pressure said — a fresh market prices at
+    // face value. Deterministic; does not draw from the rng stream.
+    const SP = cfg.salesPressure || { up: 0.05, down: 0.015, min: 0.75, max: 1.35 };
+    if (!state.market || typeof state.market !== "object") state.market = {};
+    const board = [];
+    for (const seller of towns) {
+      if (!seller || !seller.stock) continue;
+      for (const gid in CONFIG.goods) {
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus > 0) board.push({ sellerId: seller.id, q: seller.q, r: seller.r, goodId: gid,
+                       qty: Math.floor(surplus), price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
+      }
+    }
+    if (state.castleTrade && typeof ResearchEconomy !== "undefined") {
+      for (const gid in state.castleTrade) {
+        const avail = castleSellAvailable(state, gid);
+        if (avail > 0) {
+          const ch = ResearchEconomy.castleHex ? ResearchEconomy.castleHex() : null;
+          board.push({ sellerId: SELLER_CASTLE_ID, castle: true, q: ch ? ch.q : 0, r: ch ? ch.r : 0,
+                       goodId: gid, qty: Math.floor(avail), price: castleSellPrice(gid) });
+        }
+      }
+    }
+    state.market.board = board;
 
     // --- 1. Dispatch: each city's ONE external trader BUYS its biggest shortfall
     //        from a road-connected city with a real surplus (available at L1). ---
@@ -212,16 +253,43 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
       // === /PP-A ===
 
-      // (a) Biggest shortfall (need − stock − incoming) across every demanded good.
+      // (a) v0.51 §4 — LAYERED IMPORT PRIORITY. Rank each shortfall by (i) which fill
+      // BAND it sits in (below 30% is more urgent than below 60%…) and (ii) its priority
+      // LAYER within that band: house basics → production inputs → luxuries → materials.
+      // So a city fills every layer to 30% (basics first) before pushing any to 60%,
+      // and never tops one warehouse while another starves. Deficit breaks ties.
+      const N = CONFIG.needs || {};
+      const basicSet = new Set(N.basicNeeds || []);
+      const extraSet = new Set(N.extraNeeds || []);
+      // goods this city's placed buildings consume as inputs (production layer)
+      const inputSet = new Set();
+      for (const bl of (Array.isArray(home.buildings) ? home.buildings : [])) {
+        const def = bl && CONFIG.buildings[bl.typeId];
+        if (def && def.inputs) for (const g in def.inputs) inputSet.add(g);
+      }
+      const layerOf = (gid) => basicSet.has(gid) ? 0 : inputSet.has(gid) ? 1 : extraSet.has(gid) ? 2 : 3;
+      const fills = (CONFIG.town && CONFIG.town.priorityFill) || [0.3, 0.6, 1.0];
+      const bandOf = (have, need) => {
+        for (let i = 0; i < fills.length; i++) if (have < fills[i] * need) return i;
+        return fills.length;   // fully satisfied
+      };
       const gaps = [];
       for (const gid in CONFIG.goods) {
         const need = needOf(home, gid);
         if (need <= 0) continue;                              // city doesn't want this good
-        const shortfall = need - (home.stock[gid] || 0) - (incoming[gid] || 0);  // PP-A: net of in-flight
-        if (shortfall > cfg.buyThreshold) gaps.push({ gid, shortfall });
+        const have = (home.stock[gid] || 0) + (incoming[gid] || 0);
+        const shortfall = need - have;                        // PP-A: net of in-flight
+        if (shortfall <= cfg.buyThreshold) continue;
+        const band = bandOf(have, need);
+        if (band >= fills.length) continue;                   // already at 100% target
+        gaps.push({ gid, shortfall, band, layer: layerOf(gid) });
       }
       if (!gaps.length) continue;
-      gaps.sort((a, b) => b.shortfall - a.shortfall || (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
+      gaps.sort((a, b) =>
+        a.band - b.band ||                                    // fill everything to 30% before any to 60%
+        a.layer - b.layer ||                                  // within a band: basics → inputs → luxury → materials
+        b.shortfall - a.shortfall ||                          // then the biggest deficit
+        (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
 
       // (b) Offers for a good = reachable cities (+ the castle) holding a real surplus.
       const offersFor = (gid) => {
@@ -232,7 +300,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (surplus <= 0) continue;
           const route = Pathing.route(state, fromKey, townKey(seller));
           if (!route) continue;
-          out.push({ seller, surplus, route, price: priceOf(seller, gid) });
+          out.push({ seller, surplus, route, price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
         }
         addCastleOffer(state, out, fromKey, gid);   // PP-A: castle sells enabled goods
         return out;
@@ -242,20 +310,37 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       // city must not waste its trip (or give up for the tick) on its single biggest
       // shortfall when that good is unsellable (e.g. an extra nobody produces) while
       // a good it CAN buy waits. Then seeded-pick among the top-N tradeable gaps. ===
+      // v0.51 §4: anti-herding randomises ONLY within the top priority GROUP (same
+      // band+layer) that has any tradeable offer — a lower-priority good (a luxury) can
+      // never be chosen over a higher one (a basic) still for sale. Higher-priority
+      // goods with no reachable seller are skipped, falling through to the next group.
       const tradeable = [];
+      let groupKey = null;
       for (const g of gaps) {
         const o = offersFor(g.gid);
-        if (o.length) { tradeable.push({ gap: g, offers: o }); if (tradeable.length >= cfg.topRandom) break; }
+        if (!o.length) continue;
+        const key = g.band + ":" + g.layer;
+        if (groupKey === null) groupKey = key;
+        else if (key !== groupKey) break;               // past the top tradeable group
+        tradeable.push({ gap: g, offers: o });
+        if (tradeable.length >= cfg.topRandom) break;
       }
       if (!tradeable.length) continue;   // nothing this city needs is for sale anywhere reachable
       const chosen = tradeable[Math.min(tradeable.length - 1, Math.floor(rng() * tradeable.length))];
       const want = chosen.gap;
       const offers = chosen.offers;
       // === /TRADEFIX ===
+      // v0.51 §3: a STARVING buyer (a BASIC need almost entirely unmet) values getting
+      // the good FAST over getting it cheap — it will pay more to a CLOSER seller rather
+      // than starve. Detect starvation on the chosen good, then let route distance
+      // outrank price in the sort. Non-basic / well-stocked goods keep the cheap-first order.
+      const basics = (CONFIG.needs && CONFIG.needs.basicNeeds) || [];
+      const isBasic = basics.indexOf(want.gid) >= 0;
+      const starving = isBasic && ((home.stock[want.gid] || 0) + (incoming[want.gid] || 0)) < needOf(home, want.gid) * 0.25;
       offers.sort((a, b) =>
         b.surplus - a.surplus ||
-        a.price - b.price ||
-        a.route.cost - b.route.cost ||
+        (starving ? (a.route.cost - b.route.cost || a.price - b.price)
+                  : (a.price - b.price || a.route.cost - b.route.cost)) ||
         (a.sellerCastle ? SELLER_CASTLE_ID : a.seller.id) - (b.sellerCastle ? SELLER_CASTLE_ID : b.seller.id));
       const slate = offers.slice(0, cfg.topRandom);
       const pick = slate[Math.min(slate.length - 1, Math.floor(rng() * slate.length))]; // one draw
@@ -271,8 +356,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const sellerIsCastle = !!pick.sellerCastle;
       const primaryUnit = pick.price;
       const primaryAfford = primaryUnit > 0 ? (home.gold || 0) / primaryUnit : cartCapacity;
-      const primaryQty = Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford);
-      if (!(primaryQty > 0)) continue;
+      // === GRAN: traders move WHOLE units only (never a fractional/0 load). Floor
+      // the sized quantity to an integer; a city that can't afford/spare a whole
+      // unit simply doesn't dispatch (min 1).
+      const primaryQty = Math.floor(Math.min(cartCapacity, pick.surplus, want.shortfall, primaryAfford));
+      if (!(primaryQty >= 1)) continue;
 
       const cargo = [{ goodId: want.gid, qty: primaryQty, unitBuy: primaryUnit }];
       sellReserve(state, pick.seller, want.gid, primaryQty, sellerIsCastle);
@@ -286,8 +374,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (avail <= 0) continue;
         const unit = sellPrice(state, pick.seller, g.gid, sellerIsCastle);
         const afford = unit > 0 ? goldLeft / unit : capLeft;
-        const q = Math.min(capLeft, avail, g.shortfall, afford);
-        if (!(q > 0)) continue;
+        const q = Math.floor(Math.min(capLeft, avail, g.shortfall, afford));   // GRAN: whole units only
+        if (!(q >= 1)) continue;
         cargo.push({ goodId: g.gid, qty: q, unitBuy: unit });
         sellReserve(state, pick.seller, g.gid, q, sellerIsCastle);
         capLeft -= q; goldLeft -= unit * q;
@@ -382,10 +470,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!buyer.stock) buyer.stock = {};
             for (const item of cart.cargo) {
               const room = Math.max(0, capG - (buyer.stock[item.goodId] || 0));
-              const move = Math.min(perTick, item.qty - (item.unloaded || 0), room);
+              // === GRAN: meter WHOLE units into the buyer's (integer) stock; carry
+              // the sub-unit fraction of perTick so delivery still spans ~the same ticks.
+              item._unlAcc = (item._unlAcc || 0) + perTick;
+              const move = Math.min(Math.floor(item._unlAcc), item.qty - (item.unloaded || 0), room);
               if (move > 0) {
                 buyer.stock[item.goodId] = (buyer.stock[item.goodId] || 0) + move;
                 item.unloaded = (item.unloaded || 0) + move;
+                item._unlAcc -= move;
                 if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, item.goodId, move);   // MISSION-STATS: units delivered
               }
             }
@@ -397,11 +489,13 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         } else {
           if (buyer) {
             if (!buyer.stock) buyer.stock = {};
-            const move = Math.min(perTick, cart.qty - (cart.unloaded || 0),
+            cart._unlAcc = (cart._unlAcc || 0) + perTick;   // GRAN: whole-unit metering with carry
+            const move = Math.min(Math.floor(cart._unlAcc), cart.qty - (cart.unloaded || 0),
                                   Math.max(0, capG - (buyer.stock[cart.goodId] || 0)));
             if (move > 0) {
               buyer.stock[cart.goodId] = (buyer.stock[cart.goodId] || 0) + move;
               cart.unloaded = (cart.unloaded || 0) + move;
+              cart._unlAcc -= move;
               if (typeof Sim !== "undefined" && Sim.statTraded) Sim.statTraded(state, cart.goodId, move);   // MISSION-STATS: units delivered
             }
           }
@@ -435,9 +529,6 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (buyer) buyer.gold = (buyer.gold || 0) + carried;
           cart.done = true; continue;
         }
-        // P4-C hook: a "Kingdom Fair" event waives the tariff (multiplier → 0).
-        const tariffMult = (typeof Events !== "undefined" && Events.tariffMultiplier)
-          ? Events.tariffMultiplier(state) : 1;
         let liveQty = 0;
         for (const item of cargo) {
           const carriedForItem = (item.unitBuy || 0) * item.qty;
@@ -457,11 +548,17 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!seller.stock) seller.stock = {};
             take = Math.min(item.qty, Math.max(0, seller.stock[item.goodId] || 0));
             value = (item.unitBuy || 0) * take;
-            const tariff = tariffRate * value * tariffMult;   // GDD §6.3: cut (+ research bonus)
+            const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
               state.treasury += tariff;                                             // → player's treasury
+              // v0.51 §3: a completed sale is UP pressure — this good is in demand
+              // here, so the seller may charge more next time (bounded by SP.max).
+              if (!seller.salesAdj) seller.salesAdj = {};
+              const _sp = cfg.salesPressure || { up: 0.05, max: 1.35 };
+              seller.salesAdj[item.goodId] = Math.min(_sp.max,
+                ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
               if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
               if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value - tariff);  // PP-A ledger
             }
@@ -489,6 +586,31 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
 
     // --- 3. Prune retired carts ---------------------------------------------
     if (state.carts.some(c => c.done)) state.carts = state.carts.filter(c => !c.done);
+
+    // --- 4. Sales-pressure UPDATE for NEXT tick (v0.51 §3) -------------------
+    // A sale already nudged the good UP at settlement (above). Here, a good still
+    // sitting as an unsold surplus nudges DOWN (glut → cheaper next time); a good with
+    // no surplus relaxes back toward neutral. Applied AFTER dispatch/settlement so this
+    // tick's offers used the prior multiplier (a fresh market trades at face value, and
+    // exact-price mechanics are undisturbed). Deterministic; no rng draw.
+    for (const seller of towns) {
+      if (!seller || !seller.stock) continue;
+      if (!seller.salesAdj || typeof seller.salesAdj !== "object") seller.salesAdj = {};
+      const adj = seller.salesAdj;
+      for (const gid in adj) {                                 // relax any tracked good with no surplus
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus > 0) continue;                             // handled below (surplus branch)
+        const a = adj[gid];
+        if (a > 1) adj[gid] = Math.max(1, a - SP.down);
+        else if (a < 1) adj[gid] = Math.min(1, a + SP.down);
+      }
+      for (const gid in CONFIG.goods) {                        // glut pressure on offered surpluses
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        if (surplus <= 0) continue;
+        const a = (typeof adj[gid] === "number" && adj[gid] > 0) ? adj[gid] : 1;
+        adj[gid] = Math.max(SP.min, a - SP.down);
+      }
+    }
 
     return state;
   };

@@ -5,6 +5,49 @@ const CONFIG = {
   // fractions* of the board, so the map stays varied for any seed.
   map: {
     radius: 14, hexSize: 24, edgeFalloff: 0.55,
+    // The board is a RECTANGLE of pointy-top hexes, `width` columns × `height`
+    // rows. The castle sits at axial (0,0) but is placed at a seeded, off-center
+    // board position (not the middle) — see MapGen; `castleMargin` keeps it this
+    // many hexes clear of the board edge so it always has a buildable ring.
+    rect: { width: 50, height: 25 },
+    castleMargin: 2,
+    // === Deposit tiering by distance from the castle ===  Every ore good has a
+    // TIER; a tier is a [min,max] DISTANCE BAND expressed as a fraction of the
+    // castle's distance to the farthest map hex. T1 may spawn anywhere, T2
+    // mid-to-far, T3 far. Terrain resources (fertile/forest/fish/water) are T1 by
+    // nature — they follow normal biome generation. A preset may bend the rule for
+    // a good via `deposits.<good>.band = [lo,hi]` (e.g. Highlands pulls ore inward).
+    depositTiers: { stone: 1, clay: 2, coal: 2, iron: 3, gold: 3 },
+    depositBands: { 1: [0.0, 1.0], 2: [0.33, 1.0], 3: [0.66, 1.0] },
+    // === Resource DENSITY (v0.47) ===  How many deposit CLUSTERS of EACH ore type
+    // (stone, clay, iron, coal, gold) spawn on the map. The Custom "resources" axis
+    // and each preset's declared resources tier pick a level; a healthy minimum of
+    // 3 of every type is always guaranteed so no map is starved of (e.g.) gold.
+    depositDensity: { low: 3, normal: 6, high: 10 },
+    // === v0.43 MapGen overhaul ===
+    // PATCH PARADIGM: the background/filler biomes (barren/desert/snow, plus
+    // water/mountains) fill MOST of the map; fertile & forest appear as discrete
+    // PATCHES grown in a mix of sizes. Net effect: far less continuous grass.
+    // patchSizes = named size buckets a patch is drawn from (mostly medium).
+    patchSizes: { small: [1, 3], medium: [4, 7], big: [8, 12] },
+    // Deposit terrain AFFINITY (layered ON TOP of the distance-tier bands): a
+    // deposit prefers seed hexes whose neighbourhood contains one of these
+    // terrains (falls back to the plain in-band pool when none match). Clay hugs
+    // water; the metals/stone favour rocky barren/mountain country.
+    // (v0.47) Metals hug the mountain RANGES — iron & gold spawn against mountains,
+    // so ore reads as coming out of the ranges; stone & coal prefer mountains but
+    // accept barren too, so they are SOMETIMES found away from the peaks. Clay hugs
+    // water. When no in-band hex matches, generation falls back to the plain pool.
+    depositAffinity: { clay: ["water"], stone: ["mountains", "barren"],
+      iron: ["mountains"], gold: ["mountains"], coal: ["mountains", "barren"] },
+    // LAKES: inland water blobs (separate from the rim/center SEA which the Sea
+    // Level axis controls). COUNT keyed by a preset's `lakes` LEVEL string; SIZE
+    // range per blob. Placed on land, kept clear of the immediate castle core.
+    lakes: { none: 0, low: 2, normal: 4, many: 8 }, lakeSize: [4, 10],
+    // RIVERS: winding water lines that descend elevation from a high inland point
+    // toward the sea / a lake / the board edge. COUNT keyed by a preset's `rivers`
+    // LEVEL string; WIDTH varies within this range along each course.
+    rivers: { none: 0, few: 1, normal: 3, many: 5 }, riverWidth: [1, 5],
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
@@ -20,29 +63,147 @@ const CONFIG = {
   // shoal clusters (1–3 tiles each); `near` biases the FIRST shoal to within
   // that hex-distance of the castle. Fish is a T1 resource: NO ring (exempt
   // from the T2 push-out) and never far from spawn. ===
+  // Each preset also carries an explicit `rect` (board size) and a `tiers` block
+  // naming its identity on the 6 Custom-Map axes (Fertility / World Age / Climate
+  // / Sea Level / Resources / Size). The `tiers` block is UI metadata only — it
+  // pre-fills the Custom panel when a player derives a custom world from this
+  // preset; MapGen ignores it for a plain preset generate. Retuned so the five
+  // worlds read as VISUALLY DISTINCT: lush-green Fertile, desert Oasis, barren
+  // giant Big World, rugged snowy Highlands, and watery Isles.
   mapPresets: {
-    fertile: { label: "Fertile Land", radius: 14, water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.05,
-      groundMix: { fertile: 0.50, barren: 0.35, desert: 0.15 },
-      forest: { patches: 6, size: [6, 14] }, snow: { mode: "pole", rows: 2 },
+    fertile: { label: "Fertile Land", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal", lakes: "normal", rivers: "normal" },
+      water: { mode: "rim", frac: 0.18 }, mountainFrac: 0.06,
+      lakes: "normal", rivers: "normal",   // === v0.43: temperate, well-watered ===
+      groundMix: { fertile: 0.64, barren: 0.23, desert: 0.13 },   // v0.43: fertile share drives PATCH coverage (scaled down); barren/desert are the filler background
+      forest: { patches: 9, size: [8, 16] }, snow: { mode: "pole", rows: 2 },
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 6 }, coal: { count: 2, ring: 6 }, gold: { count: 1, ring: 8 },
                   fish: { count: 5, near: 6 } } },   // === TV2-FIX: ~4-6 shoals ===
-    oasis: { label: "Oasis", radius: 14, water: { mode: "center", frac: 0.12 }, mountainFrac: 0.06,
-      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },
+    oasis: { label: "Oasis", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "arid", worldAge: "normal", climate: "warm", seaLevel: "low", resources: "scarce", size: "normal", lakes: "low", rivers: "few" },
+      water: { mode: "center", frac: 0.12 }, mountainFrac: 0.05,
+      lakes: "low", rivers: "few",   // === v0.43: arid — a couple of oasis pools, a trickle of wadis ===
+      groundMix: { desert: 0.55, barren: 0.35, fertile: 0.10 },   // sand sea (filler) + a central lake, sparse green patches
       forest: { patches: 2, size: [3, 7] }, snow: { mode: "none" },
       deposits: { stone: { count: 2, ring: 0 }, clay: { count: 1, ring: 2 }, iron: { count: 2, ring: 5 }, coal: { count: 1, ring: 5 }, gold: { count: 1, ring: 7 },
                   fish: { count: 4, near: 6 } } },   // === TV2-FIX: ~3-5 shoals, in the central water ===
-    big_world: { label: "Big World", radius: 18, water: { mode: "rim", frac: 0.15 }, mountainFrac: 0.07,
-      groundMix: { fertile: 0.40, barren: 0.45, desert: 0.15 },
-      forest: { patches: 8, size: [6, 16] }, snow: { mode: "pole", rows: 2 },
-      // T1 near spawn, T2 pushed far out (bigger rings).
+    big_world: { label: "Big World", radius: 18, rect: { width: 66, height: 33 },
+      tiers: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "rich", size: "large", lakes: "normal", rivers: "normal" },
+      water: { mode: "rim", frac: 0.16 }, mountainFrac: 0.07,
+      lakes: "normal", rivers: "normal",   // === v0.43: a big continent with several lakes and rivers ===
+      groundMix: { barren: 0.52, fertile: 0.28, desert: 0.20 },   // vast barren frontier (filler) — clearly NOT the green Fertile map
+      forest: { patches: 11, size: [6, 16] }, snow: { mode: "pole", rows: 3 },
+      // T1 near spawn, T2 pushed far out (bigger rings) on the big board.
       deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 3 }, iron: { count: 3, ring: 9 }, coal: { count: 3, ring: 9 }, gold: { count: 2, ring: 12 },
                   fish: { count: 6, near: 8 } } },   // === TV2-FIX: ~5-8 shoals, some near the start rings ===
+    highlands: { label: "Highlands", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "normal", worldAge: "young", climate: "cold", seaLevel: "low", resources: "rich", size: "normal", lakes: "low", rivers: "few" },
+      water: { mode: "rim", frac: 0.10 }, mountainFrac: 0.13,   // rugged: near the 0.14 hard cap
+      lakes: "low", rivers: "few",   // === v0.43: rugged uplands — few tarns, a couple of mountain streams ===
+      groundMix: { barren: 0.52, fertile: 0.34, desert: 0.14 },   // rocky uplands (barren filler), green valley patches, little sand
+      forest: { patches: 6, size: [5, 12] }, snow: { mode: "pole", rows: 4 },   // cold: wide snow band
+      // Mining world: ore-rich, and it BENDS the global tier bands (presets-may-
+      // override) to pull coal/iron inward so ore is reachable earlier; gold still
+      // keeps the far T3 band. `band` = [minFrac, maxFrac] of castle→farthest-hex.
+      deposits: { stone: { count: 4 }, clay: { count: 2 }, iron: { count: 4, band: [0.4, 1.0] }, coal: { count: 4, band: [0.2, 1.0] }, gold: { count: 2 },
+                  fish: { count: 3, near: 6 } } },
+    isles: { label: "Isles", radius: 14, rect: { width: 50, height: 25 },
+      tiers: { fertility: "lush", worldAge: "old", climate: "temperate", seaLevel: "high", resources: "normal", size: "normal", lakes: "many", rivers: "many" },
+      water: { mode: "rim", frac: 0.42 }, mountainFrac: 0.02,   // archipelago: high rim water breaks the land into islands; worn-flat (few mountains)
+      lakes: "many", rivers: "many",   // === v0.43: watery world — lots of inland pools and streams too ===
+      groundMix: { fertile: 0.58, barren: 0.27, desert: 0.15 },   // green isle patches on a barren/desert filler base
+      forest: { patches: 7, size: [5, 12] }, snow: { mode: "none" },   // temperate ocean world — the top rows are sea, so no snow band
+      // fewer land deposits (small islands), lots of fish. ensureCastleConnected
+      // guarantees the castle island still reaches the mainland by a carved bridge.
+      deposits: { stone: { count: 3, ring: 0 }, clay: { count: 2, ring: 2 }, iron: { count: 2, ring: 4 }, coal: { count: 2, ring: 4 }, gold: { count: 1, ring: 6 },
+                  fish: { count: 8, near: 5 } } },
   },
   mapPresetDefault: "fertile",
+  // === Custom-Map tier tables ===  Six independent axes; the MIDDLE option of
+  // each is the baseline (≈ the Fertile preset). MapGen.applyTiers(base, sel)
+  // layers a selection onto any base preset to build a resolved preset. Order of
+  // keys here is the order the Custom panel renders the dropdowns.
+  // Guardrails enforced in applyTiers: mountainFrac <= 0.14, forest.patches >= 2,
+  // groundMix.fertile >= 20% of the mix (always some green contrast).
+  mapTiers: {
+    fertility: { label: "Fertility", default: "normal", options: [
+      { id: "lush",   label: "Lush",   groundMix: { fertile: 0.65, barren: 0.22, desert: 0.13 }, forestPatchMul: 1.5, forestSize: [8, 16] },
+      { id: "normal", label: "Normal", groundMix: { fertile: 0.45, barren: 0.35, desert: 0.20 }, forestPatchMul: 1.0, forestSize: [6, 14] },
+      { id: "arid",   label: "Arid",   groundMix: { fertile: 0.20, barren: 0.40, desert: 0.40 }, forestPatchMul: 0.4, forestSize: [4, 9] },
+    ] },
+    worldAge: { label: "World Age", default: "normal", options: [
+      { id: "young",  label: "Young",  mountainFrac: 0.12 },
+      { id: "normal", label: "Normal", mountainFrac: 0.06 },
+      { id: "old",    label: "Old",    mountainFrac: 0.02 },
+    ] },
+    climate: { label: "Climate", default: "temperate", options: [
+      { id: "cold",      label: "Cold",      snow: { mode: "pole", rows: 4 }, desertToBarren: true },
+      { id: "temperate", label: "Temperate", snow: { mode: "pole", rows: 2 } },
+      { id: "warm",      label: "Warm",      snow: { mode: "none" }, desertAdd: 0.05 },
+    ] },
+    seaLevel: { label: "Sea Level", default: "normal", options: [
+      { id: "low",    label: "Low",    waterFrac: 0.10 },
+      { id: "normal", label: "Normal", waterFrac: 0.18 },
+      { id: "high",   label: "High",   waterFrac: 0.30 },
+    ] },
+    // (v0.47) `density` = clusters of EACH ore type (see CONFIG.map.depositDensity):
+    // Low 3 · Normal 6 · High 10. ringMul still nudges how far ore sits from spawn.
+    resources: { label: "Resources", default: "normal", options: [
+      { id: "scarce", label: "Low (3)",    density: "low",    ringMul: 1.2 },
+      { id: "normal", label: "Normal (6)", density: "normal", ringMul: 1.0 },
+      { id: "rich",   label: "High (10)",  density: "high",   ringMul: 0.8 },
+    ] },
+    size: { label: "Size", default: "normal", options: [
+      { id: "small",  label: "Small",  rect: { width: 36, height: 18 } },
+      { id: "normal", label: "Normal", rect: { width: 50, height: 25 } },
+      { id: "large",  label: "Large",  rect: { width: 66, height: 33 } },
+    ] },
+    // === v0.43: two NEW water-feature axes. Each option just names a LEVEL
+    // string that applyTiers writes onto the resolved preset (p.lakes / p.rivers);
+    // MapGen.generate maps the level to a count via CONFIG.map.lakes / .rivers. ===
+    lakes: { label: "Lakes", default: "low", options: [
+      { id: "none",   label: "None",   lakes: "none"   },
+      { id: "low",    label: "Few",    lakes: "low"    },
+      { id: "normal", label: "Normal", lakes: "normal" },
+      { id: "many",   label: "Many",   lakes: "many"   },
+    ] },
+    rivers: { label: "Rivers", default: "few", options: [
+      { id: "none",   label: "None",   rivers: "none"   },
+      { id: "few",    label: "Few",    rivers: "few"    },
+      { id: "normal", label: "Normal", rivers: "normal" },
+      { id: "many",   label: "Many",   rivers: "many"   },
+    ] },
+  },
+  mapTiersDefault: { fertility: "normal", worldAge: "normal", climate: "temperate", seaLevel: "normal", resources: "normal", size: "normal", lakes: "low", rivers: "few" },
   // === /TV2 map presets ===
-  fog:    { castleReveal: 4, townReveal: 3 },
+  // === v0.43: fog reveal at NEW-GAME scales with board size (startReveal), so a
+  // big board still opens with a workable viewport. `castleReveal` is the legacy
+  // fallback (used if a map carries no size-derived radius). townReveal unchanged.
+  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
-  econ:   { baseTickMs: 500 },
+  econ:   { baseTickMs: 500,
+    // === Bulk production (v0.39): a producing building banks its output and
+    // releases it in WHOLE units every N game-seconds instead of trickling a
+    // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
+    // and the fractional remainder carries into the next batch so nothing is
+    // lost. Keyed by building `kind`; a kind not listed here releases whatever
+    // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
+    productionIntervalSec: { extractor: 8, processor: 12 },
+    // === Per-building internal store (v0.51 / P1 §2): a producer banks output in
+    // its own buffer; once full it STALLS (stops consuming inputs + producing) so
+    // nothing is ever made that can't be held — no waste. Internal porters drain
+    // this into the warehouse (which itself caps at town.storageCap). ===
+    buildingStoreCap: 30,
+    // === Internal porters (v0.51 §2): real haulers that carry producer output to
+    // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
+    // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
+    porterCarry: 10, porterTicksPerTile: 1 },
+  // === Construction build time (v0.49) ===  A placed building fills a progress bar
+  // to completion. Progress = min(time elapsed / buildTime, materials delivered /
+  // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
+  // with everything delivered instantly, a building still takes `buildTime` seconds.
+  // buildTime = baseSec[tier] + (upgradeLevel-1)×perUpgradeSec, capped at maxSec.
+  build: { baseSec: { peasant: 6, worker: 10, burgher: 14, aristocrat: 18 }, defaultSec: 8, perUpgradeSec: 2, maxSec: 20 },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.
   // road      = a road segment may cross this hex (traders/pathing).

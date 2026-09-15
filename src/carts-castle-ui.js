@@ -490,18 +490,10 @@
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
-    // castle level + upgrade action (gold-only since King's Quests were retired).
-    let castleHtml = `<div class="up-box">
-      <div class="up-line"><b>🏰 Castle — Level ${state.castleLevel || 1}</b></div>`;
-    const creq = Castle.nextReq(state);
-    if (!creq) {
-      castleHtml += `<div class="up-max">Level ${state.castleLevel} — the castle is at its grandest 👑</div>`;
-    } else {
-      const cres = Castle.canUpgrade(state);
-      castleHtml += `<div class="up-req">Requires ${creq.goldReq} g (have ${Math.floor(treas)})</div>
-        <button class="up-btn" data-castle-upgrade ${cres.ok ? "" : "disabled"}>${cres.ok ? "Upgrade to Level " + ((state.castleLevel || 1) + 1) : esc(cres.reason)}</button>`;
-    }
-    castleHtml += `</div>`;
+    // Castle upgrades were removed (v0.44): the castle is a fixed-capacity hub
+    // (warehouse + traders don't depend on a level). The Keep tab is filled by the
+    // castlePanelSections hooks below (provisioner, research economy, …).
+    let castleHtml = "";
 
     // CP: extension hook so later slices (e.g. CRE — castle research economy) can
     // inject their own section (research-materials list, etc.) without editing this
@@ -524,9 +516,43 @@
   // Registry of extra panel sections (CP hook; see renderCastlePanel).
   const castlePanelSections = [];
 
+  // v0.44: Provisioner section — provision store + each active line's progress.
+  // Reads the pure Provisioner module (window.Provisioner) READ-ONLY.
+  castlePanelSections.push(function provisionerSection(state) {
+    if (typeof Provisioner === "undefined") return "";
+    const cap = Provisioner.cap();
+    const have = Math.floor(state.provisions || 0);
+    const pct = cap ? Math.max(0, Math.min(100, have / cap * 100)) : 0;
+    const stock = state.castleStock || {};
+    let html = `<div class="up-box">
+      <div class="up-line"><b>🎒 Provisions</b> <span style="float:right">${have} / ${cap}</span></div>
+      <div class="tp-bar" style="margin:4px 0 8px"><span style="width:${pct}%"></span></div>`;
+    const lineRow = (key, label, def) => {
+      if (!def) return "";
+      const prog = Math.round(Provisioner.progress(state, key) * 100);
+      const ins = Object.keys(def.inputs).map(g => `${def.inputs[g]} ${goodIcon(g)}`).join(" + ");
+      const short = Object.keys(def.inputs).some(g => (stock[g] || 0) < def.inputs[g]);
+      return `<div class="tp-row"><span class="k">${label}: ${ins} → ${def.output} 🎒</span>
+        <span class="v${short ? "" : ""}" style="opacity:${short ? 0.5 : 1}">${short ? "need stock" : prog + "%"}</span></div>`;
+    };
+    const c = (CONFIG.castle && CONFIG.castle.provisions) || {};
+    // v0.51 §9: the basic line runs only when a Provisioner building is built.
+    if (Provisioner.hasBasic(state)) html += lineRow("basic", "Provisioner", c.basic);
+    else html += `<div class="tp-row"><span class="k" style="opacity:.7">Provisioner not built</span>
+        <span class="v" style="opacity:.6">build one by the castle</span></div>`;
+    if (Provisioner.hasAdvanced(state)) html += lineRow("advanced", "Advanced", c.advanced);
+    const tail = Provisioner.hasBasic(state)
+      ? "The castle buys potato from cities and turns it into provisions for your scouts."
+      : "Build a Provisioner (⭐ Special) next to the castle so it can turn potato into provisions. It starts with a small buffer.";
+    html += `<div class="tp-hint2">${tail}</div></div>`;
+    return html;
+  });
+
   function openCastlePanel() {
-    // mutually exclusive with the town panel
+    // v0.48: mutually exclusive with the town / building panels and scout selection
     if (window.TownUI && typeof window.TownUI.closeTownPanel === "function") window.TownUI.closeTownPanel();
+    if (window.TownUI && typeof window.TownUI.closeBuildingPanel === "function") window.TownUI.closeBuildingPanel();
+    if (window.Scouts && window.Scouts.selectedId != null && typeof window.Scouts.deselect === "function") window.Scouts.deselect();
     castleOpen = true;
     castleEl.classList.remove("hidden");
     castleEl.setAttribute("aria-hidden", "false");
@@ -545,18 +571,6 @@
     // RESEARCH CENTER (Slice C): "Place Research Center" button in the rc-box.
     if (e.target.closest("button[data-place-rc]")) {
       startPlacingResearchCenter();
-      return;
-    }
-    if (e.target.closest("button[data-castle-upgrade]")) {
-      const res = Castle.upgrade(state);
-      if (res.ok) {
-        renderCastlePanel(true);
-        updateProgressHud();
-        // BALPV: castle L5 is a milestone, not the win — victory now fires from
-        // Victory.check (aristocrat house @100%), surfaced via progress-ui polling.
-        scheduleSave();
-        SFX.play("levelup", "castle upgrade");
-      }
       return;
     }
     const b = e.target.closest("button[data-buy]");
@@ -648,7 +662,16 @@
     const cardsEl = document.getElementById("cityCards");
     const kingdomGoldEl = document.getElementById("kingdomGold");
     const SIZEc = (CONFIG.map && CONFIG.map.hexSize) || 24;
-    const cards = new Map();   // townId -> { root, avatar, name, gold, hFill, hPct, give, take, cool }
+    const cards = new Map();   // townId -> { root, avatar, name, gold, hFill, hPct, btns, give, take, cool }
+
+    // v0.49: compact cards by default; holding SHIFT reveals the Give/Take controls
+    // (and the cooldown line) below each card.
+    let revealBtns = false;
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", (e) => { if (e.key === "Shift" && !revealBtns) { revealBtns = true; refresh(); } });
+      window.addEventListener("keyup",   (e) => { if (e.key === "Shift" &&  revealBtns) { revealBtns = false; refresh(); } });
+      window.addEventListener("blur",    () => { if (revealBtns) { revealBtns = false; refresh(); } });
+    }
 
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
@@ -712,10 +735,14 @@
         gold: root.querySelector(".cc-gold"),
         hFill: root.querySelector(".cc-happy-fill"),
         hPct: root.querySelector(".cc-happy-pct"),
+        btns: root.querySelector(".cc-btns"),   // v0.49: hidden until Shift is held
         give: root.querySelector(".cc-give"),
         take: root.querySelector(".cc-take"),
         cool: root.querySelector(".cc-cool"),
       };
+      // v0.49: the avatar carries the city NUMBER (an "image with just a number");
+      // Give/Take stay hidden until the player holds Shift (revealBtns below).
+      parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
       parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
       parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
       root.addEventListener("click", () => focus(town));
@@ -741,6 +768,8 @@
         prev = c.root;
 
         c.avatar.style.background = cityColor(town.id);
+        c.avatar.textContent = town.id;                 // v0.49: number on the avatar image
+        if (c.btns) c.btns.style.display = revealBtns ? "flex" : "none";   // v0.49: Give/Take only while Shift held
         c.name.textContent = "City #" + town.id;
         c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
         const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
@@ -761,7 +790,7 @@
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
           const mm = Math.floor(secs / 60), ss = secs % 60;
           c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
-          c.cool.style.display = "";
+          c.cool.style.display = revealBtns ? "" : "none";   // v0.49: only with the revealed controls
         } else {
           c.cool.style.display = "none";
         }

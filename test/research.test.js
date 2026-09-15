@@ -51,12 +51,13 @@ function runSecs(st, n) { for (let i = 0; i < TPS * n; i++) Research.tick(st); }
 // =========================================================================
 const NON_STARTERS = Object.values(CONFIG.buildings).filter(b => !b.startUnlocked);
 const LADDER_LEVELS = Object.values(CONFIG.upgrades).reduce((n, a) => n + a.length, 0);
-const KINGDOM_COUNT = 15;
-const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // ARISTOFIX: 15 + 27 + 9 = 51 (aristocrat ladder removed)
-ok("expected node count derived from CONFIG (15 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
-ok("EXPECT resolves to 51", EXPECT === 51);
-// The 3 kingdom branches remain 5 nodes each.
-ok("kingdom branches × 5 nodes", ["production", "logistics", "administration"].every(b => Research.nodesIn(b).length === 5));
+const KINGDOM_COUNT = 21;   // 15 + city-cap chain (3, admin) + scout chain (2, log) + advanced_provisioner (1, log)
+const EXPECT = KINGDOM_COUNT + NON_STARTERS.length + LADDER_LEVELS;   // 21 + 27 + 10 = 58 (v0.51: +upg_hut_l5)
+ok("expected node count derived from CONFIG (21 kingdom + unlocks + ladder levels)", CONFIG.research.length === EXPECT);
+ok("EXPECT resolves to 58", EXPECT === 58);
+// Production 5; logistics 8 (5 + scout chain + advanced provisioner); administration 8 (5 + city-cap chain).
+ok("kingdom branch node counts (prod 5 / log 8 / admin 8)",
+  Research.nodesIn("production").length === 5 && Research.nodesIn("logistics").length === 8 && Research.nodesIn("administration").length === 8);
 ok("branches() is the 3 kingdom branches, development dropped",
   Research.branches().length === 3 && Research.branches().indexOf("development") < 0);
 // === CC: bands() API — 5 bands (aristocrat added above burgher). ===
@@ -182,6 +183,12 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   ok("start sets active", st.research.active === "crop_rotation");
   ok("start deducts nothing up front", st.treasury === 100000);
   ok("cannot start a second node while one is active", !Research.canStart(st, "paved_roads"));
+  // v0.51: cancel the active project so a stuck player can switch.
+  const cancelled = Research.cancel(st);
+  ok("cancel returns the cancelled node id", cancelled === "crop_rotation");
+  ok("cancel clears the active project", st.research.active === null);
+  ok("after cancel, another node can be started", Research.canStart(st, "paved_roads") === true);
+  ok("cancel with nothing active returns null", Research.cancel(st) === null);
 })();
 
 // =========================================================================
@@ -481,9 +488,9 @@ function mkCity(over) {
 (() => {
   const devIds = ["hut_upgrades", "lumberjack_upgrades", "farm_upgrades", "sawmill_upgrades"];
   ok("the 4 development ids no longer exist", devIds.every(id => Research.get(id) === null));
-  const upgNodes = ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_lumberjack_l2", "upg_lumberjack_l3",
+  const upgNodes = ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_hut_l5", "upg_lumberjack_l2", "upg_lumberjack_l3",
     "upg_farm_l2", "upg_farm_l3", "upg_sawmill_l2", "upg_sawmill_l3"];
-  ok("all 9 per-level upgrade nodes exist with kind:upgrade + peasant band", upgNodes.every(id => {
+  ok("all 10 per-level upgrade nodes exist with kind:upgrade + peasant band", upgNodes.every(id => {
     const n = Research.get(id);
     return n && n.kind === "upgrade" && n.band === "peasant";
   }));
@@ -496,11 +503,11 @@ function mkCity(over) {
 // -- RT-A: normalize migrates old development ids to their full level sets --
 (() => {
   const cleaned = Research.normalize({ unlocked: ["hut_upgrades", "crop_rotation", "bogus"] });
-  ok("migrate expands hut_upgrades → all 3 hut level nodes",
-    ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"].every(id => cleaned.unlocked.indexOf(id) >= 0));
+  ok("migrate expands hut_upgrades → all 4 hut level nodes",
+    ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_hut_l5"].every(id => cleaned.unlocked.indexOf(id) >= 0));
   ok("migrate keeps legacy kingdom id crop_rotation", cleaned.unlocked.indexOf("crop_rotation") >= 0);
   ok("migrate drops unknown id", cleaned.unlocked.indexOf("bogus") < 0);
-  ok("migrate result has exactly the expected 4 ids", cleaned.unlocked.length === 4);
+  ok("migrate result has exactly the expected 5 ids", cleaned.unlocked.length === 5);
   const multi = Research.normalize({ unlocked: ["lumberjack_upgrades", "sawmill_upgrades"] });
   ok("migrate expands multiple dev ids", multi.unlocked.length === 4 &&
     ["upg_lumberjack_l2", "upg_lumberjack_l3", "upg_sawmill_l2", "upg_sawmill_l3"].every(id => multi.unlocked.indexOf(id) >= 0));

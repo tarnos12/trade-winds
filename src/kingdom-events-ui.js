@@ -1,11 +1,9 @@
-  // === KINGDOM/EVENTS-UI START === (P4-C / slot #4 — kingdom screen, town alerts,
-  // random-event notifications). All DOM + canvas; reads the pure state produced by
-  // Events.tick. drawAlerts()/handleEventNotice() are function declarations so the
-  // render loop + accumulator (defined earlier) can call them via hoisting.
+  // === KINGDOM/EVENTS-UI START === (slot #4 — kingdom screen, town alerts, toasts,
+  // and the bottom-right Event Log feed). All DOM + canvas; reads pure state
+  // READ-ONLY. drawAlerts() is a function declaration so the render loop (defined
+  // earlier) can call it via hoisting. (The random Kingdom-Events system was retired.)
   const kingdomEl = document.getElementById("kingdomPanel");
   const kwBodyEl = document.getElementById("kwBody");
-  const kwBannerEl = document.getElementById("kwBanner");
-  const eventChipEl = document.getElementById("eventChip");
   const toastsEl = document.getElementById("toasts");
   let kingdomOpen = false;
   let kwSort = { key: "id", dir: 1 };
@@ -149,7 +147,6 @@
 
   function renderKingdom() {
     if (!kingdomOpen) return;
-    renderEventBanner();
     const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
@@ -210,29 +207,8 @@
     }
   });
 
-  // ---- event banner / chip / toasts --------------------------------------
-  function currentEventDef() {
-    const e = state.event;
-    if (!e) return null;
-    const def = CONFIG.events && CONFIG.events.defs[e.id];
-    return def ? { def, e } : null;
-  }
-  function eventText(def, e) {
-    let d = def.desc;
-    if (e.id === "craze" && e.goodId) d = "Everyone wants " + goodLabel(e.goodId) + " — its demand triples.";
-    return def.name + " — " + d + " · " + Math.max(0, e.ticksLeft | 0) + " ticks left";
-  }
-  function renderEventBanner() {
-    const cur = currentEventDef();
-    if (cur) { kwBannerEl.classList.remove("hidden"); kwBannerEl.innerHTML = (cur.def.icon || "✨") + " " + esc(eventText(cur.def, cur.e)); }
-    else { kwBannerEl.classList.add("hidden"); kwBannerEl.textContent = ""; }
-  }
-  function updateEventChip() {
-    const cur = currentEventDef();
-    if (cur) { eventChipEl.classList.add("show"); eventChipEl.textContent = (cur.def.icon || "✨") + " " + cur.def.name; }
-    else { eventChipEl.classList.remove("show"); eventChipEl.textContent = ""; }
-  }
-
+  // ---- toasts -------------------------------------------------------------
+  // Short-lived center notifications (used for build-error feedback, etc.).
   function showToast(msg) {
     const el = document.createElement("div");
     el.className = "toast"; el.textContent = msg;
@@ -241,30 +217,80 @@
     setTimeout(() => { el.classList.remove("in"); setTimeout(() => el.remove(), 320); }, 4200);
   }
 
-  // Called from the economy accumulator when Events.tick flags a start/end.
-  function handleEventNotice(notice) {
-    if (!notice) return;
-    const def = CONFIG.events.defs[notice.id];
-    const label = def ? (def.icon + " " + def.name) : notice.id;
-    if (notice.type === "start") {
-      let extra = "";
-      if (notice.id === "craze" && state.event && state.event.goodId) extra = " (" + goodLabel(state.event.goodId) + ")";
-      showToast(label + extra + " has begun!");
-      SFX.play("event", (def ? def.name : notice.id) + " begins");
-    } else {
-      showToast(label + " has ended.");
-    }
-    updateEventChip();
-    if (kingdomOpen) renderKingdom();
-  }
+  // Keep the open kingdom panel current as the economy ticks.
+  setInterval(() => { if (kingdomOpen) renderKingdom(); }, 500);
 
-  // Keep the chip + open kingdom panel current as the economy ticks.
-  updateEventChip();
-  setInterval(() => { updateEventChip(); if (kingdomOpen) renderKingdom(); }, 500);
+  // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
+  // panel funnels notable happenings (kingdom events, research completed, town/
+  // castle level-ups, victory) instead of scattering toasts/debug. Self-contained:
+  // builds its own DOM, reads state READ-ONLY, exposes window.EventLog.push.
+  const EventLog = (function () {
+    const MAX = 40;
+    const wrap = document.createElement("div");
+    wrap.id = "eventLog"; wrap.className = "collapsed";
+    wrap.innerHTML =
+      '<div class="el-head"><span class="el-title">📜 Event Log</span>' +
+      '<button class="el-toggle" title="Show / hide" aria-label="Toggle event log">▲</button></div>' +
+      '<ul class="el-list"></ul>';
+    document.body.appendChild(wrap);
+    const listEl = wrap.querySelector(".el-list");
+    const toggleBtn = wrap.querySelector(".el-toggle");
+    const headEl = wrap.querySelector(".el-head");
+    const entries = [];
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    function relTime(t) {
+      const s = Math.max(0, ((typeof performance !== "undefined" ? performance.now() : Date.now()) - t) / 1000);
+      if (s < 60) return "now";
+      const m = Math.floor(s / 60); return m + " min";
+    }
+    function render() {
+      if (!entries.length) { listEl.innerHTML = '<li class="el-empty">Nothing yet — found a town to begin.</li>'; return; }
+      let html = "";
+      for (const e of entries) html += '<li><span class="el-ic">' + e.icon + '</span><span class="el-tx">' +
+        esc(e.text) + '</span><span class="el-tm">' + relTime(e.t) + '</span></li>';
+      listEl.innerHTML = html;
+    }
+    function push(icon, text) {
+      entries.unshift({ icon: icon || "•", text: String(text), t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+      if (entries.length > MAX) entries.length = MAX;
+      render();
+    }
+    function setCollapsed(v) { wrap.classList.toggle("collapsed", v); toggleBtn.textContent = v ? "▲" : "▼"; }
+    headEl.addEventListener("click", () => setCollapsed(!wrap.classList.contains("collapsed")));
+    setInterval(render, 15000);   // refresh the "x min" labels
+    render();
+    return { push: push, setCollapsed: setCollapsed };
+  })();
+  window.EventLog = EventLog;
+
+  // Feed the log from state deltas (read-only poll): research completions,
+  // town level-ups, castle upgrades, and victory.
+  (function () {
+    let rSeen = null, lvls = {}, wonSeen = false;
+    function nameOf(id) {
+      const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
+      if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
+      return id;
+    }
+    setInterval(function () {
+      if (typeof state !== "object" || !state) return;
+      const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : null;
+      if (done) {
+        if (rSeen === null) rSeen = new Set(done);
+        else for (const id of done) if (!rSeen.has(id)) { rSeen.add(id); EventLog.push("🔬", "Researched " + nameOf(id)); }
+      }
+      for (const t of (state.towns || [])) {
+        const prev = (t.id in lvls) ? lvls[t.id] : (t.level || 1);
+        if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
+        lvls[t.id] = t.level || 1;
+      }
+      // (castle upgrades removed v0.44 — no castle-level log)
+      if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
+    }, 1200);
+  })();
 
   // Expose for the headless smoke test / console debugging.
   window.KingdomUI = { openKingdom, closeKingdom, toggleKingdom, renderKingdom,
                        showToast, drawAlerts, townAlertIcons,
                        get isOpen() { return kingdomOpen; } };
-  window.Events = Events;
   // === KINGDOM/EVENTS-UI END ===

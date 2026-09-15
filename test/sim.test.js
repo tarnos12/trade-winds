@@ -88,11 +88,18 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
                    stock: { wood: 100000 },   // firewood plentiful
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
   const potato = [];
-  for (let i = 0; i < 100; i++) { Sim.tick({ towns: [t] }); potato.push(t.stock.potato || 0); }
+  // GRAN + satEMA: batched (whole-unit) production has an early empty-shelf window
+  // and the satisfaction EMA smooths happiness, so the happiness→population ramp
+  // converges more slowly than the old instant-per-tick model. Run long enough to
+  // settle at full housing cap (happiness ~70 ⇒ full cap holds); capture potato over
+  // the first 100 ticks for the production check.
+  for (let i = 0; i < 500; i++) { Sim.tick({ towns: [t] }); if (i < 100) potato.push(t.stock.potato || 0); }
 
   ok("Sim assigns workers to the potato_farm (workerSlots cap)",
      t.buildings[0].workers === CONFIG.buildings.potato_farm.workerSlots);
-  ok("potato_farm produces potato (stock > 0)", potato[0] > 0);
+  // GRAN: extractors release whole-unit BATCHES on their interval (not a trickle
+  // each tick), so stock is 0 until the first batch lands — assert some batch did.
+  ok("potato_farm produces potato (stock > 0 after a batch)", potato.some(v => v > 0));
   ok("basics met (potato+wood) ⇒ happiness settles near ~70",
      Math.abs(t.happiness - 70) < 2.5);
   ok("CC: basics-only town (happiness ~70) fills housing to FULL cap", (() => {
@@ -122,9 +129,22 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const t = town({ pop: { peasants: 6, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
-  for (let i = 0; i < 300; i++) Sim.tick({ towns: [t] });
-  ok("potato stock is clamped at the storage cap (80)", t.stock.potato === CAP);
+  let maxPotato = 0;
+  for (let i = 0; i < 300; i++) { Sim.tick({ towns: [t] }); maxPotato = Math.max(maxPotato, t.stock.potato || 0); }
+  // GRAN: output is released in whole-unit batches, so potato peaks at (and is
+  // clamped to) the cap right after a batch and dips between batches — the peak is
+  // exactly the cap and it never exceeds it.
+  ok("potato production reaches the storage cap (80) and is clamped there", maxPotato === CAP);
   ok("no good ever exceeds the storage cap", Object.values(t.stock).every(v => v <= CAP + 1e-9));
+  // v0.51 (P1 §2): NO WASTE. With the warehouse full, the producer STALLS — its
+  // internal output buffer (_prodAcc) is bounded by storeCap and never grows
+  // unbounded, so no production is discarded (it just waits for warehouse room).
+  const storeCap = (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+  // The stall gate checks BEFORE banking, so a single tick can overshoot the cap
+  // by at most one tick's production (<1); the buffer is bounded (no runaway) —
+  // without the no-waste change it would just be clamped away (wasted) instead.
+  ok("full-warehouse producer buffer stays bounded by storeCap (no waste, no runaway)",
+     (t.buildings[0]._prodAcc || 0) <= storeCap + 1);
 }
 
 // Storage cap also clamps a directly-oversized stockpile down on the next tick.
@@ -190,11 +210,18 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("BAL2: workers appear from basics alone (no luxury gate)", dry.pop.workers > 0);
   ok("BAL2: without luxuries worker happiness stays below ~95",
      (dry.tierHappiness.workers || 0) < 95);
-  // And with NO basics stocked at all, an empty tier still does NOT appear.
+  // v0.50: with NO basics stocked, an empty tier still gets a MINIMAL duty-cycled
+  // crew (present ~1 of every 4 cycles, never above the floor) so a starved city can
+  // bootstrap food/wood. Uses a PERSISTENT state so State.tick (the duty-cycle phase)
+  // accumulates across ticks.
   const none = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
                       stock: {}, buildings: [b("cottage", 0, 1)] });
-  for (let i = 0; i < 120; i++) Sim.tick({ towns: [none] });
-  ok("BAL2: no basics stocked ⇒ no workers bootstrap", none.pop.workers === 0);
+  const noneState = { towns: [none], tick: 0 };
+  let sawOn = false, sawOff = false, maxW = 0;
+  for (let i = 0; i < 200; i++) { Sim.tick(noneState); const w = none.pop.workers || 0; if (w >= 1) sawOn = true; else sawOff = true; maxW = Math.max(maxW, w); }
+  ok("BAL2: no basics ⇒ a minimal duty-cycled crew appears (bootstrap)", sawOn);
+  ok("BAL2: no basics ⇒ the crew is intermittent (absent some cycles)", sawOff);
+  ok("BAL2: no basics ⇒ crew never exceeds the floor (1)", maxW <= 1);
 }
 
 // ========================================================================
@@ -248,11 +275,14 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const t = town({ pop: { peasants: 0, workers: 3, burghers: 0 },
                    stock: { grain: 60 },
                    buildings: [b("mill", 0, 1)] });
-  const g0 = t.stock.grain;
   Sim.tick({ towns: [t] });
   ok("Sim assigns workers to the mill", t.buildings[0].workers === CONFIG.buildings.mill.workerSlots);
-  ok("mill consumes grain input", t.stock.grain < g0);
-  ok("mill produces flour output", (t.stock.flour || 0) > 0);
+  // GRAN: a processor BANKS its input draw (b._inAcc) and output (b._prodAcc) each
+  // tick and flushes them to stock as whole units on the 24-tick interval; after a
+  // single tick both are banked (this bare-mill town has no worker housing, so its
+  // pop clamps to 0 next tick — the banked flows are the faithful measure here).
+  ok("mill consumes grain input (banked)", (t.buildings[0]._inAcc && t.buildings[0]._inAcc.grain) > 0);
+  ok("mill produces flour output (banked)", (t.buildings[0]._prodAcc || 0) > 0);
 }
 
 // ========================================================================
@@ -277,9 +307,15 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   Sim.tick({ towns: [t] });
   ok("greedy fill: first farm takes 2, second takes 0",
      t.buildings[0].workers === 2 && t.buildings[1].workers === 0);
-  // 2 labourers × rate 2 × happiness-eff ≤ 1.2x = 4.8 potato max; unbounded would be 9.6.
-  ok("labour pool caps production across buildings", (t.stock.potato || 0) <= 4.8 + 1e-9);
-  ok("labour-capped town still produced something", (t.stock.potato || 0) > 0);
+  // GRAN: production is BANKED per building (released to stock in bulk on the
+  // interval). Measure the banked output after one tick: only the staffed farm
+  // banks anything, bounded by ratePerWorker × pool(2) × effMax. (This pop-2/no-house
+  // town clamps to 0 pop next tick, so one tick's bank is the faithful measure —
+  // unbounded fill would have BOTH farms banking.)
+  const prod0 = t.buildings[0]._prodAcc || 0, prod1 = t.buildings[1]._prodAcc || 0;
+  const bound = CONFIG.buildings.potato_farm.output.ratePerWorker * 2 * CONFIG.needs.effMax + 1e-9;
+  ok("labour pool caps production across buildings", prod0 <= bound && prod1 === 0);
+  ok("labour-capped town still produced something", prod0 > 0);
 }
 
 // ========================================================================
@@ -446,12 +482,16 @@ function place(typeId, q, r, over) {
 // CB-A.5) A gold-only founding-kit starter comes out built:true and functions
 // EXACTLY as a legacy building (no built field) — same production.
 {
-  ok("CB-A: gold-only starter is instant (built:true on placement)",
-     place("potato_farm", 0, 1).built === true && place("hut", 0, 2).built === true);
-  const houses = () => [place("hut", 0, 2), place("hut", 0, 3), place("hut", 0, 4)];
+  // v0.49: starters now cost wood → they CONSTRUCT over time (not instant). A
+  // gold-only building is still instant; a resource-cost one is built:false.
+  ok("CB-A: gold-only building is instant (built:true on placement)",
+     place("farm", 0, 1).built === true);
+  ok("CB-A: resource-cost starter constructs over time (built:false on placement)",
+     place("potato_farm", 0, 1).built === false && place("hut", 0, 2).built === false);
+  const houses = () => [place("hut", 0, 2, { built: true }), place("hut", 0, 3, { built: true }), place("hut", 0, 4, { built: true })];
   const modern = town({ id: 1, pop: { peasants: 3, workers: 0, burghers: 0 },
                         stock: { wood: 100000 },
-                        buildings: [place("potato_farm", 0, 1), ...houses()] });
+                        buildings: [place("potato_farm", 0, 1, { built: true }), ...houses()] });
   const legacy = town({ id: 2, pop: { peasants: 3, workers: 0, burghers: 0 },
                         stock: { wood: 100000 },
                         buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
@@ -466,14 +506,14 @@ function place(typeId, q, r, over) {
 {
   const t = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
-                   buildings: [place("lumberjack", 0, 1, { closedSlots: 1 })] });
+                   buildings: [place("lumberjack", 0, 1, { closedSlots: 1, built: true })] });
   Sim.tick({ towns: [t] });
-  const full = CONFIG.buildings.lumberjack.workerSlots; // 3
+  const full = CONFIG.buildings.lumberjack.workerSlots; // 2
   ok("CB-A: closedSlots:1 → assigned workers = slots − 1", t.buildings[0].workers === full - 1);
 
   const t2 = town({ pop: { peasants: 10, workers: 0, burghers: 0 },
                     stock: { wood: 100000 },
-                    buildings: [place("lumberjack", 0, 1, { closedSlots: full + 5 })] });
+                    buildings: [place("lumberjack", 0, 1, { closedSlots: full + 5, built: true })] });
   Sim.tick({ towns: [t2] });
   ok("CB-A: closedSlots ≥ slots → 0 workers (never negative)", t2.buildings[0].workers === 0);
 }
@@ -485,8 +525,8 @@ function place(typeId, q, r, over) {
   const t = town({ pop: { peasants: 2, workers: 0, burghers: 0 },
                    stock: { wood: 100000 },
                    buildings: [
-                     place("lumberjack", 0, 1, { priority: false }),  // earlier in array
-                     place("lumberjack", 0, 2, { priority: true }),   // but priority
+                     place("lumberjack", 0, 1, { priority: false, built: true }),  // earlier in array
+                     place("lumberjack", 0, 2, { priority: true, built: true }),   // but priority
                    ] });
   Sim.tick({ towns: [t] });
   ok("CB-A: priority building staffed first (gets the whole pool)", t.buildings[1].workers === 2);
@@ -508,7 +548,11 @@ function place(typeId, q, r, over) {
     const t1 = mk(1), t2 = mk(2);
     Sim.tick({ towns: [t1] });
     Sim.tick({ towns: [t2] });
-    ok("RU-A: upgradeLevel 2 farm yields 1.25× grain", t1.stock.grain > 0 && near(t2.stock.grain / t1.stock.grain, 1.25, 1e-6));
+    // GRAN: grain is banked (b._prodAcc) and flushed to stock in whole-unit batches;
+    // total production = released stock + the carried remainder. The upgrade's exact
+    // 1.25× outputMult is on the banked total (floored stock alone would quantise it).
+    const grainOut = (t) => (t.stock.grain || 0) + (t.buildings[0]._prodAcc || 0);
+    ok("RU-A: upgradeLevel 2 farm yields 1.25× grain", grainOut(t1) > 0 && near(grainOut(t2) / grainOut(t1), 1.25, 1e-6));
   }
 
   // -- slotPlus: sawmill at L3 (base 2 slots + 1) staffs 3 workers from a big pool
@@ -531,7 +575,7 @@ function place(typeId, q, r, over) {
       level: 3, pop: { peasants: 12, workers: 0, burghers: 0 },
       stock: { wood: 60, potato: 60, fish: 60, wool: 60 },
       buildings: [
-        place("hut", 0, 1, { upgradeLevel: lvl }),
+        place("hut", 0, 1, { upgradeLevel: lvl, built: true }),
         place("potato_farm", 0, 2, { built: true }),
         place("lumberjack", 0, 3, { built: true }),
         place("fishery", 1, 1, { built: true }),
@@ -550,15 +594,20 @@ function place(typeId, q, r, over) {
     const mk = (lvl) => town({
       pop: { peasants: 2, workers: 0, burghers: 0 },
       stock: { wood: 50, potato: 50, fish: 50, wool: 50 },
-      buildings: [place("hut", 0, 1, { upgradeLevel: lvl })],
+      buildings: [place("hut", 0, 1, { upgradeLevel: lvl, built: true })],
     });
     const tHi = mk(1), tLo = mk(4);   // L4 hut cuts basic consumption to 0.7×
     Sim.tick({ towns: [tHi] });
     Sim.tick({ towns: [tLo] });
-    ok("RU-A: L4 hut consumes less wood", tLo.stock.wood > tHi.stock.wood);
-    ok("RU-A: L4 hut consumes less potato", tLo.stock.potato > tHi.stock.potato);
-    ok("RU-A: extra needs (fish) consumed equally", near(tLo.stock.fish, tHi.stock.fish, 1e-9));
-    ok("RU-A: extra needs (wool) consumed equally", near(tLo.stock.wool, tHi.stock.wool, 1e-9));
+    // GRAN: consumption is integer-quantized with a carry, so one tick removes 0
+    // whole units — but the town's published demand IS the real (fractional)
+    // per-capita consumption request (basicConsumptionMult applied). At equal pop
+    // (one tick) it's the faithful measure; running further would let the L4 hut's
+    // larger capacity grow its pop and confound the per-capita comparison.
+    ok("RU-A: L4 hut consumes less wood", tLo.demand.wood < tHi.demand.wood);
+    ok("RU-A: L4 hut consumes less potato", tLo.demand.potato < tHi.demand.potato);
+    ok("RU-A: extra needs (fish) demanded equally", near(tLo.demand.fish, tHi.demand.fish, 1e-9));
+    ok("RU-A: extra needs (wool) demanded equally", near(tLo.demand.wool, tHi.demand.wool, 1e-9));
   }
 
   // -- pending upgrade: its material need shows in demand, drains stock over
@@ -596,8 +645,10 @@ function place(typeId, q, r, over) {
 
   // -- transporter-scaled construction delivery: L4 delivers more/tick than L1. --
   {
+    // v0.49: use mill (wood 25 + stone 15 = 40 total) so its cost exceeds even the
+    // L4 per-tick budget (35), keeping the L1<L4 delivery comparison meaningful.
     const mk = (lvl) => town({ level: lvl, pop: { peasants: 0, workers: 0, burghers: 0 },
-                               stock: { wood: 200 }, buildings: [place("sawmill", 0, 1)] });
+                               stock: { wood: 200 }, buildings: [place("mill", 0, 1)] });
     const t1 = mk(1), t4 = mk(4);
     Sim.tick({ towns: [t1] }); Sim.tick({ towns: [t4] });
     const d1 = t1.buildings[0].delivered.wood || 0, d4 = t4.buildings[0].delivered.wood || 0;
@@ -647,8 +698,8 @@ function place(typeId, q, r, over) {
 
   // -- houseIncome attributes a tier's income across its houses by capacity share. --
   {
-    const bigHut = place("hut", 0, 3, { upgradeLevel: 2 });   // +1 capacity from L2 (cap 3)
-    const smallHut = place("hut", 1, 3);                       // base cap 2
+    const bigHut = place("hut", 0, 3, { upgradeLevel: 2, built: true });   // +1 capacity from L2 (cap 3)
+    const smallHut = place("hut", 1, 3, { built: true });                       // base cap 2
     const t = town({ level: 1, gold: 0,
       pop: { peasants: 5, workers: 0, burghers: 0 },
       stock: { wood: 200, potato: 200, fish: 200, wool: 200 },
@@ -787,6 +838,161 @@ function place(typeId, q, r, over) {
   }
 }
 // === /CC ======================================================================
+
+// === SAWTOOTH FIX (post-victory happiness plateau) ============================
+// Locks in the deterministic happiness smoothing: happiness reads a moving AVERAGE
+// (EMA, town.satEMA) of per-good satisfaction instead of the instantaneous shelf, so
+// a supplied aristocrat estate whose imports arrive in BURSTS holds a stable plateau
+// instead of the ~56↔99 sawtooth — WITHOUT changing steady-state happiness (mean
+// preserved) or trivializing genuine scarcity.
+{
+  const N = CONFIG.needs;
+  ok("SAW: CONFIG.needs.satSmoothing present and in (0,1]",
+     typeof N.satSmoothing === "number" && N.satSmoothing > 0 && N.satSmoothing <= 1);
+
+  const ARI = N.tiers.aristocrats;
+  const ARI_GOODS = [...ARI.basic, ...ARI.extra];
+  // A pure-import aristocrat estate: 10 aristocrat_homes, 20 seeded aristocrats, no
+  // local T3 producer. Its needs are met only by what we drop on the shelf.
+  const mkEstate = () => town({
+    level: 4, gold: 0,
+    pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 20 },
+    stock: {}, happiness: 100,
+    buildings: (() => { const a = []; for (let i = 0; i < 10; i++) a.push({ typeId: "aristocrat_home", q: 0, r: i + 1, workers: 0, built: true, delivered: {}, closedSlots: 0 }); return a; })(),
+  });
+  const AVG = {}; for (const g in ARI.perCapita) AVG[g] = ARI.perCapita[g] * 20;   // per-tick draw at full pop
+  // Drive with per-good BURSTS every GAP ticks (a cart dropping a load) but the estate
+  // only BANKS up to `hold` units of each good (its finite trade buy-buffer, i.e. the
+  // real minStock/needOf cap), so a burst tops the shelf to `hold` and it then drains
+  // to ~0 before the next cart — the exact bursty-import mechanism that sawtooths
+  // happiness (a supplied estate that reads instantaneous stock). Staggered phases
+  // mirror multi-good carts touching different goods on different ticks.
+  function driveBurst(gap, hold, horizon, warmup) {
+    const t = mkEstate(); const st = { towns: [t], tick: 0 };
+    const phase = {}; ARI_GOODS.forEach((g, i) => { phase[g] = (i * 7) % gap; });   // multi-good carts touch goods on different ticks
+    let mn = Infinity, mx = -Infinity, sum = 0, n = 0;
+    for (let i = 0; i < horizon; i++) {
+      for (const g of ARI_GOODS) if ((i % gap) === phase[g]) t.stock[g] = Math.min(hold, (t.stock[g] || 0) + AVG[g] * gap);
+      Sim.tick(st);
+      const h = t.tierHappiness.aristocrats;
+      if (i >= warmup && typeof h === "number") { if (h < mn) mn = h; if (h > mx) mx = h; sum += h; n++; }
+    }
+    return { min: mn, max: mx, mean: sum / n, p2t: mx - mn, pop: t.pop.aristocrats };
+  }
+
+  // (a) Snap-init: with a PLENTIFUL shelf every tick the smoothed path is bit-identical
+  //     to the old instantaneous model (EMA snaps to the first sample; gsat stays 1).
+  const drivePlentiful = (alpha) => {
+    const save = N.satSmoothing; N.satSmoothing = alpha;
+    const t = mkEstate(); const st = { towns: [t], tick: 0 };
+    const series = [];
+    for (let i = 0; i < 400; i++) { for (const g of ARI_GOODS) t.stock[g] = CONFIG.town.storageCap; Sim.tick(st); series.push(t.tierHappiness.aristocrats); }
+    N.satSmoothing = save; return series;
+  };
+  {
+    const smoothed = drivePlentiful(N.satSmoothing), raw = drivePlentiful(1);
+    ok("SAW: plentiful-shelf drive is bit-identical smoothed vs unsmoothed (snap-init, no steady-state regression)",
+       smoothed.length === raw.length && smoothed.every((v, i) => v === raw[i]));
+    ok("SAW: a fully-supplied estate plateaus at the win threshold (mean >= 99.5)",
+       smoothed[smoothed.length - 1] >= CONFIG.victory.aristocratHappiness);
+  }
+
+  // (b) The fix: bursty-but-supplied estate (the town banks a finite reserve `hold`,
+  //     so a good tops up then drains before the next burst) — smoothing collapses the
+  //     sawtooth while preserving the mean (a stable plateau, not a lower one). The
+  //     crisp <8 / trade-driven demonstration lives in trade.test.js (real Sim+Trade);
+  //     here we lock the robust invariants: the smoothing at least HALVES the ripple
+  //     and never moves the steady-state mean (no trivialize, no regress).
+  {
+    const save = N.satSmoothing;
+    N.satSmoothing = 1;    const before = driveBurst(50, 8, 4000, 2000);   // old instantaneous model
+    N.satSmoothing = save; const after  = driveBurst(50, 8, 4000, 2000);   // smoothed (default)
+    ok("SAW: bursty supply sawtooths WITHOUT smoothing (peak-to-trough > 20)", before.p2t > 20,
+       "before p2t=" + before.p2t.toFixed(1));
+    ok("SAW: smoothing at least halves the sawtooth (a stable plateau)", after.p2t < before.p2t * 0.5,
+       "after p2t=" + after.p2t.toFixed(2) + " vs before " + before.p2t.toFixed(1));
+    // v0.51 §6: the all-basics-present consumption gate lets a bursty estate hold its
+    // basics until the whole basket is on the shelf, so smoothing can RAISE the mean
+    // (fewer wasted partial meals). The invariant we lock is directional — smoothing
+    // must never LOWER the steady-state mean (no trivialize/regress); a rise is fine.
+    ok("SAW: smoothing does NOT lower the mean (no trivialize/regress)",
+       after.mean >= before.mean - 2, `before mean=${before.mean.toFixed(1)} after=${after.mean.toFixed(1)}`);
+  }
+
+  // (c) Determinism: identical bursty drives give bit-identical happiness stats.
+  {
+    const a = driveBurst(50, 8, 2000, 0), b2 = driveBurst(50, 8, 2000, 0);
+    ok("SAW: smoothed happiness drive is deterministic (bit-identical)",
+       a.min === b2.min && a.max === b2.max && a.mean === b2.mean);
+  }
+
+  // (d) satSmoothing did not mutate the shared CONFIG (restored to the built default).
+  ok("SAW: CONFIG.needs.satSmoothing restored to its config default after the A/B",
+     CONFIG.needs.satSmoothing > 0 && CONFIG.needs.satSmoothing <= 1);
+}
+// === /SAWTOOTH FIX ============================================================
+
+// ========================================================================
+// GRAN) Economy granularity overhaul — town.stock is ALWAYS a whole number:
+// production releases whole-unit BATCHES on a per-kind interval, and consumption
+// removes whole units with a fractional carry (satisfaction stays smooth via satEMA).
+// ========================================================================
+{
+  // (a) Integer invariant: run a full producing + consuming economy and assert
+  //     every stock value stays an integer on every tick.
+  const t = town({ level: 3, pop: { peasants: 4, workers: 3, burghers: 0 },
+    stock: { wood: 40, potato: 40, fish: 40, wool: 40, coal: 40, clothes: 40, bread: 40, mead: 40, grain: 40 },
+    buildings: [
+      place("potato_farm", 0, 1, { built: true }), place("lumberjack", 1, 1, { built: true }),
+      place("fishery", 2, 1, { built: true }), place("shepherd", 3, 1, { built: true }),
+      place("mill", 4, 1, { built: true }),
+      place("hut", 0, 2, { built: true }), place("hut", 1, 2, { built: true }),
+      place("cottage", 2, 2, { built: true }),
+    ] });
+  let allInt = true, badTick = -1;
+  for (let i = 0; i < 200 && allInt; i++) {
+    Sim.tick({ towns: [t] });
+    for (const g in t.stock) if (!Number.isInteger(t.stock[g])) { allInt = false; badTick = i; break; }
+  }
+  ok("GRAN: town.stock stays integer (whole units) across 200 producing/consuming ticks", allInt);
+  if (!allInt) console.error("      first fractional stock at tick " + badTick + ": " + JSON.stringify(t.stock));
+
+  // (b) Bulk release: a staffed extractor's output arrives as whole-unit batches
+  //     (some ticks add nothing, then a tick jumps by ≥1), NOT a per-tick trickle.
+  const t3 = town({ pop: { peasants: 2, workers: 0, burghers: 0 }, stock: { wood: 1e5 },
+    buildings: [place("potato_farm", 0, 1, { built: true }),
+                place("hut", 0, 2, { built: true }), place("hut", 1, 2, { built: true })] });
+  let sawZeroTick = false, sawBatchJump = false;
+  for (let i = 0; i < 40; i++) {
+    const before = t3.stock.potato || 0;
+    Sim.tick({ towns: [t3] });
+    const delta = (t3.stock.potato || 0) - before;
+    if (delta === 0) sawZeroTick = true;   // no trickle: quiet ticks add nothing
+    if (delta >= 1) sawBatchJump = true;   // batch tick: whole-unit jump
+  }
+  ok("GRAN: extractor output has quiet ticks (no per-tick trickle)", sawZeroTick);
+  ok("GRAN: extractor output releases whole-unit batches (≥1 jump)", sawBatchJump);
+
+  // (c) Batch cadence from CONFIG: an always-staffed extractor releases on the
+  //     extractor interval (intervalSec × 1000/baseTickMs ticks). Peasants staff a
+  //     lumberjack; count the ticks between successive `wood` jumps.
+  // v0.51 §1: a building's own cycleSec overrides the per-kind default (lumberjack = 4s).
+  const lj = CONFIG.buildings.lumberjack;
+  const secs = (typeof lj.cycleSec === "number") ? lj.cycleSec
+             : ((CONFIG.econ.productionIntervalSec && CONFIG.econ.productionIntervalSec.extractor) || 8);
+  const expectTicks = Math.round(secs * (1000 / CONFIG.econ.baseTickMs));
+  const t4 = town({ pop: { peasants: 3, workers: 0, burghers: 0 }, stock: { potato: 1e5, wood: 0 },
+    buildings: [place("lumberjack", 0, 1, { built: true }), place("hut", 0, 2, { built: true }),
+                place("hut", 1, 2, { built: true })] });
+  const jumpTicks = [];
+  for (let i = 0; i < expectTicks * 3 + 2; i++) {
+    const before = t4.stock.wood || 0;
+    Sim.tick({ towns: [t4] });
+    if ((t4.stock.wood || 0) > before) jumpTicks.push(i);
+  }
+  const gap = jumpTicks.length >= 2 ? (jumpTicks[1] - jumpTicks[0]) : -1;
+  ok("GRAN: extractor releases on the CONFIG interval (×1000/baseTickMs ticks)", gap === expectTicks);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
