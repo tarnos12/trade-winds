@@ -356,6 +356,7 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,
                                 // Provincial Rule +3 → 10, Imperial Domain +2 → 12).

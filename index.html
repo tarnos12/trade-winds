@@ -2821,6 +2821,7 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,
                                 // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
@@ -3278,6 +3279,17 @@ Sim.tick = function (State) {
 
   for (const town of State.towns) {
     if (!town) continue;
+    // v0.51: a city UNDER CONSTRUCTION (built === false) is dormant — no production,
+    // consumption, population, porters, trade or tax — until its build timer elapses.
+    // Only a freshly-FOUNDED city is built:false; a city level-upgrade never sets it,
+    // so an established city keeps working while it upgrades. Legacy/test towns omit
+    // the flag (built === undefined) and are treated as already built.
+    if (town.built === false) {
+      town._buildT = (town._buildT || 0) + 1;
+      const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
+      if (town._buildT >= buildTicks) { town.built = true; town._buildT = buildTicks; }
+      else continue;   // still building — skip everything else this tick
+    }
     if (!town.stock) town.stock = {};
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;
@@ -3426,7 +3438,11 @@ Sim.tick = function (State) {
 
       // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
       const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-      const w = b.workers || 0;
+      // v0.51: a PRODUCER being upgraded stops producing while the upgrade is pending
+      // (houses have no output loop, so they keep functioning — matching the design:
+      // "upgrading production buildings stops them; houses always function"). Its store
+      // still exists for porters to drain.
+      const w = b.pendingUpgrade ? 0 : (b.workers || 0);
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
         // this building's banked-but-unreleased draw); record full desired input as
@@ -4179,10 +4195,10 @@ Object.assign(CONFIG, {
     // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
     // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
-      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { gold: 100, wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { gold: 250, stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { gold: 500, bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { gold: 900, bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -4235,22 +4251,27 @@ Buildings.nextUpgrade = function (state, b) {
 // Can the player start the next upgrade on this building? Gold-gated only —
 // resources are delivered over time (like CB-A construction), not required up
 // front. Returns {ok:true} or {ok:false, reason}.
+// v0.51: an upgrade's GOLD is paid by the CITY (town.gold), not the kingdom treasury —
+// placement/founding gold comes from the treasury, but upgrading a building spends the
+// city's own coffers. Resources are delivered from town stock over time (CB-A).
 Buildings.canStartUpgrade = function (state, town, b) {
   if (!b) return { ok: false, reason: "No building" };
   if (b.built === false) return { ok: false, reason: "Under construction" };
   if (b.pendingUpgrade) return { ok: false, reason: "Upgrade in progress" };
   const nxt = Buildings.nextUpgrade(state, b);
   if (!nxt) return { ok: false, reason: "No upgrade available" };
-  if ((state.treasury || 0) < (nxt.cost.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
   return { ok: true };
 };
 
-// Charge the upgrade's GOLD to the treasury and mark the building pending. The
-// resources are delivered from town stock over time by the Sim delivery step.
+// Charge the upgrade's GOLD to the CITY and mark the building pending. The resources
+// are delivered from town stock over time by the Sim delivery step.
 Buildings.startUpgrade = function (state, town, b) {
   if (!Buildings.canStartUpgrade(state, town, b).ok) return false;
   const nxt = Buildings.nextUpgrade(state, b);
-  state.treasury = (state.treasury || 0) - (nxt.cost.gold || 0);
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
 };
@@ -7448,8 +7469,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   function drawTowns() {
+    const bt = (CONFIG.town && CONFIG.town.baseTickMs) ? 0 : 0;   // (kept for clarity; buildSec below uses econ base)
+    const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
       const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const building = t.built === false;   // v0.51: under construction
+      ctx.save();
+      if (building) ctx.globalAlpha = 0.5;   // dim a city that isn't built yet
       // shadow
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + SIZE * 0.5, SIZE * 0.55, SIZE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
@@ -7466,6 +7492,20 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       ctx.lineTo(p.x - s, p.y);
       ctx.closePath(); ctx.fill();
       ctx.fillRect(p.x - s * 0.7, p.y, s * 1.4, s * 0.9);
+      ctx.restore();
+      // construction progress ring (v0.51): a scaffolding arc + % while building
+      if (building) {
+        const prog = Math.max(0, Math.min(1, (t._buildT || 0) / buildTicks));
+        ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = Math.max(3, SIZE * 0.12);
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "#7fc24b";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#f4ecdd";
+        ctx.font = "bold " + Math.round(SIZE * 0.28) + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("🚧", p.x, p.y - SIZE * 0.9);
+        ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+      }
     }
   }
 
@@ -9196,6 +9236,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // EC-A: happiness baseline is 50 (EC-B's Sim moves it toward 100 as needs
       // are met, down when unmet); pop per house = round(cap × happiness/100).
       happiness: 50,
+      // v0.51: a freshly-founded city is UNDER CONSTRUCTION — it does nothing until
+      // its build timer completes (Sim advances _buildT and flips built→true). A city
+      // UPGRADE (level up) never sets this, so an existing city keeps working.
+      built: false, _buildT: 0,
     };
     // Prime prices once so the panel opens with meaningful numbers (priceFor
     // mutates town.prices; first read snaps to target).
@@ -9217,6 +9261,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // saves still load — Sim.tick reassigns their workers).
     if (!Array.isArray(t.buildings)) t.buildings = [];
     if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
+    if (t.built == null) t.built = true;   // v0.51: legacy/loaded cities are already built (only makeTown starts false)
     if (typeof Ledger !== "undefined") Ledger.normalizeTown(t);   // PP-A: bounded gold ledger (legacy saves self-heal)
     return t;
   }
@@ -15367,8 +15412,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.13";
+  const GAME_VERSION = "0.51.14";
   const PATCH_NOTES = [
+    { v: "0.51.14", notes: [
+      "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
+      "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",
+      "Upgrading a PRODUCTION building stops it producing until the upgrade finishes (houses keep working while they upgrade).",
+    ] },
     { v: "0.51.13", notes: [
       "THE CROWN'S CUT IS MINTED (economy overhaul): the trade tariff is now 30% and it's MINTED — the selling city keeps the FULL sale price, and the treasury gets 30% of the value as brand-new money on top. Trade grows the kingdom's money supply instead of shuffling it around, so a busy trade network steadily funds the crown. You can still tune the rate (10–40%) with the tariff slider",
     ] },

@@ -1,6 +1,11 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.13";
+  const GAME_VERSION = "0.51.14";
   const PATCH_NOTES = [
+    { v: "0.51.14", notes: [
+      "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
+      "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",
+      "Upgrading a PRODUCTION building stops it producing until the upgrade finishes (houses keep working while they upgrade).",
+    ] },
     { v: "0.51.13", notes: [
       "THE CROWN'S CUT IS MINTED (economy overhaul): the trade tariff is now 30% and it's MINTED — the selling city keeps the FULL sale price, and the treasury gets 30% of the value as brand-new money on top. Trade grows the kingdom's money supply instead of shuffling it around, so a busy trade network steadily funds the crown. You can still tune the rate (10–40%) with the tariff slider",
     ] },

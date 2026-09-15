@@ -142,12 +142,12 @@ function constructSawmillState() {
 // ========================================================================
 // 2) upgraded — a pendingUpgrade APPLIES (upgradeLevel increments).
 // ========================================================================
-// v0.51: hut L1->L2 needs research unlock "upg_hut_l2" + wood:30 + planks:10 delivered by Sim (material-only, no gold).
+// v0.51: hut L1->L2 needs research unlock "upg_hut_l2" + CITY gold + wood:30 + planks:10 delivered by Sim.
 function upgradeHutState() {
   const hut = { typeId: "hut", q: 0, r: 0, workers: 0, built: true, upgradeLevel: 1, pendingUpgrade: null, delivered: {} };
   return { treasury: 100000, research: { unlocked: ["upg_hut_l2"], active: null, progress: 0, spent: 0 },
     towns: [{
-      id: 1, q: 0, r: 0, level: 1, gold: 0,
+      id: 1, q: 0, r: 0, level: 1, gold: 1000,
       pop: { peasants: 0, workers: 0, burghers: 0 },
       stock: { wood: 50, planks: 20 }, prices: {}, demand: {}, buildings: [hut], happiness: undefined,
     }] };

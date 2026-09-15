@@ -375,6 +375,17 @@ Sim.tick = function (State) {
 
   for (const town of State.towns) {
     if (!town) continue;
+    // v0.51: a city UNDER CONSTRUCTION (built === false) is dormant — no production,
+    // consumption, population, porters, trade or tax — until its build timer elapses.
+    // Only a freshly-FOUNDED city is built:false; a city level-upgrade never sets it,
+    // so an established city keeps working while it upgrades. Legacy/test towns omit
+    // the flag (built === undefined) and are treated as already built.
+    if (town.built === false) {
+      town._buildT = (town._buildT || 0) + 1;
+      const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
+      if (town._buildT >= buildTicks) { town.built = true; town._buildT = buildTicks; }
+      else continue;   // still building — skip everything else this tick
+    }
     if (!town.stock) town.stock = {};
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;
@@ -523,7 +534,11 @@ Sim.tick = function (State) {
 
       // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
       const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-      const w = b.workers || 0;
+      // v0.51: a PRODUCER being upgraded stops producing while the upgrade is pending
+      // (houses have no output loop, so they keep functioning — matching the design:
+      // "upgrading production buildings stops them; houses always function"). Its store
+      // still exists for porters to drain.
+      const w = b.pendingUpgrade ? 0 : (b.workers || 0);
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
         // this building's banked-but-unreleased draw); record full desired input as

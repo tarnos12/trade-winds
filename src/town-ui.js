@@ -50,6 +50,10 @@
       // EC-A: happiness baseline is 50 (EC-B's Sim moves it toward 100 as needs
       // are met, down when unmet); pop per house = round(cap × happiness/100).
       happiness: 50,
+      // v0.51: a freshly-founded city is UNDER CONSTRUCTION — it does nothing until
+      // its build timer completes (Sim advances _buildT and flips built→true). A city
+      // UPGRADE (level up) never sets this, so an existing city keeps working.
+      built: false, _buildT: 0,
     };
     // Prime prices once so the panel opens with meaningful numbers (priceFor
     // mutates town.prices; first read snaps to target).
@@ -71,6 +75,7 @@
     // saves still load — Sim.tick reassigns their workers).
     if (!Array.isArray(t.buildings)) t.buildings = [];
     if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
+    if (t.built == null) t.built = true;   // v0.51: legacy/loaded cities are already built (only makeTown starts false)
     if (typeof Ledger !== "undefined") Ledger.normalizeTown(t);   // PP-A: bounded gold ledger (legacy saves self-heal)
     return t;
   }

@@ -381,8 +381,13 @@
   }
 
   function drawTowns() {
+    const bt = (CONFIG.town && CONFIG.town.baseTickMs) ? 0 : 0;   // (kept for clarity; buildSec below uses econ base)
+    const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
       const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const building = t.built === false;   // v0.51: under construction
+      ctx.save();
+      if (building) ctx.globalAlpha = 0.5;   // dim a city that isn't built yet
       // shadow
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + SIZE * 0.5, SIZE * 0.55, SIZE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
@@ -399,6 +404,20 @@
       ctx.lineTo(p.x - s, p.y);
       ctx.closePath(); ctx.fill();
       ctx.fillRect(p.x - s * 0.7, p.y, s * 1.4, s * 0.9);
+      ctx.restore();
+      // construction progress ring (v0.51): a scaffolding arc + % while building
+      if (building) {
+        const prog = Math.max(0, Math.min(1, (t._buildT || 0) / buildTicks));
+        ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = Math.max(3, SIZE * 0.12);
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "#7fc24b";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#f4ecdd";
+        ctx.font = "bold " + Math.round(SIZE * 0.28) + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("🚧", p.x, p.y - SIZE * 0.9);
+        ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+      }
     }
   }
 
