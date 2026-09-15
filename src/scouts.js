@@ -468,7 +468,7 @@
       const st = document.createElement("style");
       st.id = "scoutStyle";
       st.textContent = `
-      #scoutBar { position: fixed; top: 200px; left: 12px; z-index: 34;
+      #scoutBar { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 34;
         display: flex; gap: 6px; padding: 5px 7px; border-radius: 10px;
         background: rgba(20,16,10,0.72); border: 1px solid #6b5636;
         box-shadow: 0 3px 12px rgba(0,0,0,0.45); }
