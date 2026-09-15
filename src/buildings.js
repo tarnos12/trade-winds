@@ -337,6 +337,38 @@ Buildings.footprint = function (town) {
   return keys;
 };
 
+// v0.51 §11: connectivity cascade. A building is linked to its city only while its
+// hex is reachable from the town centre by ADJACENCY through the footprint (centre +
+// other buildings) — the same graph placement grows. Given a set of hex keys being
+// removed, return the buildings that become ORPHANED (no path back to the centre) and
+// so must fall too. If the CENTRE itself is removed, every building is orphaned.
+// Pure: reads only the town + HexMath; no DOM/RNG/mutation.
+Buildings.cascadeOrphans = function (town, removedKeys) {
+  const removed = (removedKeys instanceof Set) ? removedKeys : new Set(removedKeys || []);
+  const list = Array.isArray(town && town.buildings) ? town.buildings : [];
+  const centreKey = HexMath.key(town.q, town.r);
+  const nodes = new Map();   // surviving hex key -> { q, r, b|null }
+  if (!removed.has(centreKey)) nodes.set(centreKey, { q: town.q, r: town.r, b: null });
+  for (const b of list) {
+    const k = HexMath.key(b.q, b.r);
+    if (!removed.has(k)) nodes.set(k, { q: b.q, r: b.r, b: b });
+  }
+  const reach = new Set();
+  if (nodes.has(centreKey)) {
+    const stack = [centreKey]; reach.add(centreKey);
+    while (stack.length) {
+      const nd = nodes.get(stack.pop());
+      for (const nb of HexMath.neighbors(nd.q, nd.r)) {
+        const nk = HexMath.key(nb.q, nb.r);
+        if (nodes.has(nk) && !reach.has(nk)) { reach.add(nk); stack.push(nk); }
+      }
+    }
+  }
+  const orphans = [];
+  for (const [k, nd] of nodes) if (nd.b && !reach.has(k)) orphans.push(nd.b);
+  return { orphans: orphans };
+};
+
 // The DISTINCT towns whose footprint is adjacent to (q,r). Returns an array of
 // 0 (touches no city), 1 (the owner), or ≥2 (would fuse cities — invalid) towns.
 Buildings.footprintCitiesAdjacent = function (state, q, r) {

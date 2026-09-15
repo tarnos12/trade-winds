@@ -81,6 +81,53 @@
     return false;
   }
 
+  // v0.51 §11: refund the GOLD portion of a building's cost to the kingdom treasury
+  // (placement bills the treasury; resources are never refunded).
+  function buildingGold(b) {
+    const def = b && CONFIG.buildings[b.typeId];
+    return (def && def.cost && def.cost.gold) || 0;
+  }
+  // Destroy a building AND anything the removal cuts off from the city (cascade),
+  // refunding all their gold. Frees the slots (usedSlots = buildings.length).
+  function destroyBuildingsCascade(town, b) {
+    const list = Array.isArray(town.buildings) ? town.buildings : [];
+    if (list.indexOf(b) < 0) return;   // already gone
+    const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+    const doomed = [b, ...orphans];
+    let refund = 0;
+    for (const d of doomed) {
+      const i = list.indexOf(d);
+      if (i >= 0) { refund += buildingGold(d); list.splice(i, 1); }
+      if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === d) {
+        window.BuildingUI.closeBuildingPanel();
+      }
+    }
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") {
+      const cascadeNote = orphans.length ? " (+" + orphans.length + " cut off)" : "";
+      showToast("🏚️ Destroyed" + cascadeNote + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
+    }
+  }
+  // Destroy a whole city: all its buildings + the centre, refunding the founding gold
+  // plus every building's gold. Resources/population are lost.
+  function destroyCityRefund(town) {
+    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const idx = state.towns.indexOf(town);
+    if (idx < 0) return;
+    state.towns.splice(idx, 1);
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    if (typeof window !== "undefined" && window.TownUI && window.TownUI.closeTownPanel) window.TownUI.closeTownPanel();
+    if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.closeBuildingPanel) window.BuildingUI.closeBuildingPanel();
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") showToast("🏚️ City destroyed" + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
+  }
+
   function place(q, r, isPaint) {
     const k = HexMath.key(q, r);
     if (state.mode === "road") {
@@ -129,12 +176,9 @@
           const developed = (Array.isArray(t.buildings) && t.buildings.length > 0)
             || ((typeof Town !== "undefined" && Town.popTotal) ? Town.popTotal(t) > 0 : false)
             || (t.gold || 0) > 0;
-          const removeTown = () => {
-            const idx = state.towns.indexOf(t);   // re-find: indices may have shifted since the click
-            if (idx >= 0) { state.towns.splice(idx, 1); Pathing.invalidate(); scheduleSave(); }
-          };
           if (developed) {
-            uiConfirm("Demolish this city? Its buildings, population, and gold will be lost. This cannot be undone.", removeTown);
+            // v0.51 §11: refund the gold spent (city + buildings), lose resources.
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -148,29 +192,30 @@
         Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
       }
     } else if (state.mode === "eraseBuilding") {
-      // === J === Destroy building — ALWAYS confirms via the in-DOM uiConfirm
-      // modal (never native confirm()), single-click only (drag-paint would
-      // stack confirm dialogs, so it's ignored here like the town-erase case
-      // above). Removing the building just splices it out of town.buildings —
-      // that alone frees its build slot (Buildings.usedSlots is buildings.length)
-      // — no refund, matching the existing erase behaviour.
+      // === J / v0.51 §11 === Destroy — ALWAYS confirms via the in-DOM uiConfirm
+      // modal, single-click only (drag-paint would stack dialogs). Now works on a
+      // CITY CENTRE too (destroys the whole city) and refunds the GOLD spent (not
+      // resources), and CASCADES: any building cut off from its city by the removal
+      // is destroyed with it.
       if (isPaint) return;
       const hit = (typeof buildingAtHex === "function") ? buildingAtHex(q, r) : null;
-      if (!hit) return;
-      const { town, b } = hit;
-      const def = CONFIG.buildings[b.typeId];
-      const name = (def && def.name) || b.typeId;
-      uiConfirm("Destroy this " + name + "? This cannot be undone (no refund).", () => {
-        const list = Array.isArray(town.buildings) ? town.buildings : [];
-        const idx = list.indexOf(b);
-        if (idx < 0) return;   // already gone (e.g. town itself was erased meanwhile)
-        list.splice(idx, 1);
-        // Close/refresh any panel currently showing the destroyed building.
-        if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === b) {
-          window.BuildingUI.closeBuildingPanel();
-        }
-        scheduleSave();
-        SFX.play("place");
+      if (hit) {
+        const { town, b } = hit;
+        const def = CONFIG.buildings[b.typeId];
+        const name = (def && def.name) || b.typeId;
+        const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+        const extra = orphans.length ? " This also cuts off " + orphans.length + " connected building" + (orphans.length > 1 ? "s" : "") + "." : "";
+        uiConfirm("Destroy this " + name + "?" + extra + " Gold spent is refunded (resources are not).", () => {
+          destroyBuildingsCascade(town, b);
+        });
+        return;
+      }
+      // No building here — maybe a city centre (Destroy targets cities like Erase).
+      const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
+      if (!t) return;
+      const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+        destroyCityRefund(t);
       });
     }
   }

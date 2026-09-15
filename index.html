@@ -4370,6 +4370,38 @@ Buildings.footprint = function (town) {
   return keys;
 };
 
+// v0.51 §11: connectivity cascade. A building is linked to its city only while its
+// hex is reachable from the town centre by ADJACENCY through the footprint (centre +
+// other buildings) — the same graph placement grows. Given a set of hex keys being
+// removed, return the buildings that become ORPHANED (no path back to the centre) and
+// so must fall too. If the CENTRE itself is removed, every building is orphaned.
+// Pure: reads only the town + HexMath; no DOM/RNG/mutation.
+Buildings.cascadeOrphans = function (town, removedKeys) {
+  const removed = (removedKeys instanceof Set) ? removedKeys : new Set(removedKeys || []);
+  const list = Array.isArray(town && town.buildings) ? town.buildings : [];
+  const centreKey = HexMath.key(town.q, town.r);
+  const nodes = new Map();   // surviving hex key -> { q, r, b|null }
+  if (!removed.has(centreKey)) nodes.set(centreKey, { q: town.q, r: town.r, b: null });
+  for (const b of list) {
+    const k = HexMath.key(b.q, b.r);
+    if (!removed.has(k)) nodes.set(k, { q: b.q, r: b.r, b: b });
+  }
+  const reach = new Set();
+  if (nodes.has(centreKey)) {
+    const stack = [centreKey]; reach.add(centreKey);
+    while (stack.length) {
+      const nd = nodes.get(stack.pop());
+      for (const nb of HexMath.neighbors(nd.q, nd.r)) {
+        const nk = HexMath.key(nb.q, nb.r);
+        if (nodes.has(nk) && !reach.has(nk)) { reach.add(nk); stack.push(nk); }
+      }
+    }
+  }
+  const orphans = [];
+  for (const [k, nd] of nodes) if (nd.b && !reach.has(k)) orphans.push(nd.b);
+  return { orphans: orphans };
+};
+
 // The DISTINCT towns whose footprint is adjacent to (q,r). Returns an array of
 // 0 (touches no city), 1 (the owner), or ≥2 (would fuse cities — invalid) towns.
 Buildings.footprintCitiesAdjacent = function (state, q, r) {
@@ -8031,6 +8063,53 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     return false;
   }
 
+  // v0.51 §11: refund the GOLD portion of a building's cost to the kingdom treasury
+  // (placement bills the treasury; resources are never refunded).
+  function buildingGold(b) {
+    const def = b && CONFIG.buildings[b.typeId];
+    return (def && def.cost && def.cost.gold) || 0;
+  }
+  // Destroy a building AND anything the removal cuts off from the city (cascade),
+  // refunding all their gold. Frees the slots (usedSlots = buildings.length).
+  function destroyBuildingsCascade(town, b) {
+    const list = Array.isArray(town.buildings) ? town.buildings : [];
+    if (list.indexOf(b) < 0) return;   // already gone
+    const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+    const doomed = [b, ...orphans];
+    let refund = 0;
+    for (const d of doomed) {
+      const i = list.indexOf(d);
+      if (i >= 0) { refund += buildingGold(d); list.splice(i, 1); }
+      if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === d) {
+        window.BuildingUI.closeBuildingPanel();
+      }
+    }
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") {
+      const cascadeNote = orphans.length ? " (+" + orphans.length + " cut off)" : "";
+      showToast("🏚️ Destroyed" + cascadeNote + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
+    }
+  }
+  // Destroy a whole city: all its buildings + the centre, refunding the founding gold
+  // plus every building's gold. Resources/population are lost.
+  function destroyCityRefund(town) {
+    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const idx = state.towns.indexOf(town);
+    if (idx < 0) return;
+    state.towns.splice(idx, 1);
+    if (refund > 0) state.treasury = (state.treasury || 0) + refund;
+    if (typeof window !== "undefined" && window.TownUI && window.TownUI.closeTownPanel) window.TownUI.closeTownPanel();
+    if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.closeBuildingPanel) window.BuildingUI.closeBuildingPanel();
+    Pathing.invalidate(); scheduleSave();
+    if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    SFX.play("place");
+    if (typeof showToast === "function") showToast("🏚️ City destroyed" + (refund > 0 ? " · +" + Math.round(refund) + "🪙" : ""));
+  }
+
   function place(q, r, isPaint) {
     const k = HexMath.key(q, r);
     if (state.mode === "road") {
@@ -8079,12 +8158,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           const developed = (Array.isArray(t.buildings) && t.buildings.length > 0)
             || ((typeof Town !== "undefined" && Town.popTotal) ? Town.popTotal(t) > 0 : false)
             || (t.gold || 0) > 0;
-          const removeTown = () => {
-            const idx = state.towns.indexOf(t);   // re-find: indices may have shifted since the click
-            if (idx >= 0) { state.towns.splice(idx, 1); Pathing.invalidate(); scheduleSave(); }
-          };
           if (developed) {
-            uiConfirm("Demolish this city? Its buildings, population, and gold will be lost. This cannot be undone.", removeTown);
+            // v0.51 §11: refund the gold spent (city + buildings), lose resources.
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -8098,29 +8174,30 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         Pathing.invalidate(); scheduleSave(); SFX.playThrottled("place", 90);
       }
     } else if (state.mode === "eraseBuilding") {
-      // === J === Destroy building — ALWAYS confirms via the in-DOM uiConfirm
-      // modal (never native confirm()), single-click only (drag-paint would
-      // stack confirm dialogs, so it's ignored here like the town-erase case
-      // above). Removing the building just splices it out of town.buildings —
-      // that alone frees its build slot (Buildings.usedSlots is buildings.length)
-      // — no refund, matching the existing erase behaviour.
+      // === J / v0.51 §11 === Destroy — ALWAYS confirms via the in-DOM uiConfirm
+      // modal, single-click only (drag-paint would stack dialogs). Now works on a
+      // CITY CENTRE too (destroys the whole city) and refunds the GOLD spent (not
+      // resources), and CASCADES: any building cut off from its city by the removal
+      // is destroyed with it.
       if (isPaint) return;
       const hit = (typeof buildingAtHex === "function") ? buildingAtHex(q, r) : null;
-      if (!hit) return;
-      const { town, b } = hit;
-      const def = CONFIG.buildings[b.typeId];
-      const name = (def && def.name) || b.typeId;
-      uiConfirm("Destroy this " + name + "? This cannot be undone (no refund).", () => {
-        const list = Array.isArray(town.buildings) ? town.buildings : [];
-        const idx = list.indexOf(b);
-        if (idx < 0) return;   // already gone (e.g. town itself was erased meanwhile)
-        list.splice(idx, 1);
-        // Close/refresh any panel currently showing the destroyed building.
-        if (typeof window !== "undefined" && window.BuildingUI && window.BuildingUI.openBuilding === b) {
-          window.BuildingUI.closeBuildingPanel();
-        }
-        scheduleSave();
-        SFX.play("place");
+      if (hit) {
+        const { town, b } = hit;
+        const def = CONFIG.buildings[b.typeId];
+        const name = (def && def.name) || b.typeId;
+        const orphans = Buildings.cascadeOrphans(town, [HexMath.key(b.q, b.r)]).orphans;
+        const extra = orphans.length ? " This also cuts off " + orphans.length + " connected building" + (orphans.length > 1 ? "s" : "") + "." : "";
+        uiConfirm("Destroy this " + name + "?" + extra + " Gold spent is refunded (resources are not).", () => {
+          destroyBuildingsCascade(town, b);
+        });
+        return;
+      }
+      // No building here — maybe a city centre (Destroy targets cities like Erase).
+      const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
+      if (!t) return;
+      const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+        destroyCityRefund(t);
       });
     }
   }
@@ -15158,8 +15235,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.9";
+  const GAME_VERSION = "0.51.10";
   const PATCH_NOTES = [
+    { v: "0.51.10", notes: [
+      "DESTRUCTION & CONNECTIVITY: the Destroy tool now works on a CITY too (click its centre) — it razes the whole city. Destroying refunds the GOLD you spent (city + buildings) but not the resources. And destruction CASCADES: if removing a building (or a city) cuts other buildings off from their city, those orphaned buildings fall with it. Every destroy asks for confirmation and tells you what else it will take down",
+    ] },
     { v: "0.51.9", notes: [
       "CITIES BUY IN PRIORITY ORDER (economy overhaul): a city now imports in layers — house basics first, then production inputs, then luxuries, then materials — and only fills each layer to ~30% before topping up the next, looping back to raise them all toward 100%. So a city never fills one warehouse to the brim while another need starves, and food always beats finery to the front of the queue",
     ] },

@@ -728,5 +728,23 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
 }
 // === /RESEARCH CENTER (Slice B) =============================================
 
+// === v0.51 §11 — connectivity cascade =======================================
+{
+  const hut = (q, r) => ({ typeId: "hut", q, r });
+  // centre (0,0) with a chain A(0,1) - B(0,2) - C(0,3)
+  const town = { q: 0, r: 0, buildings: [hut(0, 1), hut(0, 2), hut(0, 3)] };
+  const orph = (keys) => Buildings.cascadeOrphans(town, keys).orphans.map(b => b.q + "," + b.r).sort();
+  ok("§11: removing a mid-chain building orphans everything past it",
+     JSON.stringify(orph([HexMath.key(0, 2)])) === JSON.stringify(["0,3"]));
+  ok("§11: removing the building next to the centre orphans the whole branch",
+     JSON.stringify(orph([HexMath.key(0, 1)])) === JSON.stringify(["0,2", "0,3"]));
+  ok("§11: removing a leaf orphans nothing", Buildings.cascadeOrphans(town, [HexMath.key(0, 3)]).orphans.length === 0);
+  ok("§11: removing the centre orphans every building", Buildings.cascadeOrphans(town, [HexMath.key(0, 0)]).orphans.length === 3);
+  // a branch that stays connected via a sibling is NOT orphaned
+  const town2 = { q: 0, r: 0, buildings: [hut(0, 1), hut(1, 0), hut(1, 1)] };  // two centre-adjacent + one bridging
+  ok("§11: a building with another path to the centre survives",
+     Buildings.cascadeOrphans(town2, [HexMath.key(0, 1)]).orphans.length === 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

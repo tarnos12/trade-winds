@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.9";
+  const GAME_VERSION = "0.51.10";
   const PATCH_NOTES = [
+    { v: "0.51.10", notes: [
+      "DESTRUCTION & CONNECTIVITY: the Destroy tool now works on a CITY too (click its centre) — it razes the whole city. Destroying refunds the GOLD you spent (city + buildings) but not the resources. And destruction CASCADES: if removing a building (or a city) cuts other buildings off from their city, those orphaned buildings fall with it. Every destroy asks for confirmation and tells you what else it will take down",
+    ] },
     { v: "0.51.9", notes: [
       "CITIES BUY IN PRIORITY ORDER (economy overhaul): a city now imports in layers — house basics first, then production inputs, then luxuries, then materials — and only fills each layer to ~30% before topping up the next, looping back to raise them all toward 100%. So a city never fills one warehouse to the brim while another need starves, and food always beats finery to the front of the queue",
     ] },
