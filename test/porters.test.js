@@ -70,7 +70,7 @@ ok("CONFIG.econ has porter tuning", CONFIG.econ.porterCarry > 0 && CONFIG.econ.p
     buildings: [b("lumberjack", 0, 1), b("hut", 0, 2), b("hut", 1, 2)] });
   let maxWarehouse = 0, everExceeded = false;
   let prevTotal = 0, sawDrop = false;
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 1600; i++) {
     Sim.tick({ towns: [t] });
     const wh = t.stock.wood || 0;
     maxWarehouse = Math.max(maxWarehouse, wh);

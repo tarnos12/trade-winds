@@ -108,7 +108,7 @@
     // never reads/writes cart.progress or the sim tick, only the cached pixel
     // position in `cartRender`.
     const frameDt = Math.max(0, Number(dt) || 16);
-    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / Math.max(0.05, state.gameSpeed || 1));
+    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) * ((CONFIG.econ && CONFIG.econ.paceMult) || 1) / Math.max(0.05, state.gameSpeed || 1));
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;

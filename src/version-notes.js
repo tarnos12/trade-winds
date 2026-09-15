@@ -1,6 +1,23 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.12";
+  const GAME_VERSION = "0.51.16";
   const PATCH_NOTES = [
+    { v: "0.51.16", notes: [
+      "BIG BALANCE REWORK — production and consumption are now tuned in sensible per-minute numbers. A lumberjack makes 15 wood/minute (2 workers, 16s cycle); a potato farm makes 12/minute, so one farm feeds 8–10 peasants. A peasant eats 1.3 potato + 0.9 wood per minute. Every other building and good was rescaled to match, giving a slower, more legible economy.",
+      "The whole game clock is back to real-time at 1× (the slow rates set the pace now); the 1×/2×/4× buttons speed it up. External traders travel 2× slower and internal porters are slower too.",
+      "Fog now lifts only around a building or city ONCE it finishes construction (a one-tile ring), not the moment you place it — scouts remain your way to open up the map.",
+      "The castle buys whole units only (no more 3.8 potato).",
+    ] },
+    { v: "0.51.15", notes: [
+      "SLOWER, more readable pace: the whole economy now runs at half speed by default (production, population, trade and porters) so you can actually watch it unfold — the 1×/2×/4× buttons still speed it up from there. Traders also load and unload their cargo more slowly, so a trade takes visible time at the dock.",
+    ] },
+    { v: "0.51.14", notes: [
+      "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
+      "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",
+      "Upgrading a PRODUCTION building stops it producing until the upgrade finishes (houses keep working while they upgrade).",
+    ] },
+    { v: "0.51.13", notes: [
+      "THE CROWN'S CUT IS MINTED (economy overhaul): the trade tariff is now 30% and it's MINTED — the selling city keeps the FULL sale price, and the treasury gets 30% of the value as brand-new money on top. Trade grows the kingdom's money supply instead of shuffling it around, so a busy trade network steadily funds the crown. You can still tune the rate (10–40%) with the tariff slider",
+    ] },
     { v: "0.51.12", notes: [
       "SEE EACH BUILDING'S STORE: a producer's detail panel now shows its OWN internal store (x/cap 🎒) — the goods waiting for a porter — instead of the shared warehouse, and the panel's cycle time honours the building's real cycle (the lumberjack reads 4s). On the map, a small bar under each producer fills teal as its store fills and turns amber when it's full and stalled, so you can see at a glance which buildings need more porters",
     ] },

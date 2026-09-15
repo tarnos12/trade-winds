@@ -19,14 +19,17 @@ Object.assign(CONFIG, {
     //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
     //   tier's population GROWTH (all luxuries must be available to grow).
     tiers: {
+      // v0.51 balance rework — per-capita consumption expressed in GAME-MINUTES / 120
+      // (2 ticks = 1 game-second). Peasant anchor: 1.3 potato/min + 0.9 wood/min.
+      // Other tiers' basics ~1.08/min (0.009), all extras ~0.6/min (0.005).
       peasants:    { basic: ["potato", "wood"], extra: ["fish", "wool"],
-                     perCapita: { potato: 0.020833, wood: 0.020833, fish: 0.0125, wool: 0.0125 } },
+                     perCapita: { potato: 0.010833, wood: 0.0075, fish: 0.005, wool: 0.005 } },
       workers:     { basic: ["fish", "coal"], extra: ["clothes", "bread", "mead"],
-                     perCapita: { fish: 0.020833, coal: 0.020833, clothes: 0.0125, bread: 0.0125, mead: 0.0125 } },
+                     perCapita: { fish: 0.009, coal: 0.009, clothes: 0.005, bread: 0.005, mead: 0.005 } },
       burghers:    { basic: ["lamp", "bread", "mead", "clothes"], extra: ["chairs", "pottery", "gold_ring"],
-                     perCapita: { lamp: 0.020833, bread: 0.020833, mead: 0.020833, clothes: 0.020833, chairs: 0.0125, pottery: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, bread: 0.009, mead: 0.009, clothes: 0.009, chairs: 0.005, pottery: 0.005, gold_ring: 0.005 } },
       aristocrats: { basic: ["lamp", "mead", "iron_armor", "chairs", "pottery"], extra: ["brandy", "luxury_clothes", "gold_ring"],
-                     perCapita: { lamp: 0.020833, mead: 0.020833, iron_armor: 0.020833, chairs: 0.020833, pottery: 0.020833, brandy: 0.0125, luxury_clothes: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, mead: 0.009, iron_armor: 0.009, chairs: 0.009, pottery: 0.009, brandy: 0.005, luxury_clothes: 0.005, gold_ring: 0.005 } },
     },
     // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
     //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.
@@ -375,6 +378,17 @@ Sim.tick = function (State) {
 
   for (const town of State.towns) {
     if (!town) continue;
+    // v0.51: a city UNDER CONSTRUCTION (built === false) is dormant — no production,
+    // consumption, population, porters, trade or tax — until its build timer elapses.
+    // Only a freshly-FOUNDED city is built:false; a city level-upgrade never sets it,
+    // so an established city keeps working while it upgrades. Legacy/test towns omit
+    // the flag (built === undefined) and are treated as already built.
+    if (town.built === false) {
+      town._buildT = (town._buildT || 0) + 1;
+      const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
+      if (town._buildT >= buildTicks) { town.built = true; town._buildT = buildTicks; }
+      else continue;   // still building — skip everything else this tick
+    }
     if (!town.stock) town.stock = {};
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;
@@ -523,7 +537,11 @@ Sim.tick = function (State) {
 
       // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
       const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-      const w = b.workers || 0;
+      // v0.51: a PRODUCER being upgraded stops producing while the upgrade is pending
+      // (houses have no output loop, so they keep functioning — matching the design:
+      // "upgrading production buildings stops them; houses always function"). Its store
+      // still exists for porters to drain.
+      const w = b.pendingUpgrade ? 0 : (b.workers || 0);
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
         // this building's banked-but-unreleased draw); record full desired input as

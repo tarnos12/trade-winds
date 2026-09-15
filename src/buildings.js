@@ -146,10 +146,10 @@ Object.assign(CONFIG, {
     // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
     // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
-      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { gold: 100, wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { gold: 250, stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { gold: 500, bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { gold: 900, bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -202,22 +202,27 @@ Buildings.nextUpgrade = function (state, b) {
 // Can the player start the next upgrade on this building? Gold-gated only —
 // resources are delivered over time (like CB-A construction), not required up
 // front. Returns {ok:true} or {ok:false, reason}.
+// v0.51: an upgrade's GOLD is paid by the CITY (town.gold), not the kingdom treasury —
+// placement/founding gold comes from the treasury, but upgrading a building spends the
+// city's own coffers. Resources are delivered from town stock over time (CB-A).
 Buildings.canStartUpgrade = function (state, town, b) {
   if (!b) return { ok: false, reason: "No building" };
   if (b.built === false) return { ok: false, reason: "Under construction" };
   if (b.pendingUpgrade) return { ok: false, reason: "Upgrade in progress" };
   const nxt = Buildings.nextUpgrade(state, b);
   if (!nxt) return { ok: false, reason: "No upgrade available" };
-  if ((state.treasury || 0) < (nxt.cost.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
   return { ok: true };
 };
 
-// Charge the upgrade's GOLD to the treasury and mark the building pending. The
-// resources are delivered from town stock over time by the Sim delivery step.
+// Charge the upgrade's GOLD to the CITY and mark the building pending. The resources
+// are delivered from town stock over time by the Sim delivery step.
 Buildings.startUpgrade = function (state, town, b) {
   if (!Buildings.canStartUpgrade(state, town, b).ok) return false;
   const nxt = Buildings.nextUpgrade(state, b);
-  state.treasury = (state.treasury || 0) - (nxt.cost.gold || 0);
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
 };

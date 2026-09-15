@@ -122,9 +122,10 @@ ok("CONFIG.town.ledgerHist is configured", typeof CONFIG.town.ledgerHist === "nu
   const qty = c.qty, unit = c.unitBuy;
   buyer.demand = {};                    // freeze re-dispatch
   for (let i = 0; i < 30; i++) Trade.tick(st);
-  const tariff = CONFIG.trade.tariffRate * unit * qty;
-  ok("Trade records the seller's net sale (value − tariff) in its ledger",
-     seller.ledger && near(seller.ledger.tally.sales, unit * qty - tariff));
+  // v0.51 §8: the tariff is minted, so the seller KEEPS the full sale value — the
+  // ledger records the whole sale, not value − tariff.
+  ok("Trade records the seller's full sale (minted tariff) in its ledger",
+     seller.ledger && near(seller.ledger.tally.sales, unit * qty));
   ok("Trade records the buyer's realized buy (delivered value) in its ledger",
      buyer.ledger && near(buyer.ledger.tally.buys, unit * qty));
 }

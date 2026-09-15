@@ -46,7 +46,11 @@
     // economy clock — paused when tab hidden (GDD §9.2 default)
     if (state.gameSpeed > 0 && !document.hidden) {
       econAcc += dt * state.gameSpeed;
-      const step = CONFIG.econ.baseTickMs;
+      // v0.51: paceMult stretches the REAL-TIME per economy tick (default 2 = the whole
+      // economy — production, population, trade, porters — runs at half speed) without
+      // changing any tick-count logic, so game-second ratios and headless tests are
+      // untouched. The 1×/2×/4× buttons still multiply on top via gameSpeed.
+      const step = CONFIG.econ.baseTickMs * ((CONFIG.econ && CONFIG.econ.paceMult) || 1);
       let guard = 0;
       while (econAcc >= step && guard++ < 8) {
         Sim.tick(state);
@@ -140,6 +144,7 @@
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
     drawRoads();
+    if (typeof revealConstructed === "function") revealConstructed();   // v0.51 (N): reveal a building/city's ring once it finishes building
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)

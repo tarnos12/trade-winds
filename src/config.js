@@ -179,16 +179,21 @@ const CONFIG = {
   // === v0.43: fog reveal at NEW-GAME scales with board size (startReveal), so a
   // big board still opens with a workable viewport. `castleReveal` is the legacy
   // fallback (used if a map carries no size-derived radius). townReveal unchanged.
-  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
+  fog:    { castleReveal: 4, townReveal: 3, buildReveal: 1, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.51 (N): buildReveal = ring shown when a building/city finishes construction   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
+    // v0.51: global real-time pace knob (1 = game-second == real-second at 1×). The
+    // slow, per-minute production/consumption rates now set the deliberate pace, so
+    // this stays at 1 (the 1×/2×/4× buttons speed it up). Bump it to stretch wall-clock
+    // time per tick without touching any game-second ratio or headless test.
+    paceMult: 1,
     // === Bulk production (v0.39): a producing building banks its output and
     // releases it in WHOLE units every N game-seconds instead of trickling a
     // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
     // and the fractional remainder carries into the next batch so nothing is
     // lost. Keyed by building `kind`; a kind not listed here releases whatever
     // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
-    productionIntervalSec: { extractor: 8, processor: 12 },
+    productionIntervalSec: { extractor: 16, processor: 16 },   // v0.51 balance rework: longer, slower cycles
     // === Per-building internal store (v0.51 / P1 §2): a producer banks output in
     // its own buffer; once full it STALLS (stops consuming inputs + producing) so
     // nothing is ever made that can't be held — no waste. Internal porters drain
@@ -197,7 +202,7 @@ const CONFIG = {
     // === Internal porters (v0.51 §2): real haulers that carry producer output to
     // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
     // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
-    porterCarry: 10, porterTicksPerTile: 1 },
+    porterCarry: 10, porterTicksPerTile: 2 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,

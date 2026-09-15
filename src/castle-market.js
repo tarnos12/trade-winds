@@ -101,7 +101,7 @@ var CastleMarket = (function () {
       // (c) dispatch: treasury pays the agreed gold up front; no tariff on castle buys.
       const agreedUnit = pick.price;
       const affordable = agreedUnit > 0 ? (state.treasury || 0) / agreedUnit : cartCapacity;
-      const qty = Math.min(cartCapacity, pick.surplus, want.rem, affordable);
+      const qty = Math.floor(Math.min(cartCapacity, pick.surplus, want.rem, affordable));   // v0.51: castle buys WHOLE units only (no 3.8 potato)
       if (!(qty > 0)) break;
       const agreedGold = agreedUnit * qty;
       reserve(pick.seller, want.gid, qty);

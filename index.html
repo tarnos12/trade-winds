@@ -1547,16 +1547,21 @@ const CONFIG = {
   // === v0.43: fog reveal at NEW-GAME scales with board size (startReveal), so a
   // big board still opens with a workable viewport. `castleReveal` is the legacy
   // fallback (used if a map carries no size-derived radius). townReveal unchanged.
-  fog:    { castleReveal: 4, townReveal: 3, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
+  fog:    { castleReveal: 4, townReveal: 3, buildReveal: 1, startReveal: { small: 6, normal: 8, large: 10 } },   // v0.51 (N): buildReveal = ring shown when a building/city finishes construction   // v0.49: shrunk — the old 10/15/20 revealed almost the whole board
   camera: { minZoom: 0.32, maxZoom: 2.4, wheelStep: 1.12, panSpeed: 620 },
   econ:   { baseTickMs: 500,
+    // v0.51: global real-time pace knob (1 = game-second == real-second at 1×). The
+    // slow, per-minute production/consumption rates now set the deliberate pace, so
+    // this stays at 1 (the 1×/2×/4× buttons speed it up). Bump it to stretch wall-clock
+    // time per tick without touching any game-second ratio or headless test.
+    paceMult: 1,
     // === Bulk production (v0.39): a producing building banks its output and
     // releases it in WHOLE units every N game-seconds instead of trickling a
     // fraction every tick. Throughput is unchanged (a batch ≈ rate × interval),
     // and the fractional remainder carries into the next batch so nothing is
     // lost. Keyed by building `kind`; a kind not listed here releases whatever
     // whole units have accumulated every tick (interval 0). 2 ticks = 1s. ===
-    productionIntervalSec: { extractor: 8, processor: 12 },
+    productionIntervalSec: { extractor: 16, processor: 16 },   // v0.51 balance rework: longer, slower cycles
     // === Per-building internal store (v0.51 / P1 §2): a producer banks output in
     // its own buffer; once full it STALLS (stops consuming inputs + producing) so
     // nothing is ever made that can't be held — no waste. Internal porters drain
@@ -1565,7 +1570,7 @@ const CONFIG = {
     // === Internal porters (v0.51 §2): real haulers that carry producer output to
     // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
     // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
-    porterCarry: 10, porterTicksPerTile: 1 },
+    porterCarry: 10, porterTicksPerTile: 2 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
@@ -2531,7 +2536,7 @@ Object.assign(CONFIG, {
       terrain: "forest", workerTier: "peasant",
       // v0.51 §1 REFERENCE RATE: 8 wood every 4 s at 2 workers (0.5/worker/tick × 2 ×
       // 8-tick cycle = 8); 1 worker ⇒ 8 wood per 8 s. cycleSec overrides the per-kind default.
-      output: { goodId: "wood", ratePerWorker: 0.5 }, cycleSec: 4,
+      output: { goodId: "wood", ratePerWorker: 0.0625 }, cycleSec: 16,
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },
@@ -2539,7 +2544,7 @@ Object.assign(CONFIG, {
     farm: {
       id: "farm", name: "Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
-      output: { goodId: "grain", ratePerWorker: 0.25 },
+      output: { goodId: "grain", ratePerWorker: 0.05 },
       // === TV2: wheat is a T2 resource unlocked by research (worker band of the
       // tree) yet still worked by peasants. researchBand overrides the tree lane
       // its unlock node lives in without changing who staffs it. GOLD ONLY. ===
@@ -2549,7 +2554,7 @@ Object.assign(CONFIG, {
     potato_farm: {
       id: "potato_farm", name: "Potato Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",
-      output: { goodId: "potato", ratePerWorker: 0.25 },
+      output: { goodId: "potato", ratePerWorker: 0.05 }, cycleSec: 16,   // v0.51: 6/worker/min → 12/min at 2 workers
       // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 10 },
@@ -2558,14 +2563,14 @@ Object.assign(CONFIG, {
     iron_mine: {
       id: "iron_mine", name: "Iron Mine", kind: "extractor",
       terrain: "iron_deposit", workerTier: "worker",
-      output: { goodId: "iron", ratePerWorker: 0.083333 },
+      output: { goodId: "iron", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_iron_mine",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     quarry: {
       id: "quarry", name: "Quarry", kind: "extractor",
       terrain: "stone_deposit", workerTier: "peasant",   // === TV2: mountains → stone_deposit ===
-      output: { goodId: "stone", ratePerWorker: 0.083333 },
+      output: { goodId: "stone", ratePerWorker: 0.033333 },
       // BAL: bootstrap stone source — wood only, so a wood-only city can build it
       // and start producing stone for everything else.
       unlockedBy: "unlock_quarry",   // RT-A: per-building unlock node
@@ -2580,14 +2585,14 @@ Object.assign(CONFIG, {
       // once an oil_maker (2 fish/oil) was also pulling, so the WORKER fish basic
       // was chronically starved and worker happiness capped below 70. Matches the
       // 2/worker yield of the other staple extractors (potato_farm/farm). ===
-      output: { goodId: "fish", ratePerWorker: 0.125 },
+      output: { goodId: "fish", ratePerWorker: 0.05 },
       unlockedBy: "unlock_fishery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 5, gold: 60 },
     },
     shepherd: {
       id: "shepherd", name: "Sheep Farm", kind: "extractor",
       terrain: "fertile", workerTier: "peasant",   // === TV2: meadow → fertile ===
-      output: { goodId: "wool", ratePerWorker: 0.1875 },
+      output: { goodId: "wool", ratePerWorker: 0.041667 },
       unlockedBy: "unlock_shepherd",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 20, stone: 5, gold: 60 },
     },
@@ -2595,21 +2600,21 @@ Object.assign(CONFIG, {
     clay_pit: {
       id: "clay_pit", name: "Clay Pit", kind: "extractor",
       terrain: "clay_deposit", workerTier: "worker",
-      output: { goodId: "clay", ratePerWorker: 0.083333 },
+      output: { goodId: "clay", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_clay_pit",
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     coal_mine: {
       id: "coal_mine", name: "Coal Mine", kind: "extractor",
       terrain: "coal_deposit", workerTier: "worker",
-      output: { goodId: "coal", ratePerWorker: 0.083333 },
+      output: { goodId: "coal", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_coal_mine",
       workerSlots: 2, cost: { wood: 30, stone: 20, gold: 120 },
     },
     gold_mine: {
       id: "gold_mine", name: "Gold Mine", kind: "extractor",
       terrain: "gold_deposit", workerTier: "worker",
-      output: { goodId: "gold", ratePerWorker: 0.083333 },
+      output: { goodId: "gold", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_gold_mine",
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 160 },
     },
@@ -2617,7 +2622,7 @@ Object.assign(CONFIG, {
     sawmill: {
       id: "sawmill", name: "Sawmill", kind: "processor",
       terrain: null, workerTier: "peasant",
-      inputs: { wood: 0.083333 }, output: { goodId: "planks", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.0208 }, output: { goodId: "planks", ratePerWorker: 0.0208 }, cycleSec: 16,   // v0.51: ~5/min at 2 workers, 1 wood → 1 plank
       // v0.49: costs 20 wood, delivered from the city's stock over time (progress bar).
       startUnlocked: true,
       workerSlots: 2, cost: { wood: 20 },
@@ -2625,21 +2630,21 @@ Object.assign(CONFIG, {
     mill: {
       id: "mill", name: "Mill", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { grain: 0.083333 }, output: { goodId: "flour", ratePerWorker: 0.041667 },
+      inputs: { grain: 0.033333 }, output: { goodId: "flour", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_mill",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 90 },
     },
     bakery: {
       id: "bakery", name: "Bakery", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { flour: 0.083333 }, output: { goodId: "bread", ratePerWorker: 0.041667 },
+      inputs: { flour: 0.033333 }, output: { goodId: "bread", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_bakery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 5, gold: 150 },
     },
     brewery: {
       id: "brewery", name: "Brewery", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { grain: 0.083333 }, output: { goodId: "mead", ratePerWorker: 0.041667 },   // === CC: beer → mead ===
+      inputs: { grain: 0.033333 }, output: { goodId: "mead", ratePerWorker: 0.033333 },   // === CC: beer → mead ===
       unlockedBy: "unlock_brewery",   // RT-A: per-building unlock node
       workerSlots: 2, cost: { wood: 25, stone: 15, gold: 100 },
     },
@@ -2649,7 +2654,7 @@ Object.assign(CONFIG, {
     brickworks: {
       id: "brickworks", name: "Brickworks", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { clay: 0.083333 }, output: { goodId: "bricks", ratePerWorker: 0.041667 },
+      inputs: { clay: 0.033333 }, output: { goodId: "bricks", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_brickworks",
       workerSlots: 2, cost: { wood: 25, stone: 20, gold: 110 },
     },
@@ -2657,7 +2662,7 @@ Object.assign(CONFIG, {
     tailoring: {
       id: "tailoring", name: "Tailoring", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { wool: 0.083333 }, output: { goodId: "clothes", ratePerWorker: 0.041667 },
+      inputs: { wool: 0.033333 }, output: { goodId: "clothes", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_tailoring",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
@@ -2669,21 +2674,21 @@ Object.assign(CONFIG, {
       terrain: null, workerTier: "peasant", researchBand: "worker",
       // BAL2: 1:1 wood→coal — at 2:1 the burner out-ate the peasants' own
       // wood (their BASIC need) and crashed peasant happiness in playthroughs.
-      inputs: { wood: 0.041667 }, output: { goodId: "coal", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.033333 }, output: { goodId: "coal", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_charcoal_burner",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
     stonetool_maker: {
       id: "stonetool_maker", name: "StoneTools Maker", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { planks: 0.041667, stone: 0.041667 }, output: { goodId: "stone_tools", ratePerWorker: 0.041667 },
+      inputs: { planks: 0.033333, stone: 0.033333 }, output: { goodId: "stone_tools", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_stonetool_maker",
       workerSlots: 2, cost: { wood: 30, stone: 15, gold: 110 },
     },
     oil_maker: {
       id: "oil_maker", name: "Oil Maker", kind: "processor",
       terrain: null, workerTier: "worker",
-      inputs: { fish: 0.083333 }, output: { goodId: "oil", ratePerWorker: 0.041667 },
+      inputs: { fish: 0.033333 }, output: { goodId: "oil", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_oil_maker",
       workerSlots: 2, cost: { wood: 25, stone: 10, gold: 90 },
     },
@@ -2691,14 +2696,14 @@ Object.assign(CONFIG, {
     forge: {
       id: "forge", name: "Forge", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { wood: 0.041667, iron: 0.041667 }, output: { goodId: "iron_tool", ratePerWorker: 0.041667 },
+      inputs: { wood: 0.033333, iron: 0.033333 }, output: { goodId: "iron_tool", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_forge",
       workerSlots: 2, cost: { wood: 30, stone: 25, gold: 160 },
     },
     armory: {
       id: "armory", name: "Armory", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { coal: 0.083333, iron: 0.083333 }, output: { goodId: "iron_armor", ratePerWorker: 0.041667 },
+      inputs: { coal: 0.033333, iron: 0.033333 }, output: { goodId: "iron_armor", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_armory",
       workerSlots: 2, cost: { wood: 35, stone: 30, bricks: 10, gold: 220 },
     },
@@ -2709,14 +2714,14 @@ Object.assign(CONFIG, {
       // isn't self-locked; research stays in the burgher band via researchBand
       // (lamp_maker precedent). ===
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { clay: 0.083333 }, output: { goodId: "pottery", ratePerWorker: 0.041667 },
+      inputs: { clay: 0.033333 }, output: { goodId: "pottery", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_pottery_workshop",
       workerSlots: 2, cost: { wood: 30, stone: 20, bricks: 5, gold: 140 },
     },
     distillery: {
       id: "distillery", name: "Distillery", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { mead: 0.083333, pottery: 0.041667 }, output: { goodId: "brandy", ratePerWorker: 0.041667 },
+      inputs: { mead: 0.033333, pottery: 0.033333 }, output: { goodId: "brandy", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_distillery",
       workerSlots: 2, cost: { wood: 30, stone: 25, planks: 10, gold: 180 },
     },
@@ -2733,7 +2738,7 @@ Object.assign(CONFIG, {
       // Inputs (gold/iron_tool) sit near their storage cap in the run, so the extra
       // yield converts to rings rather than stalling. ===
       terrain: null, workerTier: "burgher",
-      inputs: { gold: 0.041667, iron_tool: 0.041667 }, output: { goodId: "gold_ring", ratePerWorker: 0.125 },
+      inputs: { gold: 0.033333, iron_tool: 0.033333 }, output: { goodId: "gold_ring", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_goldsmith",
       workerSlots: 2, cost: { wood: 30, stone: 25, bricks: 10, gold: 200 },
     },
@@ -2742,7 +2747,7 @@ Object.assign(CONFIG, {
       // BAL2: lamps are a CITIZEN BASIC need — worker-staffed so citizens can
       // bootstrap; research stays in the citizen band via researchBand.
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { oil: 0.083333 }, output: { goodId: "lamp", ratePerWorker: 0.041667 },
+      inputs: { oil: 0.033333 }, output: { goodId: "lamp", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_lamp_maker",
       workerSlots: 2, cost: { wood: 30, stone: 20, gold: 150 },
     },
@@ -2753,14 +2758,14 @@ Object.assign(CONFIG, {
       // staffed so the aristocrat gate doesn't hang on burgher-only supply. Research
       // stays in the burgher band via researchBand (lamp_maker precedent). ===
       terrain: null, workerTier: "worker", researchBand: "burgher",
-      inputs: { planks: 0.083333, oil: 0.041667 }, output: { goodId: "chairs", ratePerWorker: 0.041667 },
+      inputs: { planks: 0.033333, oil: 0.033333 }, output: { goodId: "chairs", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_carpentry",
       workerSlots: 2, cost: { wood: 35, stone: 20, planks: 10, gold: 180 },
     },
     luxury_tailor: {
       id: "luxury_tailor", name: "Luxury Tailor", kind: "processor",
       terrain: null, workerTier: "burgher",
-      inputs: { clothes: 0.083333, gold_ring: 0.041667 }, output: { goodId: "luxury_clothes", ratePerWorker: 0.041667 },
+      inputs: { clothes: 0.033333, gold_ring: 0.033333 }, output: { goodId: "luxury_clothes", ratePerWorker: 0.033333 },
       unlockedBy: "unlock_luxury_tailor",
       workerSlots: 2, cost: { wood: 35, stone: 25, bricks: 10, gold: 240 },
     },
@@ -2821,6 +2826,7 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,
                                 // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
@@ -2922,14 +2928,17 @@ Object.assign(CONFIG, {
     //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
     //   tier's population GROWTH (all luxuries must be available to grow).
     tiers: {
+      // v0.51 balance rework — per-capita consumption expressed in GAME-MINUTES / 120
+      // (2 ticks = 1 game-second). Peasant anchor: 1.3 potato/min + 0.9 wood/min.
+      // Other tiers' basics ~1.08/min (0.009), all extras ~0.6/min (0.005).
       peasants:    { basic: ["potato", "wood"], extra: ["fish", "wool"],
-                     perCapita: { potato: 0.020833, wood: 0.020833, fish: 0.0125, wool: 0.0125 } },
+                     perCapita: { potato: 0.010833, wood: 0.0075, fish: 0.005, wool: 0.005 } },
       workers:     { basic: ["fish", "coal"], extra: ["clothes", "bread", "mead"],
-                     perCapita: { fish: 0.020833, coal: 0.020833, clothes: 0.0125, bread: 0.0125, mead: 0.0125 } },
+                     perCapita: { fish: 0.009, coal: 0.009, clothes: 0.005, bread: 0.005, mead: 0.005 } },
       burghers:    { basic: ["lamp", "bread", "mead", "clothes"], extra: ["chairs", "pottery", "gold_ring"],
-                     perCapita: { lamp: 0.020833, bread: 0.020833, mead: 0.020833, clothes: 0.020833, chairs: 0.0125, pottery: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, bread: 0.009, mead: 0.009, clothes: 0.009, chairs: 0.005, pottery: 0.005, gold_ring: 0.005 } },
       aristocrats: { basic: ["lamp", "mead", "iron_armor", "chairs", "pottery"], extra: ["brandy", "luxury_clothes", "gold_ring"],
-                     perCapita: { lamp: 0.020833, mead: 0.020833, iron_armor: 0.020833, chairs: 0.020833, pottery: 0.020833, brandy: 0.0125, luxury_clothes: 0.0125, gold_ring: 0.0125 } },
+                     perCapita: { lamp: 0.009, mead: 0.009, iron_armor: 0.009, chairs: 0.009, pottery: 0.009, brandy: 0.005, luxury_clothes: 0.005, gold_ring: 0.005 } },
     },
     // Happiness mapping: happiness = basicHappy·basicSat + extraHappy·extraSat.
     //   basics met (basicSat 1) ⇒ 70; +extras met (extraSat 1) ⇒ +30 ⇒ 100.
@@ -3278,6 +3287,17 @@ Sim.tick = function (State) {
 
   for (const town of State.towns) {
     if (!town) continue;
+    // v0.51: a city UNDER CONSTRUCTION (built === false) is dormant — no production,
+    // consumption, population, porters, trade or tax — until its build timer elapses.
+    // Only a freshly-FOUNDED city is built:false; a city level-upgrade never sets it,
+    // so an established city keeps working while it upgrades. Legacy/test towns omit
+    // the flag (built === undefined) and are treated as already built.
+    if (town.built === false) {
+      town._buildT = (town._buildT || 0) + 1;
+      const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
+      if (town._buildT >= buildTicks) { town.built = true; town._buildT = buildTicks; }
+      else continue;   // still building — skip everything else this tick
+    }
     if (!town.stock) town.stock = {};
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;
@@ -3426,7 +3446,11 @@ Sim.tick = function (State) {
 
       // v0.51 §2: per-building output-buffer cap (shared by the stall gate + release).
       const storeCap = (type.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
-      const w = b.workers || 0;
+      // v0.51: a PRODUCER being upgraded stops producing while the upgrade is pending
+      // (houses have no output loop, so they keep functioning — matching the design:
+      // "upgrading production buildings stops them; houses always function"). Its store
+      // still exists for porters to drain.
+      const w = b.pendingUpgrade ? 0 : (b.workers || 0);
       if (w > 0) {
         // Inputs cap effective workers (throttled against stock NOT YET claimed by
         // this building's banked-but-unreleased draw); record full desired input as
@@ -4179,10 +4203,10 @@ Object.assign(CONFIG, {
     // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
     // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
-      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { gold: 100, wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { gold: 250, stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { gold: 500, bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { gold: 900, bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -4235,22 +4259,27 @@ Buildings.nextUpgrade = function (state, b) {
 // Can the player start the next upgrade on this building? Gold-gated only —
 // resources are delivered over time (like CB-A construction), not required up
 // front. Returns {ok:true} or {ok:false, reason}.
+// v0.51: an upgrade's GOLD is paid by the CITY (town.gold), not the kingdom treasury —
+// placement/founding gold comes from the treasury, but upgrading a building spends the
+// city's own coffers. Resources are delivered from town stock over time (CB-A).
 Buildings.canStartUpgrade = function (state, town, b) {
   if (!b) return { ok: false, reason: "No building" };
   if (b.built === false) return { ok: false, reason: "Under construction" };
   if (b.pendingUpgrade) return { ok: false, reason: "Upgrade in progress" };
   const nxt = Buildings.nextUpgrade(state, b);
   if (!nxt) return { ok: false, reason: "No upgrade available" };
-  if ((state.treasury || 0) < (nxt.cost.gold || 0)) return { ok: false, reason: "Not enough gold" };
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
   return { ok: true };
 };
 
-// Charge the upgrade's GOLD to the treasury and mark the building pending. The
-// resources are delivered from town stock over time by the Sim delivery step.
+// Charge the upgrade's GOLD to the CITY and mark the building pending. The resources
+// are delivered from town stock over time by the Sim delivery step.
 Buildings.startUpgrade = function (state, town, b) {
   if (!Buildings.canStartUpgrade(state, town, b).ok) return false;
   const nxt = Buildings.nextUpgrade(state, b);
-  state.treasury = (state.treasury || 0) - (nxt.cost.gold || 0);
+  const gold = (nxt.cost && nxt.cost.gold) || 0;
+  if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
 };
@@ -4983,12 +5012,12 @@ var Pathing = (typeof Pathing !== "undefined" && Pathing) || {};
 // `kind:'external'` so TR-B can render internal vs external traders distinctly.
 Object.assign(CONFIG, {
   trade: {
-    tariffRate: 0.25,          // 25% of every inter-town transaction → treasury (GDD §6.3). v0.51 note: user wants 30% MINTED (seller keeps full sale) — implemented in P2 (trade rewrite) to balance conservation tests coherently.
+    tariffRate: 0.30,          // v0.51 §8: 30% of every inter-town transaction, MINTED into the treasury (the seller keeps the full sale; the tax is new money, not a deduction). Player-adjustable via state.tariffRate; clamped [0.10, 0.40].
     profitThreshold: 5,        // (legacy) retained for save/config compat; unused by the buy model
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
-    cartSpeed: 0.5,            // progress (0..1 along the path) added per tick
-    transferRate: 5,           // items/sec (game time) a parked trader loads/unloads — trades are NOT instant
+    cartSpeed: 0.25,           // v0.51: progress (0..1 along the path) per tick — halved so external traders travel 2× slower
+    transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
     buyThreshold: 1,           // TR-A: min shortfall (need − stock) before a city dispatches its trader
@@ -5017,7 +5046,7 @@ Object.assign(CONFIG, {
     // charge more); when it has a surplus offered but UNSOLD it ticks DOWN (glut →
     // cut the price to move it). Bounded + smoothed + deterministic. Net effect: near,
     // in-demand cities charge more; far cities that sell little drop prices. ===
-    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35 },
+    salesPressure: { up: 0.05, down: 0.015, min: 0.75, max: 1.35, graceTicks: 40 },
   },
 });
 
@@ -5117,6 +5146,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (!Array.isArray(state.carts)) state.carts = [];
     if (typeof state.treasury !== "number") state.treasury = 0;
     if (typeof state.tradeSeed !== "number") state.tradeSeed = 0;
+    state._tradeTick = (state._tradeTick || 0) + 1;   // v0.51 §3: monotonic trade-tick clock for sales-pressure grace window
     if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // MISSION-STATS: counter shape
     const cfg = CONFIG.trade;
     const towns = state.towns || [];
@@ -5513,16 +5543,23 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
-              seller.gold = (seller.gold || 0) + (value - tariff);                  // seller nets value − tariff
-              state.treasury += tariff;                                             // → player's treasury
+              // v0.51 §8 MINTED TARIFF: the seller keeps the FULL sale price; the tariff
+              // is MINTED as new money into the treasury (it is NOT deducted from the
+              // seller). The buyer still paid `value`, so each trade nets +tariff into
+              // the world's gold supply (deliberate inflation — the crown taxes trade
+              // without taking from the merchants).
+              seller.gold = (seller.gold || 0) + value;                             // seller keeps the whole sale
+              state.treasury += tariff;                                             // minted → player's treasury
               // v0.51 §3: a completed sale is UP pressure — this good is in demand
               // here, so the seller may charge more next time (bounded by SP.max).
               if (!seller.salesAdj) seller.salesAdj = {};
+              if (!seller._soldMark) seller._soldMark = {};
+              seller._soldMark[item.goodId] = state._tradeTick;   // §3: this good is actively selling
               const _sp = cfg.salesPressure || { up: 0.05, max: 1.35 };
               seller.salesAdj[item.goodId] = Math.min(_sp.max,
                 ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
               if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
-              if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value - tariff);  // PP-A ledger
+              if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value);  // v0.51 §8: seller keeps the full sale
             }
           }
           if (buyer && carriedForItem > value) buyer.gold = (buyer.gold || 0) + (carriedForItem - value);  // refund undelivered
@@ -5566,9 +5603,18 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (a > 1) adj[gid] = Math.max(1, a - SP.down);
         else if (a < 1) adj[gid] = Math.min(1, a + SP.down);
       }
+      const grace = SP.graceTicks || 40;
       for (const gid in CONFIG.goods) {                        // glut pressure on offered surpluses
         const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
         if (surplus <= 0) continue;
+        // §3 refinement: a surplus that is ACTIVELY SELLING (a sale settled within the
+        // grace window) is NOT a glut — leave its price where the sale bumped it. Only a
+        // surplus that's sitting UNSOLD gets marked down. This keeps a brisk, in-demand
+        // good priced up instead of the per-tick glut decay always winning over the
+        // per-trip sale bump.
+        const sold = seller._soldMark && seller._soldMark[gid];
+        const selling = (typeof sold === "number") && (state._tradeTick - sold) <= grace;
+        if (selling) continue;
         const a = (typeof adj[gid] === "number" && adj[gid] > 0) ? adj[gid] : 1;
         adj[gid] = Math.max(SP.min, a - SP.down);
       }
@@ -6357,7 +6403,7 @@ var ResearchEconomy = (function () {
         //     need, and treasury affordability at the AGREED unit price (carried).
         const agreedUnit = pick.price;
         const affordable = agreedUnit > 0 ? (state.treasury || 0) / agreedUnit : cartCapacity;
-        const qty = Math.min(cartCapacity, pick.surplus, want.rem, affordable);
+        const qty = Math.floor(Math.min(cartCapacity, pick.surplus, want.rem, affordable));   // v0.51: whole units only
         if (!(qty > 0)) break;   // can't afford / nothing to buy → stop this tick
         const agreedGold = agreedUnit * qty;
 
@@ -6877,7 +6923,7 @@ var CastleMarket = (function () {
       // (c) dispatch: treasury pays the agreed gold up front; no tariff on castle buys.
       const agreedUnit = pick.price;
       const affordable = agreedUnit > 0 ? (state.treasury || 0) / agreedUnit : cartCapacity;
-      const qty = Math.min(cartCapacity, pick.surplus, want.rem, affordable);
+      const qty = Math.floor(Math.min(cartCapacity, pick.surplus, want.rem, affordable));   // v0.51: castle buys WHOLE units only (no 3.8 potato)
       if (!(qty > 0)) break;
       const agreedGold = agreedUnit * qty;
       reserve(pick.seller, want.gid, qty);
@@ -7100,6 +7146,19 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   function isVisible(k) { return state.revealAll || state.revealed.has(k); }
+
+  // v0.51 (N): reveal the ring around each building/city ONCE it finishes construction
+  // (not when placed). Idempotent via a per-object _fogSeen flag; called each frame.
+  function revealConstructed() {
+    const R = (CONFIG.fog && CONFIG.fog.buildReveal) || 1;
+    for (const t of (state.towns || [])) {
+      if (!t) continue;
+      if (t.built !== false && !t._fogSeen) { reveal(t.q, t.r, R); t._fogSeen = true; }
+      for (const b of (Array.isArray(t.buildings) ? t.buildings : [])) {
+        if (b && b.built !== false && !b._fogSeen) { reveal(b.q, b.r, R); b._fogSeen = true; }
+      }
+    }
+  }
 
   // === TILE-ICONS ===
   // Small, code-drawn terrain motifs baked into the offscreen terrain layer
@@ -7443,8 +7502,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   function drawTowns() {
+    const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
       const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const building = t.built === false;   // v0.51: under construction
+      ctx.save();
+      if (building) ctx.globalAlpha = 0.5;   // dim a city that isn't built yet
       // shadow
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + SIZE * 0.5, SIZE * 0.55, SIZE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
@@ -7461,6 +7524,20 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       ctx.lineTo(p.x - s, p.y);
       ctx.closePath(); ctx.fill();
       ctx.fillRect(p.x - s * 0.7, p.y, s * 1.4, s * 0.9);
+      ctx.restore();
+      // construction progress ring (v0.51): a scaffolding arc + % while building
+      if (building) {
+        const prog = Math.max(0, Math.min(1, (t._buildT || 0) / buildTicks));
+        ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = Math.max(3, SIZE * 0.12);
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "#7fc24b";
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.62, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#f4ecdd";
+        ctx.font = "bold " + Math.round(SIZE * 0.28) + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("🚧", p.x, p.y - SIZE * 0.9);
+        ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+      }
     }
   }
 
@@ -8213,7 +8290,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (canPlace(q, r)) {
         Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
         state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
-        reveal(q, r, CONFIG.fog.townReveal);
+        // v0.51 (N): NO reveal at placement — a city reveals its neighbours only once
+        // it has finished CONSTRUCTION (renderer.revealConstructed), not when founded.
         scheduleSave();
         SFX.play("place");
         if (typeof updateTreasuryHud === "function") updateTreasuryHud();
@@ -9027,7 +9105,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // economy clock — paused when tab hidden (GDD §9.2 default)
     if (state.gameSpeed > 0 && !document.hidden) {
       econAcc += dt * state.gameSpeed;
-      const step = CONFIG.econ.baseTickMs;
+      // v0.51: paceMult stretches the REAL-TIME per economy tick (default 2 = the whole
+      // economy — production, population, trade, porters — runs at half speed) without
+      // changing any tick-count logic, so game-second ratios and headless tests are
+      // untouched. The 1×/2×/4× buttons still multiply on top via gameSpeed.
+      const step = CONFIG.econ.baseTickMs * ((CONFIG.econ && CONFIG.econ.paceMult) || 1);
       let guard = 0;
       while (econAcc >= step && guard++ < 8) {
         Sim.tick(state);
@@ -9121,6 +9203,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(terrainCanvas, terrainOrigin.x, terrainOrigin.y);
     drawRoads();
+    if (typeof revealConstructed === "function") revealConstructed();   // v0.51 (N): reveal a building/city's ring once it finishes building
     drawTowns();
     drawBuildings();  // TI-C: player-placed buildings, on top of town tokens
     InternalTraders.frame(dt);  // TR-B: ambient within-city porter carts (read-only overlay)
@@ -9191,6 +9274,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // EC-A: happiness baseline is 50 (EC-B's Sim moves it toward 100 as needs
       // are met, down when unmet); pop per house = round(cap × happiness/100).
       happiness: 50,
+      // v0.51: a freshly-founded city is UNDER CONSTRUCTION — it does nothing until
+      // its build timer completes (Sim advances _buildT and flips built→true). A city
+      // UPGRADE (level up) never sets this, so an existing city keeps working.
+      built: false, _buildT: 0,
     };
     // Prime prices once so the panel opens with meaningful numbers (priceFor
     // mutates town.prices; first read snaps to target).
@@ -9212,6 +9299,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // saves still load — Sim.tick reassigns their workers).
     if (!Array.isArray(t.buildings)) t.buildings = [];
     if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
+    if (t.built == null) t.built = true;   // v0.51: legacy/loaded cities are already built (only makeTown starts false)
     if (typeof Ledger !== "undefined") Ledger.normalizeTown(t);   // PP-A: bounded gold ledger (legacy saves self-heal)
     return t;
   }
@@ -11151,7 +11239,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // never reads/writes cart.progress or the sim tick, only the cached pixel
     // position in `cartRender`.
     const frameDt = Math.max(0, Number(dt) || 16);
-    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) / Math.max(0.05, state.gameSpeed || 1));
+    const tickMs = Math.max(16, ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500) * ((CONFIG.econ && CONFIG.econ.paceMult) || 1) / Math.max(0.05, state.gameSpeed || 1));
     const live = new Set();
     for (const cart of carts) {
       if (!cart || cart.done) continue;
@@ -15362,8 +15450,25 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.12";
+  const GAME_VERSION = "0.51.16";
   const PATCH_NOTES = [
+    { v: "0.51.16", notes: [
+      "BIG BALANCE REWORK — production and consumption are now tuned in sensible per-minute numbers. A lumberjack makes 15 wood/minute (2 workers, 16s cycle); a potato farm makes 12/minute, so one farm feeds 8–10 peasants. A peasant eats 1.3 potato + 0.9 wood per minute. Every other building and good was rescaled to match, giving a slower, more legible economy.",
+      "The whole game clock is back to real-time at 1× (the slow rates set the pace now); the 1×/2×/4× buttons speed it up. External traders travel 2× slower and internal porters are slower too.",
+      "Fog now lifts only around a building or city ONCE it finishes construction (a one-tile ring), not the moment you place it — scouts remain your way to open up the map.",
+      "The castle buys whole units only (no more 3.8 potato).",
+    ] },
+    { v: "0.51.15", notes: [
+      "SLOWER, more readable pace: the whole economy now runs at half speed by default (production, population, trade and porters) so you can actually watch it unfold — the 1×/2×/4× buttons still speed it up from there. Traders also load and unload their cargo more slowly, so a trade takes visible time at the dock.",
+    ] },
+    { v: "0.51.14", notes: [
+      "New cities are BUILT before they work: founding a city now raises it over ~10s (a 🚧 progress ring) before it produces, consumes or trades — you place it and wait for construction. Upgrading an existing city never pauses it.",
+      "Building UPGRADES are paid from the CITY's own gold (not the kingdom treasury) — you can't upgrade a building unless that city can afford it. Hut upgrades now cost gold too (L2 100 · L3 250 · L4 500 · L5 900) plus their materials.",
+      "Upgrading a PRODUCTION building stops it producing until the upgrade finishes (houses keep working while they upgrade).",
+    ] },
+    { v: "0.51.13", notes: [
+      "THE CROWN'S CUT IS MINTED (economy overhaul): the trade tariff is now 30% and it's MINTED — the selling city keeps the FULL sale price, and the treasury gets 30% of the value as brand-new money on top. Trade grows the kingdom's money supply instead of shuffling it around, so a busy trade network steadily funds the crown. You can still tune the rate (10–40%) with the tariff slider",
+    ] },
     { v: "0.51.12", notes: [
       "SEE EACH BUILDING'S STORE: a producer's detail panel now shows its OWN internal store (x/cap 🎒) — the goods waiting for a porter — instead of the shared warehouse, and the panel's cycle time honours the building's real cycle (the lumberjack reads 4s). On the map, a small bar under each producer fills teal as its store fills and turns amber when it's full and stalled, so you can see at a glance which buildings need more porters",
     ] },

@@ -143,7 +143,7 @@ const INCOME_MULT = 1 + Math.max(0, 100 - PT.happyBase) * PT.bonusPerPoint; // 1
 // clear surplus reads surplus (net>0), a clear deficit reads deficit (net<0).
 // ===========================================================================
 group("1. analyze() per-good prod/cons match CONFIG-derived numbers", () => {
-  const PEAS = 30;
+  const PEAS = 10;
   const scn = C.scenario([
     { name: "Farmville", pop: { peasants: PEAS, workers: 0, burghers: 0, aristocrats: 0 },
       buildings: [{ typeId: "potato_farm", count: 2, level: 1 }] },
@@ -212,14 +212,14 @@ group("2. analyze() and simulate() verdicts agree on clear cases", () => {
   // (a) DEFICIT of a SPECIFIC basic good: a city with only potato_farms (potato
   //     surplus) but NO wood source — wood is a peasant BASIC ⇒ starves happiness.
   const woodDef = C.scenario([
-    { name: "Thirstwood", pop: { peasants: 20, workers: 0, burghers: 0, aristocrats: 0 },
+    { name: "Thirstwood", pop: { peasants: 16, workers: 0, burghers: 0, aristocrats: 0 },
       buildings: [{ typeId: "potato_farm", count: 2, level: 1 }, { typeId: "hut", count: 10, level: 1 }] },
   ]);
   const aWood = BalanceLab.analyze(woodDef);
   ok("analyze: potato SURPLUS but wood DEFICIT in a potato-only city",
      aWood.perGood.potato && C.net(aWood.perGood.potato) > 0 && aWood.perGood.wood && C.net(aWood.perGood.wood) < 0,
      "potato.net=" + (aWood.perGood.potato && C.net(aWood.perGood.potato)) + " wood.net=" + (aWood.perGood.wood && C.net(aWood.perGood.wood)));
-  const sWood = BalanceLab.simulate(woodDef, 300);
+  const sWood = BalanceLab.simulate(woodDef, 1400);
   ok("simulate: the wood-deficit city is NOT self-sustained", C.selfSustained(sWood) === false, JSON.stringify(C.sCities(sWood).map(c => ({ n: c.name, h: C.happy(c) }))));
   const cWood = C.sCities(sWood)[0];
   ok("simulate: wood-deficit city happiness below the happy gate (basic unmet)", cWood && C.happy(cWood) < C.HAPPY_MIN, cWood && ("h=" + C.happy(cWood)));

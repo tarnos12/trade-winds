@@ -297,7 +297,7 @@ var ResearchEconomy = (function () {
         //     need, and treasury affordability at the AGREED unit price (carried).
         const agreedUnit = pick.price;
         const affordable = agreedUnit > 0 ? (state.treasury || 0) / agreedUnit : cartCapacity;
-        const qty = Math.min(cartCapacity, pick.surplus, want.rem, affordable);
+        const qty = Math.floor(Math.min(cartCapacity, pick.surplus, want.rem, affordable));   // v0.51: whole units only
         if (!(qty > 0)) break;   // can't afford / nothing to buy → stop this tick
         const agreedGold = agreedUnit * qty;
 

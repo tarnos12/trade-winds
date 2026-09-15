@@ -130,7 +130,7 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
                    stock: { wood: 100000 },
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
   let maxPotato = 0;
-  for (let i = 0; i < 300; i++) { Sim.tick({ towns: [t] }); maxPotato = Math.max(maxPotato, t.stock.potato || 0); }
+  for (let i = 0; i < 3000; i++) { Sim.tick({ towns: [t] }); maxPotato = Math.max(maxPotato, t.stock.potato || 0); }
   // GRAN: output is released in whole-unit batches, so potato peaks at (and is
   // clamped to) the cap right after a batch and dips between batches — the peak is
   // exactly the cap and it never exceeds it.
@@ -905,8 +905,10 @@ function place(typeId, q, r, over) {
   //     and never moves the steady-state mean (no trivialize, no regress).
   {
     const save = N.satSmoothing;
-    N.satSmoothing = 1;    const before = driveBurst(50, 8, 4000, 2000);   // old instantaneous model
-    N.satSmoothing = save; const after  = driveBurst(50, 8, 4000, 2000);   // smoothed (default)
+    // v0.51 balance rework: consumption per-capita dropped, so a good drains slower —
+    // widen the burst gap so the shelf still fully empties between carts (a real sawtooth).
+    N.satSmoothing = 1;    const before = driveBurst(80, 8, 9000, 4000);   // old instantaneous model
+    N.satSmoothing = save; const after  = driveBurst(80, 8, 9000, 4000);   // smoothed (default)
     ok("SAW: bursty supply sawtooths WITHOUT smoothing (peak-to-trough > 20)", before.p2t > 20,
        "before p2t=" + before.p2t.toFixed(1));
     ok("SAW: smoothing at least halves the sawtooth (a stable plateau)", after.p2t < before.p2t * 0.5,
