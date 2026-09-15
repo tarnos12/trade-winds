@@ -10194,7 +10194,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // Buildings.canPlaceBuilding(res.town), charges def.cost to THAT city, pushes
   // { typeId, q, r, workers:0 } (Sim.tick assigns real workers), and stays in
   // placement mode so several can be placed. Exits only when no city has a free slot.
-  function tryPlaceBuilding(sx, sy) {
+  function tryPlaceBuilding(sx, sy, keepPlacing) {
     if (!placing) return;
     const h = hexAtScreen(sx, sy);
     const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
@@ -10227,9 +10227,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     SFX.play("place");
     buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;
     buildBarHintEl.className = "ok";
-    // Exit only if NO city can accept another building (all slot caps reached).
+    // v0.51 (K): placement is ONE-SHOT — drop the building and deselect the tool, so a
+    // stray click can't keep dropping buildings. Hold SHIFT to stay armed and place
+    // several. Either way, exit if no city can accept another building.
     const anyRoom = state.towns.some(t => Buildings.usedSlots(t) < Buildings.slotCap(t.level, state));
-    if (!anyRoom) cancelPlacing();
+    if (!keepPlacing || !anyRoom) cancelPlacing();
     if (activeTown) renderTownPanel();
   }
 
@@ -10424,7 +10426,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // RESEARCH CENTER (Slice C): the Center's own placement session takes the
     // click first — same "drop and stay exclusive" pattern as building placement.
     if (placingResearchCenter) { tryPlaceResearchCenter(e.clientX, e.clientY); return; }
-    if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
+    if (placing) { tryPlaceBuilding(e.clientX, e.clientY, e.shiftKey); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
     // RESEARCH CENTER (Slice C): a click on the Center's hex opens its own panel
@@ -11140,6 +11142,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel, closeBuildingPanel,
                     // v0.48: the currently panel-selected building {q,r} (or null) — renderer highlights it on the map
                     get selectedBuilding() { return (bpBuilding && !bpEl.classList.contains("hidden")) ? { q: bpBuilding.q, r: bpBuilding.r } : null; },
+                    // v0.51 (L): true while a building/Center is being PLACED (arms the map) — used to hide the city give/take controls.
+                    isPlacing() { return !!(placing || placingResearchCenter); },
                     startPlacing, cancelPlacing, tryPlaceBuilding,
                     // RESEARCH CENTER (Slice C): the Center's own placement session.
                     startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,
@@ -11828,6 +11832,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // v0.49: compact cards by default; holding SHIFT reveals the Give/Take controls
     // (and the cooldown line) below each card.
     let revealBtns = false;
+    // v0.51 (L): Give/Take only appear when NO map tool or building is selected — holding
+    // Shift while placing/erasing (or with any build tool armed) must NOT pop the controls.
+    const noToolSelected = () => (state.mode === "pan") &&
+      !(window.TownUI && window.TownUI.isPlacing && window.TownUI.isPlacing());
+    const showGiveTake = () => revealBtns && noToolSelected();
     if (typeof window !== "undefined") {
       window.addEventListener("keydown", (e) => { if (e.key === "Shift" && !revealBtns) { revealBtns = true; refresh(); } });
       window.addEventListener("keyup",   (e) => { if (e.key === "Shift" &&  revealBtns) { revealBtns = false; refresh(); } });
@@ -11930,7 +11939,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
         c.avatar.style.background = cityColor(town.id);
         c.avatar.textContent = town.id;                 // v0.49: number on the avatar image
-        if (c.btns) c.btns.style.display = revealBtns ? "flex" : "none";   // v0.49: Give/Take only while Shift held
+        if (c.btns) c.btns.style.display = showGiveTake() ? "flex" : "none";   // v0.49: Give/Take only while Shift held
         c.name.textContent = "City #" + town.id;
         c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
         const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
@@ -11951,7 +11960,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
           const mm = Math.floor(secs / 60), ss = secs % 60;
           c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
-          c.cool.style.display = revealBtns ? "" : "none";   // v0.49: only with the revealed controls
+          c.cool.style.display = showGiveTake() ? "" : "none";   // v0.49: only with the revealed controls
         } else {
           c.cool.style.display = "none";
         }
@@ -15487,8 +15496,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.17";
+  const GAME_VERSION = "0.51.18";
   const PATCH_NOTES = [
+    { v: "0.51.18", notes: [
+      "Placing a building is now one-and-done: it drops the building and deselects the tool, so a stray click can't keep dropping copies. Hold SHIFT while placing to stay armed and lay several in a row.",
+      "Holding SHIFT while a build/erase tool (or a building) is selected no longer pops the city Give/Take gold controls — those only appear when no tool is active.",
+    ] },
     { v: "0.51.17", notes: [
       "Trader & porter cargo now reads at a glance: an internal porter on its way to COLLECT shows the good it's about to pick up, faint/translucent; once it's carrying, the good goes solid with its count. A buyer trader heading out shows a 🪙 gold-coin chip (the money it will spend) alongside the faint good it intends to buy, and switches to the solid goods once it's hauling them home.",
     ] },

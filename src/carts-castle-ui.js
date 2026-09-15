@@ -673,6 +673,11 @@
     // v0.49: compact cards by default; holding SHIFT reveals the Give/Take controls
     // (and the cooldown line) below each card.
     let revealBtns = false;
+    // v0.51 (L): Give/Take only appear when NO map tool or building is selected — holding
+    // Shift while placing/erasing (or with any build tool armed) must NOT pop the controls.
+    const noToolSelected = () => (state.mode === "pan") &&
+      !(window.TownUI && window.TownUI.isPlacing && window.TownUI.isPlacing());
+    const showGiveTake = () => revealBtns && noToolSelected();
     if (typeof window !== "undefined") {
       window.addEventListener("keydown", (e) => { if (e.key === "Shift" && !revealBtns) { revealBtns = true; refresh(); } });
       window.addEventListener("keyup",   (e) => { if (e.key === "Shift" &&  revealBtns) { revealBtns = false; refresh(); } });
@@ -775,7 +780,7 @@
 
         c.avatar.style.background = cityColor(town.id);
         c.avatar.textContent = town.id;                 // v0.49: number on the avatar image
-        if (c.btns) c.btns.style.display = revealBtns ? "flex" : "none";   // v0.49: Give/Take only while Shift held
+        if (c.btns) c.btns.style.display = showGiveTake() ? "flex" : "none";   // v0.49: Give/Take only while Shift held
         c.name.textContent = "City #" + town.id;
         c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
         const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
@@ -796,7 +801,7 @@
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
           const mm = Math.floor(secs / 60), ss = secs % 60;
           c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
-          c.cool.style.display = revealBtns ? "" : "none";   // v0.49: only with the revealed controls
+          c.cool.style.display = showGiveTake() ? "" : "none";   // v0.49: only with the revealed controls
         } else {
           c.cool.style.display = "none";
         }

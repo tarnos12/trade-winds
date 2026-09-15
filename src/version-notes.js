@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.17";
+  const GAME_VERSION = "0.51.18";
   const PATCH_NOTES = [
+    { v: "0.51.18", notes: [
+      "Placing a building is now one-and-done: it drops the building and deselects the tool, so a stray click can't keep dropping copies. Hold SHIFT while placing to stay armed and lay several in a row.",
+      "Holding SHIFT while a build/erase tool (or a building) is selected no longer pops the city Give/Take gold controls — those only appear when no tool is active.",
+    ] },
     { v: "0.51.17", notes: [
       "Trader & porter cargo now reads at a glance: an internal porter on its way to COLLECT shows the good it's about to pick up, faint/translucent; once it's carrying, the good goes solid with its count. A buyer trader heading out shows a 🪙 gold-coin chip (the money it will spend) alongside the faint good it intends to buy, and switches to the solid goods once it's hauling them home.",
     ] },
