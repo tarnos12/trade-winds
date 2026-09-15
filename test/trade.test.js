@@ -804,5 +804,28 @@ Pathing.invalidate();
   ok("§3: a good that keeps selling is priced UP (sales pressure > 1)", soldUp);
 })();
 
+// === v0.51 §4 — LAYERED IMPORT PRIORITY ======================================
+(function () {
+  const firstImport = (buyerStock) => {
+    const buyer = mkTown({ id: 1, q: 0, r: 0, gold: 1e6, stock: buyerStock,
+                           prices: {}, demand: { potato: 40, wool: 40 } });
+    const sp = mkTown({ id: 2, q: 2, r: 0, stock: { potato: 1e5 }, prices: { potato: 5 }, demand: {} });
+    const sw = mkTown({ id: 3, q: -2, r: 0, stock: { wool: 1e5 }, prices: { wool: 5 }, demand: {} });
+    const st = { towns: [buyer, sp, sw], carts: [], treasury: 0, tradeSeed: 3 };
+    for (let i = 0; i < 12; i++) {
+      buyer.demand = { potato: 40, wool: 40 };
+      if ((buyer.stock.potato || 0) < 500 && buyerStock.potato) buyer.stock.potato = buyerStock.potato;
+      Trade.tick(st);
+      const c = st.carts.find(c => c.fromId === 1);
+      if (c) return c.goodId;
+    }
+    return null;
+  };
+  // A city short on BOTH a basic (potato) and a pure luxury (wool) imports the BASIC first.
+  ok("§4: basics are imported before luxuries", firstImport({}) === "potato");
+  // Once the basic is stocked past the first fill band, the luxury becomes next in line.
+  ok("§4: with basics satisfied, the luxury is imported next", firstImport({ potato: 1000 }) === "wool");
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

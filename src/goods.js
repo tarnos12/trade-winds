@@ -372,6 +372,12 @@ Object.assign(CONFIG, {
     // × count) = level+3 (L4 7). Out-of-range levels fall back to the formula.
     externalTradersByLevel: [0, 2, 4, 6, 8],
     transportersByLevel:    [0, 4, 5, 6, 7],
+    // === v0.51 §4 LAYERED IMPORT PRIORITY. A city fills needs in priority ORDER —
+    // house basics → production inputs → luxuries → materials — but each layer only up
+    // to a rising threshold before the next, then loops back to raise earlier layers.
+    // priorityFill = the fill bands: first bring everything to 30% (basics first), then
+    // 60%, then 100% — so a city never tops one warehouse while starving another. ===
+    priorityFill: [0.3, 0.6, 1.0],
     // Bounded per-town gold ledger: max samples of town.gold (one per Sim tick)
     // and of per-tick flow snapshots kept for the budget chart.
     ledgerHist: 600,

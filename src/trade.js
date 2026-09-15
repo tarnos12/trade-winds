@@ -253,16 +253,43 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
       // === /PP-A ===
 
-      // (a) Biggest shortfall (need − stock − incoming) across every demanded good.
+      // (a) v0.51 §4 — LAYERED IMPORT PRIORITY. Rank each shortfall by (i) which fill
+      // BAND it sits in (below 30% is more urgent than below 60%…) and (ii) its priority
+      // LAYER within that band: house basics → production inputs → luxuries → materials.
+      // So a city fills every layer to 30% (basics first) before pushing any to 60%,
+      // and never tops one warehouse while another starves. Deficit breaks ties.
+      const N = CONFIG.needs || {};
+      const basicSet = new Set(N.basicNeeds || []);
+      const extraSet = new Set(N.extraNeeds || []);
+      // goods this city's placed buildings consume as inputs (production layer)
+      const inputSet = new Set();
+      for (const bl of (Array.isArray(home.buildings) ? home.buildings : [])) {
+        const def = bl && CONFIG.buildings[bl.typeId];
+        if (def && def.inputs) for (const g in def.inputs) inputSet.add(g);
+      }
+      const layerOf = (gid) => basicSet.has(gid) ? 0 : inputSet.has(gid) ? 1 : extraSet.has(gid) ? 2 : 3;
+      const fills = (CONFIG.town && CONFIG.town.priorityFill) || [0.3, 0.6, 1.0];
+      const bandOf = (have, need) => {
+        for (let i = 0; i < fills.length; i++) if (have < fills[i] * need) return i;
+        return fills.length;   // fully satisfied
+      };
       const gaps = [];
       for (const gid in CONFIG.goods) {
         const need = needOf(home, gid);
         if (need <= 0) continue;                              // city doesn't want this good
-        const shortfall = need - (home.stock[gid] || 0) - (incoming[gid] || 0);  // PP-A: net of in-flight
-        if (shortfall > cfg.buyThreshold) gaps.push({ gid, shortfall });
+        const have = (home.stock[gid] || 0) + (incoming[gid] || 0);
+        const shortfall = need - have;                        // PP-A: net of in-flight
+        if (shortfall <= cfg.buyThreshold) continue;
+        const band = bandOf(have, need);
+        if (band >= fills.length) continue;                   // already at 100% target
+        gaps.push({ gid, shortfall, band, layer: layerOf(gid) });
       }
       if (!gaps.length) continue;
-      gaps.sort((a, b) => b.shortfall - a.shortfall || (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
+      gaps.sort((a, b) =>
+        a.band - b.band ||                                    // fill everything to 30% before any to 60%
+        a.layer - b.layer ||                                  // within a band: basics → inputs → luxury → materials
+        b.shortfall - a.shortfall ||                          // then the biggest deficit
+        (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
 
       // (b) Offers for a good = reachable cities (+ the castle) holding a real surplus.
       const offersFor = (gid) => {
@@ -283,10 +310,20 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       // city must not waste its trip (or give up for the tick) on its single biggest
       // shortfall when that good is unsellable (e.g. an extra nobody produces) while
       // a good it CAN buy waits. Then seeded-pick among the top-N tradeable gaps. ===
+      // v0.51 §4: anti-herding randomises ONLY within the top priority GROUP (same
+      // band+layer) that has any tradeable offer — a lower-priority good (a luxury) can
+      // never be chosen over a higher one (a basic) still for sale. Higher-priority
+      // goods with no reachable seller are skipped, falling through to the next group.
       const tradeable = [];
+      let groupKey = null;
       for (const g of gaps) {
         const o = offersFor(g.gid);
-        if (o.length) { tradeable.push({ gap: g, offers: o }); if (tradeable.length >= cfg.topRandom) break; }
+        if (!o.length) continue;
+        const key = g.band + ":" + g.layer;
+        if (groupKey === null) groupKey = key;
+        else if (key !== groupKey) break;               // past the top tradeable group
+        tradeable.push({ gap: g, offers: o });
+        if (tradeable.length >= cfg.topRandom) break;
       }
       if (!tradeable.length) continue;   // nothing this city needs is for sale anywhere reachable
       const chosen = tradeable[Math.min(tradeable.length - 1, Math.floor(rng() * tradeable.length))];

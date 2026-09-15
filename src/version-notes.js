@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.8";
+  const GAME_VERSION = "0.51.9";
   const PATCH_NOTES = [
+    { v: "0.51.9", notes: [
+      "CITIES BUY IN PRIORITY ORDER (economy overhaul): a city now imports in layers — house basics first, then production inputs, then luxuries, then materials — and only fills each layer to ~30% before topping up the next, looping back to raise them all toward 100%. So a city never fills one warehouse to the brim while another need starves, and food always beats finery to the front of the queue",
+    ] },
     { v: "0.51.8", notes: [
       "A STARVING city buys smart: when a city is almost out of a basic good, its trader now favours the CLOSEST seller with stock over the cheapest one — it would rather pay a bit more and get fed sooner than hold out for a bargain and starve",
     ] },
