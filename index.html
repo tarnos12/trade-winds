@@ -5377,6 +5377,28 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       for (const it of cargo) { totalQty += it.qty; totalGold += it.unitBuy * it.qty; }
       home.gold = (home.gold || 0) - totalGold;   // carry the whole cargo's gold up front
 
+      // v0.51 (H): the SAME trader also SELLS on this trip — fill spare capacity with
+      // home's surplus goods that the DESTINATION city is short on, so a run can be
+      // "buy 5 wood, sell 5 potato". Town sellers only (not the castle). The goods ship
+      // out of home's stock now; they're paid for on arrival (minted tariff, §8), and any
+      // the destination can't take/afford come straight back to home.
+      const sellCargo = [];
+      if (!sellerIsCastle && pick.seller) {
+        let sellCap = cartCapacity;
+        for (const gid in CONFIG.goods) {
+          if (sellCap < 1) break;
+          const homeSurplus = (home.stock[gid] || 0) - reservedOf(home, gid) - needOf(home, gid);
+          if (homeSurplus < 1) continue;
+          const sellerShort = needOf(pick.seller, gid) - (pick.seller.stock[gid] || 0);
+          if (sellerShort < 1) continue;
+          const q = Math.floor(Math.min(sellCap, homeSurplus, sellerShort));
+          if (q < 1) continue;
+          home.stock[gid] = (home.stock[gid] || 0) - q;              // ship it out now
+          sellCargo.push({ goodId: gid, qty: q, unitSell: priceOf(pick.seller, gid) });
+          sellCap -= q;
+        }
+      }
+
       state.carts.push({
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
         kind: "external",                     // TR-B renders external vs internal traders
@@ -5387,6 +5409,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         // render / hover / not-yet-updated tests keep reading a single-good shape.
         goodId: cargo[0].goodId, qty: cargo[0].qty, unitBuy: cargo[0].unitBuy, agreedGold: totalGold,
         cargo: cargo, totalQty: totalQty,     // PP-A: full multi-good cargo + total units
+        sellCargo: sellCargo.length ? sellCargo : null,   // v0.51 (H): goods home sells TO the destination this trip
         path: pick.route.path.slice(),        // buyer → seller hex keys (contract shape)
         road: pick.route.road !== false,      // OFFROAD: false ⇒ no road link ⇒ half speed
         progress: 0, phase: "outbound", done: false,
@@ -5519,6 +5542,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         if (!sellerIsCastle && !seller) {
           const carried = cart.agreedGold || cargo.reduce((s, it) => s + (it.unitBuy || 0) * it.qty, 0);
           if (buyer) buyer.gold = (buyer.gold || 0) + carried;
+          // v0.51 (H): the destination is gone, so its unsold sell-cargo comes home too.
+          if (buyer && cart.sellCargo) { if (!buyer.stock) buyer.stock = {}; for (const it of cart.sellCargo) buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + (it.qty || 0); }
           cart.done = true; continue;
         }
         let liveQty = 0;
@@ -5567,6 +5592,32 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           item.qty = take;            // carry only what was actually bought
           item.unloaded = 0;
           liveQty += take;
+        }
+        // v0.51 (H): SELL home's outbound cargo to this destination on the same arrival.
+        // Destination pays (up to its room + gold); home keeps the full sale and the
+        // tariff is MINTED to the treasury (§8). Anything unsold returns to home now.
+        if (cart.sellCargo && cart.sellCargo.length && seller) {
+          for (const it of cart.sellCargo) {
+            const capG2 = (CONFIG.town && CONFIG.town.storageCap);
+            const room = capG2 ? Math.max(0, capG2 - (seller.stock[it.goodId] || 0)) : it.qty;
+            const unit = it.unitSell || 0;
+            let sell = Math.min(it.qty, room);
+            if (unit > 0 && (seller.gold || 0) < unit * sell) sell = Math.floor((seller.gold || 0) / unit);
+            if (sell < 0) sell = 0;
+            const value = unit * sell;
+            if (sell > 0) {
+              if (!seller.stock) seller.stock = {};
+              seller.stock[it.goodId] = (seller.stock[it.goodId] || 0) + sell;
+              seller.gold = (seller.gold || 0) - value;
+              if (buyer) buyer.gold = (buyer.gold || 0) + value;              // home keeps the whole sale
+              state.treasury += tariffRate * value;                          // minted tariff
+              if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariffRate * value);
+              if (typeof Ledger !== "undefined") { Ledger.record(buyer, "sales", value); Ledger.record(seller, "buys", value); }
+            }
+            const back = it.qty - sell;
+            if (back > 0 && buyer) { if (!buyer.stock) buyer.stock = {}; buyer.stock[it.goodId] = (buyer.stock[it.goodId] || 0) + back; }
+          }
+          cart.sellCargo = null;
         }
         cart.cargo = cargo.filter(it => it.qty > 0);          // drop fully-undelivered items
         cart.totalQty = liveQty;
@@ -7568,7 +7619,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     opts = opts || {};
     const alpha = opts.alpha == null ? 1 : opts.alpha;
     const muted = !!opts.muted;
-    const label = String(num);
+    const label = opts.hideNum ? "" : String(num);   // v0.51 (F/G): icon-only chip (e.g. a hauler on its way to pick up)
     const fontPx = Math.max(9, Math.round(SIZE * 0.19));
     const icoPx = Math.max(10, Math.round(SIZE * 0.22));   // ICONS: emoji glyph replaces the color dot
     const ico = goodIcon(gid);
@@ -7596,6 +7647,30 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     ctx.fillText(label, bx + padX + iw + gap, cy + 0.5);
     ctx.restore();
   }
+  // v0.51 (G): a small gold-coin chip (🪙 + amount) — drawn on a BUYER trader heading
+  // out, so it visibly carries the money it will spend (alongside the muted target good).
+  function drawCoinChip(cx, cy, amount) {
+    const label = String(Math.round(amount || 0));
+    const fontPx = Math.max(9, Math.round(SIZE * 0.19));
+    const icoPx = Math.max(10, Math.round(SIZE * 0.22));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width;
+    ctx.font = icoPx + "px system-ui, sans-serif";
+    const iw = ctx.measureText("🪙").width;
+    const padX = Math.max(2, SIZE * 0.05), gap = Math.max(2, SIZE * 0.05);
+    const totalW = padX * 2 + iw + gap + tw, totalH = Math.max(icoPx + 3, fontPx + 3);
+    const bx = cx - totalW / 2, by = cy - totalH / 2;
+    ctx.fillStyle = "rgba(40,30,5,0.72)";
+    cbChipRect(bx, by, totalW, totalH, totalH * 0.5); ctx.fill();
+    ctx.fillText("🪙", bx + padX, cy + 0.5);
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.fillStyle = "#ffe08a";
+    ctx.fillText(label, bx + padX + iw + gap, cy + 0.5);
+    ctx.restore();
+  }
+
   // Stack the top-3 owed goods for an under-construction building above its circle.
   function drawConstructionNeed(b, p, rad) {
     const need = (typeof Buildings !== "undefined" && Buildings.constructionNeed)
@@ -10170,7 +10245,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // Buildings.canPlaceBuilding(res.town), charges def.cost to THAT city, pushes
   // { typeId, q, r, workers:0 } (Sim.tick assigns real workers), and stays in
   // placement mode so several can be placed. Exits only when no city has a free slot.
-  function tryPlaceBuilding(sx, sy) {
+  function tryPlaceBuilding(sx, sy, keepPlacing) {
     if (!placing) return;
     const h = hexAtScreen(sx, sy);
     const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
@@ -10203,9 +10278,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     SFX.play("place");
     buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;
     buildBarHintEl.className = "ok";
-    // Exit only if NO city can accept another building (all slot caps reached).
+    // v0.51 (K): placement is ONE-SHOT — drop the building and deselect the tool, so a
+    // stray click can't keep dropping buildings. Hold SHIFT to stay armed and place
+    // several. Either way, exit if no city can accept another building.
     const anyRoom = state.towns.some(t => Buildings.usedSlots(t) < Buildings.slotCap(t.level, state));
-    if (!anyRoom) cancelPlacing();
+    if (!keepPlacing || !anyRoom) cancelPlacing();
     if (activeTown) renderTownPanel();
   }
 
@@ -10400,7 +10477,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // RESEARCH CENTER (Slice C): the Center's own placement session takes the
     // click first — same "drop and stay exclusive" pattern as building placement.
     if (placingResearchCenter) { tryPlaceResearchCenter(e.clientX, e.clientY); return; }
-    if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
+    if (placing) { tryPlaceBuilding(e.clientX, e.clientY, e.shiftKey); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
     // RESEARCH CENTER (Slice C): a click on the Center's hex opens its own panel
@@ -11116,6 +11193,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel, closeBuildingPanel,
                     // v0.48: the currently panel-selected building {q,r} (or null) — renderer highlights it on the map
                     get selectedBuilding() { return (bpBuilding && !bpEl.classList.contains("hidden")) ? { q: bpBuilding.q, r: bpBuilding.r } : null; },
+                    // v0.51 (L): true while a building/Center is being PLACED (arms the map) — used to hide the city give/take controls.
+                    isPlacing() { return !!(placing || placingResearchCenter); },
                     startPlacing, cancelPlacing, tryPlaceBuilding,
                     // RESEARCH CENTER (Slice C): the Center's own placement session.
                     startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,
@@ -11291,6 +11370,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           drawGoodChip(rp.x, rp.y - SIZE * 0.5 - shown * chipStep, items[ci].goodId, q,
             { alpha: requested ? 0.5 : 1, muted: requested });
           shown++;
+        }
+        // v0.51 (G): a BUYER heading out carries the money it will spend — show a gold
+        // coin chip under the wagon so it reads as "off to buy" (the goods above are muted).
+        if (requested && typeof drawCoinChip === "function") {
+          const gold = cart.agreedGold || ((cart.unitBuy || 0) * (cart.qty || 0));
+          if (gold > 0) drawCoinChip(rp.x, rp.y + SIZE * 0.42, gold);
         }
         // owner label ("City #N" / "Castle") — only when zoomed in well; the
         // string is cached per cart so nothing is allocated per frame.
@@ -11798,6 +11883,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // v0.49: compact cards by default; holding SHIFT reveals the Give/Take controls
     // (and the cooldown line) below each card.
     let revealBtns = false;
+    // v0.51 (L): Give/Take only appear when NO map tool or building is selected — holding
+    // Shift while placing/erasing (or with any build tool armed) must NOT pop the controls.
+    const noToolSelected = () => (state.mode === "pan") &&
+      !(window.TownUI && window.TownUI.isPlacing && window.TownUI.isPlacing());
+    const showGiveTake = () => revealBtns && noToolSelected();
     if (typeof window !== "undefined") {
       window.addEventListener("keydown", (e) => { if (e.key === "Shift" && !revealBtns) { revealBtns = true; refresh(); } });
       window.addEventListener("keyup",   (e) => { if (e.key === "Shift" &&  revealBtns) { revealBtns = false; refresh(); } });
@@ -11900,7 +11990,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
         c.avatar.style.background = cityColor(town.id);
         c.avatar.textContent = town.id;                 // v0.49: number on the avatar image
-        if (c.btns) c.btns.style.display = revealBtns ? "flex" : "none";   // v0.49: Give/Take only while Shift held
+        if (c.btns) c.btns.style.display = showGiveTake() ? "flex" : "none";   // v0.49: Give/Take only while Shift held
         c.name.textContent = "City #" + town.id;
         c.gold.textContent = Math.round(town.gold || 0).toLocaleString() + " g";
         const h = Math.max(0, Math.min(100, Math.round(town.happiness || 0)));
@@ -11921,7 +12011,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
           const mm = Math.floor(secs / 60), ss = secs % 60;
           c.cool.textContent = "cooldown " + mm + ":" + (ss < 10 ? "0" : "") + ss;
-          c.cool.style.display = revealBtns ? "" : "none";   // v0.49: only with the revealed controls
+          c.cool.style.display = showGiveTake() ? "" : "none";   // v0.49: only with the revealed controls
         } else {
           c.cool.style.display = "none";
         }
@@ -13575,13 +13665,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // carried good's cargo chip — the same chip external carts use, so a porter reads
     // its cargo exactly like a trade cart, only smaller and cooler-toned.
     const PORTER_BODY = "#2f6e73", PORTER_EDGE = "rgba(10,20,20,0.5)";
-    function drawToken(x, y, good, amount) {
+    function drawToken(x, y, good, amount, muted) {
       const r = SIZE * 0.11;
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 0.9, r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PORTER_BODY; ctx.strokeStyle = PORTER_EDGE; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      if (good && amount > 0 && typeof drawGoodChip === "function") drawGoodChip(x, y - r * 2.3, good, amount);
+      // v0.51 (F): carrying → solid chip with the count; heading OUT to fetch → the
+      // same good shown MUTED/translucent (it's going to pick this up, not holding it).
+      if (good && typeof drawGoodChip === "function") {
+        if (muted) drawGoodChip(x, y - r * 2.3, good, "", { alpha: 0.45, muted: true, hideNum: true });
+        else if (amount > 0) drawGoodChip(x, y - r * 2.3, good, amount);
+      }
     }
 
     function draw() {
@@ -13610,8 +13705,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           const a = pts[0], c = pts[pts.length - 1];
           const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
           const j = (((i % 5) - 2) * 0.22) * SIZE * 0.3;
+          // carrying → solid good+count; heading out to fetch → the good it's going
+          // to collect, shown muted (F).
           drawToken(pos.x + (-dy / len) * j, pos.y + (dx / len) * j,
-                    carrying ? p.good : null, carrying ? p.qty : 0);
+                    p.good || null, carrying ? p.qty : 0, !carrying);
         }
       }
       // prune vis entries for porters that no longer exist / went idle
@@ -15450,8 +15547,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.16";
+  const GAME_VERSION = "0.51.19";
   const PATCH_NOTES = [
+    { v: "0.51.19", notes: [
+      "Traders now BUY and SELL on the same trip: when a city sends a trader to buy something, it also loads up any surplus the destination is short on and sells it there — e.g. fetch 5 wood while dropping off 5 potato. One caravan, two deals; anything the destination can't take or afford rides back home.",
+    ] },
+    { v: "0.51.18", notes: [
+      "Placing a building is now one-and-done: it drops the building and deselects the tool, so a stray click can't keep dropping copies. Hold SHIFT while placing to stay armed and lay several in a row.",
+      "Holding SHIFT while a build/erase tool (or a building) is selected no longer pops the city Give/Take gold controls — those only appear when no tool is active.",
+    ] },
+    { v: "0.51.17", notes: [
+      "Trader & porter cargo now reads at a glance: an internal porter on its way to COLLECT shows the good it's about to pick up, faint/translucent; once it's carrying, the good goes solid with its count. A buyer trader heading out shows a 🪙 gold-coin chip (the money it will spend) alongside the faint good it intends to buy, and switches to the solid goods once it's hauling them home.",
+    ] },
     { v: "0.51.16", notes: [
       "BIG BALANCE REWORK — production and consumption are now tuned in sensible per-minute numbers. A lumberjack makes 15 wood/minute (2 workers, 16s cycle); a potato farm makes 12/minute, so one farm feeds 8–10 peasants. A peasant eats 1.3 potato + 0.9 wood per minute. Every other building and good was rescaled to match, giving a slower, more legible economy.",
       "The whole game clock is back to real-time at 1× (the slow rates set the pace now); the 1×/2×/4× buttons speed it up. External traders travel 2× slower and internal porters are slower too.",

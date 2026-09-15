@@ -946,7 +946,7 @@
   // Buildings.canPlaceBuilding(res.town), charges def.cost to THAT city, pushes
   // { typeId, q, r, workers:0 } (Sim.tick assigns real workers), and stays in
   // placement mode so several can be placed. Exits only when no city has a free slot.
-  function tryPlaceBuilding(sx, sy) {
+  function tryPlaceBuilding(sx, sy, keepPlacing) {
     if (!placing) return;
     const h = hexAtScreen(sx, sy);
     const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
@@ -979,9 +979,11 @@
     SFX.play("place");
     buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;
     buildBarHintEl.className = "ok";
-    // Exit only if NO city can accept another building (all slot caps reached).
+    // v0.51 (K): placement is ONE-SHOT — drop the building and deselect the tool, so a
+    // stray click can't keep dropping buildings. Hold SHIFT to stay armed and place
+    // several. Either way, exit if no city can accept another building.
     const anyRoom = state.towns.some(t => Buildings.usedSlots(t) < Buildings.slotCap(t.level, state));
-    if (!anyRoom) cancelPlacing();
+    if (!keepPlacing || !anyRoom) cancelPlacing();
     if (activeTown) renderTownPanel();
   }
 
@@ -1176,7 +1178,7 @@
     // RESEARCH CENTER (Slice C): the Center's own placement session takes the
     // click first — same "drop and stay exclusive" pattern as building placement.
     if (placingResearchCenter) { tryPlaceResearchCenter(e.clientX, e.clientY); return; }
-    if (placing) { tryPlaceBuilding(e.clientX, e.clientY); return; }
+    if (placing) { tryPlaceBuilding(e.clientX, e.clientY, e.shiftKey); return; }
     if (state.mode !== "pan") return;
     const h = hexAtScreen(e.clientX, e.clientY);
     // RESEARCH CENTER (Slice C): a click on the Center's hex opens its own panel
@@ -1892,6 +1894,8 @@
   window.TownUI = { makeTown, ensureTown, openTownPanel, closeTownPanel, closeBuildingPanel,
                     // v0.48: the currently panel-selected building {q,r} (or null) — renderer highlights it on the map
                     get selectedBuilding() { return (bpBuilding && !bpEl.classList.contains("hidden")) ? { q: bpBuilding.q, r: bpBuilding.r } : null; },
+                    // v0.51 (L): true while a building/Center is being PLACED (arms the map) — used to hide the city give/take controls.
+                    isPlacing() { return !!(placing || placingResearchCenter); },
                     startPlacing, cancelPlacing, tryPlaceBuilding,
                     // RESEARCH CENTER (Slice C): the Center's own placement session.
                     startPlacingResearchCenter, cancelPlacingResearchCenter, tryPlaceResearchCenter,

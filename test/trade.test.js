@@ -831,5 +831,28 @@ Pathing.invalidate();
   ok("§4: with basics satisfied, the luxury is imported next", firstImport({ potato: 1000 }) === "wool");
 })();
 
+// === v0.51 (H) — a trader BUYS and SELLS on the same trip ====================
+(function () {
+  Pathing.invalidate();
+  // home is short on wood (buys it) and has surplus potato; the destination is short
+  // on potato (buys it from us) and has surplus wood.
+  const home = mkTown({ id: 1, q: 0, r: 0, gold: 1e6, stock: { potato: 200 }, prices: { wood: 5, potato: 5 }, demand: { wood: 40 } });
+  const dest = mkTown({ id: 2, q: 3, r: 0, gold: 1e6, stock: { wood: 200 }, prices: { wood: 5, potato: 5 }, demand: { potato: 40 } });
+  const st = { towns: [home, dest], carts: [], treasury: 0, tradeSeed: 5 };
+  const g0 = home.gold + dest.gold + st.treasury;
+  let sawSell = false;
+  for (let i = 0; i < 2000; i++) {
+    home.demand = { wood: 40 }; dest.demand = { potato: 40 };
+    Trade.tick(st);
+    for (const c of st.carts) if (c.sellCargo) sawSell = true;
+  }
+  ok("H: a trader carries a sell-cargo (buys AND sells in one trip)", sawSell);
+  ok("H: home bought the good it was short on (wood)", (home.stock.wood || 0) > 0);
+  ok("H: the destination received the good sold to it (potato)", (dest.stock.potato || 0) > 0);
+  const g1 = home.gold + dest.gold + st.treasury;
+  ok("H: gold is conserved except the minted tariff (world = start + treasury)",
+     Math.abs((g1 - g0) - st.treasury) < 1e-6 && st.treasury > 0);
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
