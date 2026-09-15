@@ -2756,9 +2756,10 @@ Object.assign(CONFIG, {
       id: "hut", name: "Hut", kind: "house",
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
+      // v0.51: 10 wood (delivered from the city's stock) + 300 gold (from the treasury
+      // at placement). Upgrades L2–L5 cost materials only (see CONFIG.upgrades.hut).
       startUnlocked: true,
-      cost: { wood: 10 },
+      cost: { wood: 10, gold: 300 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",
@@ -3483,6 +3484,9 @@ Sim.tick = function (State) {
     // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
     const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
       ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+    // v0.51: LUXURY-consumption reduction from the L5 house upgrade (extra-need goods only).
+    const lcm = (typeof Buildings !== "undefined" && Buildings.luxuryConsumptionMult)
+      ? Buildings.luxuryConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
     // === CC: iterate per-tier lists (tiers[k].perCapita + per-tier basic classification) ===
     for (const tierKey in N.tiers) {
       const n = pop[tierKey] || 0;
@@ -3490,9 +3494,10 @@ Sim.tick = function (State) {
       const spec = N.tiers[tierKey];
       const rates = spec.perCapita;
       const tierBcm = bcm[tierKey] || 1;
+      const tierLcm = lcm[tierKey] || 1;
       for (const gid in rates) {
         const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
-        const amt = rates[gid] * n * (isBasic ? tierBcm : 1);
+        const amt = rates[gid] * n * (isBasic ? tierBcm : tierLcm);   // v0.51: extra-need goods scaled by luxury mult
         required[gid] = (required[gid] || 0) + amt;
         tierReq[tierKey][gid] = (tierReq[tierKey][gid] || 0) + amt;  // === PP-A ===
       }
@@ -3985,10 +3990,14 @@ Buildings.constructionProgress = function (b) {
 Object.assign(CONFIG, {
   upgrades: {
     // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
+    // v0.51: peasant house ladder — L2/L3 add a housing slot (+1 resident), L4 cuts
+    // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
+    // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",   unlockedBy: "upg_hut_l2", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",     unlockedBy: "upg_hut_l3", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",    unlockedBy: "upg_hut_l4", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -4091,7 +4100,7 @@ Buildings.upgradeConstructionNeed = function (b) {
 // capacityPlus/slotPlus are SUMMED (default 0); outputMult/basicConsumptionMult
 // are MULTIPLIED (default 1). Identity when b is missing or still at level 1.
 Buildings.upgradeEffect = function (b) {
-  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1 };
+  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1, luxuryConsumptionMult: 1 };
   if (!b) return agg;
   const lvl = b.upgradeLevel || 1;
   if (lvl < 2) return agg;
@@ -4103,6 +4112,7 @@ Buildings.upgradeEffect = function (b) {
     if (typeof e.effect.slotPlus === "number") agg.slotPlus += e.effect.slotPlus;
     if (typeof e.effect.outputMult === "number") agg.outputMult *= e.effect.outputMult;
     if (typeof e.effect.basicConsumptionMult === "number") agg.basicConsumptionMult *= e.effect.basicConsumptionMult;
+    if (typeof e.effect.luxuryConsumptionMult === "number") agg.luxuryConsumptionMult *= e.effect.luxuryConsumptionMult;   // v0.51: L5 house −30% luxury
   }
   return agg;
 };
@@ -4125,6 +4135,27 @@ Buildings.basicConsumptionMult = function (town) {
     if (cap <= 0) continue;
     acc[key].w += cap;
     acc[key].wm += cap * eff.basicConsumptionMult;
+  }
+  for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
+  return res;
+};
+// v0.51: capacity-weighted LUXURY-consumption multiplier per tier (mirrors
+// basicConsumptionMult; driven by the L5 house upgrade's luxuryConsumptionMult).
+Buildings.luxuryConsumptionMult = function (town) {
+  const res = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
+  const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  for (const b of list) {
+    if (!b || b.built === false) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.kind !== "house") continue;
+    const key = BUILDINGS_TIER_KEY[def.houseTier];
+    if (!key) continue;
+    const eff = Buildings.upgradeEffect(b);
+    const cap = (def.houseCapacity || 0) + eff.capacityPlus;
+    if (cap <= 0) continue;
+    acc[key].w += cap;
+    acc[key].wm += cap * (eff.luxuryConsumptionMult != null ? eff.luxuryConsumptionMult : 1);
   }
   for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
   return res;
@@ -5239,6 +5270,7 @@ Object.assign(CONFIG, {
     { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
     { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
     { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
+    { id: "upg_hut_l5",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 5, pos: { col: 0, row: 0 }, name: "Manor Hut",      desc: "Unlocks the Hut level 5 upgrade (−30% luxury use).", cost: 600, timeTicks: 26, prereqs: ["upg_hut_l4"],            effect: {} },
     { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
     { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
     { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 1, row: 1 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: ["unlock_farm"],           effect: {} },
@@ -5270,7 +5302,7 @@ const Research = {
     // nodes so old saves keep their unlocked value. Expand, then drop unknowns,
     // then dedupe. Legacy kingdom ids survive the filter unchanged. ===
     const MIGRATE_MAP = {
-      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"],
+      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_hut_l5"],
       lumberjack_upgrades: ["upg_lumberjack_l2", "upg_lumberjack_l3"],
       farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
       sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],
@@ -5734,6 +5766,7 @@ const RESEARCH_MATERIALS = {
   upg_hut_l2:        { wood: 15 },
   upg_hut_l3:        { wood: 20, stone: 10 },
   upg_hut_l4:        { wood: 30, stone: 15 },
+  upg_hut_l5:        { stone: 25, planks: 15 },
   upg_lumberjack_l2: { wood: 20 },
   upg_lumberjack_l3: { wood: 25, stone: 15 },
   upg_farm_l2:       { wood: 20 },
@@ -14799,8 +14832,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.50.3";
+  const GAME_VERSION = "0.51.0";
   const PATCH_NOTES = [
+    { v: "0.51.0", notes: [
+      "HOUSE UPGRADES (peasant homes, P1 of the economy overhaul): Sturdy Hut (L2) and Fine Hut (L3) each add a housing slot; Grand Hut (L4) cuts basic-resource use −30%; Manor Hut (L5) cuts luxury use −30%. Materials are delivered from the city (or bought in) — L2 30 wood + 10 planks; L3 30 stone + 20 planks + 5 stone tools; L4 30 bricks + 20 stone + 10 stone tools; L5 60 bricks + 30 iron + 10 iron tools",
+      "A peasant home now costs 10 wood + 300 gold to build",
+    ] },
     { v: "0.50.3", notes: [
       "You can now CANCEL the active research (a Cancel button on the current project in the tech tree) — so a project stuck waiting on a material you can't make yet no longer soft-locks you; research the prerequisite first, then come back to it",
     ] },

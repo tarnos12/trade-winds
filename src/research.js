@@ -90,6 +90,7 @@ Object.assign(CONFIG, {
     { id: "upg_hut_l2",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 2, pos: { col: 0, row: 0 }, name: "Sturdy Hut",     desc: "Unlocks the Hut level 2 upgrade.",        cost: 150, timeTicks: 12, prereqs: [],                        effect: {} },
     { id: "upg_hut_l3",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 3, pos: { col: 0, row: 0 }, name: "Fine Hut",       desc: "Unlocks the Hut level 3 upgrade.",        cost: 250, timeTicks: 16, prereqs: ["upg_hut_l2"],            effect: {} },
     { id: "upg_hut_l4",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 4, pos: { col: 0, row: 0 }, name: "Grand Hut",      desc: "Unlocks the Hut level 4 upgrade.",        cost: 400, timeTicks: 22, prereqs: ["upg_hut_l3"],            effect: {} },
+    { id: "upg_hut_l5",        branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "hut",        level: 5, pos: { col: 0, row: 0 }, name: "Manor Hut",      desc: "Unlocks the Hut level 5 upgrade (−30% luxury use).", cost: 600, timeTicks: 26, prereqs: ["upg_hut_l4"],            effect: {} },
     { id: "upg_lumberjack_l2", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 2, pos: { col: 1, row: 0 }, name: "Sharpened Axes", desc: "Unlocks the Lumberjack level 2 upgrade.", cost: 200, timeTicks: 14, prereqs: [],                        effect: {} },
     { id: "upg_lumberjack_l3", branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "lumberjack", level: 3, pos: { col: 1, row: 0 }, name: "Logging Camp",   desc: "Unlocks the Lumberjack level 3 upgrade.", cost: 400, timeTicks: 22, prereqs: ["upg_lumberjack_l2"],     effect: {} },
     { id: "upg_farm_l2",       branch: "peasant", band: "peasant", kind: "upgrade", buildingId: "farm",       level: 2, pos: { col: 1, row: 1 }, name: "Better Plows",   desc: "Unlocks the Farm level 2 upgrade.",       cost: 200, timeTicks: 14, prereqs: ["unlock_farm"],           effect: {} },
@@ -121,7 +122,7 @@ const Research = {
     // nodes so old saves keep their unlocked value. Expand, then drop unknowns,
     // then dedupe. Legacy kingdom ids survive the filter unchanged. ===
     const MIGRATE_MAP = {
-      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4"],
+      hut_upgrades:        ["upg_hut_l2", "upg_hut_l3", "upg_hut_l4", "upg_hut_l5"],
       lumberjack_upgrades: ["upg_lumberjack_l2", "upg_lumberjack_l3"],
       farm_upgrades:       ["upg_farm_l2", "upg_farm_l3"],
       sawmill_upgrades:    ["upg_sawmill_l2", "upg_sawmill_l3"],

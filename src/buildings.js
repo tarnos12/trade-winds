@@ -141,10 +141,14 @@ Buildings.constructionProgress = function (b) {
 Object.assign(CONFIG, {
   upgrades: {
     // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
+    // v0.51: peasant house ladder — L2/L3 add a housing slot (+1 resident), L4 cuts
+    // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
+    // (delivered from the city's stock / bought via traders), escalating in tier.
     hut: [
-      { level: 2, name: "Sturdy Hut",   unlockedBy: "upg_hut_l2", cost: { gold: 150, wood: 20 },           effect: { capacityPlus: 1 } },
-      { level: 3, name: "Fine Hut",     unlockedBy: "upg_hut_l3", cost: { gold: 300, wood: 30, stone: 10 }, effect: { capacityPlus: 1 } },
-      { level: 4, name: "Grand Hut",    unlockedBy: "upg_hut_l4", cost: { gold: 600, wood: 40, stone: 20 }, effect: { capacityPlus: 1, basicConsumptionMult: 0.7 } },
+      { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
+      { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
+      { level: 4, name: "Grand Hut",   unlockedBy: "upg_hut_l4", cost: { bricks: 30, stone: 20, stone_tools: 10 },  effect: { basicConsumptionMult: 0.7 } },
+      { level: 5, name: "Manor Hut",   unlockedBy: "upg_hut_l5", cost: { bricks: 60, iron: 30, iron_tool: 10 },     effect: { luxuryConsumptionMult: 0.7 } },
     ],
     lumberjack: [
       { level: 2, name: "Sharpened Axes", unlockedBy: "upg_lumberjack_l2", cost: { gold: 200, wood: 20 },           effect: { outputMult: 1.25 } },
@@ -247,7 +251,7 @@ Buildings.upgradeConstructionNeed = function (b) {
 // capacityPlus/slotPlus are SUMMED (default 0); outputMult/basicConsumptionMult
 // are MULTIPLIED (default 1). Identity when b is missing or still at level 1.
 Buildings.upgradeEffect = function (b) {
-  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1 };
+  const agg = { capacityPlus: 0, slotPlus: 0, outputMult: 1, basicConsumptionMult: 1, luxuryConsumptionMult: 1 };
   if (!b) return agg;
   const lvl = b.upgradeLevel || 1;
   if (lvl < 2) return agg;
@@ -259,6 +263,7 @@ Buildings.upgradeEffect = function (b) {
     if (typeof e.effect.slotPlus === "number") agg.slotPlus += e.effect.slotPlus;
     if (typeof e.effect.outputMult === "number") agg.outputMult *= e.effect.outputMult;
     if (typeof e.effect.basicConsumptionMult === "number") agg.basicConsumptionMult *= e.effect.basicConsumptionMult;
+    if (typeof e.effect.luxuryConsumptionMult === "number") agg.luxuryConsumptionMult *= e.effect.luxuryConsumptionMult;   // v0.51: L5 house −30% luxury
   }
   return agg;
 };
@@ -281,6 +286,27 @@ Buildings.basicConsumptionMult = function (town) {
     if (cap <= 0) continue;
     acc[key].w += cap;
     acc[key].wm += cap * eff.basicConsumptionMult;
+  }
+  for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
+  return res;
+};
+// v0.51: capacity-weighted LUXURY-consumption multiplier per tier (mirrors
+// basicConsumptionMult; driven by the L5 house upgrade's luxuryConsumptionMult).
+Buildings.luxuryConsumptionMult = function (town) {
+  const res = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+  const acc = { peasants: { w: 0, wm: 0 }, workers: { w: 0, wm: 0 }, burghers: { w: 0, wm: 0 }, aristocrats: { w: 0, wm: 0 } };
+  const list = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  for (const b of list) {
+    if (!b || b.built === false) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.kind !== "house") continue;
+    const key = BUILDINGS_TIER_KEY[def.houseTier];
+    if (!key) continue;
+    const eff = Buildings.upgradeEffect(b);
+    const cap = (def.houseCapacity || 0) + eff.capacityPlus;
+    if (cap <= 0) continue;
+    acc[key].w += cap;
+    acc[key].wm += cap * (eff.luxuryConsumptionMult != null ? eff.luxuryConsumptionMult : 1);
   }
   for (const key in acc) if (acc[key].w > 0) res[key] = acc[key].wm / acc[key].w;
   return res;

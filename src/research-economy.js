@@ -109,6 +109,7 @@ const RESEARCH_MATERIALS = {
   upg_hut_l2:        { wood: 15 },
   upg_hut_l3:        { wood: 20, stone: 10 },
   upg_hut_l4:        { wood: 30, stone: 15 },
+  upg_hut_l5:        { stone: 25, planks: 15 },
   upg_lumberjack_l2: { wood: 20 },
   upg_lumberjack_l3: { wood: 25, stone: 15 },
   upg_farm_l2:       { wood: 20 },

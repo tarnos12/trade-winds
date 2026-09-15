@@ -600,6 +600,9 @@ Sim.tick = function (State) {
     // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
     const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
       ? Buildings.basicConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+    // v0.51: LUXURY-consumption reduction from the L5 house upgrade (extra-need goods only).
+    const lcm = (typeof Buildings !== "undefined" && Buildings.luxuryConsumptionMult)
+      ? Buildings.luxuryConsumptionMult(town) : { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
     // === CC: iterate per-tier lists (tiers[k].perCapita + per-tier basic classification) ===
     for (const tierKey in N.tiers) {
       const n = pop[tierKey] || 0;
@@ -607,9 +610,10 @@ Sim.tick = function (State) {
       const spec = N.tiers[tierKey];
       const rates = spec.perCapita;
       const tierBcm = bcm[tierKey] || 1;
+      const tierLcm = lcm[tierKey] || 1;
       for (const gid in rates) {
         const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
-        const amt = rates[gid] * n * (isBasic ? tierBcm : 1);
+        const amt = rates[gid] * n * (isBasic ? tierBcm : tierLcm);   // v0.51: extra-need goods scaled by luxury mult
         required[gid] = (required[gid] || 0) + amt;
         tierReq[tierKey][gid] = (tierReq[tierKey][gid] || 0) + amt;  // === PP-A ===
       }

@@ -82,9 +82,11 @@ ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings
 ok("basic house (hut) shelters 2", CONFIG.buildings.hut.houseCapacity === 2);
 // v0.49: T1 starters now cost WOOD (built over time), delivered from the city's
 // stock. farm (a research unlock) stays gold-only.
-ok("T1 starters cost wood (lumberjack/hut/potato_farm)", [
-  "lumberjack", "hut", "potato_farm",
+ok("T1 producer starters are wood-only (lumberjack/potato_farm)", [
+  "lumberjack", "potato_farm",
 ].every(id => { const c = CONFIG.buildings[id].cost; return c.wood > 0 && !c.gold; }));
+// v0.51: the hut (L1 house) costs 10 wood + 300 gold.
+ok("hut L1 costs 10 wood + 300 gold", CONFIG.buildings.hut.cost.wood === 10 && CONFIG.buildings.hut.cost.gold === 300);
 ok("farm stays gold-only", (() => { const c = CONFIG.buildings.farm.cost; return c.gold > 0 && !c.wood; })());
 // v0.49: exact wood costs.
 ok("starter costs: lumberjack 10 / hut 10 / potato_farm 10 / sawmill 20 (wood)",
@@ -517,7 +519,7 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   const stWith = (unlocked, over) => Object.assign({ treasury: 0, research: { unlocked: unlocked || [], active: null, progress: 0, spent: 0 } }, over);
 
   // -- ladder / lookup --
-  ok("upgradeLadder(hut) has 3 entries", Buildings.upgradeLadder("hut").length === 3);
+  ok("upgradeLadder(hut) has 4 entries", Buildings.upgradeLadder("hut").length === 4);
   ok("upgradeLadder(iron_mine) empty", Buildings.upgradeLadder("iron_mine").length === 0);
   ok("upgradeAt(hut,4) is the final-consumption entry", Buildings.upgradeAt("hut", 4).effect.basicConsumptionMult === 0.7);
   ok("upgradeAt(iron_mine,2) is null", Buildings.upgradeAt("iron_mine", 2) === null);
@@ -528,11 +530,12 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   ok("nextUpgrade returns L2 once unlocked", (Buildings.nextUpgrade(stWith(["upg_hut_l2"]), hutB) || {}).level === 2);
 
   // -- canStartUpgrade gating --
-  ok("canStartUpgrade blocked when gold too low", (() => {
-    const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100 }), {}, hutB);
-    return !r.ok && r.reason === "Not enough gold";
+  // v0.51: hut upgrades are MATERIAL-ONLY (no gold) → low gold no longer blocks.
+  ok("canStartUpgrade not gold-gated for a material-only upgrade", (() => {
+    const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 0 }), {}, hutB);
+    return r.ok === true;
   })());
-  ok("canStartUpgrade ok with gold + unlock", Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, hutB).ok === true);
+  ok("canStartUpgrade ok with unlock", Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, hutB).ok === true);
   ok("canStartUpgrade blocked while pending", (() => {
     const r = Buildings.canStartUpgrade(stWith(["upg_hut_l2"], { treasury: 100000 }), {}, { typeId: "hut", upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: {} } });
     return !r.ok && r.reason === "Upgrade in progress";
@@ -549,7 +552,7 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
     const b = { typeId: "hut", upgradeLevel: 1, pendingUpgrade: null };
     const okStart = Buildings.startUpgrade(st, town, b);
     ok("startUpgrade returns true", okStart === true);
-    ok("startUpgrade charges only gold", st.treasury === 100000 - 150);
+    ok("startUpgrade charges no gold (material-only)", st.treasury === 100000);
     ok("startUpgrade sets pending toLevel 2", b.pendingUpgrade && b.pendingUpgrade.toLevel === 2);
     ok("startUpgrade delivered starts empty", b.pendingUpgrade && Object.keys(b.pendingUpgrade.delivered).length === 0);
     ok("startUpgrade leaves town stock untouched", town.stock.wood === 50);
@@ -558,16 +561,19 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   // -- resource cost / construction need --
   {
     const rc = Buildings.upgradeResourceCost("hut", 2);
-    ok("upgradeResourceCost(hut,2) == {wood:20}", Object.keys(rc).length === 1 && rc.wood === 20);
+    ok("upgradeResourceCost(hut,2) == {wood:30, planks:10}", rc.wood === 30 && rc.planks === 10 && Object.keys(rc).length === 2);
     const need = Buildings.upgradeConstructionNeed({ typeId: "hut", pendingUpgrade: { toLevel: 2, delivered: { wood: 5 } } });
-    ok("upgradeConstructionNeed subtracts delivered", Object.keys(need).length === 1 && need.wood === 15);
+    ok("upgradeConstructionNeed subtracts delivered", need.wood === 25 && need.planks === 10);
     ok("upgradeConstructionNeed empty when no pending", Object.keys(Buildings.upgradeConstructionNeed({ typeId: "hut" })).length === 0);
   }
 
   // -- effect aggregation --
   {
     const he = Buildings.upgradeEffect({ typeId: "hut", upgradeLevel: 4 });
-    ok("hut L4 aggregate effect", he.capacityPlus === 3 && he.slotPlus === 0 && near(he.outputMult, 1) && near(he.basicConsumptionMult, 0.7));
+    // v0.51: L2+L3 add +1 slot each (capacityPlus 2); L4 = −30% basic (no slot).
+    ok("hut L4 aggregate effect", he.capacityPlus === 2 && he.slotPlus === 0 && near(he.outputMult, 1) && near(he.basicConsumptionMult, 0.7));
+    const he5 = Buildings.upgradeEffect({ typeId: "hut", upgradeLevel: 5 });
+    ok("hut L5 adds −30% luxury", he5.capacityPlus === 2 && near(he5.basicConsumptionMult, 0.7) && near(he5.luxuryConsumptionMult, 0.7));
     const se = Buildings.upgradeEffect({ typeId: "sawmill", upgradeLevel: 3 });
     ok("sawmill L3 aggregate effect", se.slotPlus === 1 && near(se.outputMult, 1.25 * 1.5));
     const id = Buildings.upgradeEffect({ typeId: "hut", upgradeLevel: 1 });
@@ -585,8 +591,8 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
     const one = { buildings: [{ typeId: "hut", upgradeLevel: 4 }] };
     ok("basicConsumptionMult single L4 hut ≈ 0.7", near(Buildings.basicConsumptionMult(one).peasants, 0.7));
     const two = { buildings: [{ typeId: "hut", upgradeLevel: 4 }, { typeId: "hut", upgradeLevel: 1 }] };
-    // L4 cap = 2 + capacityPlus(3) = 5 @ 0.7 ; L1 cap = 2 @ 1.0 → (5*0.7 + 2*1.0)/7
-    ok("basicConsumptionMult weighted across huts", near(Buildings.basicConsumptionMult(two).peasants, (5 * 0.7 + 2 * 1.0) / 7));
+    // v0.51: L4 cap = 2 + capacityPlus(2) = 4 @ 0.7 ; L1 cap = 2 @ 1.0 → (4*0.7 + 2*1.0)/6
+    ok("basicConsumptionMult weighted across huts", near(Buildings.basicConsumptionMult(two).peasants, (4 * 0.7 + 2 * 1.0) / 6));
     ok("basicConsumptionMult defaults 1 with no houses", Buildings.basicConsumptionMult({ buildings: [] }).workers === 1);
   }
 }

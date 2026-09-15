@@ -302,9 +302,10 @@ Object.assign(CONFIG, {
       id: "hut", name: "Hut", kind: "house",
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
-      // v0.49: costs 10 wood, delivered from the city's stock over time (progress bar).
+      // v0.51: 10 wood (delivered from the city's stock) + 300 gold (from the treasury
+      // at placement). Upgrades L2–L5 cost materials only (see CONFIG.upgrades.hut).
       startUnlocked: true,
-      cost: { wood: 10 },
+      cost: { wood: 10, gold: 300 },
     },
     cottage: {
       id: "cottage", name: "Cottage", kind: "house",

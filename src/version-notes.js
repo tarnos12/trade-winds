@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.50.3";
+  const GAME_VERSION = "0.51.0";
   const PATCH_NOTES = [
+    { v: "0.51.0", notes: [
+      "HOUSE UPGRADES (peasant homes, P1 of the economy overhaul): Sturdy Hut (L2) and Fine Hut (L3) each add a housing slot; Grand Hut (L4) cuts basic-resource use −30%; Manor Hut (L5) cuts luxury use −30%. Materials are delivered from the city (or bought in) — L2 30 wood + 10 planks; L3 30 stone + 20 planks + 5 stone tools; L4 30 bricks + 20 stone + 10 stone tools; L5 60 bricks + 30 iron + 10 iron tools",
+      "A peasant home now costs 10 wood + 300 gold to build",
+    ] },
     { v: "0.50.3", notes: [
       "You can now CANCEL the active research (a Cancel button on the current project in the tech tree) — so a project stuck waiting on a material you can't make yet no longer soft-locks you; research the prerequisite first, then come back to it",
     ] },
