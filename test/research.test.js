@@ -183,6 +183,12 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   ok("start sets active", st.research.active === "crop_rotation");
   ok("start deducts nothing up front", st.treasury === 100000);
   ok("cannot start a second node while one is active", !Research.canStart(st, "paved_roads"));
+  // v0.51: cancel the active project so a stuck player can switch.
+  const cancelled = Research.cancel(st);
+  ok("cancel returns the cancelled node id", cancelled === "crop_rotation");
+  ok("cancel clears the active project", st.research.active === null);
+  ok("after cancel, another node can be started", Research.canStart(st, "paved_roads") === true);
+  ok("cancel with nothing active returns null", Research.cancel(st) === null);
 })();
 
 // =========================================================================

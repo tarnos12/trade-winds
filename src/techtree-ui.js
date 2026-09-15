@@ -257,7 +257,10 @@
         (noCenter ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Paused — build a Research Center to resume</div>` :
           qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
-        `<div style="font-size:11px;opacity:.75;margin-top:5px">${matRows}</div></div>`;
+        `<div style="display:flex;align-items:center;gap:8px;margin-top:5px">` +
+          `<div style="font-size:11px;opacity:.75;flex:1">${matRows}</div>` +
+          `<button class="tt-cancel" data-cancel="1" title="Cancel this research (materials already delivered are kept in the castle)" style="flex:0 0 auto;font-size:11px;padding:3px 10px;border:1px solid #a3524a;border-radius:6px;background:#3a231f;color:#f0b8b0;cursor:pointer">Cancel</button>` +
+        `</div></div>`;
     }
     const q = Array.isArray(R.queue) ? R.queue : [];
     if (q.length) {
@@ -356,6 +359,12 @@
   ttNodesEl.addEventListener("mouseleave", ttHideTip);
 
   ttQueueEl.addEventListener("click", (e) => {
+    // v0.51: cancel the ACTIVE project (frees you when it's stuck waiting on a
+    // material you can't make yet, so you can research the prerequisite first).
+    if (e.target.closest("[data-cancel]")) {
+      if (Research.cancel(state)) { ttRebuildStates(); ttRenderQueue(); ttBuildEdges(); scheduleSave(); }
+      return;
+    }
     const x = e.target.closest("[data-dq]");
     if (x) { if (Research.dequeue(state, x.dataset.dq)) { ttRebuildStates(); ttRenderQueue(); ttBuildEdges(); scheduleSave(); } return; }
     const card = e.target.closest(".tt-qcard[data-node]");

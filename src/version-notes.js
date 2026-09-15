@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.50.2";
+  const GAME_VERSION = "0.50.3";
   const PATCH_NOTES = [
+    { v: "0.50.3", notes: [
+      "You can now CANCEL the active research (a Cancel button on the current project in the tech tree) — so a project stuck waiting on a material you can't make yet no longer soft-locks you; research the prerequisite first, then come back to it",
+    ] },
     { v: "0.50.2", notes: [
       "Scouts explore smarter: with provisions to spare (3+), a scout now picks a nearby spot that uncovers MORE fog at once instead of always trickling 1–2 tiles — it still marches to the closest frontier first, then favours high-reveal stops",
       "Scouts never stand on or walk through water or mountains",

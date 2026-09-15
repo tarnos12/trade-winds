@@ -220,6 +220,19 @@ const Research = {
     state.research.consumed = {};
     return true;
   },
+  // v0.51: CANCEL the active project so a stuck player (e.g. it needs a material they
+  // can't yet produce) can switch to something else. Materials already delivered into
+  // the castle for it are NOT refunded (they stay as castleStock); the node can be
+  // picked again later. Returns the cancelled id, or null if nothing was active.
+  cancel(state) {
+    if (!state || !state.research || !state.research.active) return null;
+    const id = state.research.active;
+    state.research.active = null;
+    state.research.completedSec = 0;
+    state.research.subTick = 0;
+    state.research.consumed = {};
+    return id;
+  },
 
   // === Slice A: Research Center helpers ===================================
   // Center level: 0 when there is no center or it's still under construction
