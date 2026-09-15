@@ -734,4 +734,46 @@ Buildings.placeAdvancedProvisioner = function (state, q, r) {
   return { ok: true };
 };
 // === /ADVANCED PROVISIONER ===================================================
+
+// === BASIC PROVISIONER (v0.51 §9) — a castle-adjacent building (no research) that
+// enables the basic provision line (2 potato → 1). Placed like the Advanced one and
+// built instantly on gold; the castle keeps its starting provisions either way.
+Buildings.canPlaceProvisioner = function (state, q, r) {
+  if (state && state.provisionerBuilding) return { ok: false, reason: "Provisioner already built" };
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
+  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  const buildGold = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.build && CONFIG.basicProvisioner.build.gold) || 0;
+  if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
+  return { ok: true };
+};
+Buildings.placeProvisioner = function (state, q, r) {
+  const res = Buildings.canPlaceProvisioner(state, q, r);
+  if (!res.ok) return res;
+  const buildGold = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.build && CONFIG.basicProvisioner.build.gold) || 0;
+  state.treasury = (state.treasury || 0) - buildGold;
+  state.provisionerBuilding = { q, r, built: true };
+  // switch on castle potato-buying so the basic line has its input.
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const lim = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.potatoLimit) || 40;
+  if (!state.castleTrade.potato || !state.castleTrade.potato.enabled) state.castleTrade.potato = { enabled: true, limit: lim };
+  return { ok: true };
+};
+// === /BASIC PROVISIONER ======================================================
 // === BUILDINGS-CORE END ===

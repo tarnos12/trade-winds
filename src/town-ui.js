@@ -810,6 +810,14 @@
           active: !!placingResearchCenter,
           tip: "Placement — click a hex next to the castle to build the Research Center." });
       }
+      // Basic Provisioner (v0.51 §9) — no research; shown until one is built.
+      const pvCfg = CONFIG.basicProvisioner || {};
+      if (!state.provisionerBuilding) {
+        const g = (pvCfg.build && pvCfg.build.gold) || 0;
+        items.push({ action: "provisioner", name: "Provisioner", sub: `🍲 ${g}g`,
+          active: state.mode === "provisioner",
+          tip: "Click a hex next to the castle to build it (2 potato → 1 provision). The castle needs this to make provisions." });
+      }
       // Advanced Provisioner — shown only once researched and not yet built.
       const apCfg = CONFIG.advancedProvisioner || {};
       const apResearched = (typeof Research !== "undefined" && Research.has && Research.has(state, apCfg.research || "advanced_provisioner"));
@@ -1039,7 +1047,7 @@
       startPlacingResearchCenter();
       return;
     }
-    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner") {
+    if (action === "town" || action === "road" || action === "eraseRoad" || action === "eraseBuilding" || action === "advProvisioner" || action === "provisioner") {
       cancelPlacing();          // leaving building placement for a map tool
       closeFlyout();
       setMode(action);
@@ -1049,7 +1057,8 @@
         : action === "road" ? "Drag across land to lay roads."
         : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
         : action === "advProvisioner" ? "Click a hex next to the castle to build the Advanced Provisioner."
-        : "Click a building to destroy it — confirmation required, frees the slot, no refund.";
+        : action === "provisioner" ? "Click a hex next to the castle to build the Provisioner."
+        : "Click a building or a city centre to destroy it — confirmation required. Gold is refunded.";
     }
   });
   buildBarCancelEl.addEventListener("click", () => cancelPlacing());

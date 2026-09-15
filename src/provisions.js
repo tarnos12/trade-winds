@@ -16,6 +16,13 @@ if (!CONFIG.advancedProvisioner) {
   CONFIG.advancedProvisioner = { name: "Advanced Provisioner", glyph: "🍲",
     build: { gold: 400 }, research: "advanced_provisioner", fishLimit: 40 };
 }
+// v0.51 §9: the BASIC provisioner is no longer built into the castle — a Provisioner
+// building must be placed next to the castle for the basic line (2 potato → 1) to run.
+// No research needed; built instantly on gold. The castle still STARTS with 15
+// provisions (Provisioner.start) regardless.
+if (!CONFIG.basicProvisioner) {
+  CONFIG.basicProvisioner = { name: "Provisioner", glyph: "🍲", build: { gold: 200 }, potatoLimit: 40 };
+}
 if (!CONFIG.castle.provisions) {
   CONFIG.castle.provisions = {
     start: 15, cap: 30,
@@ -40,6 +47,11 @@ var Provisioner = (typeof Provisioner !== "undefined" && Provisioner) || {};
   // added in v0.45; until then this is always false and only the built-in runs.)
   Provisioner.hasAdvanced = function (state) {
     return !!(state && state.advancedProvisioner && state.advancedProvisioner.built);
+  };
+  // v0.51 §9: is a BUILT basic Provisioner present next to the castle? Until one is
+  // placed the basic line does NOT run (the castle only has its starting provisions).
+  Provisioner.hasBasic = function (state) {
+    return !!(state && state.provisionerBuilding && state.provisionerBuilding.built);
   };
   // One provisioner line: count a per-line timer up to everyTicks, then (while
   // armed) attempt a conversion each tick — consume whole-unit inputs from
@@ -67,7 +79,7 @@ var Provisioner = (typeof Provisioner !== "undefined" && Provisioner) || {};
     if (!state) return;
     Provisioner.ensure(state);
     const c = cfg();
-    if (c.basic) runLine(state, "basic", c.basic);
+    if (c.basic && Provisioner.hasBasic(state)) runLine(state, "basic", c.basic);   // v0.51 §9: requires a built Provisioner
     if (c.advanced && Provisioner.hasAdvanced(state)) runLine(state, "advanced", c.advanced);
   };
   // Progress 0..1 of a line toward its next conversion (for the castle-panel UI).

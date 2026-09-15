@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.10";
+  const GAME_VERSION = "0.51.11";
   const PATCH_NOTES = [
+    { v: "0.51.11", notes: [
+      "THE CASTLE NEEDS A PROVISIONER (economy overhaul): the castle no longer makes provisions for free. Build a Provisioner (⭐ Special build menu, placed next to the castle) to run the basic line — 2 potato → 1 provision — and switch on castle potato-buying. The castle still starts with a 15-provision buffer, so your first scouts can get moving while you set it up",
+    ] },
     { v: "0.51.10", notes: [
       "DESTRUCTION & CONNECTIVITY: the Destroy tool now works on a CITY too (click its centre) — it razes the whole city. Destroying refunds the GOLD you spent (city + buildings) but not the resources. And destruction CASCADES: if removing a building (or a city) cuts other buildings off from their city, those orphaned buildings fall with it. Every destroy asks for confirmation and tells you what else it will take down",
     ] },

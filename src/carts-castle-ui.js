@@ -536,9 +536,15 @@
         <span class="v${short ? "" : ""}" style="opacity:${short ? 0.5 : 1}">${short ? "need stock" : prog + "%"}</span></div>`;
     };
     const c = (CONFIG.castle && CONFIG.castle.provisions) || {};
-    html += lineRow("basic", "Provisioner", c.basic);
+    // v0.51 §9: the basic line runs only when a Provisioner building is built.
+    if (Provisioner.hasBasic(state)) html += lineRow("basic", "Provisioner", c.basic);
+    else html += `<div class="tp-row"><span class="k" style="opacity:.7">Provisioner not built</span>
+        <span class="v" style="opacity:.6">build one by the castle</span></div>`;
     if (Provisioner.hasAdvanced(state)) html += lineRow("advanced", "Advanced", c.advanced);
-    html += `<div class="tp-hint2">The castle buys potato from cities and turns it into provisions for your scouts.</div></div>`;
+    const tail = Provisioner.hasBasic(state)
+      ? "The castle buys potato from cities and turns it into provisions for your scouts."
+      : "Build a Provisioner (⭐ Special) next to the castle so it can turn potato into provisions. It starts with a small buffer.";
+    html += `<div class="tp-hint2">${tail}</div></div>`;
     return html;
   });
 

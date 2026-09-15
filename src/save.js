@@ -53,10 +53,11 @@
     state.castleStock = Object.assign({}, (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {});   // CRE + RSF: starter materials so first researches never stall
     state.researchCenter = null;   // Slice B: no Research Center yet — research paused until the player builds one
     state.researchSeed = (hashSeed(seedInput) ^ 0x9e3779b9) | 0;   // CRE: castle-trader RNG
-    // v0.44: the castle provisioner buys potato by default so provisions start
-    // flowing as soon as a city sells surplus. (Fish is enabled when the Advanced
-    // Provisioner is built, v0.45.) Other goods stay off unless the player enables.
-    state.castleTrade = { potato: { enabled: true, limit: 40 } };
+    // v0.51 §9: the castle buys NOTHING by default — potato-buying turns on when a
+    // basic Provisioner is built next to the castle, fish when the Advanced Provisioner
+    // is built. Other goods stay off unless the player enables them.
+    state.castleTrade = {};
+    state.provisionerBuilding = null;   // v0.51 §9: no built-in provisioner — must be placed
     state.castleReserved = {};   // PP-A: castle stock reservations
     state.castleMarketSeed = (hashSeed(seedInput) ^ 0x2545f491) | 0;   // PP-A: castle-market RNG
     state.provisions = (CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15;   // v0.44: start with a small buffer
@@ -110,6 +111,7 @@
         _provTimers: state._provTimers,    // v0.44: provisioner line timers
         scouts: state.scouts,              // v0.45: Scout units
         advancedProvisioner: state.advancedProvisioner, // v0.45: Advanced Provisioner building
+        provisionerBuilding: state.provisionerBuilding, // v0.51 §9: basic Provisioner building
         researchCenter: state.researchCenter, // Slice B: the unique Research Center (or null)
         researchSeed: state.researchSeed,  // CRE: castle-trader RNG stream
         castleTrade: state.castleTrade,        // PP-A: castle market config
@@ -250,6 +252,7 @@
       : ((CONFIG.castle && CONFIG.castle.provisions && CONFIG.castle.provisions.start) || 15);
     state._provTimers = (data._provTimers && typeof data._provTimers === "object") ? data._provTimers : {};
     state.advancedProvisioner = (data.advancedProvisioner && typeof data.advancedProvisioner === "object") ? data.advancedProvisioner : null;
+    state.provisionerBuilding = (data.provisionerBuilding && typeof data.provisionerBuilding === "object") ? data.provisionerBuilding : null;   // v0.51 §9
     state.scouts = Array.isArray(data.scouts) ? data.scouts : [];   // v0.45: Scout units (Scouts.ensure tops up to the researched count)
     state.researchCenter = normalizeResearchCenter(data.researchCenter);   // Slice B: the unique Research Center (or null)
     if (typeof data.researchSeed === "number") state.researchSeed = data.researchSeed;   // CRE

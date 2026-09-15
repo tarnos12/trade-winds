@@ -64,6 +64,9 @@
     if (state.mode === "advProvisioner") {
       return Buildings.canPlaceAdvancedProvisioner(state, q, r).ok;   // v0.46: castle-adjacent
     }
+    if (state.mode === "provisioner") {
+      return Buildings.canPlaceProvisioner(state, q, r).ok;   // v0.51 §9: castle-adjacent
+    }
     if (state.mode === "erase") {
       return state.roads.has(k) || state.towns.some(t => t.q === q && t.r === r);
     }
@@ -159,6 +162,18 @@
         if (typeof updateTreasuryHud === "function") updateTreasuryHud();
         setMode("pan");   // one-shot placement
         if (typeof showToast === "function") showToast("🍲 Advanced Provisioner built");
+      } else if (typeof showToast === "function") showToast("✗ " + res.reason);
+    } else if (state.mode === "provisioner") {
+      // v0.51 §9: place the basic Provisioner beside the castle (enables the 2 potato
+      // → 1 provision line + castle potato-buying).
+      const res = Buildings.canPlaceProvisioner(state, q, r);
+      if (res.ok) {
+        Buildings.placeProvisioner(state, q, r);
+        scheduleSave();
+        SFX.play("place");
+        if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+        setMode("pan");   // one-shot placement
+        if (typeof showToast === "function") showToast("🍲 Provisioner built");
       } else if (typeof showToast === "function") showToast("✗ " + res.reason);
     } else if (state.mode === "erase") {
       let changed = false;
