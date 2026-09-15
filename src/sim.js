@@ -36,6 +36,14 @@ Object.assign(CONFIG, {
     // population target DOWN (target = round(cap × min(1, happiness/capacityFullAt)));
     // at/above 70 = full capacity, and the surplus happiness pays extra people-tax. ===
     capacityFullAt: 70,
+    // v0.50: even a house with NO food/wood shelters a small core workforce, so a
+    // fresh (or starved) city never sits at exactly 0 workers — floor = this fraction
+    // of the tier's housing capacity, at least 1 whenever there is any capacity.
+    // But at real 0-happiness (basics unmet) that crew runs on a DUTY CYCLE: present
+    // for `onCycles` of every (on+off) cycles, absent otherwise — so a starved city
+    // gets just enough intermittent labour to bootstrap food/wood, not a free crew.
+    // A cycle is `cycleTicks` (16 ticks ≈ 8 game-seconds ≈ one extractor batch).
+    emptyHouseFrac: 0.10, emptyHouseCycleTicks: 16, emptyHouseOnCycles: 1, emptyHouseOffCycles: 3,
     growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
@@ -775,7 +783,22 @@ Sim.tick = function (State) {
         th = N.basicHappy * availFrac(tl.basic) + N.extraHappy * availFrac(tl.extra);
       }
       const capFrac = Math.min(1, Math.max(0, Math.min(100, th)) / N.capacityFullAt);
-      const target = Math.round(cap * capFrac);
+      const naturalTarget = Math.round(cap * capFrac);
+      // v0.50: minimal core workforce for an empty/starved house (>=10% of capacity,
+      // at least 1). When the natural target is BELOW that floor (basics unmet), the
+      // crew runs on a duty cycle — present onCycles of every (on+off) cycles — so the
+      // city gets intermittent labour to bootstrap food/wood, then can grow normally.
+      const floorN = cap > 0 ? Math.max(1, Math.floor(cap * (N.emptyHouseFrac || 0.10))) : 0;
+      if (cap > 0 && naturalTarget < floorN) {
+        const C = N.emptyHouseCycleTicks || 16;
+        const period = C * ((N.emptyHouseOnCycles || 1) + (N.emptyHouseOffCycles || 3));
+        const onLen = C * (N.emptyHouseOnCycles || 1);
+        const onNow = period > 0 ? ((((State.tick || 0) % period) + period) % period) < onLen : true;
+        pop[tier] = onNow ? Math.min(floorN, cap) : 0;   // crisp on/off (bypass easing)
+        town._lowSat[tier] = 0;
+        continue;
+      }
+      const target = naturalTarget;
       let n = pop[tier] || 0;
       if (n < target) {
         town._lowSat[tier] = 0;

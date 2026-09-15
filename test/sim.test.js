@@ -201,11 +201,18 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   ok("BAL2: workers appear from basics alone (no luxury gate)", dry.pop.workers > 0);
   ok("BAL2: without luxuries worker happiness stays below ~95",
      (dry.tierHappiness.workers || 0) < 95);
-  // And with NO basics stocked at all, an empty tier still does NOT appear.
+  // v0.50: with NO basics stocked, an empty tier still gets a MINIMAL duty-cycled
+  // crew (present ~1 of every 4 cycles, never above the floor) so a starved city can
+  // bootstrap food/wood. Uses a PERSISTENT state so State.tick (the duty-cycle phase)
+  // accumulates across ticks.
   const none = town({ pop: { peasants: 0, workers: 0, burghers: 0 },
                       stock: {}, buildings: [b("cottage", 0, 1)] });
-  for (let i = 0; i < 120; i++) Sim.tick({ towns: [none] });
-  ok("BAL2: no basics stocked ⇒ no workers bootstrap", none.pop.workers === 0);
+  const noneState = { towns: [none], tick: 0 };
+  let sawOn = false, sawOff = false, maxW = 0;
+  for (let i = 0; i < 200; i++) { Sim.tick(noneState); const w = none.pop.workers || 0; if (w >= 1) sawOn = true; else sawOff = true; maxW = Math.max(maxW, w); }
+  ok("BAL2: no basics ⇒ a minimal duty-cycled crew appears (bootstrap)", sawOn);
+  ok("BAL2: no basics ⇒ the crew is intermittent (absent some cycles)", sawOff);
+  ok("BAL2: no basics ⇒ crew never exceeds the floor (1)", maxW <= 1);
 }
 
 // ========================================================================

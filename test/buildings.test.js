@@ -75,7 +75,7 @@ ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q 
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
 // EV3: a new city starts with 20 wood (a basic peasant need — firewood).
-ok("CONFIG.town.startStock is { wood: 40 }", CONFIG.town.startStock.wood === 40);
+ok("CONFIG.town.startStock is { wood: 60, potato: 20 }", CONFIG.town.startStock.wood === 60 && CONFIG.town.startStock.potato === 20);
 // EV3: per-city storage cap.
 ok("CONFIG.town.storageCap === 80", CONFIG.town.storageCap === 80);
 ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);

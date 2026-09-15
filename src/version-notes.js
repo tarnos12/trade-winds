@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.49.0";
+  const GAME_VERSION = "0.50.0";
   const PATCH_NOTES = [
+    { v: "0.50.0", notes: [
+      "Cities no longer stall at 0 workers: even a house with no food/wood keeps a tiny core crew — at least 1 worker, ~10% of capacity. When basics are totally missing that crew works on a DUTY CYCLE (present 1 of every 4 cycles) so a starved city can still bootstrap food/wood and recover",
+      "A new city now starts with 60 wood + 20 potato (was 40 wood)",
+    ] },
     { v: "0.49.0", notes: [
       "CONSTRUCTION takes time now: every building fills a progress bar. Progress is the lesser of build-time and materials delivered — so a house with 8/10 wood delivered stalls at 80% until the rest arrives; with everything on hand a T1 building finishes in ~6s (longer for higher tiers/upgrades)",
       "T1 buildings cost WOOD (hut, lumberjack, potato farm 10 each; sawmill 20), delivered from the city’s own stock by its haulers. A NEW CITY starts with 40 wood",
