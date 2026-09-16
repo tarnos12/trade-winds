@@ -5120,6 +5120,91 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (isCastle) castleReserve(state, gid, n); else reserve(seller, gid, n);
   }
 
+  // === v0.51: RESOURCE-FLOW OVERVIEW (for the map overlay). Pure read-only helpers
+  // that describe, per city, whether it currently SELLS (+) or BUYS (−) a good — plus
+  // its POTENTIAL role at full population/staffing (a city that can't self-supply at
+  // max is a latent buyer). All rates are per GAME-MINUTE (×120 of per-tick). ===
+  const PER_MIN_T = 120;
+  // Current + max production of `gid` in a town (per game-minute).
+  function prodOf(town, gid) {
+    let cur = 0, max = 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b || b.built === false) continue;
+      const def = CONFIG.buildings[b.typeId];
+      if (def && def.output && def.output.goodId === gid) {
+        const r = def.output.ratePerWorker || 0;
+        cur += r * (b.workers || 0) * PER_MIN_T;
+        max += r * (def.workerSlots || 0) * PER_MIN_T;
+      }
+    }
+    return { cur, max };
+  }
+  // Current + max consumption of `gid` in a town (population needs + processor inputs).
+  function consOf(town, gid) {
+    const N = CONFIG.needs || {};
+    let cur = 0, max = 0;
+    const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
+      ? Buildings.housingCapacity(town, (typeof State !== "undefined" ? State : null)) : {};
+    for (const tier in (N.tiers || {})) {
+      const pc = N.tiers[tier].perCapita && N.tiers[tier].perCapita[gid];
+      if (!(pc > 0)) continue;
+      cur += pc * ((town.pop && town.pop[tier]) || 0) * PER_MIN_T;
+      max += pc * ((housing && housing[tier]) || 0) * PER_MIN_T;
+    }
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b || b.built === false) continue;
+      const def = CONFIG.buildings[b.typeId];
+      if (def && def.inputs && def.inputs[gid]) {
+        cur += def.inputs[gid] * (b.workers || 0) * PER_MIN_T;
+        max += def.inputs[gid] * (def.workerSlots || 0) * PER_MIN_T;
+      }
+    }
+    return { cur, max };
+  }
+  // Per-city snapshot for a good: net trend now, potential net at full scale, stock,
+  // and the price it would pay/ask. role: "seller" | "buyer" | "none".
+  Trade.cityGood = function (state, town, gid) {
+    if (!town) return null;
+    const p = prodOf(town, gid), c = consOf(town, gid);
+    const net = p.cur - c.cur;                 // >0 surplus (sells), <0 deficit (buys)
+    const netMax = p.max - c.max;              // potential at full pop/staffing
+    const stock = (town.stock && town.stock[gid]) || 0;
+    const price = (town.prices && town.prices[gid]) || 0;
+    // A city SELLS if it has a live surplus; it BUYS if it's short now OR would be at
+    // full scale (latent) — the latter matters because it will import once it grows.
+    const seller = net > 1e-6;
+    const buyer = net < -1e-6 || netMax < -1e-6;
+    return { gid: gid, townId: town.id, q: town.q, r: town.r,
+             prod: p.cur, cons: c.cur, net: net, netMax: netMax, maxProd: p.max, maxNeed: c.max,
+             stock: stock, price: price,
+             role: seller ? "seller" : (buyer ? "buyer" : "none"),
+             latent: !seller && net >= -1e-6 && netMax < -1e-6 };
+  };
+  // Live flows of a good, from in-flight carts: seller → buyer with the units aboard.
+  // (Buy cargo flows seller→buyer; H sell-cargo flows home→destination.) Castle id is
+  // SELLER_CASTLE_ID / CASTLE sentinel; the renderer resolves its hex.
+  Trade.goodFlows = function (state, gid) {
+    const agg = new Map();   // "from>to" -> { fromId, toId, units }
+    const add = (fromId, toId, u) => {
+      if (!(u > 0) || fromId == null || toId == null || fromId === toId) return;
+      const k = fromId + ">" + toId;
+      const e = agg.get(k) || { fromId: fromId, toId: toId, units: 0 };
+      e.units += u; agg.set(k, e);
+    };
+    for (const c of (state.carts || [])) {
+      if (c.done) continue;
+      const items = Array.isArray(c.cargo) ? c.cargo : (c.goodId ? [{ goodId: c.goodId, qty: c.qty, unloaded: c.unloaded }] : []);
+      for (const it of items) {
+        if (it.goodId !== gid) continue;
+        const left = (it.qty || 0) - (it.unloaded || 0);
+        add(c.toId, c.fromId, left);              // bought goods: seller(toId) → buyer(fromId)
+      }
+      if (c.sellCargo) for (const it of c.sellCargo) if (it.goodId === gid) add(c.fromId, c.toId, it.qty || 0);   // H: home → destination
+    }
+    return Array.from(agg.values());
+  };
+  // === /RESOURCE-FLOW OVERVIEW ===
+
   // How many external traders a city may keep on the road at once — scales with
   // town level (CONFIG.town.externalTradersByLevel; formula level*2 out of range).
   // Research extraCarts is added on top by the dispatch loop.
@@ -7552,6 +7637,99 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
   }
 
+  // === v0.51: RESOURCE-FLOW OVERLAY ==========================================
+  // Active while a good is selected in the top-left resource panel (state._flowGood).
+  // Shows, for that good: which producer patches make it, each city's sell(+)/buy(−)
+  // trend (with warehouse stock + price), and arrows for who is shipping it to whom.
+  function flowGoodTerrains(gid) {
+    const set = new Set();
+    for (const id in CONFIG.buildings) {
+      const def = CONFIG.buildings[id];
+      if (def && def.output && def.output.goodId === gid) {
+        if (def.terrain) set.add(def.terrain);
+        if (def.adjacent) set.add(def.adjacent);
+      }
+    }
+    return set;
+  }
+  function flowNodeHex(id) {
+    if (id === 1e9 || (typeof ResearchEconomy !== "undefined" && ResearchEconomy.CASTLE_ID != null && id === ResearchEconomy.CASTLE_ID))
+      return (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+    for (const t of (state.towns || [])) if (t.id === id) return { q: t.q, r: t.r };
+    return null;
+  }
+  function drawFlowOverlay() {
+    const gid = state && state._flowGood;
+    if (!gid || typeof Trade === "undefined" || !Trade.cityGood) return;
+    // 1) tint producing terrain patches (subtle) + ring the actual producer buildings.
+    const terrains = flowGoodTerrains(gid);
+    if (terrains.size) {
+      for (const [k, hex] of state.map.hexes) {
+        if (!isVisible(k) || !terrains.has(hex.terrain)) continue;
+        const p = HexMath.hexToPixel(hex.q, hex.r, SIZE);
+        const pts = hexCorners(p.x, p.y);
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(120,200,90,0.16)"; ctx.fill();
+      }
+    }
+    for (const t of (state.towns || [])) {
+      for (const b of (Array.isArray(t.buildings) ? t.buildings : [])) {
+        const def = b && CONFIG.buildings[b.typeId];
+        if (!def || !def.output || def.output.goodId !== gid || b.built === false) continue;
+        const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+        ctx.strokeStyle = "#7fe07a"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    // 2) flow arrows (seller → buyer) with a resource chip + units at the midpoint.
+    const flows = (Trade.goodFlows ? Trade.goodFlows(state, gid) : []);
+    for (const f of flows) {
+      const a = flowNodeHex(f.fromId), b = flowNodeHex(f.toId);
+      if (!a || !b) continue;
+      const pa = HexMath.hexToPixel(a.q, a.r, SIZE), pb = HexMath.hexToPixel(b.q, b.r, SIZE);
+      ctx.strokeStyle = "rgba(240,225,170,0.9)"; ctx.lineWidth = Math.max(2, SIZE * 0.08);
+      ctx.setLineDash([SIZE * 0.35, SIZE * 0.25]);
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      ctx.setLineDash([]);
+      const ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
+      const hx = pb.x - Math.cos(ang) * SIZE * 0.7, hy = pb.y - Math.sin(ang) * SIZE * 0.7, hl = SIZE * 0.32;
+      ctx.fillStyle = "rgba(240,225,170,0.95)";
+      ctx.beginPath();
+      ctx.moveTo(hx + Math.cos(ang) * hl, hy + Math.sin(ang) * hl);
+      ctx.lineTo(hx + Math.cos(ang + 2.5) * hl, hy + Math.sin(ang + 2.5) * hl);
+      ctx.lineTo(hx + Math.cos(ang - 2.5) * hl, hy + Math.sin(ang - 2.5) * hl);
+      ctx.closePath(); ctx.fill();
+      if (typeof drawGoodChip === "function") drawGoodChip((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, gid, Math.round(f.units));
+    }
+    // 3) per-city trend badge: arrow + net/min, warehouse stock, willing price.
+    for (const t of (state.towns || [])) {
+      if (t.built === false) continue;
+      const cg = Trade.cityGood(state, t, gid);
+      if (!cg) continue;
+      const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const sells = cg.role === "seller", buys = cg.role === "buyer";
+      const arrow = sells ? "▲" : (buys ? "▼" : "■");
+      const col = sells ? "#6fc24b" : (buys ? (cg.latent ? "#e0a63c" : "#e0563f") : "#b8b2a6");
+      const net = Math.round(Math.abs(cg.net) || 0);
+      const left = arrow + (net > 0 ? " " + net + "/m" : "");
+      const right = "  🏬" + Math.round(cg.stock) + "  🪙" + (cg.price ? cg.price.toFixed(1) : "0");
+      const fontPx = Math.max(9, Math.round(SIZE * 0.2));
+      ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      const lw = ctx.measureText(left).width, rw = ctx.measureText(right).width;
+      const w = lw + rw + 12, h = fontPx + 8;
+      const bx = p.x - w / 2, by = p.y - SIZE * 1.15 - h;
+      ctx.fillStyle = "rgba(18,12,5,0.82)"; cbChipRect(bx, by, w, h, h * 0.4); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5; cbChipRect(bx, by, w, h, h * 0.4); ctx.stroke();
+      ctx.fillStyle = col; ctx.fillText(left, bx + 6, by + h / 2);
+      ctx.fillStyle = "#f4ecdd"; ctx.fillText(right, bx + 6 + lw, by + h / 2);
+      ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    }
+  }
+  // === /RESOURCE-FLOW OVERLAY =================================================
+
   function drawTowns() {
     const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {
@@ -9288,6 +9466,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     drawCastle();
     drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
     if (typeof drawAdvancedProvisioner === "function") drawAdvancedProvisioner();   // v0.46: Advanced Provisioner token + placement highlight
+    if (typeof drawFlowOverlay === "function") drawFlowOverlay();   // v0.51: resource-flow overlay when a good is selected
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)
@@ -11363,9 +11542,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           ? cart.cargo
           : (cart.goodId ? [cart] : []);   // legacy/castle carts: {goodId,qty} shape
         const chipStep = Math.max(11, SIZE * 0.26);
+        // v0.51: the chip COUNTS with the load/unload — while UNLOADING it ticks down
+        // (10,9,8…) as each unit is delivered; while LOADING it ticks up from 0; on the
+        // road it shows the full held amount. Metering runs at transferRate items/sec.
+        const loadFrac = (cart.phase === "loading" && cart.qty > 0) ? Math.min(1, (cart.loaded || 0) / cart.qty) : 1;
         let shown = 0;
         for (let ci = 0; ci < items.length && shown < 3; ci++) {
-          const q = Math.round(Number(items[ci].qty) || 0);
+          const full = Number(items[ci].qty) || 0;
+          let q;
+          if (cart.phase === "unloading") q = Math.max(0, Math.ceil(full - (items[ci].unloaded || 0)));
+          else if (cart.phase === "loading") q = Math.floor(full * loadFrac);
+          else q = Math.round(full);
           if (q <= 0) continue;
           drawGoodChip(rp.x, rp.y - SIZE * 0.5 - shown * chipStep, items[ci].goodId, q,
             { alpha: requested ? 0.5 : 1, muted: requested });
@@ -12164,6 +12351,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     function open(gid) {
       if (!CONFIG.goods[gid] || !detailEl) return;
       openGood = gid;
+      if (state) state._flowGood = gid;   // v0.51: drive the map resource-flow overlay
       detailEl.classList.remove("hidden");
       detailEl.setAttribute("aria-hidden", "false");
       if (rdDot) rdDot.style.background = goodColor(gid);
@@ -12173,6 +12361,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
     function close() {
       openGood = null;
+      if (state) state._flowGood = null;   // v0.51: clear the map overlay
       if (detailEl) { detailEl.classList.add("hidden"); detailEl.setAttribute("aria-hidden", "true"); }
       for (const [, c] of chips) c.root.classList.remove("active");
     }
@@ -15547,8 +15736,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.20";
+  const GAME_VERSION = "0.51.21";
   const PATCH_NOTES = [
+    { v: "0.51.21", notes: [
+      "RESOURCE FLOW MAP: click a resource in the top-left panel to light up its whole supply network — every patch and building that produces it gets a green ring, each city shows a badge telling you whether it's SELLING (green ▲) or BUYING (red ▼, amber if it will need it once it grows) with its warehouse count and the price it'll pay, and dashed arrows trace who is shipping it to whom, with a resource chip on each arrow. Click the resource again to turn it off.",
+      "A trader's cargo count now ticks as it works: while unloading, the number counts down (10, 9, 8…) one unit at a time as each item is delivered, and while loading it counts up from 0 — at the loading/unloading speed.",
+    ] },
     { v: "0.51.20", notes: [
       "Population now grows at a steadier, more deliberate pace — a fresh cluster of cities takes about 3 minutes of game time to grow into a happy, self-sustaining 2-people-per-hut population (it used to fill up in well under a minute). You can watch a new town fill in rather than snapping to full.",
     ] },

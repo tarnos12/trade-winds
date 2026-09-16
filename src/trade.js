@@ -129,6 +129,91 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (isCastle) castleReserve(state, gid, n); else reserve(seller, gid, n);
   }
 
+  // === v0.51: RESOURCE-FLOW OVERVIEW (for the map overlay). Pure read-only helpers
+  // that describe, per city, whether it currently SELLS (+) or BUYS (−) a good — plus
+  // its POTENTIAL role at full population/staffing (a city that can't self-supply at
+  // max is a latent buyer). All rates are per GAME-MINUTE (×120 of per-tick). ===
+  const PER_MIN_T = 120;
+  // Current + max production of `gid` in a town (per game-minute).
+  function prodOf(town, gid) {
+    let cur = 0, max = 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b || b.built === false) continue;
+      const def = CONFIG.buildings[b.typeId];
+      if (def && def.output && def.output.goodId === gid) {
+        const r = def.output.ratePerWorker || 0;
+        cur += r * (b.workers || 0) * PER_MIN_T;
+        max += r * (def.workerSlots || 0) * PER_MIN_T;
+      }
+    }
+    return { cur, max };
+  }
+  // Current + max consumption of `gid` in a town (population needs + processor inputs).
+  function consOf(town, gid) {
+    const N = CONFIG.needs || {};
+    let cur = 0, max = 0;
+    const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
+      ? Buildings.housingCapacity(town, (typeof State !== "undefined" ? State : null)) : {};
+    for (const tier in (N.tiers || {})) {
+      const pc = N.tiers[tier].perCapita && N.tiers[tier].perCapita[gid];
+      if (!(pc > 0)) continue;
+      cur += pc * ((town.pop && town.pop[tier]) || 0) * PER_MIN_T;
+      max += pc * ((housing && housing[tier]) || 0) * PER_MIN_T;
+    }
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b || b.built === false) continue;
+      const def = CONFIG.buildings[b.typeId];
+      if (def && def.inputs && def.inputs[gid]) {
+        cur += def.inputs[gid] * (b.workers || 0) * PER_MIN_T;
+        max += def.inputs[gid] * (def.workerSlots || 0) * PER_MIN_T;
+      }
+    }
+    return { cur, max };
+  }
+  // Per-city snapshot for a good: net trend now, potential net at full scale, stock,
+  // and the price it would pay/ask. role: "seller" | "buyer" | "none".
+  Trade.cityGood = function (state, town, gid) {
+    if (!town) return null;
+    const p = prodOf(town, gid), c = consOf(town, gid);
+    const net = p.cur - c.cur;                 // >0 surplus (sells), <0 deficit (buys)
+    const netMax = p.max - c.max;              // potential at full pop/staffing
+    const stock = (town.stock && town.stock[gid]) || 0;
+    const price = (town.prices && town.prices[gid]) || 0;
+    // A city SELLS if it has a live surplus; it BUYS if it's short now OR would be at
+    // full scale (latent) — the latter matters because it will import once it grows.
+    const seller = net > 1e-6;
+    const buyer = net < -1e-6 || netMax < -1e-6;
+    return { gid: gid, townId: town.id, q: town.q, r: town.r,
+             prod: p.cur, cons: c.cur, net: net, netMax: netMax, maxProd: p.max, maxNeed: c.max,
+             stock: stock, price: price,
+             role: seller ? "seller" : (buyer ? "buyer" : "none"),
+             latent: !seller && net >= -1e-6 && netMax < -1e-6 };
+  };
+  // Live flows of a good, from in-flight carts: seller → buyer with the units aboard.
+  // (Buy cargo flows seller→buyer; H sell-cargo flows home→destination.) Castle id is
+  // SELLER_CASTLE_ID / CASTLE sentinel; the renderer resolves its hex.
+  Trade.goodFlows = function (state, gid) {
+    const agg = new Map();   // "from>to" -> { fromId, toId, units }
+    const add = (fromId, toId, u) => {
+      if (!(u > 0) || fromId == null || toId == null || fromId === toId) return;
+      const k = fromId + ">" + toId;
+      const e = agg.get(k) || { fromId: fromId, toId: toId, units: 0 };
+      e.units += u; agg.set(k, e);
+    };
+    for (const c of (state.carts || [])) {
+      if (c.done) continue;
+      const items = Array.isArray(c.cargo) ? c.cargo : (c.goodId ? [{ goodId: c.goodId, qty: c.qty, unloaded: c.unloaded }] : []);
+      for (const it of items) {
+        if (it.goodId !== gid) continue;
+        const left = (it.qty || 0) - (it.unloaded || 0);
+        add(c.toId, c.fromId, left);              // bought goods: seller(toId) → buyer(fromId)
+      }
+      if (c.sellCargo) for (const it of c.sellCargo) if (it.goodId === gid) add(c.fromId, c.toId, it.qty || 0);   // H: home → destination
+    }
+    return Array.from(agg.values());
+  };
+  // === /RESOURCE-FLOW OVERVIEW ===
+
   // How many external traders a city may keep on the road at once — scales with
   // town level (CONFIG.town.externalTradersByLevel; formula level*2 out of range).
   // Research extraCarts is added on top by the dispatch loop.
