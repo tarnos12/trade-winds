@@ -1570,7 +1570,14 @@ const CONFIG = {
     // === Internal porters (v0.51 §2): real haulers that carry producer output to
     // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
     // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
-    porterCarry: 10, porterTicksPerTile: 2 },
+    porterCarry: 10, porterTicksPerTile: 2,
+    // === Internal porters DISTRIBUTE (v0.51 §2 second half): after collecting producer
+    // output into the warehouse, porters carry consumables OUT to each house/processor's
+    // own input buffer (b.inbuf). Consumption reads those buffers, so an under-served
+    // building actually starves. inbufTargetSec = how many game-seconds of a building's
+    // own consumption a full buffer holds (porters top it up toward this). porterMaxFleet
+    // caps the fleet across both jobs. ===
+    inbufTargetSec: 30, porterMaxFleet: 20 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
@@ -2959,7 +2966,7 @@ Object.assign(CONFIG, {
     growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
-    growthRate: 0.008,       // v0.51: fraction of the gap-to-target a tier gains per tick — slowed so a fresh cluster of cities takes ~3 game-minutes to grow into a happy, self-sustaining 2-per-hut population (was 0.03)
+    growthRate: 0.0095,      // v0.51: fraction of the gap-to-target a tier gains per tick — paced so a fresh cluster of cities takes ~3 game-minutes to grow into a happy, self-sustaining 2-per-hut population (was 0.03; nudged from 0.008 to absorb the distribute-porter fill latency)
     declineRate: 0.05,       // fraction of a tier's population lost per decline tick
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,
@@ -3457,9 +3464,13 @@ Sim.tick = function (State) {
         // demand every tick, exactly as the per-tick model did.
         let effW = w;
         if (inputs) {
+          if (!b.inbuf || typeof b.inbuf !== "object") b.inbuf = {};   // v0.51 §2: processors consume inputs from their OWN buffer (porters fill it)…
           for (const gid in inputs) {
             const qty = inputs[gid];
-            if (qty > 0) effW = Math.min(effW, ((stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
+            // …preferring that buffer, but falling back to the town warehouse when it runs
+            // thin mid-transit. Real gating is at the TOWN level (buffer + warehouse both
+            // empty ⇒ genuine shortage), not a per-building logistics cliff.
+            if (qty > 0) effW = Math.min(effW, ((b.inbuf[gid] || 0) + (stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
             addDemand(gid, qty * w);
           }
         }
@@ -3501,9 +3512,15 @@ Sim.tick = function (State) {
       // both sides of the recipe stay integer and on the same cadence.
       const releaseBatch = () => {
         if (inputs) {
+          if (!b.inbuf || typeof b.inbuf !== "object") b.inbuf = {};
           for (const gid in inputs) {
-            const consumed = Math.floor(b._inAcc[gid] || 0);
-            if (consumed > 0) { stock[gid] = clamp0((stock[gid] || 0) - consumed); b._inAcc[gid] -= consumed; }
+            let consumed = Math.floor(b._inAcc[gid] || 0);
+            if (consumed > 0) {
+              b._inAcc[gid] -= consumed;
+              const fromBuf = Math.min(consumed, b.inbuf[gid] || 0);   // v0.51 §2: drain the processor's own input buffer first…
+              if (fromBuf > 0) { b.inbuf[gid] = clamp0((b.inbuf[gid] || 0) - fromBuf); consumed -= fromBuf; }
+              if (consumed > 0) stock[gid] = clamp0((stock[gid] || 0) - consumed);   // …then the town warehouse as the reserve
+            }
           }
         }
         // v0.51 (P1/§2): release whole units into the building's OWN store (b.store),
@@ -3556,6 +3573,28 @@ Sim.tick = function (State) {
     const required = {};                 // goodId -> units the population wants this tick (DEMAND: prices/trade/happiness)
     const consume  = {};                 // v0.51 §6: goodId -> units to PHYSICALLY remove (basics gated on all-present)
     const tierReq = { peasants: {}, workers: {}, burghers: {}, aristocrats: {} };  // === PP-A / CC === per-tier required
+    // v0.51 §2 (distribute): population eats from HOUSE input buffers, which porters
+    // physically fill from the warehouse — so the town-wide "available" of a good is the
+    // SUM across houses of b.inbuf[good], and consuming it drains those buffers. If
+    // porters can't keep the houses supplied the town starves even with a full warehouse.
+    const houseList = [];
+    const houseAvail = {};
+    for (const hb of buildings) {
+      const hdef = hb && CONFIG.buildings[hb.typeId];
+      if (!hdef || hdef.kind !== "house" || hb.built === false) continue;
+      houseList.push(hb);
+      if (hb.inbuf) for (const g in hb.inbuf) houseAvail[g] = (houseAvail[g] || 0) + (hb.inbuf[g] || 0);
+    }
+    const drainHouses = (g, n) => {
+      let left = n;
+      for (const h of houseList) {
+        if (left <= 0) break;
+        const has = (h.inbuf && h.inbuf[g]) || 0;
+        if (has <= 0) continue;
+        const t = Math.min(has, left);
+        h.inbuf[g] = has - t; left -= t;
+      }
+    };
     // === RU-A: capacity-weighted basic-consumption reduction from house upgrades.
     // Only BASIC-need goods (this tier's basic[]) are scaled; extra-need goods are not.
     const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult)
@@ -3577,7 +3616,7 @@ Sim.tick = function (State) {
       // still read the full `required`, so a gated shortage lowers happiness and pulls
       // imports for the missing good.
       let basicsOk = true;
-      for (const gid of spec.basic) { if ((stock[gid] || 0) <= 0) { basicsOk = false; break; } }
+      for (const gid of spec.basic) { if (((houseAvail[gid] || 0) + (stock[gid] || 0)) <= 0) { basicsOk = false; break; } }
       for (const gid in rates) {
         const isBasic = spec.basic.indexOf(gid) >= 0;   // CC: class is per-TIER, not global
         const amt = rates[gid] * n * (isBasic ? tierBcm : tierLcm);   // v0.51: extra-need goods scaled by luxury mult
@@ -3599,12 +3638,17 @@ Sim.tick = function (State) {
     for (const gid in required) {
       const req = required[gid];
       addDemand(gid, req);
-      const have = stock[gid] || 0;
+      const have = (houseAvail[gid] || 0) + (stock[gid] || 0);  // v0.51 §2: house buffers (porter-delivered) + the town warehouse as reserve
       gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
       const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
       let take = Math.floor(cc);
       if (take > have) take = have;                             // clamp ≥0 — can't consume what isn't there
-      if (take > 0) stock[gid] = have - take;
+      if (take > 0) {                                           // drain the house buffers first, then the warehouse reserve
+        const fromHouses = Math.min(take, houseAvail[gid] || 0);
+        if (fromHouses > 0) drainHouses(gid, fromHouses);
+        const fromStock = take - fromHouses;
+        if (fromStock > 0) stock[gid] = clamp0((stock[gid] || 0) - fromStock);
+      }
       town._consCarry[gid] = cc - Math.floor(cc);               // carry only the sub-unit remainder
     }
     // === SAWTOOTH FIX === smooth the per-good satisfaction that HAPPINESS reads with a
@@ -3858,13 +3902,17 @@ Sim.tickPorters = function (town) {
   // stays "a small fleet" and bounds work per tick.
   const base = (typeof Buildings !== "undefined" && Buildings.transporterCount)
     ? Buildings.transporterCount(town) : 4;
-  let waiting = 0;
+  let waiting = 0, consumers = 0;
   for (const b of buildings) {
-    if (!b || b.built === false || !b.store) continue;
-    for (const g in b.store) { if ((b.store[g] || 0) >= 1) { waiting++; break; } }
+    if (!b || b.built === false) continue;
+    if (b.store) { for (const g in b.store) { if ((b.store[g] || 0) >= 1) { waiting++; break; } } }
+    const def = CONFIG.buildings[b.typeId];
+    if (def && (def.kind === "house" || def.inputs)) consumers++;   // distribute demand
   }
-  const maxFleet = (E.porterMaxFleet || 16);
-  const need = Math.max(1, Math.min(maxFleet, Math.max(base, waiting)));
+  const maxFleet = (E.porterMaxFleet || 20);
+  // enough porters to both collect from producers with a load AND keep consumers'
+  // input buffers topped up (roughly one porter per active job, capped).
+  const need = Math.max(1, Math.min(maxFleet, Math.max(base, waiting + Math.ceil(consumers / 2))));
 
   // Size the fleet deterministically to `need` (grow at the end, trim the tail).
   if (!Array.isArray(town.porters)) town.porters = [];
@@ -3896,6 +3944,40 @@ Sim.tickPorters = function (town) {
   };
   const legTicksFor = (bq, br) =>
     Math.max(1, Math.round(PORTER_HEX_DIST(town.q, town.r, bq, br) * ticksPerTile));
+  // v0.51 §2 (distribute): the goods a building wants in its OWN input buffer, and the
+  // per-good target (≈ inbufTargetSec game-seconds of its consumption, floored so a
+  // porter load is worthwhile). Houses want their tier's basics + extras; processors
+  // want their recipe inputs. Consumption/production read these buffers (below).
+  const N2 = CONFIG.needs || {};
+  const TIERKEY = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
+  const tgtSec = (E.inbufTargetSec || 30);
+  const inbufWants = (b) => {
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || def.built === false) return null;
+    const out = {};
+    if (def.kind === "house") {
+      const spec = N2.tiers && N2.tiers[TIERKEY[def.houseTier]];
+      if (!spec) return null;
+      const cap = def.houseCapacity || 0;
+      // Houses keep a lean buffer (about one porter carry-load) so a hut doesn't starve
+      // between porter trips, without hoarding standing inventory that would spike the
+      // import demand of a marginal-supply cluster into a boom-bust.
+      for (const g of (spec.basic || [])) out[g] = Math.max(carryCap, Math.ceil((spec.perCapita[g] || 0) * cap * 2 * tgtSec));
+      for (const g of (spec.extra || [])) out[g] = Math.max(carryCap, Math.ceil((spec.perCapita[g] || 0) * cap * 2 * tgtSec));
+    } else if (def.inputs) {
+      if ((b.workers || 0) <= 0) return null;   // an idle processor (no workers) consumes nothing → don't hoard inputs
+      for (const g in def.inputs) out[g] = Math.max(carryCap, Math.ceil((def.inputs[g] || 0) * (def.workerSlots || 1) * 2 * tgtSec));
+    } else return null;
+    return out;
+  };
+  const anyBuildingAt = (q, r) => {
+    for (const b of buildings) if (b && b.built !== false && b.q === q && b.r === r) return b;
+    return null;
+  };
+  // Goods already committed to distribute (loaded on a porter en route to a consumer),
+  // so a second porter doesn't over-draw the warehouse for the same good.
+  const outbound = {};
+  for (const p of P) if (p.phase === "toConsumer" && p.good) outbound[p.good] = (outbound[p.good] || 0) + p.qty;
 
   for (const p of P) {
     if (p.phase === "idle") {
@@ -3917,10 +3999,56 @@ Sim.tickPorters = function (town) {
         }
       }
       if (best) {
+        p.job = "collect";
         p.phase = "toBuilding"; p.prog = 0; p.good = best.g; p.qty = 0;
         p.bq = best.b.q; p.br = best.b.r; p.legTicks = legTicksFor(best.b.q, best.b.r);
         inbound[best.g] = (inbound[best.g] || 0) + bestQ;   // reserve the room now
+        continue;
       }
+      // No collect job → DISTRIBUTE: carry a consumable from the warehouse OUT to the
+      // house/processor most below its input-buffer target (deterministic pick). The
+      // load leaves the warehouse now; consumption/production reads that buffer.
+      let db = null, dbQ = 0, dbKey = null;
+      for (const b of buildings) {
+        if (!b || b.built === false) continue;
+        const wants = inbufWants(b);
+        if (!wants) continue;
+        for (const g in wants) {
+          const have = (b.inbuf && b.inbuf[g]) || 0;
+          const deficit = wants[g] - have;
+          if (deficit < 1) continue;
+          const wh = (stock[g] || 0) - (outbound[g] || 0);
+          if (wh < 1) continue;
+          const q = Math.min(carryCap, Math.floor(deficit), Math.floor(wh));
+          if (q < 1) continue;
+          const key = b.q + "," + b.r + ":" + g;
+          if (q > dbQ || (q === dbQ && dbKey !== null && key < dbKey)) { db = { b: b, g: g }; dbQ = q; dbKey = key; }
+        }
+      }
+      if (db) {
+        stock[db.g] = (stock[db.g] || 0) - dbQ;                 // ship it out of the warehouse now
+        p.job = "distribute";
+        p.phase = "toConsumer"; p.prog = 0; p.good = db.g; p.qty = dbQ;
+        p.bq = db.b.q; p.br = db.b.r; p.legTicks = legTicksFor(db.b.q, db.b.r);
+        outbound[db.g] = (outbound[db.g] || 0) + dbQ;
+      }
+      continue;
+    }
+    if (p.phase === "toConsumer") {
+      p.prog += 1 / (p.legTicks || 1);
+      if (p.prog < 1) continue;
+      p.prog = 1;
+      const b = anyBuildingAt(p.bq, p.br);
+      if (b) {
+        if (!b.inbuf || typeof b.inbuf !== "object") b.inbuf = {};
+        const wants = inbufWants(b);
+        const target = (wants && wants[p.good]) || carryCap;
+        const room = Math.max(0, target - (b.inbuf[p.good] || 0));
+        const drop = Math.min(p.qty, room);
+        if (drop > 0) { b.inbuf[p.good] = (b.inbuf[p.good] || 0) + drop; p.qty -= drop; }
+      }
+      if (p.qty > 0) { stock[p.good] = (stock[p.good] || 0) + p.qty; p.qty = 0; }   // return any leftover (never wasted)
+      p.phase = "idle"; p.good = null; p.job = null;
       continue;
     }
     if (p.phase === "toBuilding") {
@@ -15797,8 +15925,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.22";
+  const GAME_VERSION = "0.51.23";
   const PATCH_NOTES = [
+    { v: "0.51.23", notes: [
+      "INTERNAL PORTERS NOW DISTRIBUTE, NOT JUST COLLECT: the same fleet that carries a producer's output to the warehouse now also carries goods OUT of the warehouse to the buildings that need them — food to houses, inputs to workshops — filling each building's own input buffer. You can watch supplies move to where they're consumed, not just to the storehouse.",
+      "Buildings eat from their delivered buffer first and fall back to the town warehouse when it runs thin, so a city only ever starves when it genuinely lacks a good — never just because a porter was a few steps away. Producer cities hold rock-steady, and a pure-import city settles at the edge of what its trade partners can supply.",
+    ] },
     { v: "0.51.22", notes: [
       "Resource-flow arrows now show the whole INTENDED supply network for the selected good — not just the one good that happens to be on a cart right now. Every buyer is matched to its nearest seller, the dashes MARCH in the direction of flow with a bold arrowhead at the buyer, and each arrow is labelled with the rate in units per minute.",
     ] },
