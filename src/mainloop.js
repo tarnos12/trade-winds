@@ -154,6 +154,7 @@
     drawCastle();
     drawResearchCenter();   // RESEARCH CENTER (Slice C): the King's Research Center, beside the castle
     if (typeof drawAdvancedProvisioner === "function") drawAdvancedProvisioner();   // v0.46: Advanced Provisioner token + placement highlight
+    if (typeof drawFlowOverlay === "function") drawFlowOverlay();   // v0.51: resource-flow overlay when a good is selected
     drawPlacementOverlay(); // TI-C: valid/invalid highlight while placing
     drawHoverGhost();
     Juice.frame(dt);        // P5-B: cozy micro-animation overlay (read-only, last)

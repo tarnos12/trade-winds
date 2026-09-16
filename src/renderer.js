@@ -393,6 +393,99 @@
     }
   }
 
+  // === v0.51: RESOURCE-FLOW OVERLAY ==========================================
+  // Active while a good is selected in the top-left resource panel (state._flowGood).
+  // Shows, for that good: which producer patches make it, each city's sell(+)/buy(−)
+  // trend (with warehouse stock + price), and arrows for who is shipping it to whom.
+  function flowGoodTerrains(gid) {
+    const set = new Set();
+    for (const id in CONFIG.buildings) {
+      const def = CONFIG.buildings[id];
+      if (def && def.output && def.output.goodId === gid) {
+        if (def.terrain) set.add(def.terrain);
+        if (def.adjacent) set.add(def.adjacent);
+      }
+    }
+    return set;
+  }
+  function flowNodeHex(id) {
+    if (id === 1e9 || (typeof ResearchEconomy !== "undefined" && ResearchEconomy.CASTLE_ID != null && id === ResearchEconomy.CASTLE_ID))
+      return (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
+    for (const t of (state.towns || [])) if (t.id === id) return { q: t.q, r: t.r };
+    return null;
+  }
+  function drawFlowOverlay() {
+    const gid = state && state._flowGood;
+    if (!gid || typeof Trade === "undefined" || !Trade.cityGood) return;
+    // 1) tint producing terrain patches (subtle) + ring the actual producer buildings.
+    const terrains = flowGoodTerrains(gid);
+    if (terrains.size) {
+      for (const [k, hex] of state.map.hexes) {
+        if (!isVisible(k) || !terrains.has(hex.terrain)) continue;
+        const p = HexMath.hexToPixel(hex.q, hex.r, SIZE);
+        const pts = hexCorners(p.x, p.y);
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(120,200,90,0.16)"; ctx.fill();
+      }
+    }
+    for (const t of (state.towns || [])) {
+      for (const b of (Array.isArray(t.buildings) ? t.buildings : [])) {
+        const def = b && CONFIG.buildings[b.typeId];
+        if (!def || !def.output || def.output.goodId !== gid || b.built === false) continue;
+        const p = HexMath.hexToPixel(b.q, b.r, SIZE);
+        ctx.strokeStyle = "#7fe07a"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    // 2) flow arrows (seller → buyer) with a resource chip + units at the midpoint.
+    const flows = (Trade.goodFlows ? Trade.goodFlows(state, gid) : []);
+    for (const f of flows) {
+      const a = flowNodeHex(f.fromId), b = flowNodeHex(f.toId);
+      if (!a || !b) continue;
+      const pa = HexMath.hexToPixel(a.q, a.r, SIZE), pb = HexMath.hexToPixel(b.q, b.r, SIZE);
+      ctx.strokeStyle = "rgba(240,225,170,0.9)"; ctx.lineWidth = Math.max(2, SIZE * 0.08);
+      ctx.setLineDash([SIZE * 0.35, SIZE * 0.25]);
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      ctx.setLineDash([]);
+      const ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
+      const hx = pb.x - Math.cos(ang) * SIZE * 0.7, hy = pb.y - Math.sin(ang) * SIZE * 0.7, hl = SIZE * 0.32;
+      ctx.fillStyle = "rgba(240,225,170,0.95)";
+      ctx.beginPath();
+      ctx.moveTo(hx + Math.cos(ang) * hl, hy + Math.sin(ang) * hl);
+      ctx.lineTo(hx + Math.cos(ang + 2.5) * hl, hy + Math.sin(ang + 2.5) * hl);
+      ctx.lineTo(hx + Math.cos(ang - 2.5) * hl, hy + Math.sin(ang - 2.5) * hl);
+      ctx.closePath(); ctx.fill();
+      if (typeof drawGoodChip === "function") drawGoodChip((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, gid, Math.round(f.units));
+    }
+    // 3) per-city trend badge: arrow + net/min, warehouse stock, willing price.
+    for (const t of (state.towns || [])) {
+      if (t.built === false) continue;
+      const cg = Trade.cityGood(state, t, gid);
+      if (!cg) continue;
+      const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      const sells = cg.role === "seller", buys = cg.role === "buyer";
+      const arrow = sells ? "▲" : (buys ? "▼" : "■");
+      const col = sells ? "#6fc24b" : (buys ? (cg.latent ? "#e0a63c" : "#e0563f") : "#b8b2a6");
+      const net = Math.round(Math.abs(cg.net) || 0);
+      const left = arrow + (net > 0 ? " " + net + "/m" : "");
+      const right = "  🏬" + Math.round(cg.stock) + "  🪙" + (cg.price ? cg.price.toFixed(1) : "0");
+      const fontPx = Math.max(9, Math.round(SIZE * 0.2));
+      ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      const lw = ctx.measureText(left).width, rw = ctx.measureText(right).width;
+      const w = lw + rw + 12, h = fontPx + 8;
+      const bx = p.x - w / 2, by = p.y - SIZE * 1.15 - h;
+      ctx.fillStyle = "rgba(18,12,5,0.82)"; cbChipRect(bx, by, w, h, h * 0.4); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5; cbChipRect(bx, by, w, h, h * 0.4); ctx.stroke();
+      ctx.fillStyle = col; ctx.fillText(left, bx + 6, by + h / 2);
+      ctx.fillStyle = "#f4ecdd"; ctx.fillText(right, bx + 6 + lw, by + h / 2);
+      ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    }
+  }
+  // === /RESOURCE-FLOW OVERLAY =================================================
+
   function drawTowns() {
     const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500))));
     for (const t of state.towns) {

@@ -153,9 +153,17 @@
           ? cart.cargo
           : (cart.goodId ? [cart] : []);   // legacy/castle carts: {goodId,qty} shape
         const chipStep = Math.max(11, SIZE * 0.26);
+        // v0.51: the chip COUNTS with the load/unload — while UNLOADING it ticks down
+        // (10,9,8…) as each unit is delivered; while LOADING it ticks up from 0; on the
+        // road it shows the full held amount. Metering runs at transferRate items/sec.
+        const loadFrac = (cart.phase === "loading" && cart.qty > 0) ? Math.min(1, (cart.loaded || 0) / cart.qty) : 1;
         let shown = 0;
         for (let ci = 0; ci < items.length && shown < 3; ci++) {
-          const q = Math.round(Number(items[ci].qty) || 0);
+          const full = Number(items[ci].qty) || 0;
+          let q;
+          if (cart.phase === "unloading") q = Math.max(0, Math.ceil(full - (items[ci].unloaded || 0)));
+          else if (cart.phase === "loading") q = Math.floor(full * loadFrac);
+          else q = Math.round(full);
           if (q <= 0) continue;
           drawGoodChip(rp.x, rp.y - SIZE * 0.5 - shown * chipStep, items[ci].goodId, q,
             { alpha: requested ? 0.5 : 1, muted: requested });
@@ -954,6 +962,7 @@
     function open(gid) {
       if (!CONFIG.goods[gid] || !detailEl) return;
       openGood = gid;
+      if (state) state._flowGood = gid;   // v0.51: drive the map resource-flow overlay
       detailEl.classList.remove("hidden");
       detailEl.setAttribute("aria-hidden", "false");
       if (rdDot) rdDot.style.background = goodColor(gid);
@@ -963,6 +972,7 @@
     }
     function close() {
       openGood = null;
+      if (state) state._flowGood = null;   // v0.51: clear the map overlay
       if (detailEl) { detailEl.classList.add("hidden"); detailEl.setAttribute("aria-hidden", "true"); }
       for (const [, c] of chips) c.root.classList.remove("active");
     }

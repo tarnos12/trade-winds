@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.20";
+  const GAME_VERSION = "0.51.21";
   const PATCH_NOTES = [
+    { v: "0.51.21", notes: [
+      "RESOURCE FLOW MAP: click a resource in the top-left panel to light up its whole supply network — every patch and building that produces it gets a green ring, each city shows a badge telling you whether it's SELLING (green ▲) or BUYING (red ▼, amber if it will need it once it grows) with its warehouse count and the price it'll pay, and dashed arrows trace who is shipping it to whom, with a resource chip on each arrow. Click the resource again to turn it off.",
+      "A trader's cargo count now ticks as it works: while unloading, the number counts down (10, 9, 8…) one unit at a time as each item is delivered, and while loading it counts up from 0 — at the loading/unloading speed.",
+    ] },
     { v: "0.51.20", notes: [
       "Population now grows at a steadier, more deliberate pace — a fresh cluster of cities takes about 3 minutes of game time to grow into a happy, self-sustaining 2-people-per-hut population (it used to fill up in well under a minute). You can watch a new town fill in rather than snapping to full.",
     ] },
