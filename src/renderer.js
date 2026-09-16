@@ -439,25 +439,38 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
       }
     }
-    // 2) flow arrows (seller → buyer) with a resource chip + units at the midpoint.
-    const flows = (Trade.goodFlows ? Trade.goodFlows(state, gid) : []);
-    for (const f of flows) {
+    // 2) flow arrows: the INTENDED supply plan (seller → buyer), so the whole network
+    // shows even when no cart is mid-trip. Dashes MARCH toward the buyer to make the
+    // direction obvious, a solid arrowhead sits near the buyer, and a resource chip
+    // with the rate (units/min) rides the midpoint.
+    const plan = (Trade.goodPlan ? Trade.goodPlan(state, gid) : []);
+    const march = (Date.now() / 45) % (SIZE * 0.6);   // animated dash offset (render-only)
+    for (const f of plan) {
       const a = flowNodeHex(f.fromId), b = flowNodeHex(f.toId);
       if (!a || !b) continue;
       const pa = HexMath.hexToPixel(a.q, a.r, SIZE), pb = HexMath.hexToPixel(b.q, b.r, SIZE);
-      ctx.strokeStyle = "rgba(240,225,170,0.9)"; ctx.lineWidth = Math.max(2, SIZE * 0.08);
-      ctx.setLineDash([SIZE * 0.35, SIZE * 0.25]);
-      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
-      ctx.setLineDash([]);
       const ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
-      const hx = pb.x - Math.cos(ang) * SIZE * 0.7, hy = pb.y - Math.sin(ang) * SIZE * 0.7, hl = SIZE * 0.32;
-      ctx.fillStyle = "rgba(240,225,170,0.95)";
+      // start/end pulled in to the token edges so the arrow sits between the cities.
+      const sx = pa.x + Math.cos(ang) * SIZE * 0.55, sy = pa.y + Math.sin(ang) * SIZE * 0.55;
+      const ex = pb.x - Math.cos(ang) * SIZE * 0.55, ey = pb.y - Math.sin(ang) * SIZE * 0.55;
+      ctx.strokeStyle = "rgba(255,214,120,0.95)"; ctx.lineWidth = Math.max(2.5, SIZE * 0.1);
+      ctx.lineCap = "round";
+      ctx.setLineDash([SIZE * 0.34, SIZE * 0.26]); ctx.lineDashOffset = -march;   // negative → marches seller→buyer
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0; ctx.lineCap = "butt";
+      // bold arrowhead at the buyer end
+      const hl = SIZE * 0.42;
+      ctx.fillStyle = "rgba(255,214,120,1)";
       ctx.beginPath();
-      ctx.moveTo(hx + Math.cos(ang) * hl, hy + Math.sin(ang) * hl);
-      ctx.lineTo(hx + Math.cos(ang + 2.5) * hl, hy + Math.sin(ang + 2.5) * hl);
-      ctx.lineTo(hx + Math.cos(ang - 2.5) * hl, hy + Math.sin(ang - 2.5) * hl);
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - Math.cos(ang - 0.42) * hl, ey - Math.sin(ang - 0.42) * hl);
+      ctx.lineTo(ex - Math.cos(ang + 0.42) * hl, ey - Math.sin(ang + 0.42) * hl);
       ctx.closePath(); ctx.fill();
-      if (typeof drawGoodChip === "function") drawGoodChip((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, gid, Math.round(f.units));
+      // resource chip + per-minute rate at the midpoint
+      if (typeof drawGoodChip === "function") {
+        const rate = Math.max(1, Math.round(f.rate));
+        drawGoodChip((sx + ex) / 2, (sy + ey) / 2, gid, rate + "/m");
+      }
     }
     // 3) per-city trend badge: arrow + net/min, warehouse stock, willing price.
     for (const t of (state.towns || [])) {

@@ -5180,6 +5180,54 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
              role: seller ? "seller" : (buyer ? "buyer" : "none"),
              latent: !seller && net >= -1e-6 && netMax < -1e-6 };
   };
+  // v0.51: INTENDED supply plan for a good — who should ship it to whom, independent
+  // of whether a cart happens to be mid-trip right now. Every buyer (short now OR at
+  // full potential) is matched to its NEAREST seller(s) with surplus; rate is the
+  // matched flow in units/GAME-MINUTE. This is what the map overlay draws so the whole
+  // network shows (not just the one good that has a live cart). Pure/deterministic.
+  const PLAN_DIST = (aq, ar, bq, br) =>
+    (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+  Trade.goodPlan = function (state, gid) {
+    const towns = (state && state.towns) || [];
+    const sellers = [], buyers = [];
+    for (const t of towns) {
+      if (!t || t.built === false) continue;
+      const cg = Trade.cityGood(state, t, gid);
+      if (!cg) continue;
+      // surplus/need blend current with potential so the structural network still
+      // shows before a fresh cluster has grown into its trades.
+      const surplus = cg.net > 1e-6 ? cg.net : (cg.netMax > 1e-6 ? cg.netMax : 0);
+      const need = cg.net < -1e-6 ? -cg.net : (cg.netMax < -1e-6 ? -cg.netMax : 0);
+      if (surplus > 0) sellers.push({ id: t.id, q: t.q, r: t.r, rem: surplus });
+      else if (need > 0) buyers.push({ id: t.id, q: t.q, r: t.r, need: need });
+    }
+    // the castle sells its enabled goods too (a real source on the network).
+    if (state && state.castleTrade && typeof ResearchEconomy !== "undefined") {
+      const avail = castleSellAvailable(state, gid);
+      if (avail > 0) {
+        const ch = ResearchEconomy.castleHex ? ResearchEconomy.castleHex() : { q: 0, r: 0 };
+        sellers.push({ id: SELLER_CASTLE_ID, q: ch.q, r: ch.r, rem: avail });
+      }
+    }
+    const flows = [];
+    // Deterministic order: buyers by id, then nearest sellers (dist, then id).
+    buyers.sort((a, b) => a.id - b.id);
+    for (const buyer of buyers) {
+      let need = buyer.need;
+      const cand = sellers.filter(s => s.rem > 1e-6 && s.id !== buyer.id)
+        .map(s => ({ s: s, d: PLAN_DIST(s.q, s.r, buyer.q, buyer.r) }))
+        .sort((x, y) => x.d - y.d || x.s.id - y.s.id);
+      for (const { s } of cand) {
+        if (need <= 1e-6) break;
+        const take = Math.min(need, s.rem);
+        if (take <= 1e-6) continue;
+        flows.push({ fromId: s.id, toId: buyer.id, rate: take });
+        s.rem -= take; need -= take;
+      }
+    }
+    return flows;
+  };
+
   // Live flows of a good, from in-flight carts: seller → buyer with the units aboard.
   // (Buy cargo flows seller→buyer; H sell-cargo flows home→destination.) Castle id is
   // SELLER_CASTLE_ID / CASTLE sentinel; the renderer resolves its hex.
@@ -7683,25 +7731,38 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         ctx.beginPath(); ctx.arc(p.x, p.y, SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
       }
     }
-    // 2) flow arrows (seller → buyer) with a resource chip + units at the midpoint.
-    const flows = (Trade.goodFlows ? Trade.goodFlows(state, gid) : []);
-    for (const f of flows) {
+    // 2) flow arrows: the INTENDED supply plan (seller → buyer), so the whole network
+    // shows even when no cart is mid-trip. Dashes MARCH toward the buyer to make the
+    // direction obvious, a solid arrowhead sits near the buyer, and a resource chip
+    // with the rate (units/min) rides the midpoint.
+    const plan = (Trade.goodPlan ? Trade.goodPlan(state, gid) : []);
+    const march = (Date.now() / 45) % (SIZE * 0.6);   // animated dash offset (render-only)
+    for (const f of plan) {
       const a = flowNodeHex(f.fromId), b = flowNodeHex(f.toId);
       if (!a || !b) continue;
       const pa = HexMath.hexToPixel(a.q, a.r, SIZE), pb = HexMath.hexToPixel(b.q, b.r, SIZE);
-      ctx.strokeStyle = "rgba(240,225,170,0.9)"; ctx.lineWidth = Math.max(2, SIZE * 0.08);
-      ctx.setLineDash([SIZE * 0.35, SIZE * 0.25]);
-      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
-      ctx.setLineDash([]);
       const ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
-      const hx = pb.x - Math.cos(ang) * SIZE * 0.7, hy = pb.y - Math.sin(ang) * SIZE * 0.7, hl = SIZE * 0.32;
-      ctx.fillStyle = "rgba(240,225,170,0.95)";
+      // start/end pulled in to the token edges so the arrow sits between the cities.
+      const sx = pa.x + Math.cos(ang) * SIZE * 0.55, sy = pa.y + Math.sin(ang) * SIZE * 0.55;
+      const ex = pb.x - Math.cos(ang) * SIZE * 0.55, ey = pb.y - Math.sin(ang) * SIZE * 0.55;
+      ctx.strokeStyle = "rgba(255,214,120,0.95)"; ctx.lineWidth = Math.max(2.5, SIZE * 0.1);
+      ctx.lineCap = "round";
+      ctx.setLineDash([SIZE * 0.34, SIZE * 0.26]); ctx.lineDashOffset = -march;   // negative → marches seller→buyer
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0; ctx.lineCap = "butt";
+      // bold arrowhead at the buyer end
+      const hl = SIZE * 0.42;
+      ctx.fillStyle = "rgba(255,214,120,1)";
       ctx.beginPath();
-      ctx.moveTo(hx + Math.cos(ang) * hl, hy + Math.sin(ang) * hl);
-      ctx.lineTo(hx + Math.cos(ang + 2.5) * hl, hy + Math.sin(ang + 2.5) * hl);
-      ctx.lineTo(hx + Math.cos(ang - 2.5) * hl, hy + Math.sin(ang - 2.5) * hl);
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - Math.cos(ang - 0.42) * hl, ey - Math.sin(ang - 0.42) * hl);
+      ctx.lineTo(ex - Math.cos(ang + 0.42) * hl, ey - Math.sin(ang + 0.42) * hl);
       ctx.closePath(); ctx.fill();
-      if (typeof drawGoodChip === "function") drawGoodChip((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, gid, Math.round(f.units));
+      // resource chip + per-minute rate at the midpoint
+      if (typeof drawGoodChip === "function") {
+        const rate = Math.max(1, Math.round(f.rate));
+        drawGoodChip((sx + ex) / 2, (sy + ey) / 2, gid, rate + "/m");
+      }
     }
     // 3) per-city trend badge: arrow + net/min, warehouse stock, willing price.
     for (const t of (state.towns || [])) {
@@ -15736,8 +15797,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.21";
+  const GAME_VERSION = "0.51.22";
   const PATCH_NOTES = [
+    { v: "0.51.22", notes: [
+      "Resource-flow arrows now show the whole INTENDED supply network for the selected good — not just the one good that happens to be on a cart right now. Every buyer is matched to its nearest seller, the dashes MARCH in the direction of flow with a bold arrowhead at the buyer, and each arrow is labelled with the rate in units per minute.",
+    ] },
     { v: "0.51.21", notes: [
       "RESOURCE FLOW MAP: click a resource in the top-left panel to light up its whole supply network — every patch and building that produces it gets a green ring, each city shows a badge telling you whether it's SELLING (green ▲) or BUYING (red ▼, amber if it will need it once it grows) with its warehouse count and the price it'll pay, and dashed arrows trace who is shipping it to whom, with a resource chip on each arrow. Click the resource again to turn it off.",
       "A trader's cargo count now ticks as it works: while unloading, the number counts down (10, 9, 8…) one unit at a time as each item is delivered, and while loading it counts up from 0 — at the loading/unloading speed.",

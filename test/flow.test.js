@@ -51,5 +51,27 @@ const c1toC2 = wf.filter(f => f.fromId === 1 && f.toId === 2).reduce((s, f) => s
 ok("goodFlows reports wood flowing from the seller (C1) to the buyer (C2)", c1toC2 === 11, "units " + c1toC2);
 ok("goodFlows ignores a good not asked for", Trade.goodFlows(st, "iron").length === 0);
 
+// Trade.goodPlan: intended supply plan (nearest seller → each buyer), independent of
+// live carts — so EVERY good with a seller+buyer shows a flow, not just one on a cart.
+ok("Trade.goodPlan is a function", typeof Trade.goodPlan === "function");
+{
+  const towns = [
+    { id: 1, q: 0, r: 0, level: 1, built: true, pop: { peasants: 4 }, stock: { wood: 50 }, prices: { wood: 5 },
+      buildings: [bld("lumberjack", 0, 1, 2), bld("lumberjack", 0, 2, 2), bld("hut", 1, 0, 0)] },     // wood seller
+    { id: 2, q: 6, r: 0, level: 1, built: true, pop: { peasants: 4 }, stock: { potato: 60 }, prices: { potato: 4 },
+      buildings: [bld("potato_farm", 6, 1, 2), bld("hut", 7, 0, 0)] },                                 // potato seller, wood buyer
+    { id: 3, q: 0, r: 6, level: 1, built: true, pop: { peasants: 2 }, stock: {}, prices: {},
+      buildings: [bld("hut", 0, 7, 0)] },                                                              // buys both
+  ];
+  const st = { towns: towns, carts: [] };
+  const woodPlan = Trade.goodPlan(st, "wood");
+  ok("goodPlan routes wood from the seller (C1) to both buyers", woodPlan.length >= 2 && woodPlan.every(f => f.fromId === 1),
+     JSON.stringify(woodPlan));
+  const potPlan = Trade.goodPlan(st, "potato");
+  ok("goodPlan routes potato from its seller (C2), not wood's seller", potPlan.length >= 1 && potPlan.every(f => f.fromId === 2),
+     JSON.stringify(potPlan));
+  ok("goodPlan rates are positive per-minute numbers", woodPlan.every(f => f.rate > 0));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
