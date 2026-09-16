@@ -50,7 +50,7 @@ Object.assign(CONFIG, {
     growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
-    growthRate: 0.03,        // fraction of the gap to target a tier gains per tick
+    growthRate: 0.008,       // v0.51: fraction of the gap-to-target a tier gains per tick — slowed so a fresh cluster of cities takes ~3 game-minutes to grow into a happy, self-sustaining 2-per-hut population (was 0.03)
     declineRate: 0.05,       // fraction of a tier's population lost per decline tick
     // Work efficiency from happiness (0..100): factor = effMin + (h/100)*(effMax-effMin).
     effMin: 0.5, effMax: 1.2,

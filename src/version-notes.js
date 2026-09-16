@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.19";
+  const GAME_VERSION = "0.51.20";
   const PATCH_NOTES = [
+    { v: "0.51.20", notes: [
+      "Population now grows at a steadier, more deliberate pace — a fresh cluster of cities takes about 3 minutes of game time to grow into a happy, self-sustaining 2-people-per-hut population (it used to fill up in well under a minute). You can watch a new town fill in rather than snapping to full.",
+    ] },
     { v: "0.51.19", notes: [
       "Traders now BUY and SELL on the same trip: when a city sends a trader to buy something, it also loads up any surplus the destination is short on and sells it there — e.g. fetch 5 wood while dropping off 5 potato. One caravan, two deals; anything the destination can't take or afford rides back home.",
     ] },

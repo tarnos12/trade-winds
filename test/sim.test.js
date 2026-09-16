@@ -117,7 +117,7 @@ ok("tick handles Phase-1 marker town {q,r}", (() => {
   const t = town({ pop: { peasants: 3, workers: 0, burghers: 0 },
                    stock: { wood: 100000, fish: 100000, wool: 100000 },
                    buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
-  for (let i = 0; i < 120; i++) Sim.tick({ towns: [t] });
+  for (let i = 0; i < 600; i++) Sim.tick({ towns: [t] });   // v0.51: slower growthRate needs more ticks to fill housing
   ok("basics + extras met ⇒ happiness ~100", t.happiness > 95);
   ok("all needs met ⇒ housing fills to full cap", Math.abs(t.pop.peasants - PEA_CAP) <= 0.5);
 }

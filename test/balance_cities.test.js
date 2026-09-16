@@ -48,7 +48,7 @@ function city(id, cx, producers) {
   for (const pt of producers) { b.push(bld(pt, nb[i].q, nb[i].r)); i++; }
   return { id, q: cx, r: 0, level: 1, gold: 5000, built: true,
     pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 },
-    stock: {}, prices: {}, demand: {}, buildings: b, happiness: 50 };
+    stock: { ...CONFIG.town.startStock }, prices: {}, demand: {}, buildings: b, happiness: 50 };  // real game seeds startStock
 }
 const C1 = city(1, 0, ["lumberjack", "lumberjack"]);
 const C2 = city(2, 6, ["potato_farm", "potato_farm"]);
@@ -60,11 +60,20 @@ const st = { towns: [C1, C2, C3, C4], carts: [], treasury: 100000, tradeSeed: 1,
 for (let q = -2; q <= 20; q++) for (let r = -2; r <= 2; r++) st.map.hexes.set(K(q, r), { q, r, terrain: "fertile" });
 if (Pathing && Pathing.invalidate) Pathing.invalidate();
 
-// Run 8 game-minutes to let trade settle (equilibrium is reached around ~5 min).
-for (let i = 0; i < 8 * PER_MIN; i++) { st.tick = i; Sim.tick(st); Trade.tick(st); }
-
 const pk = (t) => (t.pop.peasants || 0);
 const hp = (t) => t.happiness || 0;
+
+// The cluster should take REAL time to grow — it must NOT already be full at ~1 minute
+// (living off the starting stock alone), it should be well on its way by ~3 minutes, and
+// fully grown to a happy 2-per-hut by ~4 minutes. (Growth is paced by CONFIG.needs.growthRate.)
+function runTo(min) { const target = Math.round(min * PER_MIN); while (st.tick < target) { st.tick++; Sim.tick(st); Trade.tick(st); } }
+runTo(1);
+ok("at ~1 min the cluster is NOT yet full (growth takes real time)", pk(C1) < 3.5 && pk(C4) < 6,
+   "1m C1 " + pk(C1).toFixed(1) + " C4 " + pk(C4).toFixed(1));
+runTo(3);
+ok("by ~3 min the producer cities are well grown toward a full 2-per-hut (~3 of 4)", [C1, C2, C3].every(t => pk(t) >= 2.8),
+   "3m " + [C1, C2, C3].map(t => "C" + t.id + " " + pk(t).toFixed(1)).join(" "));
+runTo(4.5);
 // City #1/#2/#3 have 2 huts (cap 2 each ⇒ 4 peasants at full); City #4 has 4 huts (8).
 ok("City #1 (wood) reaches ~2 peasants/hut", pk(C1) >= 3.5, "pop " + pk(C1).toFixed(1));
 ok("City #2 (potato) reaches ~2 peasants/hut", pk(C2) >= 3.5, "pop " + pk(C2).toFixed(1));
