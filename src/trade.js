@@ -189,6 +189,54 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
              role: seller ? "seller" : (buyer ? "buyer" : "none"),
              latent: !seller && net >= -1e-6 && netMax < -1e-6 };
   };
+  // v0.51: INTENDED supply plan for a good — who should ship it to whom, independent
+  // of whether a cart happens to be mid-trip right now. Every buyer (short now OR at
+  // full potential) is matched to its NEAREST seller(s) with surplus; rate is the
+  // matched flow in units/GAME-MINUTE. This is what the map overlay draws so the whole
+  // network shows (not just the one good that has a live cart). Pure/deterministic.
+  const PLAN_DIST = (aq, ar, bq, br) =>
+    (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+  Trade.goodPlan = function (state, gid) {
+    const towns = (state && state.towns) || [];
+    const sellers = [], buyers = [];
+    for (const t of towns) {
+      if (!t || t.built === false) continue;
+      const cg = Trade.cityGood(state, t, gid);
+      if (!cg) continue;
+      // surplus/need blend current with potential so the structural network still
+      // shows before a fresh cluster has grown into its trades.
+      const surplus = cg.net > 1e-6 ? cg.net : (cg.netMax > 1e-6 ? cg.netMax : 0);
+      const need = cg.net < -1e-6 ? -cg.net : (cg.netMax < -1e-6 ? -cg.netMax : 0);
+      if (surplus > 0) sellers.push({ id: t.id, q: t.q, r: t.r, rem: surplus });
+      else if (need > 0) buyers.push({ id: t.id, q: t.q, r: t.r, need: need });
+    }
+    // the castle sells its enabled goods too (a real source on the network).
+    if (state && state.castleTrade && typeof ResearchEconomy !== "undefined") {
+      const avail = castleSellAvailable(state, gid);
+      if (avail > 0) {
+        const ch = ResearchEconomy.castleHex ? ResearchEconomy.castleHex() : { q: 0, r: 0 };
+        sellers.push({ id: SELLER_CASTLE_ID, q: ch.q, r: ch.r, rem: avail });
+      }
+    }
+    const flows = [];
+    // Deterministic order: buyers by id, then nearest sellers (dist, then id).
+    buyers.sort((a, b) => a.id - b.id);
+    for (const buyer of buyers) {
+      let need = buyer.need;
+      const cand = sellers.filter(s => s.rem > 1e-6 && s.id !== buyer.id)
+        .map(s => ({ s: s, d: PLAN_DIST(s.q, s.r, buyer.q, buyer.r) }))
+        .sort((x, y) => x.d - y.d || x.s.id - y.s.id);
+      for (const { s } of cand) {
+        if (need <= 1e-6) break;
+        const take = Math.min(need, s.rem);
+        if (take <= 1e-6) continue;
+        flows.push({ fromId: s.id, toId: buyer.id, rate: take });
+        s.rem -= take; need -= take;
+      }
+    }
+    return flows;
+  };
+
   // Live flows of a good, from in-flight carts: seller → buyer with the units aboard.
   // (Buy cargo flows seller→buyer; H sell-cargo flows home→destination.) Castle id is
   // SELLER_CASTLE_ID / CASTLE sentinel; the renderer resolves its hex.

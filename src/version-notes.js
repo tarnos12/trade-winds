@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.21";
+  const GAME_VERSION = "0.51.22";
   const PATCH_NOTES = [
+    { v: "0.51.22", notes: [
+      "Resource-flow arrows now show the whole INTENDED supply network for the selected good — not just the one good that happens to be on a cart right now. Every buyer is matched to its nearest seller, the dashes MARCH in the direction of flow with a bold arrowhead at the buyer, and each arrow is labelled with the rate in units per minute.",
+    ] },
     { v: "0.51.21", notes: [
       "RESOURCE FLOW MAP: click a resource in the top-left panel to light up its whole supply network — every patch and building that produces it gets a green ring, each city shows a badge telling you whether it's SELLING (green ▲) or BUYING (red ▼, amber if it will need it once it grows) with its warehouse count and the price it'll pay, and dashed arrows trace who is shipping it to whom, with a resource chip on each arrow. Click the resource again to turn it off.",
       "A trader's cargo count now ticks as it works: while unloading, the number counts down (10, 9, 8…) one unit at a time as each item is delivered, and while loading it counts up from 0 — at the loading/unloading speed.",
