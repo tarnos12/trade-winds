@@ -47,9 +47,11 @@ ok("CONFIG.econ has porter tuning", CONFIG.econ.porterCarry > 0 && CONFIG.econ.p
 {
   const t = town({ stock: { potato: 1e5 },
     buildings: [b("lumberjack", 0, 3), b("hut", 0, 1), b("hut", 1, 1)] });
-  // run one production cycle's worth so wood banks in the lumberjack's store
+  // run several production cycles: wood banks in the store, porters collect it to the
+  // warehouse — but the distribute step now fills the two huts' input buffers (20 wood)
+  // first, so warehouse accumulation past that starts a little later (≈tick 205 here).
   let sawStore = false, sawWarehouse = false;
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 300; i++) {
     Sim.tick({ towns: [t] });
     if (((t.buildings[0].store && t.buildings[0].store.wood) || 0) >= 1) sawStore = true;
     if ((t.stock.wood || 0) >= 1) sawWarehouse = true;

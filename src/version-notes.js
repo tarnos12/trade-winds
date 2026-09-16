@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.22";
+  const GAME_VERSION = "0.51.23";
   const PATCH_NOTES = [
+    { v: "0.51.23", notes: [
+      "INTERNAL PORTERS NOW DISTRIBUTE, NOT JUST COLLECT: the same fleet that carries a producer's output to the warehouse now also carries goods OUT of the warehouse to the buildings that need them — food to houses, inputs to workshops — filling each building's own input buffer. You can watch supplies move to where they're consumed, not just to the storehouse.",
+      "Buildings eat from their delivered buffer first and fall back to the town warehouse when it runs thin, so a city only ever starves when it genuinely lacks a good — never just because a porter was a few steps away. Producer cities hold rock-steady, and a pure-import city settles at the edge of what its trade partners can supply.",
+    ] },
     { v: "0.51.22", notes: [
       "Resource-flow arrows now show the whole INTENDED supply network for the selected good — not just the one good that happens to be on a cart right now. Every buyer is matched to its nearest seller, the dashes MARCH in the direction of flow with a bold arrowhead at the buyer, and each arrow is labelled with the rate in units per minute.",
     ] },

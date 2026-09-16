@@ -202,7 +202,14 @@ const CONFIG = {
     // === Internal porters (v0.51 §2): real haulers that carry producer output to
     // the warehouse. carry ≤ porterCarry per trip; a leg of D tiles takes
     // round(D × porterTicksPerTile) ticks (2 ticks = 1 game-second). ===
-    porterCarry: 10, porterTicksPerTile: 2 },
+    porterCarry: 10, porterTicksPerTile: 2,
+    // === Internal porters DISTRIBUTE (v0.51 §2 second half): after collecting producer
+    // output into the warehouse, porters carry consumables OUT to each house/processor's
+    // own input buffer (b.inbuf). Consumption reads those buffers, so an under-served
+    // building actually starves. inbufTargetSec = how many game-seconds of a building's
+    // own consumption a full buffer holds (porters top it up toward this). porterMaxFleet
+    // caps the fleet across both jobs. ===
+    inbufTargetSec: 30, porterMaxFleet: 20 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
