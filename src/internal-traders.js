@@ -92,7 +92,13 @@
           // return (toWarehouse) runs building->centre (prog).
           const prog = Math.max(0, Math.min(1, p.prog || 0));
           const target = (p.phase === "toWarehouse") ? prog : (1 - prog);
-          const carrying = p.phase === "toWarehouse";
+          // Two phases carry a load: toWarehouse (COLLECT return, building->centre) and
+          // toConsumer (DISTRIBUTE, centre->building — a porter hauling a good out of the
+          // warehouse to a house/workshop input buffer). toBuilding is the only empty leg
+          // (heading OUT to fetch a producer's store), drawn muted. Without listing
+          // toConsumer here a distribute porter rendered as an empty walker, so delivered
+          // goods appeared in the building with no visible carrier.
+          const carrying = (p.phase === "toWarehouse" || p.phase === "toConsumer");
           const key = t.id + ":" + i;
           seen.add(key);
           let v = vis.get(key);

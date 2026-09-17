@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.23";
+  const GAME_VERSION = "0.51.24";
   const PATCH_NOTES = [
+    { v: "0.51.24", notes: [
+      "Fixed: goods delivered to a building's input buffer (e.g. a fresh hut's firewood) now visibly ride an internal porter out from the warehouse — a loaded carrier with the goods chip — instead of appearing to fill in on their own. The porter always moved the goods; it just wasn't drawn as carrying them on the outbound-to-a-building leg.",
+    ] },
     { v: "0.51.23", notes: [
       "INTERNAL PORTERS NOW DISTRIBUTE, NOT JUST COLLECT: the same fleet that carries a producer's output to the warehouse now also carries goods OUT of the warehouse to the buildings that need them — food to houses, inputs to workshops — filling each building's own input buffer. You can watch supplies move to where they're consumed, not just to the storehouse.",
       "Buildings eat from their delivered buffer first and fall back to the town warehouse when it runs thin, so a city only ever starves when it genuinely lacks a good — never just because a porter was a few steps away. Producer cities hold rock-steady, and a pure-import city settles at the edge of what its trade partners can supply.",
