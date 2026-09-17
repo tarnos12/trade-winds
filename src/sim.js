@@ -386,9 +386,16 @@ Sim.tick = function (State) {
     if (town.built === false) {
       town._buildT = (town._buildT || 0) + 1;
       const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
-      if (town._buildT >= buildTicks) { town.built = true; town._buildT = buildTicks; }
+      if (town._buildT >= buildTicks) {
+        town.built = true; town._buildT = buildTicks;
+        // v0.51 SELL-GATE: on finishing construction, open a no-export grace window so a
+        // brand-new city doesn't dump its founding stock before the player has placed its
+        // huts (Trade reads town._sellHold; it ticks down below).
+        town._sellHold = Math.max(0, Math.round(((CONFIG.trade && CONFIG.trade.sellGraceSec) || 30) * (1000 / baseTickMs)));
+      }
       else continue;   // still building — skip everything else this tick
     }
+    if ((town._sellHold || 0) > 0) town._sellHold--;   // count down the post-construction export grace
     if (!town.stock) town.stock = {};
     if (!town.pop) town.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };  // === CC: 4th tier ===
     const stock = town.stock;

@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.24";
+  const GAME_VERSION = "0.51.25";
   const PATCH_NOTES = [
+    { v: "0.51.25", notes: [
+      "A new city no longer dumps its founding resources the instant it appears. A city exports NOTHING while it is still under construction, and for 30 seconds after it finishes — giving you time to place its huts and workshops before any surplus is offered for sale.",
+      "Cities now feed themselves first: a city will not sell a good it is set up to CONSUME more of than it produces (counting huts and workshops you've placed but not yet finished building) — it imports that good instead of dumping stock its own people will need. Only a genuine surplus over what its buildings will use is ever offered to traders.",
+    ] },
     { v: "0.51.24", notes: [
       "Fixed: goods delivered to a building's input buffer (e.g. a fresh hut's firewood) now visibly ride an internal porter out from the warehouse — a loaded carrier with the goods chip — instead of appearing to fill in on their own. The porter always moved the goods; it just wasn't drawn as carrying them on the outbound-to-a-building leg.",
     ] },

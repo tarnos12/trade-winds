@@ -38,6 +38,13 @@ Object.assign(CONFIG, {
     // not use), so large-demand trades (cart-capped) and multi-good cargo are
     // unchanged, and the price model (separate bufferTarget) is untouched. ===
     minStock: 6,               // floor inventory a city keeps of each good it consumes
+    // === v0.51 SELL-GATE: a freshly-CONSTRUCTED city won't EXPORT anything for
+    // sellGraceSec game-seconds after it finishes building (time for the player to place
+    // huts, which commit future consumption). After grace, a city still holds back
+    // reserveMinutes of its ANTICIPATED consumption (at full placed housing/staffing,
+    // counting buildings still under construction) — and never sells a good it is a
+    // structural NET CONSUMER of. Selling only offers genuine producer surplus. ===
+    sellGraceSec: 30,          // no exports until built + this many game-seconds
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
     offRoadSpeedMult: 0.5,     // OFFROAD: carts with no road route travel at half speed (roads = 2× faster)
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
@@ -117,10 +124,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     offers.push({ seller: null, sellerCastle: true, surplus: avail, route: route, price: castleSellPrice(gid) });
   }
   // seller-agnostic surplus / price / reserve (town OR castle) for the multi-good fill.
-  function sellAvailable(state, seller, gid, isCastle, needOf) {
+  function sellAvailable(state, seller, gid, isCastle, holdOf) {
     if (isCastle) return castleSellAvailable(state, gid);
     if (!seller || !seller.stock) return 0;
-    return (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+    return (seller.stock[gid] || 0) - reservedOf(seller, gid) - holdOf(seller, gid);
   }
   function sellPrice(state, seller, gid, isCastle) {
     return isCastle ? castleSellPrice(gid) : priceOf(seller, gid) * salesAdjOf(seller, gid);
@@ -169,6 +176,39 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
     }
     return { cur, max };
+  }
+  // v0.51 SELL-GATE: structural production / anticipated consumption of `gid` per
+  // game-minute, counting ALL PLACED buildings — including ones still UNDER
+  // CONSTRUCTION. A placed hut is a committed future eater and a placed producer a
+  // committed future maker, so a city reserves for (and refuses to sell) a good its
+  // just-placed buildings will need, before those buildings even finish.
+  const TIER_OF_HOUSE = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
+  function placedProdMax(town, gid) {
+    let max = 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b) continue;                                   // count under-construction producers too
+      const def = CONFIG.buildings[b.typeId];
+      if (def && def.output && def.output.goodId === gid)
+        max += (def.output.ratePerWorker || 0) * (def.workerSlots || 0) * PER_MIN_T;
+    }
+    return max;
+  }
+  function placedConsMax(town, gid) {
+    const N = CONFIG.needs || {};
+    let max = 0;
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      if (!b) continue;                                   // count under-construction houses/processors too
+      const def = CONFIG.buildings[b.typeId];
+      if (!def) continue;
+      if (def.kind === "house") {
+        const tk = TIER_OF_HOUSE[def.houseTier];
+        const pc = tk && N.tiers && N.tiers[tk] && N.tiers[tk].perCapita && N.tiers[tk].perCapita[gid];
+        if (pc > 0) max += pc * (def.houseCapacity || 0) * PER_MIN_T;
+      } else if (def.inputs && def.inputs[gid]) {
+        max += def.inputs[gid] * (def.workerSlots || 0) * PER_MIN_T;
+      }
+    }
+    return max;
   }
   // Per-city snapshot for a good: net trend now, potential net at full scale, stock,
   // and the price it would pay/ask. role: "seller" | "buyer" | "none".
@@ -327,6 +367,23 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const d = (t.demand && t.demand[gid]) || 0;
       return d > 0 ? Math.max(d * buffer, minStock) : 0;
     };
+    // v0.51 SELL-GATE: how much of `gid` a town holds BACK from export (distinct from
+    // needOf, which is the BUY target — overloading needOf would make a consumer try to
+    // BUY an infinite amount). A big sentinel means "don't sell any":
+    //   • during the post-construction grace window (just built, huts not placed yet), and
+    //   • for a good the town is a structural NET CONSUMER of at full build-out — counting
+    //     placed-but-unbuilt buildings, so a city that will eat more of a good than it
+    //     makes (once its just-placed huts fill) never dumps that good; it imports instead.
+    // A structural net PRODUCER exports its genuine surplus down to the ordinary needOf
+    // floor — its residents are fed from the per-building input buffers (porters keep
+    // those topped from production), so selling the warehouse surplus never starves them.
+    const HOLD_ALL = 1e9;
+    const sellHoldback = (t, gid) => {
+      if (t.built === false || (t._sellHold || 0) > 0) return HOLD_ALL;   // still under construction, or post-build grace — no exports yet
+      const cons = placedConsMax(t, gid);                          // anticipated units/min at full placed housing/staffing
+      if (cons > 0 && placedProdMax(t, gid) <= cons + 1e-9) return HOLD_ALL;   // structural net consumer — never sell
+      return needOf(t, gid);
+    };
 
     // --- 0. BULLETIN BOARD (v0.51 §3) — every city POSTS an offer per surplus good
     // to a shared board that all traders read. Published with the CURRENT sales-
@@ -339,7 +396,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     for (const seller of towns) {
       if (!seller || !seller.stock) continue;
       for (const gid in CONFIG.goods) {
-        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - sellHoldback(seller, gid);
         if (surplus > 0) board.push({ sellerId: seller.id, q: seller.q, r: seller.r, goodId: gid,
                        qty: Math.floor(surplus), price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
       }
@@ -430,7 +487,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         const out = [];
         for (const seller of towns) {
           if (seller === home || !seller || !seller.stock) continue;
-          const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+          const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - sellHoldback(seller, gid);
           if (surplus <= 0) continue;
           const route = Pathing.route(state, fromKey, townKey(seller));
           if (!route) continue;
@@ -504,7 +561,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       for (let gi = 0; gi < gaps.length && capLeft > 0; gi++) {
         const g = gaps[gi];
         if (g.gid === want.gid) continue;
-        const avail = sellAvailable(state, pick.seller, g.gid, sellerIsCastle, needOf);
+        const avail = sellAvailable(state, pick.seller, g.gid, sellerIsCastle, sellHoldback);
         if (avail <= 0) continue;
         const unit = sellPrice(state, pick.seller, g.gid, sellerIsCastle);
         const afford = unit > 0 ? goldLeft / unit : capLeft;
@@ -529,7 +586,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         let sellCap = cartCapacity;
         for (const gid in CONFIG.goods) {
           if (sellCap < 1) break;
-          const homeSurplus = (home.stock[gid] || 0) - reservedOf(home, gid) - needOf(home, gid);
+          const homeSurplus = (home.stock[gid] || 0) - reservedOf(home, gid) - sellHoldback(home, gid);
           if (homeSurplus < 1) continue;
           const sellerShort = needOf(pick.seller, gid) - (pick.seller.stock[gid] || 0);
           if (sellerShort < 1) continue;
@@ -790,7 +847,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       if (!seller.salesAdj || typeof seller.salesAdj !== "object") seller.salesAdj = {};
       const adj = seller.salesAdj;
       for (const gid in adj) {                                 // relax any tracked good with no surplus
-        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - sellHoldback(seller, gid);
         if (surplus > 0) continue;                             // handled below (surplus branch)
         const a = adj[gid];
         if (a > 1) adj[gid] = Math.max(1, a - SP.down);
@@ -798,7 +855,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
       const grace = SP.graceTicks || 40;
       for (const gid in CONFIG.goods) {                        // glut pressure on offered surpluses
-        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - needOf(seller, gid);
+        const surplus = (seller.stock[gid] || 0) - reservedOf(seller, gid) - sellHoldback(seller, gid);
         if (surplus <= 0) continue;
         // §3 refinement: a surplus that is ACTIVELY SELLING (a sale settled within the
         // grace window) is NOT a glut — leave its price where the sale bumped it. Only a

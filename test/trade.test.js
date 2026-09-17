@@ -63,7 +63,19 @@ function homes() {
 // advantage observable post-rebalance (per-capita draws dropped ~4.8×).
 function farmTown() { return mkTown({ id: 1, q: 0, r: 0,
   pop: { peasants: 12, workers: 6, burghers: 0 },
-  buildings: [{ typeId: "farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "lumberjack", workers: 3 }, ...homes()],
+  // v0.51 SELL-GATE: a city now holds back any good it is a structural NET CONSUMER of
+  // at full housing (it imports rather than dumps stock its own residents will need). To
+  // stay a genuine potato EXPORTER that feeds the mine, the farm carries enough
+  // potato_farms to out-produce its own full-housing potato draw with a clear surplus.
+  // v0.51 SELL-GATE: cities now hold any good they are a structural net consumer of at
+  // full housing (they import rather than dump stock their own residents will need), so
+  // the mill no longer dumps its starting potato — the FARM is the mine's sole potato
+  // source. It carries enough potato_farms to run a genuine surplus, but that surplus is
+  // cart-THROUGHPUT-limited (not over-supplied), so faster road carts still deliver more.
+  buildings: [{ typeId: "farm", workers: 3 },
+    { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 },
+    { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 }, { typeId: "potato_farm", workers: 3 },
+    { typeId: "lumberjack", workers: 3 }, ...homes()],
   stock: { grain: 80, potato: 80, wood: 80, mead: 20 } }); }   // === CC: beer→mead ===
 // === TV2: the mine floods IRON (80 stock, 0 self-demand → a permanent surplus
 // the neighbours buy). Peasant-only housing, so its happiness (and pop) tracks
