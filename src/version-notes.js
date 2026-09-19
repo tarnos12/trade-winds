@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.25";
+  const GAME_VERSION = "0.51.26";
   const PATCH_NOTES = [
+    { v: "0.51.26", notes: [
+      "New terrain art: grass, water and mountain tiles now use hand-drawn hex sprites (brighter, textured) in place of the old flat colours. Water bodies (including fishing tiles) get the rippled water tile, with resource icons still drawn on top.",
+    ] },
     { v: "0.51.25", notes: [
       "A new city no longer dumps its founding resources the instant it appears. A city exports NOTHING while it is still under construction, and for 30 seconds after it finishes — giving you time to place its huts and workshops before any surplus is offered for sale.",
       "Cities now feed themselves first: a city will not sell a good it is set up to CONSUME more of than it produces (counting huts and workshops you've placed but not yet finished building) — it imports that good instead of dumping stock its own people will need. Only a genuine surplus over what its buildings will use is ever offered to traders.",

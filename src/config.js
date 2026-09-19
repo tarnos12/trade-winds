@@ -227,12 +227,12 @@ const CONFIG = {
     // --- generic buildable ground (any processor/house; extractors only on their own terrain) ---
     barren:        { color: "#b9a679", buildable: true,  road: true  }, // Barren Land (tan)
     desert:        { color: "#d9c27a", buildable: true,  road: true  }, // Desert (sand-yellow)
-    fertile:       { color: "#7fa64b", buildable: true,  road: true  }, // Fertile Soil / grassland (green) — farm/shepherd terrain
+    fertile:       { color: "#95df65", buildable: true,  road: true  }, // Fertile Soil / grassland (green) — farm/shepherd terrain (grass hex-tile art)
     // --- houses only ---
     snow:          { color: "#dbe6ef", buildable: true,  road: true,  houseOnly: true }, // Iceland (white-blue)
     // --- obstacles ---
-    water:         { color: "#3f6079", buildable: false, road: false }, // future harbor
-    mountains:     { color: "#877f77", buildable: false, road: false }, // obstacle: blocks build + road + pathing
+    water:         { color: "#7ef4dc", buildable: false, road: false }, // future harbor (water hex-tile art)
+    mountains:     { color: "#cba65b", buildable: false, road: false }, // obstacle: blocks build + road + pathing (mountain hex-tile art)
     // --- resource tiles (buildable:false → ONLY the matching extractor may sit here) ---
     fish:          { color: "#4d7fa0", buildable: false, road: false, deposit: "fish"          }, // fishery sits ON it
     forest:        { color: "#4d7738", buildable: false, road: true,  deposit: "forest"        }, // lumberjack only  (T1)
