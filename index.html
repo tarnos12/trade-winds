@@ -1595,12 +1595,12 @@ const CONFIG = {
     // --- generic buildable ground (any processor/house; extractors only on their own terrain) ---
     barren:        { color: "#b9a679", buildable: true,  road: true  }, // Barren Land (tan)
     desert:        { color: "#d9c27a", buildable: true,  road: true  }, // Desert (sand-yellow)
-    fertile:       { color: "#7fa64b", buildable: true,  road: true  }, // Fertile Soil / grassland (green) — farm/shepherd terrain
+    fertile:       { color: "#95df65", buildable: true,  road: true  }, // Fertile Soil / grassland (green) — farm/shepherd terrain (grass hex-tile art)
     // --- houses only ---
     snow:          { color: "#dbe6ef", buildable: true,  road: true,  houseOnly: true }, // Iceland (white-blue)
     // --- obstacles ---
-    water:         { color: "#3f6079", buildable: false, road: false }, // future harbor
-    mountains:     { color: "#877f77", buildable: false, road: false }, // obstacle: blocks build + road + pathing
+    water:         { color: "#7ef4dc", buildable: false, road: false }, // future harbor (water hex-tile art)
+    mountains:     { color: "#cba65b", buildable: false, road: false }, // obstacle: blocks build + road + pathing (mountain hex-tile art)
     // --- resource tiles (buildable:false → ONLY the matching extractor may sit here) ---
     fish:          { color: "#4d7fa0", buildable: false, road: false, deposit: "fish"          }, // fishery sits ON it
     forest:        { color: "#4d7738", buildable: false, road: true,  deposit: "forest"        }, // lumberjack only  (T1)
@@ -7496,6 +7496,29 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     return pts;
   }
 
+  // === TERRAIN ART === hex-tile sprites for the three main terrains (grass/water/
+  // mountain), supplied as inline PNG data URIs so the game stays a single file. Each
+  // decodes asynchronously; when it lands we flag the baked terrain layer dirty so it
+  // re-renders with the art. Until a sprite is ready, that terrain falls back to its
+  // flat CONFIG.terrain colour, so nothing ever renders blank.
+  const TERRAIN_SPRITE_SRC = {
+    water: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACK0lEQVRYhcVXu27bQBCcI1mKuBRXB1LrP0jj/IBb9+lcBQiQ0gWtQkCaAAZcuUvv1j9gN/kDtdIHXEOQrXJpMsxyyRMfguUBBIi6483c7N7tCjgBj+E1bMI2nLKGmUvs4eDgsSuXAIDc1rg1F5PXm/TCJmyDJCVyW8PBAwA83CQhoyaS2MN1xqpy0RLC57GODE54DK9hVy5biw9BOnJjLo9yRAflrscSx8RU5QI/Pnzs5er8SGIAnVjHCPqgRdMV7UjzsAnbUJULrOy+2fXK7jtCNCHFasTyRTtiSD7FbgrT4obmaPG35sIY7vy9kDj4ltpzIrc1smPxfms4eCRMjF25xK5cntUND4dEXzDncoC8mYOHs/7oUdM4JWllqFs5IEn12e4rPnOErOy+tZaDR0ZySToUhrkO6HU9HDLGosJ57wLyvts9QOezU6tdH4aSmAJaOTBXRB9ZrEDJHGDRa3Jg7k1I4WMKlAR7yt57YA6mvN8cRyvK8VtUxFg/QcdvzKVJAOB5XaQc1Mht3XymQtYXvu/gkdsav9YPKSA6ok931wkAfCm+HmQ3IxNKdzljXBvqlDN++X339Off1xQAPn/7eWCVJDr3hW0/9gly8ID977JGtCuWjsTach1jGSYebxKLDY4TIIVcFeuDtHHIes55uf+exoiJ7Ngg0ChPAeCqWB8cPCosOpVNZjcTbIh8lAC1UCNEEjNRn++L9GUkMTHr3zHzg45M2bHGX+HJaHN1yWv2AAAAAElFTkSuQmCC",
+    fertile: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACWElEQVRYha1XPWvbUBQ9soLAk1EmS1Pmru5S/A/yMZRi8BRQHejfyN9omw/IVCghQ5r+A9HFXjtnsjTZeBIYFHUwV716evdJT/aZ5Pd1js679+oa2AOz+bQ4e74s9jnD6UqcJh4+jfqIlxsAQJp4eLl4sD7PasPZ82UxDLYYhwPEyw3G4aCc6yqk1UIiBlAh1cFWSOOC2XxatCGWhNy+/2HkECe53RKizMfV+rVccxr4+J2sK2seFxmGwVYUUhuU7NYd3gYUK5KQ8kfbe46XG9z4J7jvV8VETz7uP+7GosyvzUtCHAC4W34p1KjeB/ws1Tku5OXiwXGa7lr3NqZxW6E9Hflp4JfPV+tX7WZ1nKLehjxNPPTSxKtt5papgagbB4Ab/6TyO3r6vzbK/Nr4OBxgGGzhzObT4lB3L0EXX6IDOrW24E4B+qwiB2oxwO+W0oqrboM29UJ0wHQd6j2rUB3jbhLInb1jQCpI6hrpbHLAWAcOkesmiHWAINWAQ5FXYoDuy5TrEvgefpaOlOY6x0DXr6JOjFgJTbAlV2sCQawDHKqVbdJMhSS4zAJg1wtQh6s2mk29QdcUHocDfA6/Oj0AWC0ylxTRAqA5CHXzTUFIPN+/rVyAdUQfric9AHh37ua85z/Eh8rUKR/Rw5/rn2+7p4kLZIiDbZ4mHhBWD1MbUYIuOzjxapG5QFYTJ3bF3BHAri3nbdeOmL9gFUe6weqGiXs86ucxmuOCiNPEQ4wNVovclYgJrf4ZkRvHo36u65zVjvfvr9z41tYCmoR0Ie4kQBLShZjwD5XVsvT4JWY+AAAAAElFTkSuQmCC",
+    mountains: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADaElEQVRYhbWXP2hTURTGf2lC0yF5DtYhlyCIwqvQLUJwq0s3J+tgKVky6yRBOnUS6aib0CVoF50dXMxWMnR7Qx6IOLQvIF18L4NVahzien8vLwEUlEwv+d/f2AR16IIA5+cwjyDGYb9uXO0PN7bHF/Gh2ySYX8Rs7K8RNiMwmkH8xoq/W/u768zg3v3xUXdI7WdYv3MtjYHEuNGmnjq48kMBHASD41tQDeekvnFDJ5OvRyABKX0lgET6hK7/wFkc/rQGKTGvbZrRZFq395NxMnsZpbdErAfr6C+ThoOOC84MIgJHBadUV7/KomMJAI4kMOpQy1+YSSz7VF0j7ZfGiegVchFKPbGD9mhtyHUTtYSFRCxqS950Wj2DSAEgip4MJUobWMwlOYzuu9PqGWR0EpIPqu6RhAMq6x5+Q3EYbA6333zM5Q93Nofn/Z9Ghqu6R7laTL+T03PK1SLJ6TmDb+dcvb5C2S9RXF0mCQf4jxTB21P4BcWVHMXVZYqry1y9vsLR/hfuPL1BcXWZrx/OUHWPrx/O8O9f48Htm3sFkU7u1ZZf/5Y7j7oxin8VMc1sX+pvYP0gpiD3mQUs8kp+2CZy15rVNPmEXNkvpeu1ZjX1nfpvQ6qAfu/6vUoSSTmJzatC2S+hLFVSBVTdMxpNp9Uzmsoszu2OOMkkzwCWJKqoGxvgImHYjgzp9MqIurGR7bVmlX4QG+su0ytqyVXTOrCqe/SDmFqzaiTrrCbEOq2eoabfUFTWvVEOyEKn1UufWL0s/4cZOQDgz5hMYkbfYPZktM8XpDPZ9+zq93ryuJTRyw7Gy1EUTsKB1QfapJXgSp5F7t5lOrj0gSXXkzvJLkMkCQejfvC37xg5YJeXXIv+ts9Kwj6jl6ooYPQBv6EMp8JQ2vE8EQqQ+HONbHofyMFoFrDLT98sTvVEtc2loJjLr99QKPUyVwB4detKvtKOLqQtC7B+KAkHTkWyIrQfHpEeRpW1+zqXB20iurv3cAng+crwQjrfNAWyklfOHR+cTP3tMDYT2kQ29tecMgqQa3wD8/XsBzGvbl3JAxztvfs9kYCLiDjWFdFJgHue6LR6mcBTCehEHn/+fqFPTi7pJWJ98Nz9kctnAc9MQEgACBH4l1gwPvHu/shNjHpuAtOILAK8EIEsIosAi/0BTGeDemWObnoAAAAASUVORK5CYII=",
+  };
+  const TERRAIN_SPRITES = {};   // terrainKey -> decoded HTMLImageElement (set on load)
+  (function loadTerrainSprites() {
+    if (typeof Image === "undefined") return;   // headless/no-DOM: skip (renderer isn't exercised there)
+    for (const key in TERRAIN_SPRITE_SRC) {
+      const img = new Image();
+      img.onload = (function (k) { return function () { TERRAIN_SPRITES[k] = img; terrainDirty = true; }; })(key);
+      img.src = TERRAIN_SPRITE_SRC[key];
+    }
+  })();
+  // Also dress the water RESOURCE tile (fish) as water — it keeps its own icon on top.
+  const SPRITE_ALIAS = { fish: "water" };
+  function terrainSprite(terr) { return TERRAIN_SPRITES[terr] || TERRAIN_SPRITES[SPRITE_ALIAS[terr]] || null; }
+
   function worldBounds() {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const h of state.map.hexes.values()) {
@@ -7804,13 +7827,25 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       g.closePath();
 
       if (visible) {
+        // Flat colour first (guarantees no sub-pixel seam between neighbours), then the
+        // hex-tile sprite clipped to the hex where one exists.
         g.fillStyle = CONFIG.terrain[hex.terrain].color;
         g.fill();
+        const spr = terrainSprite(hex.terrain);
+        if (spr) {
+          g.save();
+          g.clip();   // clip to the hex path built above
+          const bw = SIZE * Math.sqrt(3) + 1.5, bh = SIZE * 2 + 1.5;   // cover the hex bbox (+bleed to kill hairlines)
+          g.drawImage(spr, cx - bw / 2, cy - bh / 2, bw, bh);
+          g.restore();
+        }
         g.lineWidth = 1;
         g.strokeStyle = "rgba(30,22,12,0.28)";
         g.stroke();
-        // TILE-ICONS: bake a subtle terrain motif into the cached layer.
-        drawTerrainIcon(g, cx, cy, SIZE, hex.terrain);
+        // TILE-ICONS: bake a subtle terrain motif into the cached layer. Sprited terrains
+        // carry their own texture, so skip the motif — except a resource tile (e.g. fish)
+        // that needs its resource icon read on top of the water art.
+        if (!spr || CONFIG.terrain[hex.terrain].deposit) drawTerrainIcon(g, cx, cy, SIZE, hex.terrain);
       } else {
         g.fillStyle = CONFIG.fogColor;
         g.fill();
@@ -15995,8 +16030,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.25";
+  const GAME_VERSION = "0.51.26";
   const PATCH_NOTES = [
+    { v: "0.51.26", notes: [
+      "New terrain art: grass, water and mountain tiles now use hand-drawn hex sprites (brighter, textured) in place of the old flat colours. Water bodies (including fishing tiles) get the rippled water tile, with resource icons still drawn on top.",
+    ] },
     { v: "0.51.25", notes: [
       "A new city no longer dumps its founding resources the instant it appears. A city exports NOTHING while it is still under construction, and for 30 seconds after it finishes — giving you time to place its huts and workshops before any surplus is offered for sale.",
       "Cities now feed themselves first: a city will not sell a good it is set up to CONSUME more of than it produces (counting huts and workshops you've placed but not yet finished building) — it imports that good instead of dumping stock its own people will need. Only a genuine surplus over what its buildings will use is ever offered to traders.",
