@@ -986,6 +986,7 @@ Sim.tickPorters = function (town) {
   const cap = (CONFIG.town && CONFIG.town.storageCap);
   const carryCap = E.porterCarry || 10;
   const ticksPerTile = E.porterTicksPerTile || 1;
+  const dwellTicks = Math.max(1, Math.round((E.porterDwellSec || 0.3) * 1000 / (E.baseTickMs || 500)));   // enter/leave pause, in ticks
   const buildings = Array.isArray(town.buildings) ? town.buildings : [];
   // Fleet size: at least the town's base hauler count, but scaled so every producer
   // that currently has goods waiting can be served — otherwise a handful of porters
@@ -1071,6 +1072,8 @@ Sim.tickPorters = function (town) {
   for (const p of P) if (p.phase === "toConsumer" && p.good) outbound[p.good] = (outbound[p.good] || 0) + p.qty;
 
   for (const p of P) {
+    // Paused inside a building / at the centre (entering or leaving): just wait out the dwell.
+    if ((p.wait || 0) > 0) { p.wait--; continue; }
     if (p.phase === "idle") {
       // Pick the producer offering the largest immediately-collectable load whose
       // good still has warehouse room (net of inbound). Deterministic max, tie-break
@@ -1121,14 +1124,17 @@ Sim.tickPorters = function (town) {
         p.job = "distribute";
         p.phase = "toConsumer"; p.prog = 0; p.good = db.g; p.qty = dbQ;
         p.bq = db.b.q; p.br = db.b.r; p.legTicks = legTicksFor(db.b.q, db.b.r);
+        p.wait = dwellTicks;                                     // loading up at the warehouse before heading out
         outbound[db.g] = (outbound[db.g] || 0) + dbQ;
       }
       continue;
     }
     if (p.phase === "toConsumer") {
+      if (p.leaving) { p.leaving = false; p.inside = false; p.phase = "idle"; p.good = null; p.job = null; continue; }   // left the building
       p.prog += 1 / (p.legTicks || 1);
       if (p.prog < 1) continue;
       p.prog = 1;
+      if (!p.inside) { p.inside = true; p.wait = dwellTicks; continue; }   // step inside, pause, then unload
       const b = anyBuildingAt(p.bq, p.br);
       if (b) {
         if (!b.inbuf || typeof b.inbuf !== "object") b.inbuf = {};
@@ -1139,13 +1145,15 @@ Sim.tickPorters = function (town) {
         if (drop > 0) { b.inbuf[p.good] = (b.inbuf[p.good] || 0) + drop; p.qty -= drop; }
       }
       if (p.qty > 0) { stock[p.good] = (stock[p.good] || 0) + p.qty; p.qty = 0; }   // return any leftover (never wasted)
-      p.phase = "idle"; p.good = null; p.job = null;
+      p.leaving = true; p.wait = dwellTicks;                  // pause before stepping back out
       continue;
     }
     if (p.phase === "toBuilding") {
       p.prog += 1 / (p.legTicks || 1);
       if (p.prog < 1) continue;
       p.prog = 1;
+      if (!p.inside) { p.inside = true; p.wait = dwellTicks; continue; }   // step inside, pause, then load
+      p.inside = false;
       const b = buildingAt(p.bq, p.br, p.good);
       const avail = (b && b.store && b.store[p.good]) || 0;
       const room = roomFor(p.good);   // recompute at pickup (inbound reservation already applied)
@@ -1153,6 +1161,7 @@ Sim.tickPorters = function (town) {
       if (load >= 1) {
         b.store[p.good] -= load; p.qty = load;
         p.phase = "toWarehouse"; p.prog = 0;
+        p.wait = dwellTicks;                                   // pause (loaded) before stepping back out
       } else {
         p.phase = "idle"; p.good = null; p.qty = 0;   // nothing left to grab (another porter beat us)
       }
@@ -1162,15 +1171,16 @@ Sim.tickPorters = function (town) {
       p.prog += 1 / (p.legTicks || 1);
       if (p.prog < 1) continue;
       p.prog = 1;
+      if (!p.inside) { p.inside = true; p.wait = dwellTicks; continue; }   // step into the warehouse, pause, then unload
       const room = roomFor(p.good);
       const drop = Math.min(p.qty, room);
       if (drop > 0) { stock[p.good] = (stock[p.good] || 0) + drop; p.qty -= drop; }
-      if (p.qty <= 0) { p.phase = "idle"; p.good = null; p.qty = 0; }
+      if (p.qty <= 0) { p.phase = "idle"; p.good = null; p.qty = 0; p.inside = false; }
       // else: warehouse full — keep the cargo and retry next tick (never wasted).
       continue;
     }
     // Unknown phase (corrupt/legacy save): reset to idle.
-    p.phase = "idle"; p.good = null; p.qty = 0; p.prog = 0;
+    p.phase = "idle"; p.good = null; p.qty = 0; p.prog = 0; p.inside = false; p.leaving = false; p.wait = 0;
   }
 };
 

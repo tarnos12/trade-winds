@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.27";
+  const GAME_VERSION = "0.51.28";
   const PATCH_NOTES = [
+    { v: "0.51.28", notes: [
+      "Porters no longer load and unload instantly: a porter steps into the building (or the town warehouse), pauses a moment, hands over or picks up its load, and pauses again before heading back out.",
+    ] },
     { v: "0.51.27", notes: [
       "Fixed the mountain tile: its art data was corrupted in the last build so mountains fell back to the old flat look. Mountains now render the hand-drawn golden peak sprite like grass and water do.",
     ] },

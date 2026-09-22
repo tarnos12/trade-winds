@@ -107,10 +107,13 @@
           v.f = reduced() ? target : v.f + (target - v.f) * GLIDE;
           const pts = hexLinePixels(p.bq, p.br, t.q, t.r);
           const pos = pointAlong(pts, v.f);
-          // deterministic lateral spread so co-located porters don't overlap
           const a = pts[0], c = pts[pts.length - 1];
           const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1;
-          const j = (((i % 5) - 2) * 0.22) * SIZE * 0.3;
+          // deterministic lateral spread so co-located walkers don't overlap — but a porter
+          // that has stepped INTO a building / the centre (pausing to load or unload) sits
+          // on the hex centre itself.
+          const atStop = (p.wait || 0) > 0 || p.inside || p.leaving;
+          const j = atStop ? 0 : (((i % 5) - 2) * 0.22) * SIZE * 0.3;
           // carrying → solid good+count; heading out to fetch → the good it's going
           // to collect, shown muted (F).
           drawToken(pos.x + (-dy / len) * j, pos.y + (dx / len) * j,

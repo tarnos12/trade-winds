@@ -209,7 +209,12 @@ const CONFIG = {
     // building actually starves. inbufTargetSec = how many game-seconds of a building's
     // own consumption a full buffer holds (porters top it up toward this). porterMaxFleet
     // caps the fleet across both jobs. ===
-    inbufTargetSec: 30, porterMaxFleet: 20 },
+    inbufTargetSec: 30, porterMaxFleet: 20,
+    // v0.51: a porter steps INTO the building (or the town centre) and pauses there
+    // before handing over its load, and pauses again before it heads back out — so
+    // loading/unloading reads as a moment, not an instant swap. Rounded to whole
+    // economy ticks (at least 1 tick each way).
+    porterDwellSec: 0.3 },
   // === Construction build time (v0.49) ===  A placed building fills a progress bar
   // to completion. Progress = min(time elapsed / buildTime, materials delivered /
   // cost) — so delivery LIMITS how far it can build (8/10 wood ⇒ stalls at 80%) and,
