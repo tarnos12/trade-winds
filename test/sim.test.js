@@ -500,10 +500,11 @@ function place(typeId, q, r, over) {
                         buildings: [b("potato_farm", 0, 1), b("hut", 0, 2), b("hut", 0, 3), b("hut", 0, 4)] });
   for (let i = 0; i < 50; i++) { Sim.tick({ towns: [modern] }); Sim.tick({ towns: [legacy] }); }
   // Produced potato is held wherever it currently sits — the warehouse, the farm's own
-  // store, or the huts' input buffers (porters distribute it there) — so sum all three.
+  // store, the huts' input buffers, or a porter's cargo (porters carry it there) — so sum them all.
   const potatoHeld = (tn) => {
     let s = tn.stock.potato || 0;
     for (const bb of tn.buildings) { if (bb.store) s += (bb.store.potato || 0); if (bb.inbuf) s += (bb.inbuf.potato || 0); }
+    for (const p of (tn.porters || [])) if (p.good === "potato") s += (p.qty || 0);   // …or riding in a porter's cargo
     return s;
   };
   ok("CB-A: instant starter produces potato", potatoHeld(modern) > 0);

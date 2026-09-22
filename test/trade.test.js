@@ -300,23 +300,29 @@ Pathing.invalidate();
 
   // Run the cut network AND the road-keeping control the same 160 ticks, tallying
   // potato delivered into the mine (towns[1]) in each.
+  // Also average the farm↔mine potato-price gap over the back half of the run: a
+  // single-tick snapshot is noisy (it depends on whether a cart happened to land that
+  // tick), the average reflects how well each network keeps prices converged.
+  const GAP_FROM = 80;
   Pathing.invalidate();
-  let cutDelivered = 0;
+  let cutDelivered = 0, cutGapSum = 0;
   for (let i = 0; i < 160; i++) {
     Sim.tick(cut);
     const b = cut.towns[1].stock.potato || 0;
     Trade.tick(cut);
     const a = cut.towns[1].stock.potato || 0;
     if (a > b) cutDelivered += a - b;
+    if (i >= GAP_FROM) cutGapSum += potatoGap(cut);
   }
   Pathing.invalidate();
-  let keepDelivered = 0;
+  let keepDelivered = 0, keepGapSum = 0;
   for (let i = 0; i < 160; i++) {
     Sim.tick(keep);
     const b = keep.towns[1].stock.potato || 0;
     Trade.tick(keep);
     const a = keep.towns[1].stock.potato || 0;
     if (a > b) keepDelivered += a - b;
+    if (i >= GAP_FROM) keepGapSum += potatoGap(keep);
   }
 
   // The severed farm KEEPS trading off-road — it is NOT cut out of trade any more.
@@ -328,8 +334,8 @@ Pathing.invalidate();
   // network and holds a tighter farm↔mine potato-price gap.
   ok("roads advantageous: the road-keeping control out-delivers the cut (off-road) network",
     keepDelivered > cutDelivered);
-  ok("roads advantageous: the cut network holds a WIDER potato gap than the road control",
-    potatoGap(cut) > potatoGap(keep));
+  ok("roads advantageous: the cut network holds a WIDER potato gap than the road control (averaged)",
+    cutGapSum > keepGapSum);
   ok("treasury never decreases (tariff income only accrues)", cut.treasury >= treasuryBefore);
 }
 
