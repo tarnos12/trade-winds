@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.26";
+  const GAME_VERSION = "0.51.27";
   const PATCH_NOTES = [
+    { v: "0.51.27", notes: [
+      "Fixed the mountain tile: its art data was corrupted in the last build so mountains fell back to the old flat look. Mountains now render the hand-drawn golden peak sprite like grass and water do.",
+    ] },
     { v: "0.51.26", notes: [
       "New terrain art: grass, water and mountain tiles now use hand-drawn hex sprites (brighter, textured) in place of the old flat colours. Water bodies (including fishing tiles) get the rippled water tile, with resource icons still drawn on top.",
     ] },
