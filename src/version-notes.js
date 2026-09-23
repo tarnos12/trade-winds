@@ -1,6 +1,9 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.28";
+  const GAME_VERSION = "0.51.29";
   const PATCH_NOTES = [
+    { v: "0.51.29", notes: [
+      "Castle buildings (Research Center, Provisioner, Advanced Provisioner) can now be built right next to each other, and they no longer all have to hug the castle: a castle building can go anywhere that touches the castle OR touches another castle building that connects back to it — so the castle quarter can grow outward as a chain. The placement highlight shows every spot that would connect. Castle buildings still keep a one-tile gap from cities.",
+    ] },
     { v: "0.51.28", notes: [
       "Porters no longer load and unload instantly: a porter steps into the building (or the town warehouse), pauses a moment, hands over or picks up its load, and pauses again before heading back out.",
     ] },

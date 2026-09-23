@@ -840,12 +840,13 @@
   // BORDERS ANY city footprint (union over all towns) green (valid) / red
   // (invalid) via the adjacency model Buildings.canPlaceBuilding, and outline the
   // hover hex. The owning city is resolved per-hex by the model — no selected town.
-  // === RESEARCH CENTER (Slice C) === valid/invalid tint over the castle's 6
-  // neighbour hexes while placing the Center, mirroring drawPlacementOverlay's
+  // === RESEARCH CENTER (Slice C) === valid/invalid tint over the hexes that would
+  // join the castle compound while placing the Center, mirroring drawPlacementOverlay's
   // footprint-ring look (green=ok/red=blocked) + a brighter hover outline.
   function drawResearchCenterPlacementOverlay() {
-    const castle = Buildings.castleHex();
-    for (const n of HexMath.neighbors(castle.q, castle.r)) {
+    // v0.51: candidates = every free hex touching the castle compound (the castle or a
+    // castle building that chains back to it), not just the castle's 6 neighbours.
+    for (const n of Buildings.castleCompoundFrontier(state)) {
       const k = HexMath.key(n.q, n.r);
       if (!state.map.hexes.has(k) || !isVisible(k)) continue;
       const res = Buildings.canPlaceResearchCenter(state, n.q, n.r);
@@ -1034,10 +1035,9 @@
 
   // === ADVANCED PROVISIONER (v0.46) === map token + placement highlight.
   function drawAdvancedProvisioner() {
-    // placement highlight: tint the castle's 6 neighbours while in place mode.
+    // placement highlight: tint every hex that would join the castle compound.
     if (state.mode === "advProvisioner") {
-      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
-      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+      for (const n of Buildings.castleCompoundFrontier(state)) {   // v0.51: whole compound frontier (chains allowed)
         const k = HexMath.key(n.q, n.r);
         if (!state.map.hexes.has(k) || !isVisible(k)) continue;
         const ok = Buildings.canPlaceAdvancedProvisioner(state, n.q, n.r).ok;
@@ -1049,10 +1049,9 @@
         ctx.restore();
       }
     }
-    // v0.51 §9: basic Provisioner placement highlight (castle neighbours).
+    // v0.51 §9: basic Provisioner placement highlight (castle compound frontier).
     if (state.mode === "provisioner") {
-      const castle = (typeof Buildings !== "undefined" && Buildings.castleHex) ? Buildings.castleHex() : { q: 0, r: 0 };
-      for (const n of HexMath.neighbors(castle.q, castle.r)) {
+      for (const n of Buildings.castleCompoundFrontier(state)) {   // v0.51: whole compound frontier (chains allowed)
         const k = HexMath.key(n.q, n.r);
         if (!state.map.hexes.has(k) || !isVisible(k)) continue;
         const ok = Buildings.canPlaceProvisioner(state, n.q, n.r).ok;

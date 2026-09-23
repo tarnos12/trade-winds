@@ -393,8 +393,9 @@ Buildings.touchesCastle = function (state, q, r) {
   return HexMath.neighbors(q, r).some(n => n.q === c.q && n.r === c.r);
 };
 // v0.51: the castle's SPECIAL buildings (Research Center, Advanced Provisioner, and
-// a placed Provisioner) each carry the same no-touch gap as the castle — nothing may
-// be placed on or beside them, so cities and castle buildings never fuse together.
+// a placed Provisioner) carry the same no-touch gap as the castle for CITIES — no city
+// building may sit on or beside them, so cities and the castle compound never fuse.
+// (Castle buildings themselves may touch each other — see castleCompound.)
 Buildings.castleBuildingHexes = function (state) {
   const out = [];
   if (!state) return out;
@@ -411,6 +412,81 @@ Buildings.touchesCastleBuilding = function (state, q, r, ignore) {
     if (HexMath.neighbors(q, r).some(n => n.q === h.q && n.r === h.r)) return true;
   }
   return false;
+};
+
+// v0.51: the CASTLE COMPOUND — the castle hex plus every castle building reachable
+// from it by adjacency through other castle buildings. Castle buildings may be
+// placed next to each other: a site is valid if it touches the castle OR touches any
+// building already in the compound, so the compound can grow outward as a chain
+// (a building two tiles out is fine if it sits against one that leads back). Returns
+// a Set of hex keys (castle + connected castle buildings). Pure.
+Buildings.castleCompound = function (state) {
+  const c = Buildings.castleHex();
+  const castleKey = HexMath.key(c.q, c.r);
+  const bldg = new Map();
+  for (const h of Buildings.castleBuildingHexes(state)) bldg.set(HexMath.key(h.q, h.r), h);
+  const reach = new Set([castleKey]);
+  const stack = [c];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const n of HexMath.neighbors(cur.q, cur.r)) {
+      const k = HexMath.key(n.q, n.r);
+      if (reach.has(k) || !bldg.has(k)) continue;
+      reach.add(k); stack.push(bldg.get(k));
+    }
+  }
+  return reach;
+};
+// True if (q,r) sits directly beside a hex of the castle compound (so a castle
+// building there would join it).
+Buildings.connectsToCastleCompound = function (state, q, r) {
+  const comp = Buildings.castleCompound(state);
+  return HexMath.neighbors(q, r).some(n => comp.has(HexMath.key(n.q, n.r)));
+};
+// Every free hex a new castle building could join the compound at (neighbours of the
+// castle or of a connected castle building, minus the compound itself). Used for the
+// placement highlights. Pure.
+Buildings.castleCompoundFrontier = function (state) {
+  const comp = Buildings.castleCompound(state);
+  const out = [], seen = new Set();
+  for (const k of comp) {
+    const [q, r] = k.split(",").map(Number);
+    for (const n of HexMath.neighbors(q, r)) {
+      const nk = HexMath.key(n.q, n.r);
+      if (comp.has(nk) || seen.has(nk)) continue;
+      seen.add(nk); out.push({ q: n.q, r: n.r });
+    }
+  }
+  return out;
+};
+// Shared site rules for every castle building (Research Center, Advanced Provisioner,
+// Provisioner): not the castle hex, not on another castle building, joined to the
+// castle compound, a 1-hex gap from every city (never fuse with a city), buildable
+// land, and a free hex. Returns { ok } or { ok:false, reason }. Pure.
+Buildings.castleSiteCheck = function (state, q, r) {
+  const map = state && state.map;
+  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
+  if (!hex) return { ok: false, reason: "No hex here" };
+  const castle = Buildings.castleHex();
+  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
+  for (const h of Buildings.castleBuildingHexes(state)) {
+    if (h.q === q && h.r === r) return { ok: false, reason: "A castle building is already here" };
+  }
+  if (!Buildings.connectsToCastleCompound(state, q, r))
+    return { ok: false, reason: "Must connect to the castle (next to it, or next to a castle building)" };
+  if (Buildings.footprintCitiesAdjacent(state, q, r).length) return { ok: false, reason: "Too close to a city" };
+  const terrDef = CONFIG.terrain[hex.terrain];
+  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
+  const key = HexMath.key(q, r);
+  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
+  if (Array.isArray(state.towns)) {
+    for (const t of state.towns) {
+      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
+      const bl = Array.isArray(t.buildings) ? t.buildings : [];
+      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
+    }
+  }
+  return { ok: true };
 };
 
 // May `typeId` be built at hex (q,r)? Resolves the OWNING city by footprint
@@ -605,37 +681,17 @@ Buildings.researchCenter = function (state) {
 };
 
 // May a Research Center be placed at hex (q,r)? Rules (INVERSE of a city
-// building): exactly one center allowed; must be ADJACENT to the castle but NOT
-// on the castle hex; buildable land; hex free (no road/town center/building/
-// water); and the Kingdom treasury must cover the build gold. Pure: reads only.
+// building): exactly one center allowed; must JOIN the castle compound (beside the
+// castle or beside a castle building that leads back to it), never on the castle
+// hex; buildable land; hex free (no road/town center/building/water); and the
+// Kingdom treasury must cover the build gold. Pure: reads only.
 Buildings.canPlaceResearchCenter = function (state, q, r) {
   if (state && state.researchCenter) return { ok: false, reason: "Research Center already built" };
 
-  const map = state && state.map;
-  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
-  if (!hex) return { ok: false, reason: "No hex here" };
-
-  // (1) adjacency to the castle — beside it, never on it.
-  const castle = Buildings.castleHex();
-  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
-  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
-  // v0.51: castle buildings never touch each other.
-  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
-
-  // (2) buildable land (same terrain gate a processor/house uses).
-  const terrDef = CONFIG.terrain[hex.terrain];
-  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
-
-  // (3) hex must be free: no road, no town center, no town building.
-  const key = HexMath.key(q, r);
-  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
-  if (Array.isArray(state.towns)) {
-    for (const t of state.towns) {
-      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
-      const bl = Array.isArray(t.buildings) ? t.buildings : [];
-      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
-    }
-  }
+  // (1)-(3) shared castle-site rules: joined to the castle compound, gap from cities,
+  // buildable, free hex.
+  const site = Buildings.castleSiteCheck(state, q, r);
+  if (!site.ok) return site;
 
   // (4) affordability — build gold billed to the Kingdom treasury.
   const buildGold = (CONFIG.researchCenter && CONFIG.researchCenter.build && CONFIG.researchCenter.build.gold) || 0;
@@ -703,25 +759,8 @@ Buildings.canPlaceAdvancedProvisioner = function (state, q, r) {
   const need = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.research);
   if (need && typeof Research !== "undefined" && Research.has && !Research.has(state, need))
     return { ok: false, reason: "Research Advanced Provisioner first" };
-  const map = state && state.map;
-  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
-  if (!hex) return { ok: false, reason: "No hex here" };
-  const castle = Buildings.castleHex();
-  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
-  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
-  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };   // v0.51
-  const terrDef = CONFIG.terrain[hex.terrain];
-  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
-  const key = HexMath.key(q, r);
-  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
-  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
-  if (Array.isArray(state.towns)) {
-    for (const t of state.towns) {
-      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
-      const bl = Array.isArray(t.buildings) ? t.buildings : [];
-      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
-    }
-  }
+  const site = Buildings.castleSiteCheck(state, q, r);   // v0.51: joined to the castle compound (chains allowed)
+  if (!site.ok) return site;
   const buildGold = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.build && CONFIG.advancedProvisioner.build.gold) || 0;
   if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
   return { ok: true };
@@ -745,25 +784,8 @@ Buildings.placeAdvancedProvisioner = function (state, q, r) {
 // built instantly on gold; the castle keeps its starting provisions either way.
 Buildings.canPlaceProvisioner = function (state, q, r) {
   if (state && state.provisionerBuilding) return { ok: false, reason: "Provisioner already built" };
-  const map = state && state.map;
-  const hex = map && map.hexes && map.hexes.get(HexMath.key(q, r));
-  if (!hex) return { ok: false, reason: "No hex here" };
-  const castle = Buildings.castleHex();
-  if (castle.q === q && castle.r === r) return { ok: false, reason: "The castle is here" };
-  if (!Buildings.touchesCastle(state, q, r)) return { ok: false, reason: "Must be next to the castle" };
-  if (Buildings.touchesCastleBuilding(state, q, r)) return { ok: false, reason: "Too close to another castle building" };
-  const terrDef = CONFIG.terrain[hex.terrain];
-  if (!(terrDef && terrDef.buildable)) return { ok: false, reason: "Needs buildable land" };
-  const key = HexMath.key(q, r);
-  if (state.roads && state.roads.has(key)) return { ok: false, reason: "A road is here" };
-  if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return { ok: false, reason: "The Research Center is here" };
-  if (Array.isArray(state.towns)) {
-    for (const t of state.towns) {
-      if (t.q === q && t.r === r) return { ok: false, reason: "A town center is here" };
-      const bl = Array.isArray(t.buildings) ? t.buildings : [];
-      for (const b of bl) if (b.q === q && b.r === r) return { ok: false, reason: "A building is already here" };
-    }
-  }
+  const site = Buildings.castleSiteCheck(state, q, r);   // v0.51: joined to the castle compound (chains allowed)
+  if (!site.ok) return site;
   const buildGold = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.build && CONFIG.basicProvisioner.build.gold) || 0;
   if ((state.treasury || 0) < buildGold) return { ok: false, reason: "Kingdom treasury lacks gold" };
   return { ok: true };
