@@ -48,6 +48,12 @@ Object.assign(CONFIG, {
     pavedRoadSpeed: 1.5,       // P5-A: cart-speed multiplier once "Paved Roads" is researched
     offRoadSpeedMult: 0.5,     // OFFROAD: carts with no road route travel at half speed (roads = 2× faster)
     maxTariffRate: 0.9,        // P5-A: clamp the research-boosted tariff to a sane ceiling
+    // === DESIGN PASS: CUSTOMS VALUATION ("Book of Rates"). The crown levies its tariff
+    // on a good's OFFICIAL value — max(sale price, basePrice) — not the clearance price.
+    // Surplus goods sell near the 40% price floor, which made the tariff (the King's
+    // headline income, GDD §7) a trickle next to city taxes. The merchants still trade
+    // at market prices; only the minted tariff uses the official rate. ===
+    customsValuation: true,
     castleSellMargin: 1.0,     // PP-A: castle-as-seller unit price = basePrice × this (tunable)
     // === CAPFIX === safety multiplier on the naive unload dwell. A cart whose buyer
     // is near storageCap delivers slower than dwellFor() assumes; it keeps unloading
@@ -94,6 +100,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   function reservedOf(t, gid) { return (t && t.reserved && t.reserved[gid]) || 0; }
   function reserve(t, gid, n) { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; }
   function release(t, gid, n) { if (t && t.reserved) t.reserved[gid] = Math.max(0, (t.reserved[gid] || 0) - n); }
+
+  // DESIGN PASS: the value the crown's tariff is levied on (customs valuation — see
+  // CONFIG.trade.customsValuation): the official basePrice, or the sale price if higher.
+  function customsValue(gid, unit, qty) {
+    const g = CONFIG.goods[gid];
+    const official = (CONFIG.trade.customsValuation && g) ? (g.basePrice || 0) : 0;
+    return Math.max(unit || 0, official) * qty;
+  }
 
   // === PP-A === CASTLE-AS-SELLER. When the player ENABLES a good in
   // state.castleTrade, the castle offers whatever it stocks (state.castleStock) at
@@ -764,7 +778,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
             if (!seller.stock) seller.stock = {};
             take = Math.min(item.qty, Math.max(0, seller.stock[item.goodId] || 0));
             value = (item.unitBuy || 0) * take;
-            const tariff = tariffRate * value;   // GDD §6.3: cut (+ research bonus)
+            const tariff = tariffRate * customsValue(item.goodId, item.unitBuy, take);   // GDD §6.3: cut (+ research bonus), on the customs value
             if (take > 0) {
               seller.stock[item.goodId] = (seller.stock[item.goodId] || 0) - take;  // passive sale
               // v0.51 §8 MINTED TARIFF: the seller keeps the FULL sale price; the tariff
@@ -783,6 +797,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               seller.salesAdj[item.goodId] = Math.min(_sp.max,
                 ((typeof seller.salesAdj[item.goodId] === "number" && seller.salesAdj[item.goodId] > 0) ? seller.salesAdj[item.goodId] : 1) + _sp.up);
               if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff);   // MISSION-STATS: tariff/tax earned
+              if (typeof Ledger !== "undefined") Ledger.record(seller, "crown", tariff);            // DESIGN PASS: which city earns the King money
               if (typeof Ledger !== "undefined") Ledger.record(seller, "sales", value);  // v0.51 §8: seller keeps the full sale
             }
           }
@@ -809,8 +824,10 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
               seller.stock[it.goodId] = (seller.stock[it.goodId] || 0) + sell;
               seller.gold = (seller.gold || 0) - value;
               if (buyer) buyer.gold = (buyer.gold || 0) + value;              // home keeps the whole sale
-              state.treasury += tariffRate * value;                          // minted tariff
-              if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariffRate * value);
+              const tariff2 = tariffRate * customsValue(it.goodId, unit, sell);
+              state.treasury += tariff2;                                     // minted tariff (customs value)
+              if (typeof Sim !== "undefined" && Sim.statTaxEarned) Sim.statTaxEarned(state, tariff2);
+              if (typeof Ledger !== "undefined" && buyer) Ledger.record(buyer, "crown", tariff2);   // home city made the sale
               if (typeof Ledger !== "undefined") { Ledger.record(buyer, "sales", value); Ledger.record(seller, "buys", value); }
             }
             const back = it.qty - sell;

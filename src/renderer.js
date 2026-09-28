@@ -689,6 +689,33 @@
       drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96, muted: true });
     }
   }
+  // DESIGN PASS: understaffed marker (top-left) — red "0" when a producer has no
+  // workers, amber "n/m" when it runs short. Output scales with workers, so a short
+  // building is slow rather than broken; this makes the shortage scannable on the map
+  // (Anno's "insufficient workforce" icon). Closed slots don't count as missing.
+  function drawStaffBadge(b, def, p, rad) {
+    if (!def || def.kind === "house" || !def.workerTier || !(def.workerSlots > 0)) return;
+    const slotPlus = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0;
+    const open = Math.max(0, def.workerSlots + slotPlus - (b.closedSlots || 0));
+    if (open <= 0) return;
+    const w = b.workers || 0;
+    if (w >= open - 0.05) return;
+    const none = w < 0.05;
+    const label = none ? "👷0" : "👷" + Math.floor(w + 0.05) + "/" + open;
+    const fontPx = Math.max(7, Math.round(SIZE * 0.17));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width;
+    const bx = p.x - rad * 0.95, by = p.y - rad * 0.95, bw = tw + 6, bh = fontPx + 4;
+    ctx.fillStyle = none ? "rgba(150,40,30,0.92)" : "rgba(150,100,20,0.92)";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx - bw / 2, by - bh / 2, bw, bh, bh / 2); else ctx.rect(bx - bw / 2, by - bh / 2, bw, bh);
+    ctx.fill();
+    ctx.fillStyle = "#fff3e0";
+    ctx.fillText(label, bx, by + 0.5);
+    ctx.restore();
+  }
   function drawUpgradeBadge(b, p, rad) {
     const lvl = b && (b.upgradeLevel || 1);
     if (!lvl || lvl < 2) return;
@@ -797,6 +824,7 @@
         // === RU-B: level badge + pending-upgrade material chips (built only) ===
         if (!(state.zoom < 0.6)) {
           drawUpgradeBadge(b, p, rad);
+          drawStaffBadge(b, def, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
           // v0.47: production/consumption progress bar under producers — fills as the
           // building nears its next whole-unit batch (green = producing, amber =

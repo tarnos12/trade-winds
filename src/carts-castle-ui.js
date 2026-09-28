@@ -771,6 +771,17 @@
     function refresh() {
       if (!cardsEl) return;
       if (kingdomGoldEl) kingdomGoldEl.textContent = Math.round(state.treasury || 0).toLocaleString();
+      // DESIGN PASS: show the King's tariff income next to the treasury (5-min avg) —
+      // the headline income should be visible, not buried in a panel.
+      const rateEl = document.getElementById("kingdomRate");
+      if (rateEl && typeof Ledger !== "undefined") {
+        let perTick = 0;
+        for (const t of state.towns || []) perTick += Ledger.lastNAverage(t, "crown", 600);
+        const pm = (typeof window.perMin === "function") ? window.perMin(perTick) : perTick * 120;
+        rateEl.textContent = pm >= 0.05 ? "+" + (pm < 10 ? pm.toFixed(1) : Math.round(pm)) + "/min" : "";
+        const chip = document.getElementById("kingdomChip");
+        if (chip) chip.title = "Your royal treasury — the King's gold. Tariff income ≈ " + pm.toFixed(1) + " g/min (last 5 min), earned on trade between your cities.";
+      }
 
       const towns = (state.towns || []).slice().sort((a, b) => (+a.id || 0) - (+b.id || 0));
       const seen = new Set();

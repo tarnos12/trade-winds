@@ -13,9 +13,9 @@
 // recorded at SETTLE, so hist dips and the tally entries can land a few ticks
 // apart — fine for a budget chart (documented).
 var Ledger = (function () {
-  const KEYS = ["tax", "sales", "buys", "transfers"];
+  const KEYS = ["tax", "sales", "buys", "transfers", "crown"];   // crown = tariff this city's sales minted for the King (not city gold)
   const cap = () => (CONFIG.town && CONFIG.town.ledgerHist) || 600;
-  function freshTally() { return { tax: 0, sales: 0, buys: 0, transfers: 0, net: 0 }; }
+  function freshTally() { return { tax: 0, sales: 0, buys: 0, transfers: 0, crown: 0, net: 0 }; }
   function ensure(town) {
     if (!town) return null;
     let L = town.ledger;
@@ -52,7 +52,7 @@ var Ledger = (function () {
     L.hist.push((town && typeof town.gold === "number") ? town.gold : 0);
     while (L.hist.length > C) L.hist.shift();
     L.tallyHist.push({ tax: L.tally.tax, sales: L.tally.sales, buys: L.tally.buys,
-                       transfers: L.tally.transfers, net: L.tally.net });
+                       transfers: L.tally.transfers, crown: L.tally.crown || 0, net: L.tally.net });
     while (L.tallyHist.length > C) L.tallyHist.shift();
     L.tally = freshTally();
   }

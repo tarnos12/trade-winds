@@ -90,7 +90,8 @@
   // planks before any Sawmill is working). Returns [{gid, maker}] (pure read).
   function ttUnsourcedMaterials(id) {
     const node = Research.get(id); if (!node) return [];
-    const M = node.materials || {}, R = state.research || {}, consumed = R.consumed || {};
+    const M = node.materials || {}, R = state.research || {};
+    const consumed = Research.isActive(state, id) ? (R.consumed || {}) : {};
     const stock = state.castleStock || {}, out = [];
     for (const gid of Object.keys(M)) {
       if ((consumed[gid] || 0) + (stock[gid] || 0) >= M[gid]) continue;
@@ -122,7 +123,7 @@
     if (s === "done") return "✓";
     if (s === "researching") return ttWaitingOnMaterials(id) ? "⏳" : Math.round(Research.activeFraction(state) * 100) + "%";
     if (s === "queued") { const i = (state.research.queue || []).indexOf(id); return "#" + (i + 1); }
-    if (s === "available") return "▶";   // RESEARCH CENTER (Slice C): materials shown in the tooltip, not a gold badge
+    if (s === "available") return ttUnsourcedMaterials(id).length ? "⚠" : "▶";   // ⚠ = a material no city makes yet   // RESEARCH CENTER (Slice C): materials shown in the tooltip, not a gold badge
     return "🔒";
   }
 
@@ -346,6 +347,13 @@
       // while active, show live consumed/required progress per material
       const qtyTxt = active ? (Math.min(qty, Math.floor(consumed[gid] || 0)) + "/" + qty) : String(qty);
       html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt}</div>`;
+    }
+    // DESIGN PASS: warn BEFORE the player starts a node that would stall.
+    if (s === "available" || s === "queued") {
+      const miss = ttUnsourcedMaterials(id);
+      if (miss.length) html += `<div style="color:#f08a7a;margin-top:4px">⚠ No city makes ` +
+        miss.map(m => esc(GOOD_LABEL(m.gid)) + (m.maker ? " (needs a staffed " + esc(m.maker) + ")" : "")).join(", ") +
+        ` yet — this research would wait until one does.</div>`;
     }
     return html;
   }

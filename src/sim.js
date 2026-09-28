@@ -327,13 +327,13 @@ MissionEngine.DEFAULT = {
         { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
       ] },
     { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-      tip: "The King earns a tariff whenever your cities trade — found a second city that makes what the first lacks. Cities keep their own taxes: Take 1k from a city's panel when you need gold.",
+      tip: "The King earns a tariff whenever your cities trade — found a second city that makes what the first lacks. Watch 👑 +g/min beside your gold.",
       objectives: [
         { type: "found_city", count: 2 },                   // a trading partner
         { type: "earn_tax",   amount: 10 },                 // your first tariffs (early trade is small — just see it arrive)
       ] },
     { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
-      tip: "⭐ Special → Research Center beside the castle, then open 🔬 and pick a research. Upgrades and most buildings unlock there.",
+      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — most research needs stone. ⚠ marks research no city can supply yet.",
       objectives: [
         { type: "construct", building: "research_center", count: 1 },
         { type: "research",  count: 1 },
@@ -345,12 +345,13 @@ MissionEngine.DEFAULT = {
         { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
       ] },
     { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
-      tip: "Roads let traders travel twice as fast — link your cities to trade more.",
+      tip: "Roads let traders travel twice as fast. A city that makes everything it needs exports nothing and earns no tariff — give each city a speciality.",
       objectives: [
         { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
-        { type: "earn_tax",   amount: 100 },                // a steady tariff income (~4 g/min with 3 cities)
+        { type: "earn_tax",   amount: 150 },                // lifetime tariff — ~12 g/min with 3 trading cities (customs valuation)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
+      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build Huts or ☆ Priority them.",
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
@@ -360,7 +361,7 @@ MissionEngine.DEFAULT = {
       objectives: [
         { type: "construct", building: "manor",          count: 1 },  // raise a citizen (burgher) class
         { type: "construct", building: "aristocrat_home", count: 1 }, // the top of the economy
-        { type: "earn_tax",  amount: 2000 },                          // a thriving kingdom
+        { type: "earn_tax",  amount: 1000 },                          // a thriving kingdom (lifetime tariff)
       ] },
   ],
 };

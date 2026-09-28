@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.31";
+  const GAME_VERSION = "0.51.32";
   const PATCH_NOTES = [
+    { v: "0.51.32", notes: [
+      "The King's tariff is now charged on each good's official value (the higher of its base price or the sale price). Cheap surplus goods used to earn almost nothing — the tariff is roughly 3× bigger for the same trade.",
+      "Your gold chip shows your tariff income (👑 +g/min), and every city's panel shows how much tariff it earns the King — a city that makes everything it needs exports nothing and earns you nothing.",
+      "Buildings short of workers show a 👷 badge on the map (red 0 = idle, amber = running short).",
+      "Research that no city can supply yet is marked ⚠ in the tree before you start it, and its tooltip names the building you need. Mission 3 now points you at Quarry first (most research needs stone).",
+      "Mission goals retuned for the new tariff: Trade Routes 150, The Good Life 1000; new tips on specialising cities, Take 1k and worker shortages.",
+    ] },
     { v: "0.51.31", notes: [
       "New opening missions that teach the real loop: found a city → a second city and your first tariff → Research Center and first research → sawmill and an upgrade → trade routes → the King's works → the good life. Each mission now has a 💡 tip, and progress shows whole numbers.",
       "The 🔬 button shows research at a glance: progress %, ⏳ waiting for materials, ⚠ stuck (no city makes a needed material — the tree says which building to add), or 💤 when the Research Center is idle.",

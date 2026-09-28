@@ -378,6 +378,14 @@
       row("🤝", "Transfers", transfers, transfers > 0 ? "pos" : transfers < 0 ? "neg" : "", transfers < 0 ? "−" : "+") +
       `<div class="tp-row net"><span class="k">Net</span><span class="v ${net > 0 ? "pos" : net < 0 ? "neg" : ""}">` +
       `${net < 0 ? "−" : "+"}${fmt1(Math.abs(net))}🪙/min</span></div></div>`;
+    // DESIGN PASS: the King's cut this city's exports earn (5-min average). Tariff is
+    // only levied on trade BETWEEN cities, so a self-sufficient city pays nothing —
+    // this row is how the player sees which cities feed the treasury.
+    const crown = perMin(typeof Ledger !== "undefined" ? Ledger.lastNAverage(t, "crown", 600) : 0);
+    html += `<div class="pp-brk" title="Tariff the King earns when this city sells to your other cities. A city that makes everything it needs sells nothing — specialise cities so they trade.">` +
+      `<div class="tp-row"><span class="k">👑 Tariff for the King</span><span class="v ${crown > 0.05 ? "pos" : ""}">+${fmt1(crown)}🪙/min</span></div>` +
+      (crown <= 0.05 ? `<div class="tp-row"><span class="k" style="opacity:.7;font-size:11px">This city isn't exporting — give it a speciality other cities need.</span></div>` : "") +
+      `</div>`;
     return html;
   }
 
