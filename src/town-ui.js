@@ -1431,6 +1431,16 @@
   // progress bar uses (Sim.buildingProgress). Self-contained inline styles.
   const CHAIN_TERRAIN_GLYPH = { forest: "🌲", fertile: "🌱", stone_deposit: "🪨", clay_deposit: "🧱",
     iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
+  // Playtest: workers are auto-assigned, so "assign a worker below" misled players
+  // into clicking the slots (which CLOSE them). Say why it's idle and what fixes it.
+  function bpIdleReason(b, def) {
+    if (b && b.built === false) return "Under construction.";
+    const slots = (def && def.workerSlots) || 0;
+    if (slots > 0 && ((b && b.closedSlots) || 0) >= slots) return "Idle — all worker slots are closed. Click a slot below to reopen it.";
+    const HOME = { peasant: ["peasants", "Huts"], worker: ["workers", "Cottages"], burgher: ["citizens", "Manors"] };
+    const h = HOME[def && def.workerTier] || ["workers", "houses"];
+    return "Idle — no free " + h[0] + ". Build more " + h[1] + ", or turn on ☆ Priority to staff this first.";
+  }
   function renderProducerChain(town, b, def) {
     const out = def.output.goodId, oc = goodColor(out);
     const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
@@ -1485,7 +1495,7 @@
       <div class="tp-hint2">${workers > 0
         ? (stock >= cap ? "Store full — waiting for a porter to collect."
           : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
-        : "Idle — assign a worker below."}</div>`;
+        : bpIdleReason(b, def)}</div>`;
   }
 
   // Building level shown in the header banner badge (upgrade level, min 1).

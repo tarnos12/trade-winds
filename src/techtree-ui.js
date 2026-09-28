@@ -84,6 +84,32 @@
     }
     return false;
   }
+  // Playtest: materials the active node still needs that NO city can supply right
+  // now — none in any city's stock and no staffed, built producer. Without this the
+  // player sees "royal buyers are fetching them" forever (e.g. Water Wheel needs
+  // planks before any Sawmill is working). Returns [{gid, maker}] (pure read).
+  function ttUnsourcedMaterials(id) {
+    const node = Research.get(id); if (!node) return [];
+    const M = node.materials || {}, R = state.research || {}, consumed = R.consumed || {};
+    const stock = state.castleStock || {}, out = [];
+    for (const gid of Object.keys(M)) {
+      if ((consumed[gid] || 0) + (stock[gid] || 0) >= M[gid]) continue;
+      let ok = false;
+      for (const t of state.towns || []) {
+        if ((t.stock && t.stock[gid] || 0) >= 1) { ok = true; break; }
+        for (const b of t.buildings || []) {
+          const d = CONFIG.buildings[b.typeId];
+          if (d && d.output && d.output.goodId === gid && b.built !== false && (b.workers || 0) > 0) { ok = true; break; }
+        }
+        if (ok) break;
+      }
+      if (ok) continue;
+      let maker = null;
+      for (const k in CONFIG.buildings) { const d = CONFIG.buildings[k]; if (d.output && d.output.goodId === gid) { maker = d.name; break; } }
+      out.push({ gid, maker });
+    }
+    return out;
+  }
   // === /RESEARCH CENTER (Slice C) ===
   function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
@@ -148,7 +174,7 @@
   function ttBuildLayout() {
     const rows = {}, bandH = {};
     for (const b of TT_POP_BANDS) { rows[b] = ttRowsOf(b); bandH[b] = rows[b] * TT.CELL_H + TT.BAND_PAD_Y * 2; }
-    const H = TT_POP_BANDS.reduce((s, b) => s + bandH[b], 0);
+    const H = Math.max(TT_POP_BANDS.reduce((s, b) => s + bandH[b], 0), ttRowsOf("kingdom") * TT.CELL_H + TT.BAND_PAD_Y * 2);
     const bandTops = {}; let y = H;
     for (const b of TT_POP_BANDS) { bandTops[b] = y - bandH[b]; y -= bandH[b]; }   // first (peasant) → bottom
 
@@ -163,7 +189,10 @@
     // positions (cards only)
     ttPos.clear();
     for (const n of Research.nodesInBand("kingdom"))
-      ttPos.set(n.id, { x: TT_KINGDOM_X0 + n.pos.col * TT.CELL_W, y: TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
+      // Playtest: kingdom chains grow UPWARD from the bottom like the population bands,
+      // so their root nodes sit beside the peasant band the tree opens on (they were
+      // pinned to the top of a tall surface — off-screen on first open).
+      ttPos.set(n.id, { x: TT_KINGDOM_X0 + n.pos.col * TT.CELL_W, y: H - TT.BAND_PAD_Y - (n.pos.row + 1) * TT.CELL_H });
     for (const b of TT_POP_BANDS) for (const n of Research.nodesInBand(b)) {
       if (n.kind === "upgrade") continue;
       ttPos.set(n.id, { x: TT_POP_X0 + n.pos.col * TT.CELL_W, y: bandTops[b] + TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
@@ -255,7 +284,11 @@
       html += `<div class="tt-qactive" data-node="${R.active}">` +
         `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${qWaiting ? "⏳" : Math.round(frac * 100) + "%"}</span></div>` +
         (noCenter ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Paused — build a Research Center to resume</div>` :
-          qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
+          qWaiting ? (() => {
+            const miss = ttUnsourcedMaterials(R.active);
+            if (!miss.length) return `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>`;
+            return `<div style="font-size:11px;color:#f08a7a;margin:3px 0">⚠ No city makes ` + miss.map(m => goodIcon(m.gid) + " " + esc(m.gid.replace(/_/g, " ")) + (m.maker ? " (build &amp; staff a " + esc(m.maker) + ")" : "")).join(", ") + ` — or Cancel and research something else.</div>`;
+          })() : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
         `<div style="display:flex;align-items:center;gap:8px;margin-top:5px">` +
           `<div style="font-size:11px;opacity:.75;flex:1">${matRows}</div>` +
@@ -294,7 +327,7 @@
     const waiting = ttWaitingOnMaterials(id);
     const noCenter = Research.centerLevel(state) === 0;
     const curTxt = (noCenter && Research.isActive(state, id)) ? "Paused — needs a Research Center" :
-      waiting ? "Waiting for materials — the King's buyers purchase them from cities" :
+      waiting ? (ttUnsourcedMaterials(id).length ? "Stuck — no city makes " + ttUnsourcedMaterials(id).map(m => m.gid.replace(/_/g, " ")).join(", ") + " yet" : "Waiting for materials — the King's buyers purchase them from cities") :
       { done: "Finished", researching: "In Progress",
       queued: "Queued (#" + (((state.research.queue || []).indexOf(id)) + 1) + ")",
       available: "Available", locked: "Locked" }[s] || s;
@@ -446,7 +479,31 @@
   });
 
   // Live refresh: cheap state/badge patch + queue each ~500ms; edges only on change.
+  // Playtest: the 🔬 button shows research status at a glance (the tree is usually
+  // closed) — "42%" while progressing, "⏳" waiting on buyers, "⚠" when no city can
+  // supply a material, "💤" when a built Research Center sits idle.
+  let ttBtnSig = "";
+  function ttUpdateButton() {
+    const R = state.research || {};
+    let txt = "🔬", cls = "", tip = "Research tree";
+    if (R.active && Research.get(R.active)) {
+      const name = Research.get(R.active).name;
+      if (Research.centerLevel(state) === 0) { txt = "🔬 ⏳"; tip = "Research paused — build a Research Center"; }
+      else if (ttWaitingOnMaterials(R.active)) {
+        const miss = ttUnsourcedMaterials(R.active);
+        if (miss.length) { txt = "🔬 ⚠"; cls = "tt-stuck"; tip = name + " is stuck — no city makes " + miss.map(m => m.gid.replace(/_/g, " ")).join(", "); }
+        else { txt = "🔬 ⏳"; tip = name + " — waiting for materials"; }
+      } else { txt = "🔬 " + Math.round(Research.activeFraction(state) * 100) + "%"; tip = "Researching " + name; }
+    } else if (Research.centerLevel(state) > 0) { txt = "🔬 💤"; cls = "tt-idle"; tip = "Research Center is idle — pick a research"; }
+    const sig = txt + "|" + cls + "|" + tip;
+    if (sig === ttBtnSig) return;
+    ttBtnSig = sig;
+    btnResearch.textContent = txt; btnResearch.title = tip;
+    btnResearch.classList.toggle("tt-stuck", cls === "tt-stuck");
+    btnResearch.classList.toggle("tt-idle", cls === "tt-idle");
+  }
   setInterval(() => {
+    ttUpdateButton();
     if (!techOpen) return;
     ttRebuildStates();
     ttRenderQueue();

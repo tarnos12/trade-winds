@@ -283,7 +283,7 @@ const DEFAULT_MISSIONS = [   // mirrors MissionEngine.DEFAULT in src/sim.js (the
     objectives: [ { type: "construct", building: "sawmill", count: 1 }, { type: "upgrade", building: "any", count: 1 } ] },
   { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
     tip: "Roads let traders travel twice as fast — link your cities to trade more.",
-    objectives: [ { type: "trade_good", good: "potato", count: 20 }, { type: "earn_tax", amount: 200 } ] },
+    objectives: [ { type: "trade_good", good: "potato", count: 20 }, { type: "earn_tax", amount: 100 } ] },
   { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
     objectives: [ { type: "construct", building: "any", count: 8 }, { type: "upgrade", building: "any", count: 3 } ] },
   { id: "m7", name: "The Good Life", icon: "👑", pos: { col: 6, row: 0 }, retroactive: true, prereqs: ["m6"],

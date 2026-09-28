@@ -348,7 +348,7 @@ MissionEngine.DEFAULT = {
       tip: "Roads let traders travel twice as fast — link your cities to trade more.",
       objectives: [
         { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
-        { type: "earn_tax",   amount: 200 },                // a steady tariff income
+        { type: "earn_tax",   amount: 100 },                // a steady tariff income (~4 g/min with 3 cities)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
       objectives: [
