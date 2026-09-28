@@ -13,9 +13,10 @@
 //
 // Run:
 //   PW_CORE=/path/to/playwright-core node test/editor.test.js
-// playwright-core is not vendored in this repo (no npm deps checked in) — set
-// PW_CORE to wherever it's installed. Falls back to the path used to author
-// this harness if the env var is unset.
+// playwright-core is not vendored in this repo (no npm deps checked in). The
+// harness uses PW_CORE if set, otherwise looks for it as a plain module or inside
+// a global `playwright` install (npm root -g), which is where the cloud container
+// ships it.
 //
 // Every UI action that a real user would perform with a mouse (clicking
 // cards, connection circles, and sidebar buttons) uses genuine Playwright
@@ -34,8 +35,19 @@
 // currently does. The pass/fail tally below is the source of truth for what
 // is fixed vs. still broken.
 
-const PW = process.env.PW_CORE ||
-  "/tmp/claude-0/-home-user-trade-winds/ca920791-6b12-5d41-8459-6b2bac7e3bdb/scratchpad/node_modules/playwright-core";
+function findPlaywrightCore() {
+  if (process.env.PW_CORE) return process.env.PW_CORE;
+  const cands = ["playwright-core"];
+  try {
+    const globalRoot = require("child_process").execSync("npm root -g", { encoding: "utf8" }).trim();
+    const P = require("path");
+    cands.push(P.join(globalRoot, "playwright-core"),
+               P.join(globalRoot, "playwright", "node_modules", "playwright-core"));
+  } catch (e) { /* npm not on PATH — fall through to the plain module name */ }
+  for (const c of cands) { try { require.resolve(c); return c; } catch (e) { /* next */ } }
+  return cands[0];   // let require() raise a clear "cannot find module" error
+}
+const PW = findPlaywrightCore();
 const CHROME_PATH = process.env.PW_CHROME || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const { chromium } = require(PW);
 const path = require("path");

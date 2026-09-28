@@ -485,6 +485,8 @@
         background: rgba(20,16,10,0.72); border: 1px solid #6b5636;
         box-shadow: 0 3px 12px rgba(0,0,0,0.45); }
       #scoutBar.empty { display: none; }
+      #kingdomWrap #scoutBar { position: static; transform: none; padding: 3px 5px; gap: 4px;
+        border-color: var(--accent, #c98a3c); border-radius: 9px; }
       .scout-ico { width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
         border: 2px solid rgba(10,8,4,0.7); position: relative; padding: 0;
         display: flex; align-items: center; justify-content: center;
@@ -518,7 +520,10 @@
       injectStyle();
       bar = document.createElement("div");
       bar.id = "scoutBar"; bar.className = "empty";
-      document.body.appendChild(bar);
+      // Scout icons sit with the other panel openers in the top-left group (falls back to
+      // a floating bar if that group isn't present).
+      const home = document.getElementById("kingdomWrap");
+      (home || document.body).appendChild(bar);
 
       panel = document.createElement("div");
       panel.id = "scoutPanel"; panel.className = "hidden";
