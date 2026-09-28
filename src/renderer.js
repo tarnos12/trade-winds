@@ -1174,12 +1174,13 @@
       const buildables = terrainEligibleBuildings(hoverHex.q, hoverHex.r);
       let html = "<b>" + esc(terrainDisplayName(hex.terrain)) + "</b>";
       if (buildables.length) {
-        const parts = buildables.map(def => {
-          const locked = (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
-          return "<span" + (locked ? ' class="tt-locked"' : "") + ">" + esc(def.name) +
-            (locked ? " (locked)" : "") + "</span>";
-        });
-        html += '<div class="tt-build">' + parts.join(", ") + "</div>";
+        // Name only what can be built here NOW; research-locked options collapse into
+        // a single count so the tip stays short (it used to list ~20 struck-through names).
+        const isLocked = def => (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
+        const open = buildables.filter(def => !isLocked(def));
+        const lockedN = buildables.length - open.length;
+        if (open.length) html += '<div class="tt-build">Build: ' + open.map(def => esc(def.name)).join(", ") + "</div>";
+        if (lockedN) html += '<div class="tt-build tt-none">+' + lockedN + " more with research 🔬</div>";
       } else {
         html += '<div class="tt-build tt-none">Nothing buildable here</div>';
       }

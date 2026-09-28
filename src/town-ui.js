@@ -693,7 +693,7 @@
   // (a new building drops into the right category automatically). The upper tiers
   // are UI-gated behind a research node — the gate is cosmetic only; the pure
   // placement logic (Buildings.canPlaceBuilding / chargeBuilding) is untouched.
-  //  1. 🏗 Build  — City (town mode) · Road (road mode) · Bridge (coming soon).
+  //  1. 🏗 Build  — City (town mode) · Road (road mode) · Destroy road / building.
   //  2. 🌾 Peasant — hut + every workerTier:'peasant' building.
   //  3. 🔨 Worker  — cottage + every workerTier:'worker' building.
   //  4. 👑 Burgher — manor + every workerTier:'burgher' building.
@@ -770,8 +770,8 @@
   // Render the flyout body for a category into buildBarFlyoutEl.
   function renderFlyout(cat) {
     if (cat.kind === "special") {
-      // Build: City / Road / Bridge / Destroy road / Destroy building. City &
-      // Road switch build mode; Bridge is a stub. === J === Destroy road/building
+      // Build: City / Road / Destroy road / Destroy building. City &
+      // Road switch build mode. === J === Destroy road/building
       // are new "eraseRoad"/"eraseBuilding" modes (input.js) — destroying a road
       // needs no confirmation (matches the existing road-erase behaviour);
       // destroying a building always confirms via uiConfirm before removing it.
@@ -784,7 +784,6 @@
           tip: cityFull ? `City limit reached (${cityHave}/${cityCap}) — research Township Grants / Provincial Rule / Imperial Domain to raise it.`
                         : "Enter town mode — click a valid site to found a city." },
         { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
-        { action: "bridge", name: "Bridge", sub: "Coming soon", disabled: true, tip: "Bridges over water — coming soon." },
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
         { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
       ];
@@ -1039,8 +1038,8 @@
     if (btn) openCategory(btn.dataset.cat);
   });
   // Flyout item clicks: a building typeId enters placement; a Build action
-  // (City/Road/Destroy road/Destroy building) switches build mode; Bridge is a
-  // disabled stub. === J === eraseRoad/eraseBuilding are the new destroy modes;
+  // (City/Road/Destroy road/Destroy building) switches build mode.
+  // === J === eraseRoad/eraseBuilding are the new destroy modes;
   // input.js's canPlace/place implement the actual click behaviour per mode.
   buildBarFlyoutEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".bb-btn");

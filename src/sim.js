@@ -112,7 +112,7 @@ const SIM_TIER_KEY = { peasant: "peasants", worker: "workers", burgher: "burgher
 // safe to call at the top of any tick. Owned by EngineDev; shared read contract in
 // docs/proposals/MISSION_EDITOR_BRIEF.md.
 Sim.ensureStats = function (state) {
-  if (!state) return { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} }, taxEarned: 0 };
+  if (!state) return { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} }, taxEarned: 0, founded: 0, researched: 0 };
   let st = state.stats;
   if (!st || typeof st !== "object") st = {};
   if (!st.constructed || typeof st.constructed !== "object") st.constructed = { total: 0, byType: {} };
@@ -124,6 +124,11 @@ Sim.ensureStats = function (state) {
   if (!st.traded || typeof st.traded !== "object") st.traded = { byGood: {} };
   if (!st.traded.byGood || typeof st.traded.byGood !== "object") st.traded.byGood = {};
   if (typeof st.taxEarned !== "number") st.taxEarned = 0;
+  // v0.51: cities founded + research completed (onboarding missions). Old saves seed
+  // them from the live state so a returning player's progress still counts.
+  if (typeof st.founded !== "number") st.founded = Array.isArray(state.towns) ? state.towns.length : 0;
+  if (typeof st.researched !== "number")
+    st.researched = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked.length : 0;
   state.stats = st;
   return st;
 };
@@ -133,6 +138,9 @@ Sim.statConstructed = function (state, typeId) {
   st.constructed.total += 1;
   if (typeId) st.constructed.byType[typeId] = (st.constructed.byType[typeId] || 0) + 1;
 };
+// v0.51: a city was founded / a research node completed (onboarding objectives).
+Sim.statFounded = function (state) { Sim.ensureStats(state).founded += 1; };
+Sim.statResearched = function (state) { Sim.ensureStats(state).researched += 1; };
 // Increment the "building upgrade applied" counter (upgradeLevel incremented).
 Sim.statUpgraded = function (state, typeId) {
   const st = Sim.ensureStats(state);
@@ -187,6 +195,8 @@ MissionEngine.readLifetime = function (obj, statsOrState) {
     case "upgrade":   return (obj.building && obj.building !== "any") ? (uBy[obj.building] || 0) : (u.total || 0);
     case "trade_good": return tr[obj.good] || 0;
     case "earn_tax":   return stats.taxEarned || 0;
+    case "found_city": return stats.founded || 0;      // v0.51: cities founded
+    case "research":   return stats.researched || 0;   // v0.51: research nodes completed
     default: return 0;
   }
 };
@@ -237,6 +247,7 @@ MissionEngine.normalize = function (set) {
       id: m.id,
       name: typeof m.name === "string" ? m.name : m.id,
       icon: typeof m.icon === "string" ? m.icon : "🎯",
+      tip: typeof m.tip === "string" ? m.tip : "",   // v0.51: optional one-line hint shown under the objectives
       pos: (m.pos && typeof m.pos === "object") ? { col: m.pos.col | 0, row: m.pos.row | 0 } : { col: 0, row: 0 },
       retroactive: m.retroactive !== false,             // DEFAULT true
       prereqs: Array.isArray(m.prereqs) ? m.prereqs.filter(x => typeof x === "string") : [],
@@ -300,31 +311,52 @@ MissionEngine.evaluate = function (missionSet, statsOrState, opts) {
 // typed objectives (construct/upgrade/trade_good/earn_tax). Steps that don't map to
 // a counter (found town, lay road, unlock tech, victory) use the CLOSEST objective.
 // All retroactive (default) so a returning player's lifetime progress counts; the
-// prereq chain m1→m2→m3→m4→m5 preserves the original ordered progression.
+// prereq chain m1→…→m7 keeps them in teaching order.
 MissionEngine.DEFAULT = {
   version: 1,
+  // v0.51 onboarding pass: the chain now TEACHES the core loop in the order the game
+  // needs it — found a city → a second city trades and earns the King's tariff (the
+  // player's only income) → the Research Center (every upgrade and most buildings are
+  // research-locked) → then grow, trade, and reach the win. Each mission carries a
+  // one-line `tip` rendered under its objectives.
   missions: [
     { id: "m1", name: "Found Your Realm", icon: "🏰", pos: { col: 0, row: 0 }, retroactive: true, prereqs: [],
+      tip: "🏗 Build → City, then 🌾 Peasant: a Lumberjack, a Potato Farm and two Huts beside it.",
       objectives: [
-        { type: "construct", building: "any", count: 1 },   // place your first building
+        { type: "found_city", count: 1 },                   // found your first city
         { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
       ] },
-    { id: "m2", name: "A Growing Town", icon: "🌾", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
+    { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
+      tip: "Your gold comes from a tariff on trade between your cities — found a second city that makes what the first one lacks.",
+      objectives: [
+        { type: "found_city", count: 2 },                   // a trading partner
+        { type: "earn_tax",   amount: 25 },                 // your first tariffs
+      ] },
+    { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
+      tip: "⭐ Special → Research Center beside the castle, then open 🔬 and pick a research. Upgrades and most buildings unlock there.",
+      objectives: [
+        { type: "construct", building: "research_center", count: 1 },
+        { type: "research",  count: 1 },
+      ] },
+    { id: "m4", name: "A Growing Town", icon: "🌾", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
+      tip: "A Sawmill turns wood into planks. Upgrade a building from its panel (⬆) once its upgrade is researched.",
       objectives: [
         { type: "construct", building: "sawmill", count: 1 }, // build a workshop (processor)
         { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
       ] },
-    { id: "m3", name: "Trade Routes", icon: "🛣", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
+    { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
+      tip: "Roads let traders travel twice as fast — link your cities to trade more.",
       objectives: [
         { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
-        { type: "earn_tax",   amount: 200 },                // your first tariffs
+        { type: "earn_tax",   amount: 200 },                // a steady tariff income
       ] },
-    { id: "m4", name: "The King's Works", icon: "🔬", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
+    { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
       ] },
-    { id: "m5", name: "The Good Life", icon: "👑", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
+    { id: "m7", name: "The Good Life", icon: "👑", pos: { col: 6, row: 0 }, retroactive: true, prereqs: ["m6"],
+      tip: "Victory: an Aristocrat's House at 100% happiness.",
       objectives: [
         { type: "construct", building: "manor",          count: 1 },  // raise a citizen (burgher) class
         { type: "construct", building: "aristocrat_home", count: 1 }, // the top of the economy

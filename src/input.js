@@ -144,6 +144,7 @@
       if (canPlace(q, r)) {
         Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
         state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
+        if (typeof Sim !== "undefined" && Sim.statFounded) Sim.statFounded(state);   // onboarding: cities founded
         // v0.51 (N): NO reveal at placement — a city reveals its neighbours only once
         // it has finished CONSTRUCTION (renderer.revealConstructed), not when founded.
         scheduleSave();

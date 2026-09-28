@@ -217,6 +217,7 @@ const BUILDING_IDS = [
   "stonetool_maker","oil_maker","forge","armory","pottery_workshop","distillery",
   "goldsmith","lamp_maker","carpentry","luxury_tailor",
   "hut","cottage","manor","aristocrat_home",
+  "research_center",   // castle building (not in CONFIG.buildings) — counted when it finishes construction
 ];
 const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potato_farm: "🥔", sawmill: "🪚",
   quarry: "⛏️", fishery: "🎣", iron_mine: "⚒️", shepherd: "🐑", mill: "🌀",
@@ -224,7 +225,7 @@ const TT_BUILDING_GLYPH = { hut: "🛖", lumberjack: "🪓", farm: "🌾", potat
   cottage: "🏠", brewery: "🍺", bakery: "🍞", manor: "🏛️",
   tailoring: "🧵", charcoal_burner: "🪮", stonetool_maker: "⚒️", oil_maker: "🛢️",
   forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
-  lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
+  lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰", research_center: "🔬" };
 const GOOD_ICON = {
   wood: "🪵", stone: "🪨", iron: "🔩", clay: "🟫", grain: "🌾", potato: "🥔",
   fish: "🐟", wool: "🧶", planks: "🪚", flour: "🌸", coal: "⬛", gold: "🪙", bricks: "🧱",
@@ -235,10 +236,13 @@ const GOOD_ICON = {
 const goodIcon = id => GOOD_ICON[id] || "📦";
 const buildingGlyph = id => TT_BUILDING_GLYPH[id] || "🏭";
 
-// The four objective types (exactly these). `fields` drives the inspector row.
-const OBJECTIVE_TYPES = ["construct", "upgrade", "trade_good", "earn_tax"];
+// The objective types the game's MissionEngine understands (keep in sync with
+// MissionEngine.readLifetime in src/sim.js). `fields` drives the inspector row.
+// found_city / research are COUNT-only (v0.51 onboarding).
+const OBJECTIVE_TYPES = ["construct", "upgrade", "trade_good", "earn_tax", "found_city", "research"];
+const COUNT_ONLY_TYPES = ["found_city", "research"];
 const OBJ_LABEL = { construct: "Construct buildings", upgrade: "Upgrade buildings",
-  trade_good: "Trade a good", earn_tax: "Earn tax/tariff" };
+  trade_good: "Trade a good", earn_tax: "Earn tax/tariff", found_city: "Found cities", research: "Complete research" };
 
 // 8 connector anchor points per card (4 edge mid-points + 4 corners).
 const CARD_SIDES = ["top-left", "top", "top-right", "right", "bottom-right", "bottom", "bottom-left", "left"];
@@ -264,19 +268,28 @@ function sidePoint(r, side) {
    authoritative default (EngineDev); this is the editor's starting canvas and
    round-trips through the schema exactly.
    ===================================================================== */
-const DEFAULT_MISSIONS = [
-  { id: "m1", name: "First Building",   icon: "🏗", pos: { col: 0, row: 1 }, retroactive: true, prereqs: [],
-    objectives: [ { type: "construct", building: "any", count: 1 } ] },
-  { id: "m2", name: "Woodcutter's Camp", icon: "🪓", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-    objectives: [ { type: "construct", building: "lumberjack", count: 2 } ] },
-  { id: "m3", name: "Feed the People",   icon: "🥔", pos: { col: 1, row: 2 }, retroactive: true, prereqs: ["m1"],
-    objectives: [ { type: "trade_good", good: "potato", count: 20 } ] },
-  { id: "m4", name: "Master Craft",      icon: "⬆️", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
-    objectives: [ { type: "upgrade", building: "any", count: 1 } ] },
-  { id: "m5", name: "Royal Coffers",     icon: "💰", pos: { col: 2, row: 2 }, retroactive: true, prereqs: ["m3"],
-    objectives: [ { type: "earn_tax", amount: 500 } ] },
-  { id: "m6", name: "Industrialist",     icon: "🏭", pos: { col: 3, row: 1 }, retroactive: true, prereqs: ["m4", "m5"],
-    objectives: [ { type: "construct", building: "any", count: 5 }, { type: "earn_tax", amount: 1000 } ] },
+const DEFAULT_MISSIONS = [   // mirrors MissionEngine.DEFAULT in src/sim.js (the game's bundled chain)
+  { id: "m1", name: "Found Your Realm", icon: "🏰", pos: { col: 0, row: 0 }, retroactive: true, prereqs: [],
+    tip: "🏗 Build → City, then 🌾 Peasant: a Lumberjack, a Potato Farm and two Huts beside it.",
+    objectives: [ { type: "found_city", count: 1 }, { type: "construct", building: "any", count: 3 } ] },
+  { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
+    tip: "Your gold comes from a tariff on trade between your cities — found a second city that makes what the first one lacks.",
+    objectives: [ { type: "found_city", count: 2 }, { type: "earn_tax", amount: 25 } ] },
+  { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
+    tip: "⭐ Special → Research Center beside the castle, then open 🔬 and pick a research. Upgrades and most buildings unlock there.",
+    objectives: [ { type: "construct", building: "research_center", count: 1 }, { type: "research", count: 1 } ] },
+  { id: "m4", name: "A Growing Town", icon: "🌾", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
+    tip: "A Sawmill turns wood into planks. Upgrade a building from its panel (⬆) once its upgrade is researched.",
+    objectives: [ { type: "construct", building: "sawmill", count: 1 }, { type: "upgrade", building: "any", count: 1 } ] },
+  { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
+    tip: "Roads let traders travel twice as fast — link your cities to trade more.",
+    objectives: [ { type: "trade_good", good: "potato", count: 20 }, { type: "earn_tax", amount: 200 } ] },
+  { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
+    objectives: [ { type: "construct", building: "any", count: 8 }, { type: "upgrade", building: "any", count: 3 } ] },
+  { id: "m7", name: "The Good Life", icon: "👑", pos: { col: 6, row: 0 }, retroactive: true, prereqs: ["m6"],
+    tip: "Victory: an Aristocrat's House at 100% happiness.",
+    objectives: [ { type: "construct", building: "manor", count: 1 }, { type: "construct", building: "aristocrat_home", count: 1 },
+                  { type: "earn_tax", amount: 2000 } ] },
 ];
 
 /* ===================================================================== */
@@ -307,6 +320,8 @@ function freshObjective(type) {
     case "upgrade":    return { type: "upgrade",   building: "any", count: 1 };
     case "trade_good": return { type: "trade_good", good: "potato", count: 10 };
     case "earn_tax":   return { type: "earn_tax",  amount: 500 };
+    case "found_city": return { type: "found_city", count: 2 };
+    case "research":   return { type: "research",  count: 1 };
     case "construct":
     default:           return { type: "construct", building: "any", count: 1 };
   }
@@ -319,6 +334,7 @@ function normalizeObjective(o) {
   const type = OBJECTIVE_TYPES.includes(o.type) ? o.type : "construct";
   if (type === "earn_tax") return { type, amount: Math.max(0, +o.amount || 0) };
   if (type === "trade_good") return { type, good: String(o.good || "potato"), count: Math.max(0, +o.count || 0) };
+  if (COUNT_ONLY_TYPES.includes(type)) return { type, count: Math.max(0, +o.count || 0) };
   // construct / upgrade
   return { type, building: String(o.building || "any"), count: Math.max(0, +o.count || 0) };
 }
@@ -327,6 +343,8 @@ function normalizeObjective(o) {
 function objectiveToken(o) {
   if (o.type === "earn_tax") return "💰" + (o.amount || 0);
   if (o.type === "trade_good") return goodIcon(o.good) + (o.count || 0);
+  if (o.type === "found_city") return "🏘×" + (o.count || 0);
+  if (o.type === "research") return "🔬×" + (o.count || 0);
   const glyph = (o.building && o.building !== "any") ? buildingGlyph(o.building) : "🏗";
   const prefix = o.type === "upgrade" ? "⬆️" : "";
   return prefix + glyph + "×" + (o.count || 0);
@@ -342,6 +360,7 @@ function normalizeMission(m) {
     id: String(m.id || "m"),
     name: m.name != null ? String(m.name) : "",
     icon: m.icon != null ? String(m.icon) : "",
+    tip: m.tip != null ? String(m.tip) : "",   // one-line hint shown under the mission's objectives in game
     pos: { col: Math.max(0, (m.pos && m.pos.col) | 0), row: Math.max(0, (m.pos && m.pos.row) | 0) },
     // Retroactive defaults to TRUE — only an explicit `false` turns it off.
     retroactive: m.retroactive === false ? false : true,
@@ -373,6 +392,7 @@ function cloneMissionForExport(m) {
     prereqs: (m.prereqs || []).slice(),
     objectives: (m.objectives || []).map(normalizeObjective),
   };
+  if (m.tip) out.tip = m.tip;
   return out;
 }
 
@@ -1140,6 +1160,12 @@ function renderMissionInspector(root, node) {
   iconWrap.appendChild(iconInput);
   row1.appendChild(iconWrap);
   fsId.appendChild(row1);
+  const tipWrap = el("div", {});
+  tipWrap.appendChild(el("label", { text: "tip (one-line hint shown in game)" }));
+  const tipInput = el("input", { type: "text", value: node.tip || "", placeholder: "e.g. Build → City, then add a Lumberjack…" });
+  tipInput.addEventListener("input", () => { node.tip = tipInput.value; });
+  tipWrap.appendChild(tipInput);
+  fsId.appendChild(tipWrap);
 
   // retroactive checkbox — CHECKED (true) by default
   const retroLabel = el("label", { class: "chk" });
@@ -1222,6 +1248,15 @@ function renderMissionInspector(root, node) {
   }
   function objectiveFields(o, idx) {
     const fr = el("div", { class: "fieldRow" });
+    if (COUNT_ONLY_TYPES.includes(o.type)) {
+      const cw = el("div", {});
+      cw.appendChild(el("label", { text: o.type === "found_city" ? "cities founded (total)" : "research completed (total)" }));
+      const cnt = el("input", { type: "number", value: o.count != null ? o.count : 0, min: "0" });
+      cnt.addEventListener("input", () => { o.count = Math.max(0, parseFloat(cnt.value) || 0); draw(); });
+      cw.appendChild(cnt);
+      fr.appendChild(cw);
+      return fr;
+    }
     if (o.type === "earn_tax") {
       const w = el("div", {});
       w.appendChild(el("label", { text: "amount (gold of tax/tariff)" }));
@@ -1288,7 +1323,7 @@ function renderPalette() {
   root.innerHTML = "";
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: "Objective types" }),
-    el("div", { class: "hint", text: "construct — build N buildings (building = a typeId or \"any\"). upgrade — complete N building upgrades (typeId or \"any\"). trade_good — N units of a good delivered by trade. earn_tax — cumulative tariff/tax income reaches `amount`." }),
+    el("div", { class: "hint", text: "construct — build N buildings (building = a typeId, \"research_center\", or \"any\"). upgrade — complete N building upgrades (typeId or \"any\"). trade_good — N units of a good delivered by trade. earn_tax — cumulative tariff/tax income reaches `amount`. found_city — total cities founded reaches N. research — total research nodes completed reaches N." }),
   ]));
   root.appendChild(el("fieldset", {}, [
     el("legend", { text: `Good ids (CONFIG.goods) — ${GOODS_IDS.length}` }),
@@ -1320,6 +1355,8 @@ function computeValidation() {
       if (!OBJECTIVE_TYPES.includes(o.type)) { issues.push({ level: "error", msg: `"${m.id}" objective ${i + 1} has unknown type "${o.type}".` }); return; }
       if (o.type === "earn_tax") {
         if (!(o.amount > 0)) issues.push({ level: "warn", msg: `"${m.id}" earn_tax objective ${i + 1} has amount ${o.amount} (should be > 0).` });
+      } else if (COUNT_ONLY_TYPES.includes(o.type)) {
+        if (!(o.count > 0)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} has count ${o.count} (should be > 0).` });
       } else if (o.type === "trade_good") {
         if (!GOODS_IDS.includes(o.good)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} references unknown good "${o.good}".` });
         if (!(o.count > 0)) issues.push({ level: "warn", msg: `"${m.id}" objective ${i + 1} has count ${o.count} (should be > 0).` });

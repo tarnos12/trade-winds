@@ -295,6 +295,39 @@ if (!engineAvailable) {
   }
 }
 
+// ---- v0.51 onboarding objective types + default chain ----------------------------
+{
+  const E = sandbox.MissionEngine;
+  // found_city / research read their stats counters
+  const st = { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} },
+               taxEarned: 0, founded: 2, researched: 1 };
+  ok("found_city objective reads stats.founded", E.readLifetime({ type: "found_city", count: 2 }, st) === 2);
+  ok("found_city 2 is met with 2 cities founded", E.objectiveMet({ type: "found_city", count: 2 }, st, 0));
+  ok("research objective reads stats.researched", E.readLifetime({ type: "research", count: 1 }, st) === 1);
+  // the default chain teaches: city -> second city + tariff -> research center -> growth
+  const D = E.DEFAULT.missions;
+  ok("default chain starts by founding a city", D[0].objectives.some(o => o.type === "found_city"));
+  ok("mission 2 is the trade / tariff lesson", D[1].objectives.some(o => o.type === "found_city" && o.count === 2)
+     && D[1].objectives.some(o => o.type === "earn_tax"));
+  ok("mission 3 teaches the Research Center + a first research",
+     D[2].objectives.some(o => o.type === "construct" && o.building === "research_center")
+     && D[2].objectives.some(o => o.type === "research"));
+  ok("upgrades are only asked for AFTER research is taught",
+     D.findIndex(m => m.objectives.some(o => o.type === "upgrade")) > 2);
+  ok("normalize keeps a mission's tip line",
+     E.normalize({ version: 1, missions: [{ id: "x", tip: "hello", objectives: [] }] }).missions[0].tip === "hello");
+}
+// Old saves (no founded/researched counters) seed them from live state.
+{
+  const Sim = (() => { const sb = {}; vm.createContext(sb); vm.runInContext(m[1] + "\nthis.Sim=Sim;", sb); return sb.Sim; })();
+  const state = { towns: [{}, {}, {}], research: { unlocked: ["a", "b"] }, stats: { taxEarned: 5 } };
+  const st2 = Sim.ensureStats(state);
+  ok("old save: founded seeded from existing towns", st2.founded === 3);
+  ok("old save: researched seeded from unlocked research", st2.researched === 2);
+  Sim.statFounded(state); Sim.statResearched(state);
+  ok("statFounded / statResearched increment", st2.founded === 4 && st2.researched === 3);
+}
+
 // ---- summary ----
 if (pending) console.error("\nmission.test.js: " + pending + " engine assertion group(s) PENDING a build with EngineDev's pure evaluator.");
 if (fail) { console.error("mission.test.js: " + pass + " passed, " + fail + " FAILED, " + pending + " pending"); process.exit(1); }

@@ -12,13 +12,13 @@ function loadCore(htmlPath) {
   if (!m) throw new Error("PURE_CORE markers not found");
   const sandbox = { console };
   vm.createContext(sandbox);
+  // Export every known pure-core global that EXISTS in this build (typeof guard), so a
+  // retired module (e.g. Quests, removed in v0.34) doesn't crash the harness.
+  const NAMES = ["CONFIG", "HexMath", "MapGen", "Sim", "Pathing", "Trade", "Buildings", "Research",
+    "ResearchEconomy", "CastleMarket", "Market", "Ledger", "Town", "Castle", "Quests", "Needs",
+    "Provisioner", "MissionEngine", "mulberry32"];
   vm.runInContext(
-    m[1] +
-      "\nthis.CONFIG=CONFIG;this.HexMath=HexMath;this.MapGen=MapGen;this.Sim=Sim;" +
-      "this.Pathing=Pathing;this.Trade=Trade;this.Buildings=Buildings;this.Research=Research;" +
-      "this.ResearchEconomy=ResearchEconomy;this.CastleMarket=CastleMarket;this.Market=Market;" +
-      "this.Ledger=Ledger;this.Town=Town;this.Castle=Castle;this.Quests=Quests;this.Needs=Needs;" +
-      "this.mulberry32=mulberry32;",
+    m[1] + "\n" + NAMES.map(n => "if (typeof " + n + " !== 'undefined') this." + n + " = " + n + ";").join("\n"),
     sandbox
   );
   return sandbox;

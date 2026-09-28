@@ -314,7 +314,10 @@ const Research = {
           budget -= move;
         }
       }
-      if (Object.keys(Research.centerConstructionNeed(state)).length === 0) c.built = true;
+      if (Object.keys(Research.centerConstructionNeed(state)).length === 0) {
+        c.built = true;
+        if (typeof Sim !== "undefined" && Sim.statConstructed) Sim.statConstructed(state, "research_center");   // onboarding objective
+      }
       return;
     }
     if (c.pendingUpgrade) {
@@ -374,7 +377,7 @@ const Research = {
     const S = Research.centerSpeed(state);
     if (S === 0) return;   // no center / under construction → PAUSED (even a zero-material node waits for a center)
     if (!gids.length) {   // zero-material node → complete instantly (center present)
-      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      if (R.unlocked.indexOf(node.id) < 0) { R.unlocked.push(node.id); if (typeof Sim !== "undefined" && Sim.statResearched) Sim.statResearched(state); }
       R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
       return;
     }
@@ -407,7 +410,7 @@ const Research = {
     let complete = true;
     for (const gid of gids) if ((R.consumed[gid] || 0) < M[gid]) { complete = false; break; }
     if (complete) {
-      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      if (R.unlocked.indexOf(node.id) < 0) { R.unlocked.push(node.id); if (typeof Sim !== "undefined" && Sim.statResearched) Sim.statResearched(state); }
       R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
     }
   },

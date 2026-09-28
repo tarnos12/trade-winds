@@ -277,11 +277,13 @@ function run() {
         best.cooldownUntil = (state.tick || 0) + 240;
       }
     }
-    // 4. castle leveling
-    const cr = Castle.canUpgrade(state);
-    if (cr.ok) Castle.upgrade(state);
-    // 5. fill castle warehouse for the active deliver quest (emulates player castleBuy)
-    fillDeliverQuest();
+    // 4. castle upgrades (removed v0.44) and King's Quests (removed v0.34) are gone —
+    //    guarded so the harness still runs against old builds that had them.
+    if (Castle && typeof Castle.canUpgrade === "function") {
+      const cr = Castle.canUpgrade(state);
+      if (cr.ok) Castle.upgrade(state);
+    }
+    if (C.Quests && typeof C.Quests.template === "function") fillDeliverQuest();
   }
 
   function fillDeliverQuest() {

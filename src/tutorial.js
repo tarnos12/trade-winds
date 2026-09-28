@@ -117,6 +117,7 @@
     function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
     function prettyBuilding(id) {
       if (!id || id === "any") return "buildings";
+      if (id === "research_center") return "Research Center";   // castle building (not in CONFIG.buildings)
       const d = (typeof CONFIG !== "undefined" && CONFIG.buildings) ? CONFIG.buildings[id] : null;
       return (d && d.name) || id;
     }
@@ -130,6 +131,8 @@
         case "upgrade":   return (obj.building && obj.building !== "any") ? "Upgrade " + prettyBuilding(obj.building) : "Complete upgrades";
         case "trade_good": return "Trade " + prettyGood(obj.good);
         case "earn_tax":   return "Earn tariffs 👑";
+        case "found_city": return "Found cities";
+        case "research":   return "Complete research 🔬";
         default: return obj.type;
       }
     }
@@ -170,7 +173,8 @@
       const nameLine = activeMissions.length === 1
         ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
       elStep.innerHTML = nameLine +
-        '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>";
+        '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>" +
+        (primary.tip ? '<div class="tut-hint">💡 ' + esc(primary.tip) + "</div>" : "");
 
       let html = "";
       for (const m of activeMissions) {
