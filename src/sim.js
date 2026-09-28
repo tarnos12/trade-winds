@@ -327,10 +327,10 @@ MissionEngine.DEFAULT = {
         { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
       ] },
     { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-      tip: "Your gold comes from a tariff on trade between your cities — found a second city that makes what the first one lacks.",
+      tip: "The King earns a tariff whenever your cities trade — found a second city that makes what the first lacks. Cities keep their own taxes: Take 1k from a city's panel when you need gold.",
       objectives: [
         { type: "found_city", count: 2 },                   // a trading partner
-        { type: "earn_tax",   amount: 25 },                 // your first tariffs
+        { type: "earn_tax",   amount: 10 },                 // your first tariffs (early trade is small — just see it arrive)
       ] },
     { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
       tip: "⭐ Special → Research Center beside the castle, then open 🔬 and pick a research. Upgrades and most buildings unlock there.",

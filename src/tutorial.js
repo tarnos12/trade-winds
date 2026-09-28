@@ -186,7 +186,7 @@
           const cls = o.met ? "done" : "cur";
           const mk = o.met ? "✓" : "▶";
           html += '<li class="' + cls + '"><span class="mk">' + mk + "</span><span>" +
-            esc(objLabel(obj)) + ' <b>' + Math.min(o.cur, o.target) + "/" + o.target + "</b></span></li>";
+            esc(objLabel(obj)) + ' <b>' + Math.floor(Math.min(o.cur, o.target)) + "/" + o.target + "</b></span></li>";   // whole numbers (tariff is fractional)
         });
       }
       elList.innerHTML = html;
