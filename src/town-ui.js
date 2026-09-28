@@ -280,8 +280,8 @@
       `<span class="pp-stat" title="Building slots used / capacity">🏠 ${used}/${cap}</span>` +
       `<span class="pp-stat pp-face ${faceCls}" title="City happiness">${face} ${h}%</span>` +
       `<span class="pp-headbtns">${upBtn}` +
-      `<button data-pp-give ${canGive ? "" : "disabled"} title="${escAttr("Give 1000🪙 from the Kingdom to this city (+happiness)" + coolTip)}">Give 1k</button>` +
-      `<button data-pp-take ${canTake ? "" : "disabled"} title="${escAttr("Take 1000🪙 from this city into the Kingdom (−happiness)" + coolTip)}">Take 1k</button></span>` +
+      `<button data-pp-give ${canGive ? "" : "disabled"} title="${escAttr("Give 1000🪙 from the Kingdom to this city — +10 happiness for 1 min" + coolTip)}">Give 1k</button>` +
+      `<button data-pp-take ${canTake ? "" : "disabled"} title="${escAttr("Take 1000🪙 from this city into the Kingdom — −30 happiness for 1 min, so fewer residents stay and work" + coolTip)}">Take 1k</button></span>` +
       (cooling ? `<span class="pp-cool">⏳ transfer cooldown ${coolStr}</span>` : "");
   }
 

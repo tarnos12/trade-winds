@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.30";
+  const GAME_VERSION = "0.51.31";
   const PATCH_NOTES = [
+    { v: "0.51.31", notes: [
+      "New opening missions that teach the real loop: found a city → a second city and your first tariff → Research Center and first research → sawmill and an upgrade → trade routes → the King's works → the good life. Each mission now has a 💡 tip, and progress shows whole numbers.",
+      "The 🔬 button shows research at a glance: progress %, ⏳ waiting for materials, ⚠ stuck (no city makes a needed material — the tree says which building to add), or 💤 when the Research Center is idle.",
+      "The research tree opens with Kingdom research visible beside the peasant nodes (it used to be off-screen at the top).",
+      "An idle building now says why (no free peasants → build Huts or turn on Priority) instead of asking you to click the worker slots, which closes them.",
+      "Give/Take 1k explain the happiness effect; the mission panel slides left when a city or building panel is open; shorter tile tooltips; removed the unused Bridge button.",
+    ] },
     { v: "0.51.30", notes: [
       "Cleaner screen: the top-right now holds only the game controls (clock, speed, ☰ menu), and every button that opens a panel sits together in the top-left next to your gold — research, castle, kingdom overview and your scouts. Patch notes moved into the ☰ menu.",
       "The build bar at the bottom is just its category buttons until you start placing something; the hint and Cancel button appear only while you're placing, or to tell you why a spot is blocked.",
