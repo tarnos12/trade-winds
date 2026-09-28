@@ -444,6 +444,10 @@
   .bb-btn.active .bb-cost { opacity: 0.95; }
   #buildBarFoot { display: flex; align-items: center; gap: 8px; min-height: 16px; }
   #buildBarHint { flex: 1; font-size: 11.5px; opacity: 0.85; }
+  /* idle build bar = just the category buttons; the hint/cancel footer shows only
+     while placing a building or to report a result (locked / blocked / built). */
+  #buildBarHint:empty { display: none; }
+  #buildBarFoot:has(#buildBarHint:empty):has(#buildBarCancel.hidden) { display: none; }
   #buildBarHint.ok { color: #6fbf73; opacity: 1; }
   #buildBarHint.bad { color: #e0503c; opacity: 1; }
   #buildBarCancel { padding: 2px 10px; font-size: 11px; }
@@ -1025,8 +1029,7 @@
   #tutorial.celebrate { border-color: #6fbf73; box-shadow: 0 6px 22px rgba(111,191,115,0.35); }
   /* === TUTORIAL CSS END === */
   /* === VERSION / PATCH NOTES === */
-  #verBadge { font: inherit; font-size: 11px; color: var(--accent); background: rgba(201,138,60,0.12);
-    border: 1px solid var(--panel-edge); border-radius: 6px; padding: 1px 7px; margin-left: 6px; cursor: pointer; }
+  #verBadge { color: var(--accent); }
   #verBadge:hover { border-color: var(--accent); }
   #patchPanel { position: fixed; left: 12px; top: 46px; width: 320px; max-height: 70vh; overflow-y: auto;
     z-index: 60; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
@@ -1113,11 +1116,10 @@
     <button class="speed" data-speed="4" title="Quadruple speed (4)">4×</button>
   </div>
 
-  <!-- primary quick-access + the ☰ Menu (everything non-essential lives in the menu) -->
+  <!-- top-right = game controls only (clock, speed, ☰). Panel openers live top-left;
+       everything non-essential (patch notes, map tools, help, debug) is inside ☰. -->
   <div class="group" id="topActions">
-    <button id="btnKingdom" class="ic" title="Kingdom overview — all towns (K)">📋</button>
-    <button id="verBadge" class="ic" title="Patch notes">v0.8.0</button>
-    <button id="hudMenuBtn" class="ic" title="Menu — map, tools, help, debug">☰</button>
+    <button id="hudMenuBtn" class="ic" title="Menu — patch notes, map, tools, help, debug">☰</button>
   </div>
 </div>
 
@@ -1132,6 +1134,7 @@
     <div class="hm-row">
       <button id="btnMainMenu" title="Save and return to the main menu">🏠 Main Menu</button>
       <button id="btnMute" class="ic" title="Toggle sound (M)">🔊</button>
+      <button id="verBadge" title="Patch notes — what changed in each version">📜 Patch notes</button>
     </div>
   </div>
 
@@ -1156,7 +1159,7 @@
     <div class="hm-help">
       <b>Drag</b> to pan · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
       <b>Scroll</b> to zoom · use the <b>🏗 Build</b> menu (bottom) for cities, roads &amp; buildings.
-      Placing a town clears the fog around it.
+      Fog lifts around a city or building once it finishes construction.
     </div>
   </div>
 
@@ -1172,11 +1175,12 @@
 
 <!-- === CITY-CARDS === kingdom-gold chip + live city cards row (EC-C) -->
 <div id="cityStrip">
-  <!-- v0.48: gold + quick icons (research, castle) grouped top-left -->
+  <!-- gold + every panel opener (research, castle, kingdom overview, scouts) grouped top-left -->
   <div id="kingdomWrap">
     <div id="kingdomChip" title="Your royal treasury — the King's gold">👑 <b id="kingdomGold">0</b> g</div>
     <button id="btnResearch" class="ic kwrap-ic" title="Research tree">🔬</button>
     <button id="btnCastleCenter" class="ic kwrap-ic" title="Center on the castle &amp; open its menu">🏰</button>
+    <button id="btnKingdom" class="ic kwrap-ic" title="Kingdom overview — all towns (K)">📋</button>
   </div>
   <div id="cityCards" aria-label="Cities"></div>
 </div>
@@ -1222,7 +1226,7 @@
   <div id="buildBarFlyout" class="hidden" role="menu"></div>
   <div id="buildBarCats"></div>
   <div id="buildBarFoot">
-    <span id="buildBarHint">Pick a category, then a building to place.</span>
+    <span id="buildBarHint"></span>
     <button id="buildBarCancel" class="hidden" title="Stop placing (Esc)">Cancel</button>
   </div>
 </div>
@@ -10475,7 +10479,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   const buildBarFlyoutEl = document.getElementById("buildBarFlyout");
   const buildBarHintEl = document.getElementById("buildBarHint");
   const buildBarCancelEl = document.getElementById("buildBarCancel");
-  const BB_DEFAULT_HINT = "Pick a category, then a building to place.";
+  const BB_DEFAULT_HINT = "";   // idle: no instruction text — the footer hides when empty (see #buildBarFoot CSS)
 
   function bbCostStr(cost) {
     const parts = [];
@@ -14737,6 +14741,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         background: rgba(20,16,10,0.72); border: 1px solid #6b5636;
         box-shadow: 0 3px 12px rgba(0,0,0,0.45); }
       #scoutBar.empty { display: none; }
+      #kingdomWrap #scoutBar { position: static; transform: none; padding: 3px 5px; gap: 4px;
+        border-color: var(--accent, #c98a3c); border-radius: 9px; }
       .scout-ico { width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
         border: 2px solid rgba(10,8,4,0.7); position: relative; padding: 0;
         display: flex; align-items: center; justify-content: center;
@@ -14770,7 +14776,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       injectStyle();
       bar = document.createElement("div");
       bar.id = "scoutBar"; bar.className = "empty";
-      document.body.appendChild(bar);
+      // Scout icons sit with the other panel openers in the top-left group (falls back to
+      // a floating bar if that group isn't present).
+      const home = document.getElementById("kingdomWrap");
+      (home || document.body).appendChild(bar);
 
       panel = document.createElement("div");
       panel.id = "scoutPanel"; panel.className = "hidden";
@@ -16069,8 +16078,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
 /* BUILD:version-notes START */
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.29";
+  const GAME_VERSION = "0.51.30";
   const PATCH_NOTES = [
+    { v: "0.51.30", notes: [
+      "Cleaner screen: the top-right now holds only the game controls (clock, speed, ☰ menu), and every button that opens a panel sits together in the top-left next to your gold — research, castle, kingdom overview and your scouts. Patch notes moved into the ☰ menu.",
+      "The build bar at the bottom is just its category buttons until you start placing something; the hint and Cancel button appear only while you're placing, or to tell you why a spot is blocked.",
+    ] },
     { v: "0.51.29", notes: [
       "Castle buildings (Research Center, Provisioner, Advanced Provisioner) can now be built right next to each other, and they no longer all have to hug the castle: a castle building can go anywhere that touches the castle OR touches another castle building that connects back to it — so the castle quarter can grow outward as a chain. The placement highlight shows every spot that would connect. Castle buildings still keep a one-tile gap from cities.",
     ] },
@@ -16516,7 +16529,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const panel = document.getElementById("patchPanel");
     const body = document.getElementById("pnBody");
     if (!badge || !panel || !body) return;
-    badge.textContent = "v" + GAME_VERSION;
+    badge.textContent = "📜 Patch notes · v" + GAME_VERSION;   // lives inside the ☰ menu
     body.innerHTML = PATCH_NOTES.map(p =>
       '<div class="pn-ver"><span>v' + p.v + '</span></div><ul>' +
       p.notes.map(n => "<li>" + n.replace(/</g, "&lt;") + "</li>").join("") + "</ul>"

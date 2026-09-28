@@ -673,7 +673,7 @@
   const buildBarFlyoutEl = document.getElementById("buildBarFlyout");
   const buildBarHintEl = document.getElementById("buildBarHint");
   const buildBarCancelEl = document.getElementById("buildBarCancel");
-  const BB_DEFAULT_HINT = "Pick a category, then a building to place.";
+  const BB_DEFAULT_HINT = "";   // idle: no instruction text — the footer hides when empty (see #buildBarFoot CSS)
 
   function bbCostStr(cost) {
     const parts = [];

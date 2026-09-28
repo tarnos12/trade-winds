@@ -1,6 +1,10 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.29";
+  const GAME_VERSION = "0.51.30";
   const PATCH_NOTES = [
+    { v: "0.51.30", notes: [
+      "Cleaner screen: the top-right now holds only the game controls (clock, speed, ☰ menu), and every button that opens a panel sits together in the top-left next to your gold — research, castle, kingdom overview and your scouts. Patch notes moved into the ☰ menu.",
+      "The build bar at the bottom is just its category buttons until you start placing something; the hint and Cancel button appear only while you're placing, or to tell you why a spot is blocked.",
+    ] },
     { v: "0.51.29", notes: [
       "Castle buildings (Research Center, Provisioner, Advanced Provisioner) can now be built right next to each other, and they no longer all have to hug the castle: a castle building can go anywhere that touches the castle OR touches another castle building that connects back to it — so the castle quarter can grow outward as a chain. The placement highlight shows every spot that would connect. Castle buildings still keep a one-tile gap from cities.",
     ] },
@@ -446,7 +450,7 @@
     const panel = document.getElementById("patchPanel");
     const body = document.getElementById("pnBody");
     if (!badge || !panel || !body) return;
-    badge.textContent = "v" + GAME_VERSION;
+    badge.textContent = "📜 Patch notes · v" + GAME_VERSION;   // lives inside the ☰ menu
     body.innerHTML = PATCH_NOTES.map(p =>
       '<div class="pn-ver"><span>v' + p.v + '</span></div><ul>' +
       p.notes.map(n => "<li>" + n.replace(/</g, "&lt;") + "</li>").join("") + "</ul>"
