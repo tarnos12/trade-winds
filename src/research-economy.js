@@ -22,7 +22,7 @@ Object.assign(CONFIG, {
   researchEconomy: {
     maxTraders: 10,     // hard cap on concurrent castle-owned traders
     cartCapacity: 10,   // units one royal buyer hauls per trip
-    cartSpeed: 0.5,     // progress (0..1) added per tick (paved-roads boosts it)
+    cartSpeed: 0.5,     // max progress (0..1) per tick; long routes are capped by CONFIG.trade.cartTilesPerTick (paved-roads boosts it)
     transferRate: 5,    // items/sec (game time) a parked royal buyer loads/unloads — not instant
     buyThreshold: 0,    // min still-needed qty before a buyer is sent (0 = any)
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
@@ -240,7 +240,9 @@ var ResearchEconomy = (function () {
     const needOf = (t, gid) => Math.max(0, ((t.demand && t.demand[gid]) || 0) - townShare(state, gid)) * buffer;
     const cartCapacity = C.cartCapacity;
     const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
-    const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
+    const pavedMult = paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1;
+    const offRoadMult = (CONFIG.trade && CONFIG.trade.offRoadSpeedMult) || 0.5;
+    const legSpeed = (typeof Trade !== "undefined" && Trade.legSpeed) ? Trade.legSpeed : (s) => s;
 
     // --- 1. Dispatch. Castle traders buy the UNION of (a) the active node's
     //     still-to-consume materials AND (b) the Research Center's outstanding
@@ -310,6 +312,7 @@ var ResearchEconomy = (function () {
           fromId: CASTLE_ID, toId: pick.seller.id,
           goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
           path: pick.route.path.slice(),         // castle → seller hex keys
+          road: pick.route.road !== false,       // DESIGN PASS (distance): off-road ⇒ half speed, like town traders
           progress: 0, phase: "outbound", done: false,
         });
       }
@@ -345,8 +348,10 @@ var ResearchEconomy = (function () {
         continue;
       }
 
-      // -- Travel (outbound / return) --
-      cart.progress += cartSpeed;
+      // -- Travel (outbound / return) --  DESIGN PASS (distance): the same per-hex rule as
+      // town traders (CONFIG.trade.cartTilesPerTick), plus the off-road ×0.5 royal buyers
+      // used to skip. A pre-pass in-flight cart has no `road` flag ⇒ treated as on-road.
+      cart.progress += legSpeed(C.cartSpeed, cart) * pavedMult * (cart.road === false ? offRoadMult : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 

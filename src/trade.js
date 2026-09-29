@@ -26,6 +26,12 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.25,           // v0.51: progress (0..1 along the path) per tick — halved so external traders travel 2× slower
+    // === DESIGN PASS (distance): a leg's progress per tick is min(cartSpeed, cartTilesPerTick
+    // / pathSteps) — so a route of ≤ cartTilesPerTick/cartSpeed (= 8) hexes keeps its 4-tick
+    // leg, and longer routes take proportionally longer (2 hexes/tick = 4 hexes/game-second
+    // on road). Paved Roads and the off-road ×0.5 multiply the result. 0 = legacy
+    // (length-blind legs). Trade.legSpeed is shared with the castle's royal buyers. ===
+    cartTilesPerTick: 2,
     transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
@@ -336,6 +342,18 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return n;
   }
 
+  // === DESIGN PASS (distance): base progress (0..1 of the path) a cart gains per tick on
+  // its current leg, before the paved / off-road multipliers. Capped at `baseSpeed` (the
+  // old length-blind rate) and at cartTilesPerTick hexes per tick, so short routes are
+  // unchanged and travel time grows with route length. A cart with no path (legacy) keeps
+  // the old rate. Shared by Trade and ResearchEconomy (royal buyers / castle market).
+  Trade.legSpeed = function (baseSpeed, cart) {
+    const tpt = CONFIG.trade.cartTilesPerTick;
+    const steps = (cart && Array.isArray(cart.path)) ? cart.path.length - 1 : 0;
+    return (tpt > 0 && steps > 0) ? Math.min(baseSpeed, tpt / steps) : baseSpeed;
+  };
+  const legSpeed = Trade.legSpeed;
+
   // Advance the whole trade layer by one tick. Mutates State only.
   Trade.tick = function (state) {
     if (!state) return state;
@@ -360,7 +378,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const rHas = (id) => (typeof Research !== "undefined" && Research.has) ? Research.has(state, id) : false;
     const extraCarts  = rEffect("extraCarts", 0);                        // more carts on the road
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
-    const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
+    const pavedMult = rHas("paved_roads") ? cfg.pavedRoadSpeed : 1;    // paved roads → faster (per hex, any route length)
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
     // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
     // Clamp the composed rate to [0.10, 0.40]
@@ -630,7 +648,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     }
 
     // --- 2. Advance traders; travel, then PARK to load / unload (not instant) -----
-    // A trader travels (progress += cartSpeed), then dwells to LOAD at the seller and
+    // A trader travels (progress += legSpeed × paved × off-road), then dwells to LOAD at the seller and
     // to UNLOAD at the buyer for ceil(qty / perTick) ticks — so a trade takes visible
     // time (CONFIG.trade.transferRate items/sec of game time). Phases:
     //   outbound → loading (dwell @ seller) → return → unloading (dwell @ buyer) → done.
@@ -735,7 +753,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
 
       // -- Travel (outbound / return) --  OFFROAD: no road link ⇒ half speed.
-      cart.progress += cartSpeed * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
+      // DESIGN PASS (distance): long routes take longer (see CONFIG.trade.cartTilesPerTick).
+      cart.progress += legSpeed(cfg.cartSpeed, cart) * pavedMult * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 

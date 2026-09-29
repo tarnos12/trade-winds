@@ -110,7 +110,8 @@ var CastleMarket = (function () {
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
         kind: "castle", fromId: ResearchEconomy.CASTLE_ID, toId: pick.seller.id,
         goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
-        path: pick.route.path.slice(), progress: 0, phase: "outbound", done: false,
+        path: pick.route.path.slice(), road: pick.route.road !== false,   // DESIGN PASS (distance): off-road ⇒ half speed
+        progress: 0, phase: "outbound", done: false,
       });
     }
     return state;
