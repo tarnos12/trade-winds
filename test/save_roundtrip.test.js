@@ -162,6 +162,29 @@ async function makeThreeCitySave(page) {
     }));
     ok("give/take refuse a town object that is not in state.towns", stale.take === false && stale.give === false, stale);
 
+    // Review fix: a start-screen Custom… PREVIEW (newGame noSave) used to reach the
+    // save through the 30 s autosave / tab-hide / beforeunload, replacing the kingdom.
+    console.log("start-screen preview never overwrites the save");
+    await page.click("#hudMenuBtn");
+    await page.waitForTimeout(150);
+    await page.click("#btnMainMenu");                   // saveGame() + start overlay
+    await page.waitForTimeout(200);
+    await page.selectOption("#ssPreset", "custom");     // live preview → empty custom world
+    await page.waitForTimeout(200);
+    const pv = await page.evaluate(() => {
+      const liveTowns = window.__cre.state.towns.length;
+      window.dispatchEvent(new Event("beforeunload"));  // same saveGame() as autosave / tab hide
+      const d = JSON.parse(localStorage.getItem("tradewinds.save"));
+      return { liveTowns, savedTowns: d.towns.length, savedPreset: d.preset };
+    });
+    ok("preview replaced the live backdrop (sanity)", pv.liveTowns === 0, pv);
+    ok("the save still holds the 3-city kingdom after a preview + beforeunload",
+      pv.savedTowns === 3 && pv.savedPreset === "fertile", pv);
+    await page.click("#ssContinue");
+    await page.waitForTimeout(200);
+    ok("Continue after a preview restores the kingdom",
+      await page.evaluate(() => { const st = window.__cre.state; st.gameSpeed = 0; return st.towns.length === 3; }));
+
     console.log("New Game after Continue starts clean");
     const fresh = await page.evaluate(() => {
       window.StartScreen.startNew("fresh-after-continue", "fertile");
@@ -175,6 +198,15 @@ async function makeThreeCitySave(page) {
     ok("New Game resets lifetime stats", fresh.tax === 0 && fresh.built === 0, fresh);
     ok("New Game resets mission progress", fresh.completed === 0, fresh);
     ok("New Game clears the city cards", fresh.cards === 0, fresh);
+    // Review fix: the Event Log baselines at New Game itself — it used to prime on its
+    // next 1.2 s poll, silently swallowing a city founded before that poll ran.
+    await page.evaluate(() => {
+      window.StartScreen.startNew("log-prime", "fertile");
+      window.__cre.state.towns.push(window.TownUI.makeTown(3, 0));   // founded before any poll
+    });
+    await page.waitForTimeout(1500);
+    const logged = await page.evaluate(() => window.EventLog.entries.map((e) => e.text));
+    ok("Event Log reports a city founded right after New Game", logged.includes("City #1 founded"), logged);
     ok("no page errors (player build)", errs.length === 0, errs);
     await ctx.close();
 

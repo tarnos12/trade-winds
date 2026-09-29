@@ -14,6 +14,9 @@
   // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
   // custom worlds never clobbers an existing save). ===
   function newGame(seedInput, presetId, tiers, noSave) {
+    // DESIGN PASS (review): a noSave PREVIEW world must never reach the save — the
+    // 30 s autosave, tab-hide and beforeunload used to write it over the kingdom.
+    previewWorld = !!noSave;
     state.seedInput = seedInput;
     const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
@@ -95,11 +98,13 @@
   // Persistence (versioned; GDD §9.4)
   // ---------------------------------------------------------------
   let saveTimer = null;
+  let previewWorld = false;   // set by newGame(noSave): the live state is a start-screen preview
   function scheduleSave() {
     if (saveTimer) return;
     saveTimer = setTimeout(() => { saveTimer = null; saveGame(); }, 800);
   }
   function saveGame() {
+    if (previewWorld) return;   // DESIGN PASS (review): never persist a start-screen preview
     try {
       const data = {
         saveVersion: CONFIG.saveVersion,

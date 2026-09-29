@@ -8,7 +8,8 @@
   let kingdomOpen = false;
   let kwSort = { key: "id", dir: 1 };
 
-  const goodLabel = (id) => id ? id.charAt(0).toUpperCase() + id.slice(1) : "—";
+  // DESIGN PASS (review): same label as everywhere else ("Iron tool", not "Iron_tool").
+  const goodLabel = (id) => id ? GOOD_LABEL(id) : "—";
 
   // ---- town alerts (canvas icons over a town in a bad state) --------------
   // Cheap: a couple of sums per town, derived from state each frame. Icons scale
@@ -354,10 +355,22 @@
       if (!e.staffed) return " — its producer has no workers";
       return " — production can't keep up";
     }
+    // Baseline after boot / New Game / Continue: what already exists is not news.
+    function prime() {
+      primed = true;
+      rSeen = new Set((state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : []);
+      for (const t of (state.towns || [])) if (t) { townSeen.set(t.id, t.built !== false); lvls[t.id] = t.level || 1; }
+      const comp = (state.missions && state.missions.completed) || {};
+      for (const id in comp) if (comp[id]) missSeen.add(id);
+      wonSeen = !!state.victory;
+    }
     feedReset = function () {
       primed = false; rSeen = null; lvls = {}; wonSeen = false;
       townSeen = new Map(); missSeen = new Set(); idleRec = new WeakMap();
       shortFlags.clear();
+      // DESIGN PASS (review): baseline NOW (newGame/loadGame just replaced state) —
+      // priming lazily on the next 1.2 s poll swallowed a city founded in between.
+      if (typeof state === "object" && state) prime();
     };
     function poll() {
       if (typeof state !== "object" || !state) return;
@@ -365,13 +378,7 @@
       const towns = state.towns || [];
       const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : [];
       const comp = (state.missions && state.missions.completed) || {};
-      if (!primed) {                                // baseline after boot / New Game / Continue
-        primed = true;
-        rSeen = new Set(done);
-        for (const t of towns) if (t) { townSeen.set(t.id, t.built !== false); lvls[t.id] = t.level || 1; }
-        for (const id in comp) if (comp[id]) missSeen.add(id);
-        wonSeen = !!state.victory;
-      }
+      if (!primed) prime();
       for (const id of done) if (!rSeen.has(id)) {
         rSeen.add(id);
         EventLog.push("🔬", "Researched " + nameOf(id), { action: "research" });
