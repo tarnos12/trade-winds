@@ -324,7 +324,7 @@
         towns: [],
         carts: [],
         treasury: 1e9, // effectively unlimited: founding/road/build gold is not the thing under test
-        tariffRate: (CONFIG.trade && CONFIG.trade.tariffRate) || 0.25,
+        tariffRate: (CONFIG.trade && CONFIG.trade.tariffRate) || 0.30,
         research: (typeof Research !== "undefined" && Research.fresh) ? Research.fresh() : { unlocked: [], active: null, queue: [], progress: 0 },
         market: (typeof Market !== "undefined" && Market.fresh) ? Market.fresh() : { hist: {}, head: 0, len: 0 },
         warehouse: {},

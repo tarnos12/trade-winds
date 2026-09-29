@@ -16,8 +16,9 @@ Object.assign(CONFIG, {
     // is a worker LUXURY but a citizen+aristocrat BASIC). Each tier declares its own
     // basic[] / extra[] lists + perCapita rates. Author's DEFINITIVE NEEDS MATRIX. ===
     //   BASIC needs floor happiness at ~basicHappy (70) when met; missing drops below.
-    //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
-    //   tier's population GROWTH (all luxuries must be available to grow).
+    //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100). They do NOT
+    //   gate growth (removed in CC→BAL2): population follows housing × happiness,
+    //   so luxuries only lift happiness above 70 (bonus tax, work speed).
     tiers: {
       // v0.51 balance rework — per-capita consumption expressed in GAME-MINUTES / 120
       // (2 ticks = 1 game-second). Peasant anchor: 1.3 potato/min + 0.9 wood/min.
@@ -47,7 +48,7 @@ Object.assign(CONFIG, {
     // gets just enough intermittent labour to bootstrap food/wood, not a free crew.
     // A cycle is `cycleTicks` (16 ticks ≈ 8 game-seconds ≈ one extractor batch).
     emptyHouseFrac: 0.10, emptyHouseCycleTicks: 16, emptyHouseOnCycles: 1, emptyHouseOffCycles: 3,
-    growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
+    growthThreshold: 0.9999, // LEGACY, unread: the luxury growth gate it drove was removed (CC→BAL2)
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
     growthRate: 0.0095,      // v0.51: fraction of the gap-to-target a tier gains per tick — paced so a fresh cluster of cities takes ~3 game-minutes to grow into a happy, self-sustaining 2-per-hut population (was 0.03; nudged from 0.008 to absorb the distribute-porter fill latency)
@@ -1085,11 +1086,10 @@ Sim.tick = function (State) {
     // === /PP-A ===
 
     // --- 4. Population from housing scales with happiness --------------
-    // Effective target per tier = round(capacity × happiness/100). A tier grows
-    // toward its target while its EXTRA-need goods are AVAILABLE (beer for workers,
-    // beer+clothes for burghers) — basics aren't a growth gate (they drive
-    // happiness, which already scales the target). Over target, or with an extra
-    // need missing, the tier declines after a sustained low streak.
+    // Effective target per tier = round(capacity × min(1, happiness/capacityFullAt)).
+    // A tier grows toward its target; neither basics nor luxuries gate growth
+    // directly — both feed happiness, which scales the target. Over target, the
+    // tier declines after a sustained low streak.
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
       ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
       : { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===
@@ -1577,4 +1577,108 @@ Sim.CC_migrateGoods = function (state) {
   return state;
 };
 // === /CC ===
+
+// === NEED-COVERAGE (DESIGN PASS) === READ-ONLY shortage signals for the UI (map alert
+// icons, speech bubbles, Event Log). One shared definition so the bubble, the alert
+// and the Event Log agree. Iterates only the tiers PRESENT in the town (pop > 0) and
+// their own per-tier basic/extra lists — never the cross-tier union. Stock counts the
+// warehouse PLUS every house's porter-filled buffer (b.inbuf), since that is what the
+// residents actually eat from. Never writes state; call it from a throttled poll, not
+// per frame. Returns [{ gid, cls:"basic"|"extra", perMin, have, coverMin, inbound,
+// hasLocalProducer, staffed, satEMA }], present tiers in order, basics before extras.
+Sim.needCoverage = function (state, town) {
+  const out = [];
+  if (!town || !town.pop) return out;
+  const pop = town.pop;
+  const ticksPerMin = 60000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);   // 120
+  const B = (typeof Buildings !== "undefined") ? Buildings : null;
+  const bcm = (B && B.basicConsumptionMult) ? B.basicConsumptionMult(town) : {};
+  const lcm = (B && B.luxuryConsumptionMult) ? B.luxuryConsumptionMult(town) : {};
+  const idx = {};                                      // gid -> entry
+  for (const k of Needs.tierKeys()) {
+    const n = pop[k] || 0;
+    if (!(n > 0)) continue;
+    const spec = Needs.tier(k), rates = spec.perCapita || {};
+    const addList = (list, cls, mult) => {
+      for (const gid of list) {
+        let e = idx[gid];
+        if (!e) {
+          e = idx[gid] = { gid, cls, perMin: 0, have: 0, coverMin: Infinity, inbound: 0,
+            hasLocalProducer: false, staffed: false, satEMA: 1 };
+          out.push(e);
+        } else if (cls === "basic") e.cls = "basic";   // dual-role good: basic wins
+        e.perMin += (rates[gid] || 0) * n * mult * ticksPerMin;
+      }
+    };
+    addList(spec.basic, "basic", bcm[k] || 1);
+    addList(spec.extra, "extra", lcm[k] || 1);
+  }
+  if (!out.length) return out;
+  const stock = town.stock || {};
+  for (const e of out) e.have = stock[e.gid] || 0;
+  for (const b of (town.buildings || [])) {
+    if (!b || b.built === false) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def) continue;
+    if (def.kind === "house" && b.inbuf) {
+      for (const gid in b.inbuf) if (idx[gid]) idx[gid].have += b.inbuf[gid] || 0;
+    }
+    const og = def.output && def.output.goodId;
+    if (og && idx[og]) {
+      idx[og].hasLocalProducer = true;
+      if (b.workers > 0 || !(def.workerSlots > 0)) idx[og].staffed = true;
+    }
+  }
+  // Units on the road TO this town: a buyer's own carts (cargo not yet unloaded) and
+  // H sell-cargo other cities are shipping here.
+  for (const c of (state && state.carts) || []) {
+    if (!c || c.done || c.kind === "castle") continue;
+    if (c.fromId === town.id) {
+      const items = Array.isArray(c.cargo) ? c.cargo : (c.goodId ? [c] : []);
+      for (const it of items) {
+        const e = idx[it.goodId];
+        if (e) e.inbound += Math.max(0, (it.qty || 0) - (it.unloaded || 0));
+      }
+    }
+    if (c.toId === town.id && Array.isArray(c.sellCargo)) {
+      for (const it of c.sellCargo) { const e = it && idx[it.goodId]; if (e) e.inbound += it.qty || 0; }
+    }
+  }
+  const sat = town.satEMA || {};
+  for (const e of out) {
+    if (e.perMin > 0) e.coverMin = e.have / e.perMin;
+    if (typeof sat[e.gid] === "number") e.satEMA = sat[e.gid];
+  }
+  return out;
+};
+
+// Basic-need shortage flags with hysteresis. `prev` = the flags returned last time
+// ({gid:true}); returns a NEW object (never mutates town/prev). Raise: a present
+// tier's basic good has < raiseCoverMin minutes of cover, nothing inbound, and no
+// staffed local producer (or one that is visibly failing: satEMA < satOk). Clear:
+// cover back above clearCoverMin (or the tier left). A city under construction has none.
+Sim.shortageAlerts = function (state, town, prev, cov) {
+  const next = {};
+  if (!town || town.built === false) return next;
+  const A = CONFIG.alerts || {};
+  const raise = (typeof A.raiseCoverMin === "number") ? A.raiseCoverMin : 2;
+  const clear = (typeof A.clearCoverMin === "number") ? A.clearCoverMin : 4;
+  const satOk = (typeof A.satOk === "number") ? A.satOk : 0.9;
+  for (const e of (cov || Sim.needCoverage(state, town))) {
+    if (e.cls !== "basic" || !(e.perMin > 0)) continue;
+    if (prev && prev[e.gid]) { if (!(e.coverMin > clear)) next[e.gid] = true; continue; }
+    if (e.coverMin < raise && !(e.inbound > 0) && (!e.staffed || e.satEMA < satOk)) next[e.gid] = true;
+  }
+  return next;
+};
+
+// The present-tier BASIC good whose shelves (warehouse + homes) are empty right now,
+// or null — the "We don't have any X!" speech bubble. Never a luxury, never another
+// tier's basic (a peasant-only city can't complain about fish).
+Sim.emptyBasicNeed = function (state, town, cov) {
+  for (const e of (cov || Sim.needCoverage(state, town)))
+    if (e.cls === "basic" && e.perMin > 0 && e.have < 0.5) return e.gid;
+  return null;
+};
+// === /NEED-COVERAGE ===
 // === SIM-CORE END ===

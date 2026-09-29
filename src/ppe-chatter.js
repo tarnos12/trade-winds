@@ -1,8 +1,9 @@
   // === PP-E START === (map juice — LTT-style ambient city chatter, render-only)
   // Three overlays drawn from drawWithDpr AFTER Juice (topmost):
-  //   1. speech bubbles over city centers (shortage / very-happy tier / all fine),
+  //   1. speech bubbles over city centers (shortage / "we dream of" a locked luxury /
+  //      very-happy tier / all fine),
   //   2. a wanted-goods icon row above each city (top-4 demand gaps, yellow ring
-  //      when the shelf is empty),
+  //      when the shelf is empty; research-locked goods greyed with a 🔒),
   //   3. "+N 🪙" gold floaters when a city's people-tax lands.
   // Mirrors the Juice module's discipline: READ-ONLY over the pure core (all
   // stores are module-local), pooled floaters (no GC churn), zoom-culled at the
@@ -33,6 +34,8 @@
     const floaters = [];           // active gold floaters (world-space)
     const fpool = [];              // dead floaters, reused
     let wantedTick = -1;           // state.tick the caches were computed for
+    const dreamed = new Set();     // DESIGN PASS: townIds that already said their one "We dream of …" line
+    const homeScratch = {};        // reused per town by homeStock (no per-tick allocation)
     let bubblesSpawned = 0, floatersSpawned = 0, wantedComputes = 0;
 
     // Is a world point on screen? (mirror of drawWithDpr's camera transform)
@@ -44,27 +47,47 @@
       return sx >= -m && sx <= W + m && sy >= -m && sy <= H + m;
     }
 
+    // DESIGN PASS: goods sitting in the houses' porter-filled buffers (b.inbuf) — the
+    // residents eat from these, so a shelf check that ignores them cries wolf.
+    function homeStock(t) {
+      for (const k in homeScratch) homeScratch[k] = 0;
+      for (const b of t.buildings || []) {
+        if (!b || b.built === false || !b.inbuf) continue;
+        const def = CONFIG.buildings[b.typeId];
+        if (!def || def.kind !== "house") continue;
+        for (const g in b.inbuf) homeScratch[g] = (homeScratch[g] || 0) + (b.inbuf[g] || 0);
+      }
+      return homeScratch;
+    }
+
     // ---- per-Sim-tick recompute: wanted rows + tax deltas + bubble scans ----
     function recompute() {
       const tick = state.tick || 0;
       if (tick === wantedTick) return;
       wantedTick = tick;
       wantedComputes++;
+      const E = CONFIG.econ;
+      // DESIGN PASS: research-locked goods (no available producer building) are drawn
+      // greyed with a 🔒 instead of a yellow "acute" ring — they hint at what to
+      // research, but aren't a shortage the player can fix today.
+      const producible = (typeof Market !== "undefined" && Market.producible) ? Market.producible(state) : null;
       const live = new Set();
       for (const t of state.towns || []) {
         if (!t || t.id == null) continue;
         live.add(t.id);
         // wanted row: goods short of cover, most short first; acute (yellow ring) when
         // the shelf is essentially empty. DESIGN PASS #6: consumed goods use the price
-        // engine's Sim.coverRatio (stock vs minutes of use); a construction bill / research
-        // share (a lump, not a rate) counts as covered once the stock holds it.
+        // engine's cover model (stock vs coverMin minutes of use); a construction bill /
+        // research share (a lump, not a rate) counts as covered once the shelf holds it.
+        // DESIGN PASS (#8): "shelf" = warehouse + the houses' porter buffers (production-7).
         const d = t.demand || {}, s = t.stock || {};
+        const home = homeStock(t);
         const entries = [];
         for (const gid in d) {
           const want = d[gid] || 0;
           if (!(want > 0)) continue;
-          const have = s[gid] || 0, cons = Sim.consDemandOf(t, gid), lump = want - cons;
-          let ratio = cons > 0 ? Sim.coverRatio(t, gid) : Infinity;
+          const have = (s[gid] || 0) + (home[gid] || 0), cons = Sim.consDemandOf(t, gid), lump = want - cons;
+          let ratio = cons > 0 ? have / (Math.max(E.minDemandPerMin, cons * E.ticksPerMin) * E.coverMin) : Infinity;
           if (lump > 1e-9) ratio = Math.min(ratio, have / lump);
           if (ratio < 1) entries.push([gid, 1 - ratio, have < 0.5]);
         }
@@ -72,8 +95,10 @@
         let row = wantedRows.get(t.id);
         if (!row) { row = []; wantedRows.set(t.id, row); }
         row.length = 0;
-        for (let i = 0; i < entries.length && i < 4; i++)
-          row.push({ gid: entries[i][0], acute: entries[i][2] });
+        for (let i = 0; i < entries.length && i < 4; i++) {
+          const locked = !!producible && !producible[entries[i][0]];
+          row.push({ gid: entries[i][0], acute: entries[i][2] && !locked, locked });
+        }
 
         // floater fuel: the PP-A ledger tally resets every Sim tick, so on each
         // NEW tick tally.tax is exactly this tick's people-tax landing.
@@ -87,38 +112,61 @@
       // prune stores for towns that no longer exist
       for (const m of [bubbles, bubbleCool, floatCool, taxPend, wantedRows])
         for (const id of m.keys()) if (!live.has(id)) m.delete(id);
+      for (const id of dreamed) if (!live.has(id)) dreamed.delete(id);
     }
 
-    // What (if anything) a city would say right now — priority order (a→c).
+    // What (if anything) a city would say right now — priority order (a→d).
     function bubbleTextFor(t) {
-      const N = CONFIG.needs || {};
-      const d = t.demand || {}, s = t.stock || {};
-      // (a) severe shortage of a BASIC need: empty shelf + real demand
-      for (const gid of N.basicNeeds || []) {
-        if ((d[gid] || 0) > 0 && (s[gid] || 0) < 0.5) {
-          // DESIGN PASS (#2): name the fix when this city's own producer is still unbuilt.
-          const p = (typeof Buildings !== "undefined" && Buildings.localProducers) ? Buildings.localProducers(t, gid) : null;
-          if (p && p.pending && !p.built) {
-            const def = CONFIG.buildings[p.pending.typeId] || {};
-            return "We have no " + goodIcon(gid) + " " + GOOD_LABEL(gid) + " — finish the " + (def.name || p.pending.typeId) + " or import it";
-          }
-          return "We don't have any " + goodIcon(gid) + " " + GOOD_LABEL(gid) + "!";
+      // DESIGN PASS: one shared, per-tier shortage definition (Sim.needCoverage): only
+      // the tiers actually living here, their OWN basics, warehouse + home buffers.
+      // (Was the cross-tier CONFIG.needs.basicNeeds union: every peasant city shouted
+      // "We don't have any 🐟 Fish!" — a worker basic but a locked peasant luxury.)
+      const cov = Sim.needCoverage(state, t);
+      // (a) severe shortage of a BASIC need of a present tier: nothing left anywhere
+      const empty = Sim.emptyBasicNeed(state, t, cov);
+      if (empty) {
+        // DESIGN PASS (#2): name the fix when this city's own producer is still unbuilt.
+        const p = (typeof Buildings !== "undefined" && Buildings.localProducers) ? Buildings.localProducers(t, empty) : null;
+        if (p && p.pending && !p.built) {
+          const def = CONFIG.buildings[p.pending.typeId] || {};
+          return "We have no " + goodIcon(empty) + " " + GOOD_LABEL(empty) + " — finish the " + (def.name || p.pending.typeId) + " or import it";
         }
+        return "We don't have any " + goodIcon(empty) + " " + GOOD_LABEL(empty) + "!";
       }
-      // (b) a tier is very happy (pays the people-tax bonus above happyBase)
+      // (b) once per city: the first research-locked luxury, pointing at the research
+      if (!dreamed.has(t.id)) {
+        const line = dreamLine(cov);
+        if (line) { dreamed.add(t.id); return line; }
+      }
+      // (c) a tier is very happy (pays the people-tax bonus above happyBase)
       const th = t.tierHappiness || {};
       for (const tk in TIER_LABEL) {
         if (typeof th[tk] === "number" && th[tk] >= 90)
           return TIER_LABEL[tk] + " are very happy and pay our city more.";
       }
-      // (c) every demanded good has at least a tick of coverage → all fine
-      let anyDemand = false;
-      for (const gid in d) {
-        if (!((d[gid] || 0) > 0)) continue;
-        anyDemand = true;
-        if ((s[gid] || 0) < (d[gid] || 0)) return null;
+      // (d) every need of a present tier has at least a minute of cover → all fine
+      if (!cov.length) return null;
+      for (const e of cov) if (e.coverMin < 1) return null;
+      return "All is fine here.";
+    }
+    // "We dream of 🐟 Fish — research the Fishery 🔬" for the first present-tier luxury
+    // with no available producer; the research name comes from the building's unlockedBy.
+    function dreamLine(cov) {
+      const producible = (typeof Market !== "undefined" && Market.producible) ? Market.producible(state) : {};
+      for (const e of cov) {
+        if (e.cls !== "extra" || producible[e.gid]) continue;
+        let node = null;
+        for (const bid in CONFIG.buildings) {
+          const def = CONFIG.buildings[bid];
+          if (def && def.output && def.output.goodId === e.gid && def.unlockedBy) {
+            node = (typeof Research !== "undefined" && Research.get) ? Research.get(def.unlockedBy) : null;
+            if (node) break;
+          }
+        }
+        if (!node) continue;
+        return "We dream of " + goodIcon(e.gid) + " " + GOOD_LABEL(e.gid) + " — research the " + node.name + " \u{1F52C}";
       }
-      return anyDemand ? "All is fine here." : null;
+      return null;
     }
     function maybeSpeak(t) {
       if (bubbles.has(t.id)) return;                 // one bubble at a time per city
@@ -176,8 +224,16 @@
           ctx.strokeStyle = "#ffce4d"; ctx.lineWidth = 1.6;
           ctx.beginPath(); ctx.arc(x, py, SIZE * 0.28, 0, Math.PI * 2); ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+        // DESIGN PASS: research-locked want → greyed glyph + a small 🔒, no ring
+        ctx.globalAlpha = row[i].locked ? 0.38 : 1;
         ctx.fillText(goodIcon(row[i].gid), x, py + 0.5);
+        if (row[i].locked) {
+          ctx.globalAlpha = 0.95;
+          ctx.font = Math.max(7, Math.round(icoPx * 0.55)) + "px system-ui, sans-serif";
+          ctx.fillText("\u{1F512}", x + SIZE * 0.2, py + SIZE * 0.18);
+          ctx.font = icoPx + "px system-ui, sans-serif";
+        }
+        ctx.globalAlpha = 1;
       }
     }
 
@@ -269,6 +325,7 @@
       frame,
       get bubblesSpawned() { return bubblesSpawned; },
       get activeBubbles() { return bubbles.size; },
+      get bubbleTexts() { return Array.from(bubbles.values(), (b) => b.text); },   // headless probes
       get wantedComputes() { return wantedComputes; },
       get wantedRowCount() { let n = 0; for (const r of wantedRows.values()) if (r.length) n++; return n; },
       get floatersSpawned() { return floatersSpawned; },

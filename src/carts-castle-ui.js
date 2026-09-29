@@ -503,7 +503,7 @@
     const treas = state.treasury || 0;
     const town = nearestTownToCastle();
     cwTreasuryEl.textContent = Math.round(treas).toLocaleString() + " g";
-    cwMarketEl.textContent = town ? ("Town #" + town.id) : "base prices";
+    cwMarketEl.textContent = town ? ("City #" + town.id) : "base prices";
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
@@ -674,9 +674,9 @@
       return PALETTE[i];
     }
 
-    const GIVE_AMT = 1000, TAKE_AMT = 1000;
-    const COOLDOWN_TICKS = 240;   // ~2 min at 1× (500 ms/tick)
-    const HAPPY_TICKS = 120;      // ~1 min the happiness nudge lasts
+    // DESIGN PASS: amounts/cooldown/happiness now live in CONFIG.town.transfer (Crown).
+    const GIVE_AMT = (CONFIG.town.transfer && CONFIG.town.transfer.amount) || 1000;
+    const TAKE_TIP = "Take " + GIVE_AMT + " g from this city into the Kingdom (−happiness)";
 
     const cardsEl = document.getElementById("cityCards");
     const kingdomGoldEl = document.getElementById("kingdomGold");
@@ -700,28 +700,42 @@
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
 
+    // DESIGN PASS: only a LIVE town (in state.towns) can be given to / taken from — a
+    // stale object from a replaced game minted free gold (Take) or lost it (Give).
+    const isLive = (town) => !!town && (state.towns || []).includes(town);
+    const liveTown = (id) => (state.towns || []).find(x => x.id === id) || null;
+
+    // DESIGN PASS: the transfer rules live in the pure Crown module (Crown.canGive /
+    // canTake / give / take — tested headlessly); this wrapper adds the live-town
+    // guard, the save and the player-facing feedback: a floater over the city, a
+    // floater + pulse on the 👑 chip and the 'place' SFX.
+    function chipFloat(text, cls) {
+      const chip = document.getElementById("kingdomChip");
+      if (!chip) return;
+      chip.classList.remove("kc-pulse"); void chip.offsetWidth; chip.classList.add("kc-pulse");
+      const f = document.createElement("span");
+      f.className = "kc-float " + cls; f.textContent = text;
+      f.addEventListener("animationend", () => f.remove());
+      chip.appendChild(f);
+      setTimeout(() => { if (f.parentNode) f.remove(); }, 1600);   // reduced-motion: no animationend
+    }
+    function transferFx(town, taken) {
+      const amt = Math.round(GIVE_AMT).toLocaleString();
+      if (window.Juice && Juice.townPopup) Juice.townPopup(town, (taken ? "−" : "+") + amt + "🪙", taken ? "#ff9b7a" : "#bfe8a8");
+      chipFloat((taken ? "+" : "−") + amt, taken ? "gain" : "loss");
+      if (typeof SFX !== "undefined") SFX.play("place");
+      if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    }
     function give(town) {
-      if (onCooldown(town)) return false;
-      if ((state.treasury || 0) < GIVE_AMT) return false;
-      state.treasury -= GIVE_AMT;
-      town.gold = (town.gold || 0) + GIVE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, +GIVE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: +10, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.give(state, town)) return false;
+      transferFx(town, false);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
     }
     function take(town) {
-      if (onCooldown(town)) return false;
-      if ((town.gold || 0) < TAKE_AMT) return false;
-      town.gold -= TAKE_AMT;
-      state.treasury = (state.treasury || 0) + TAKE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, -TAKE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: -30, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.take(state, town)) return false;
+      transferFx(town, true);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
@@ -729,12 +743,15 @@
 
     // Click a card body (not a button): center the camera and open its panel.
     function focus(town) {
+      if (!isLive(town)) return false;
       const p = HexMath.hexToPixel(town.q, town.r, SIZEc);
       state.cam.x = p.x; state.cam.y = p.y;
       if (typeof openTownPanel === "function") openTownPanel(town);
     }
 
-    function buildCard(town) {
+    // DESIGN PASS: a card captures only its town ID and resolves the live town on click
+    // (Continue/New Game replace state.towns with new objects under the same ids).
+    function buildCard(id) {
       const root = document.createElement("div");
       root.className = "city-card";
       root.innerHTML =
@@ -749,7 +766,7 @@
         '</div>' +
         '<div class="cc-btns">' +
           '<button class="cc-give" title="Give 1000 g from the Kingdom to this city (+happiness)">Give 1000</button>' +
-          '<button class="cc-take" title="Take 1000 g from this city into the Kingdom (−happiness)">Take 1000</button>' +
+          '<button class="cc-take" title="' + TAKE_TIP + '">Take 1000</button>' +
         '</div>' +
         '<div class="cc-cool" style="display:none"></div>';
       const parts = {
@@ -767,9 +784,9 @@
       // v0.49: the avatar carries the city NUMBER (an "image with just a number");
       // Give/Take stay hidden until the player holds Shift (revealBtns below).
       parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
-      parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
-      parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
-      root.addEventListener("click", () => focus(town));
+      parts.give.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; give(t); });
+      parts.take.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; take(t); });
+      root.addEventListener("click", () => { const t = liveTown(id); if (!t) return false; focus(t); });
       return parts;
     }
 
@@ -795,7 +812,7 @@
         if (town.id == null) continue;
         seen.add(town.id);
         let c = cards.get(town.id);
-        if (!c) { c = buildCard(town); cards.set(town.id, c); }
+        if (!c) { c = buildCard(town.id); cards.set(town.id, c); }
         // keep DOM order matching id order
         if (c.root.parentNode !== cardsEl || c.root.previousElementSibling !== prev) {
           cardsEl.insertBefore(c.root, prev ? prev.nextElementSibling : cardsEl.firstChild);
@@ -816,10 +833,11 @@
         // === /PP-E ===
 
         const cooling = onCooldown(town);
-        const canGive = !cooling && (state.treasury || 0) >= GIVE_AMT;
-        const canTake = !cooling && (town.gold || 0) >= TAKE_AMT;
-        c.give.disabled = !canGive;
-        c.take.disabled = !canTake;
+        const g = Crown.canGive(state, town), k = Crown.canTake(state, town);   // DESIGN PASS: same gate as the panel
+        c.give.disabled = !g.ok;
+        c.take.disabled = !k.ok;
+        const takeTip = k.ok ? TAKE_TIP : k.reason;
+        if (c.take.title !== takeTip) c.take.title = takeTip;
         if (cooling) {
           const left = Math.max(0, (town.cooldownUntil || 0) - now());
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
@@ -836,7 +854,15 @@
       }
     }
 
-    return { refresh, cityColor, give, take, PALETTE };
+    // DESIGN PASS: drop every card (DOM + map) — called by newGame()/loadGame() when
+    // state.towns is replaced, then rebuilt from the live towns straight away.
+    function reset() {
+      for (const c of cards.values()) if (c.root.parentNode) c.root.parentNode.removeChild(c.root);
+      cards.clear();
+      refresh();
+    }
+
+    return { refresh, reset, cityColor, give, take, PALETTE };
   })();
   window.CityCards = CityCards;
   // === CITY-CARDS END ===

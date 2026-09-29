@@ -197,13 +197,13 @@
       newGame(seed, preset, tiers);
       setMode(state.mode);
       begin();
-      if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: onboarding on a new game
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh(state);  // P5D-C: onboarding on a new game (DESIGN PASS: pass live state)
     }
     function continueSave() {
       if (!loadGame()) { refreshContinue(); return false; }   // no valid save
       setMode(state.mode);
       begin();
-      if (typeof Tutorial !== "undefined") Tutorial.resume();     // P5D-C: resume an in-progress tutorial
+      if (typeof Tutorial !== "undefined") Tutorial.resume(state);     // P5D-C: resume the SAVE's own mission progress (DESIGN PASS: pass live state)
       return true;
     }
 

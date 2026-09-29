@@ -16,6 +16,9 @@
   // DESIGN PASS: `genVersion` = MapGen revision to build with (CONFIG.map.genVersion
   // for a new game; loadGame passes the save's own so old terrain regenerates exactly).
   function newGame(seedInput, presetId, tiers, noSave, genVersion) {
+    // DESIGN PASS (review): a noSave PREVIEW world must never reach the save — the
+    // 30 s autosave, tab-hide and beforeunload used to write it over the kingdom.
+    previewWorld = !!noSave;
     state.seedInput = seedInput;
     state.mapgenVersion = genVersion || CONFIG.map.genVersion || 1;
     const hasTiers = tiers && typeof tiers === "object";
@@ -48,7 +51,7 @@
     state.towns = [];
     state.carts = [];
     state.treasury = 10000;   // EC-A: Kingdom starting gold (pays all placement)
-    state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 25%
+    state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 30%
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.market = (typeof Market !== "undefined" && Market.fresh) ? Market.fresh() : { hist: {}, head: 0, len: 0 };  // KR-A: fresh market history
@@ -71,19 +74,27 @@
     state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
     state.victoryTick = null;    // DESIGN PASS: tick the realm was won (recap time-to-win)
-    // DESIGN PASS: lifetime stats + mission progress belong to ONE realm — a new map
-    // starts them fresh (Sim.ensureStats / Tutorial rebuild them); loadGame restores.
-    state.stats = null;
-    state.missions = null;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
-    document.getElementById("seed").value = seedInput;
+    // DESIGN PASS: a new map starts with fresh lifetime counters + no mission progress —
+    // the boot-time loadGame() now restores the save's stats/missions into `state`, and
+    // New Game must not inherit them (Tutorial.startFresh(state) then seeds missions).
+    state.stats = undefined;
+    Sim.ensureStats(state);
+    state.missions = null;
+    // DESIGN PASS: the Seed field lives in the ?debug=1-only menu row — null-guard it.
+    const seedEl = document.getElementById("seed");
+    if (seedEl) seedEl.value = seedInput;
     // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
     // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
     // dims; fall back to the legacy castleReveal if a map carries none.
     reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
+    // DESIGN PASS: state.towns was replaced — drop city cards bound to the old game.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
@@ -91,11 +102,13 @@
   // Persistence (versioned; GDD §9.4)
   // ---------------------------------------------------------------
   let saveTimer = null;
+  let previewWorld = false;   // set by newGame(noSave): the live state is a start-screen preview
   function scheduleSave() {
     if (saveTimer) return;
     saveTimer = setTimeout(() => { saveTimer = null; saveGame(); }, 800);
   }
   function saveGame() {
+    if (previewWorld) return;   // DESIGN PASS (review): never persist a start-screen preview
     try {
       const data = {
         saveVersion: CONFIG.saveVersion,
@@ -285,12 +298,17 @@
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
     state.victoryTick = (typeof data.victoryTick === "number") ? data.victoryTick : null;   // DESIGN PASS: absent on old saves
-    // DESIGN PASS: restore the saved lifetime stats (recap + missions) and this game's
-    // mission progress (incl. the per-game "hidden"). They were saved but never loaded.
+    // DESIGN PASS (#1/#11): restore the saved lifetime stats (recap + missions) and this
+    // game's mission progress (incl. the per-game "hidden"). They were saved but never
+    // loaded, so every Continue restarted m1 and zeroed the lifetime tariff. Assigned
+    // BEFORE StartScreen.continueSave → Tutorial.resume(state); a save with no missions
+    // keeps state.missions null so ensureProg falls back to the localStorage mirror.
     state.stats = (data.stats && typeof data.stats === "object") ? data.stats : null;
     if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // migrate/seed missing counters
     state.missions = (data.missions && typeof data.missions === "object") ? data.missions : null;
-    state.revealAll = !!data.revealAll;
+    // DESIGN PASS: full-map reveal is a ?debug=1-only cheat now — a save that had it
+    // toggled on (the button used to be in every player's menu) loads with fog back.
+    state.revealAll = !!data.revealAll && DEBUG_UI;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
     state.gameSpeed = (typeof data.gameSpeed === "number" && data.gameSpeed > 0) ? data.gameSpeed : 1;
@@ -326,6 +344,10 @@
     // gold_ring, furniture→chairs, cloth→clothes) + weaver→tailoring across the
     // loaded save. Pure helper (PURE_CORE) so migration tests can drive it. ===
     Sim.CC_migrateGoods(state);
+    // DESIGN PASS: rebuild the city cards against the freshly loaded town objects.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     terrainDirty = true;
     return true;
     } catch (err) {

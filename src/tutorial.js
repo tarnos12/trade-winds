@@ -355,8 +355,10 @@
     }
 
     // Resolve the live game state for the poll (browser shell global).
+    let boundState = null;   // DESIGN PASS: remembered live state (shell `state` is not on window)
     function liveState(s) {
-      if (s) return s;
+      if (s) { boundState = s; return s; }
+      if (boundState) return boundState;
       if (typeof window !== "undefined" && window.state) return window.state;
       if (typeof globalThis !== "undefined" && globalThis.state) return globalThis.state;
       // DESIGN PASS: the shell's `state` is a lexical const (never on window) — without
@@ -368,12 +370,15 @@
     // ---- public API ----------------------------------------------------------
     // Fresh game: reset this playthrough's mission progress unless the player has
     // already finished/skipped the missions (LS gate), then run from the roots.
-    function startFresh() {
+    // DESIGN PASS (#1): callers pass the live `state` — the shell `state` is IIFE-scoped (no
+    // window.state), so liveState(null) resolved nothing and New Game never reset, nor
+    // Continue ever read, this game's own mission progress.
+    function startFresh(s) {
       ensureEls(); bindMenu();
       reloadSet();
       const gate = loadProgFromLS();
       if (gate.done) {
-        const st = liveState(null);
+        const st = liveState(s);
         // DESIGN PASS: a finished tutorial stays done; a global "hide on new games"
         // also hides the panel (the win tracker then waits for ☰ → 🎯 Missions → Show).
         if (st) { st.missions = freshProg(); st.missions.done = true; st.missions.skipped = st.missions.hidden = !!gate.skipped; }
@@ -381,7 +386,7 @@
         if (st) refresh(st);
         return;
       }
-      const st = liveState(null);
+      const st = liveState(s);
       if (st) st.missions = freshProg();     // new playthrough → clear baselines/activation
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
@@ -390,11 +395,17 @@
     }
 
     // Loaded game: resume the saved mission progress; leave finished/skipped alone.
-    function resume() {
+    function resume(s) {
       ensureEls();
       reloadSet();
-      const st = liveState(null);
+      const st = liveState(s);
       const p = st ? ensureProg(st) : loadProgFromLS();
+      // DESIGN PASS (#1): also honour the LS gate — before resume() saw the live state, a
+      // Skip only reached localStorage, so a pre-fix save's missions lack `done`.
+      if (st && !p.done) {
+        const gate = loadProgFromLS();
+        if (gate.done) { p.done = true; if (gate.skipped) p.skipped = p.hidden = true; }
+      }
       bindMenu();
       celebrating = false; active = true;     // DESIGN PASS: keep polling for the win tracker even when done
       if (elRoot) elRoot.classList.remove("celebrate");

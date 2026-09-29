@@ -45,7 +45,7 @@
     forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
     lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
   const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
-  const TT_ROMAN = { 2: "II", 3: "III", 4: "IV" };
+  const TT_ROMAN = { 2: "II", 3: "III", 4: "IV", 5: "V" };
 
   const ttPos = new Map();   // node id → { x, y } (cards only; edges + pips read it)
   let ttSurfaceW = 0, ttSurfaceH = 0;

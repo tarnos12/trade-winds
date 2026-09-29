@@ -7,9 +7,10 @@ audit — search the banner text, not the number, since edits shift them.
 wrapped in `/* BUILD:<name> START|END */` markers in `index.html` and mirrored 1:1
 in `src/<name>.js` (edit `src/`, run `node tools/build.js`, commit both; `--check`
 guards drift). The shipped `index.html` stays one self-contained offline file — the
-markers are behaviour-neutral comments. The 16 modules (in splice order) are:
+markers are behaviour-neutral comments. The pure-core modules (in splice order) are:
 `config, rng, hexmath, mapgen, goods, sim, buildings, pathing, trade, research,
-research-economy, progress, events, kingdom-market, ledger, castle-market`. The
+research-economy, progress, events, kingdom-market, ledger, castle-market,
+provisions, crown` (`crown` = Give/Take transfer rules + destroy-city refund). The
 impure shell below `PURE_CORE_END` is **not** yet modularized (Phase 2 deferred).
 
 ## Pure deterministic core — `PURE_CORE_START` (~1140) … `PURE_CORE_END` (~5162)
@@ -57,4 +58,4 @@ Fenced `=== X CSS START/END ===` and `=== X HTML START/END ===` blocks per panel
 Each standalone: reads `index.html`, regex-extracts PURE_CORE, `vm`-evals it,
 asserts. board · buildings · sim · trade · research · research_effects ·
 prices · market · balance · migration · progress · ledger · pathing · tariff · staffing ·
-distance · castle_trade · readouts.
+distance · castle_trade · readouts · crown · alerts.

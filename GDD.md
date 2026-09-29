@@ -154,7 +154,7 @@ Design:
 1. **Combat** — cut to optional Stage 4. *(Still deferred.)*
 2. **Tab-hidden behavior** — default: pause when not visible (no offline
    progression). *(Assumed; a capped ~10-min catch-up is the alternative.)*
-3. **Tariff** — baseline 25%, slider 10–40% (10% floor closes the "0% tariff"
+3. **Tariff** — baseline 30%, slider 10–40% (10% floor closes the "0% tariff"
    exploit). *(Assumed range.)*
 4. **Goods count** — grew from the original 14 to the current content-chains-v2
    set (T1–T3 across 4 tiers). *(Shipped; balance ongoing.)*
