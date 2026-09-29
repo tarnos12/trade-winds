@@ -44,6 +44,9 @@ async function makeThreeCitySave(page) {
     for (const [q, r] of spots) {
       const t = window.TownUI.makeTown(q, r);
       t.built = true; t.gold = 3000; t.happyMods = [];
+      // Design pass #5: Take now needs residents (CONFIG.town.transfer.takeMinPop) —
+      // give each city a few so the Shift+Take check below exercises a LEGAL Take.
+      t.pop.peasants = 4;
       st.towns.push(t);
     }
     const stats = Sim.ensureStats(st);

@@ -132,6 +132,17 @@
     box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums;
   }
   #kingdomChip b { color: var(--accent); }
+  /* DESIGN PASS: Give/Take feedback on the crown chip — a pulse + a rising "+1000"/"−1000" */
+  #kingdomChip { position: relative; }
+  #kingdomChip.kc-pulse { animation: kc-pulse 0.6s ease-out; }
+  @keyframes kc-pulse { 0% { transform: scale(1); } 30% { transform: scale(1.12); box-shadow: 0 0 16px var(--accent); } 100% { transform: scale(1); } }
+  #kingdomChip .kc-float { position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+    pointer-events: none; font-size: 13px; font-weight: bold; white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7); animation: kc-float 1.3s ease-out forwards; }
+  #kingdomChip .kc-float.gain { color: #ffd27a; }
+  #kingdomChip .kc-float.loss { color: #ff9b7a; }
+  @keyframes kc-float { 0% { opacity: 0; transform: translate(-50%, 0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 22px); } }
+  @media (prefers-reduced-motion: reduce) { #kingdomChip.kc-pulse, #kingdomChip .kc-float { animation: none; } }
   /* v0.48: gold + quick icons grouped top-left; game clock top-right */
   #kingdomWrap { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
   .kwrap-ic { min-width: 34px; text-align: center; padding: 8px; font-size: 15px; line-height: 1;
@@ -343,6 +354,10 @@
   #ppHead .pp-face.good { color: #6fbf73; }
   #ppHead .pp-face.mid  { color: #e0b23c; }
   #ppHead .pp-face.bad  { color: #e0503c; }
+  /* DESIGN PASS: live Give/Take happiness nudge readout ('😟 −30 · 0:42') */
+  #ppHead .pp-mod { font-size: 10.5px; padding: 1px 5px; border-radius: 5px; background: rgba(0,0,0,0.22); }
+  #ppHead .pp-mod.bad  { color: #e0503c; }
+  #ppHead .pp-mod.good { color: #6fbf73; }
   #ppHead .pp-headbtns { margin-left: auto; display: flex; gap: 4px; }
   #ppHead button { padding: 2px 7px; font-size: 10.5px; border-radius: 5px; }
   #ppHead .pp-cool { flex-basis: 100%; font-size: 10.5px; opacity: 0.7; margin-top: -3px; }
@@ -2859,6 +2874,22 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    // DESIGN PASS: a new city's starting purse (its trade budget) — was a literal in
+    // makeTown/ensureTown. Keep startGold <= foundCost: the Take→Destroy refund rule
+    // (Crown.cityRefund) only guarantees found→take→destroy nets ≤ 0 while it holds.
+    startGold: 1000,
+    // DESIGN PASS: Crown Give/Take (pure Crown module). Take is refused until the city
+    // is BUILT, has takeMinPop residents and is takeMinAgeTicks old (600 = 5 game-min),
+    // so a fresh city's founding purse can't be skimmed to make founding free.
+    transfer: {
+      amount: 1000,             // gold moved per Give / Take
+      cooldownTicks: 240,       // per-city cooldown after either (~2 game-min)
+      happyTicks: 120,          // how long the happiness nudge lasts (~1 game-min)
+      giveHappy: 10,            // Give: +happiness while it lasts
+      takeHappy: -30,           // Take: −happiness while it lasts
+      takeMinPop: 2,            // residents needed before a city can be taxed
+      takeMinAgeTicks: 600,     // ticks after founding before Take unlocks (5 game-min)
+    },
     buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,
@@ -7526,6 +7557,145 @@ if (typeof window !== "undefined") window.Provisioner = Provisioner;
 // === PROVISIONS END ===
 /* BUILD:provisions END */
 
+/* BUILD:crown START */
+// === CROWN === (DESIGN PASS) pure Give/Take gold transfers between the Kingdom
+// treasury (state.treasury) and a city's purse (town.gold), plus the destroy-city
+// refund rule. Moved out of the CityCards UI closure so the found → Take → Destroy
+// loop can be tested headlessly. Player-action hooks only (never called from
+// Sim.tick), no DOM / Math.random / Date — deterministic and save-safe.
+//
+// Per-town fields (all optional; legacy saves self-heal via normalizeTown):
+//   foundedTick  state.tick when the city was placed (absent → an old city, no age lock)
+//   foundPaid    treasury gold actually charged to found it (absent → CONFIG foundCost)
+//   takenGold    NET gold the Crown has withdrawn (Take adds, Give subtracts; may be
+//                negative) — deducted from the destroy refund so Take can't be undone
+//   cooldownUntil / happyMods  (unchanged EC-C channels, read by Sim)
+var Crown = (function () {
+  const cfg = () => (CONFIG.town && CONFIG.town.transfer) || {};
+  const num = (v, d) => (typeof v === "number" && Number.isFinite(v)) ? v : d;
+  const amount = () => num(cfg().amount, 1000);
+  const tickOf = (state) => (state && state.tick) || 0;
+  const NO_RESIDENTS = "The city has no residents to tax yet";
+
+  function isLive(state, town) {
+    return !!town && !!state && Array.isArray(state.towns) && state.towns.includes(town);
+  }
+  function popOf(town) {
+    const p = (town && town.pop) || {};
+    return (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);
+  }
+  function cooldownLeft(state, town) {
+    return Math.max(0, ((town && town.cooldownUntil) || 0) - tickOf(state));
+  }
+  // Ticks until the post-founding Take lock lifts (0 = unlocked / legacy city).
+  function ageLockLeft(state, town) {
+    if (!town || typeof town.foundedTick !== "number") return 0;
+    const minAge = num(cfg().takeMinAgeTicks, 600);
+    return Math.max(0, minAge - (tickOf(state) - town.foundedTick));
+  }
+  // "m:ss" of game time for a tick count (2 ticks = 1 game-second).
+  function fmtTicks(ticks) {
+    const secs = Math.ceil(Math.max(0, ticks) * (num(CONFIG.econ && CONFIG.econ.baseTickMs, 500) / 1000));
+    return Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
+  }
+
+  // { ok } | { ok:false, reason } — the reason doubles as the disabled-button tooltip.
+  function canTake(state, town) {
+    if (!isLive(state, town)) return { ok: false, reason: "No such city" };
+    if (town.built === false || popOf(town) < num(cfg().takeMinPop, 2)) return { ok: false, reason: NO_RESIDENTS };
+    const lock = ageLockLeft(state, town);
+    if (lock > 0) return { ok: false, reason: NO_RESIDENTS + " — its first settlers are still arriving (" + fmtTicks(lock) + ")" };
+    const cd = cooldownLeft(state, town);
+    if (cd > 0) return { ok: false, reason: "Transfer cooldown " + fmtTicks(cd) };
+    if ((town.gold || 0) < amount()) return { ok: false, reason: "The city holds less than " + amount() + "🪙" };
+    return { ok: true };
+  }
+  function canGive(state, town) {
+    if (!isLive(state, town)) return { ok: false, reason: "No such city" };
+    const cd = cooldownLeft(state, town);
+    if (cd > 0) return { ok: false, reason: "Transfer cooldown " + fmtTicks(cd) };
+    if ((state.treasury || 0) < amount()) return { ok: false, reason: "The Kingdom holds less than " + amount() + "🪙" };
+    return { ok: true };
+  }
+
+  function pushMod(state, town, delta) {
+    if (!Array.isArray(town.happyMods)) town.happyMods = [];
+    town.happyMods.push({ delta, untilTick: tickOf(state) + num(cfg().happyTicks, 120) });
+    town.cooldownUntil = tickOf(state) + num(cfg().cooldownTicks, 240);
+  }
+  // Move `amount` city → Kingdom. Returns true when it happened.
+  function take(state, town) {
+    if (!canTake(state, town).ok) return false;
+    const a = amount();
+    town.gold -= a;
+    state.treasury = (state.treasury || 0) + a;
+    town.takenGold = num(town.takenGold, 0) + a;
+    if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, -a);   // PP-A ledger
+    pushMod(state, town, num(cfg().takeHappy, -30));
+    return true;
+  }
+  // Move `amount` Kingdom → city. Lowers the net withdrawal, so Take-then-Give
+  // restores the full destroy refund (Give-then-Take nets to zero as well).
+  function give(state, town) {
+    if (!canGive(state, town).ok) return false;
+    const a = amount();
+    state.treasury -= a;
+    town.gold = (town.gold || 0) + a;
+    town.takenGold = num(town.takenGold, 0) - a;
+    if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, +a);   // PP-A ledger
+    pushMod(state, town, num(cfg().giveHappy, 10));
+    return true;
+  }
+
+  // Sum of the live Give/Take happiness nudges + ticks until the last expires
+  // (null when none) — for the town header's "😟 −30 · 0:42" readout.
+  function activeMod(state, town) {
+    const mods = town && town.happyMods;
+    if (!Array.isArray(mods) || !mods.length) return null;
+    const now = tickOf(state);
+    let delta = 0, until = -1;
+    for (const m of mods) {
+      if (!m || m.untilTick == null || m.untilTick < now) continue;
+      delta += (m.delta || 0);
+      if (m.untilTick > until) until = m.untilTick;
+    }
+    return (until < 0 || !delta) ? null : { delta, ticksLeft: until - now };
+  }
+
+  // Stamp a freshly placed city (call right after it joins state.towns).
+  function stampFounding(state, town, paid) {
+    if (!town) return;
+    town.foundedTick = tickOf(state);
+    town.foundPaid = num(paid, num(CONFIG.town && CONFIG.town.foundCost, 1000));
+    town.takenGold = 0;
+  }
+  // Treasury gold returned when the city is destroyed: what was paid to found it and
+  // its buildings, minus what the Crown has net withdrawn. Never the city's remaining
+  // purse (that would open a purse → treasury pipe).
+  function cityRefund(town) {
+    if (!town) return 0;
+    let paid = num(town.foundPaid, num(CONFIG.town && CONFIG.town.foundCost, 0));
+    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) {
+      const def = b && CONFIG.buildings[b.typeId];
+      paid += (def && def.cost && def.cost.gold) || 0;
+    }
+    return Math.max(0, paid - Math.max(0, num(town.takenGold, 0)));
+  }
+  // Load-time repair: drop non-numeric values (absent = legacy semantics above).
+  function normalizeTown(town) {
+    if (!town) return;
+    for (const k of ["foundedTick", "foundPaid", "takenGold"]) {
+      if (k in town && num(town[k], null) === null) delete town[k];
+    }
+  }
+
+  return { canTake, canGive, take, give, activeMod, stampFounding, cityRefund,
+           normalizeTown, cooldownLeft, ageLockLeft, fmtTicks, popOf, NO_RESIDENTS };
+})();
+if (typeof window !== "undefined") window.Crown = Crown;
+// === CROWN END ===
+/* BUILD:crown END */
+
 /* PURE_CORE_END */
 
 // === RESEARCH EDITOR EMBED ===
@@ -8948,9 +9118,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
   // Destroy a whole city: all its buildings + the centre, refunding the founding gold
   // plus every building's gold. Resources/population are lost.
+  // DESIGN PASS: refund = max(0, foundPaid + building gold − gold the Crown has Taken)
+  // (Crown.cityRefund) — found → Take → Destroy used to mint +1000 per cycle. The
+  // city's remaining purse is never refunded (that would be a purse → treasury pipe).
+  // Confirm-dialog copy: the exact refund, and why it is short when the Crown has Taken.
+  function cityRefundNote(town) {
+    const refund = Math.round(Crown.cityRefund(town));
+    const taken = Math.max(0, Math.round(town.takenGold || 0));
+    return " Refund: " + refund.toLocaleString() + "🪙 (gold spent on the city + buildings" +
+      (taken > 0 ? ", minus " + taken.toLocaleString() + "🪙 the Crown took" : "") + "); resources are not refunded.";
+  }
   function destroyCityRefund(town) {
-    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
-    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const refund = Crown.cityRefund(town);
     const idx = state.towns.indexOf(town);
     if (idx < 0) return;
     state.towns.splice(idx, 1);
@@ -8974,8 +9153,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
+        const paid = Buildings.foundCost();
         Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
-        state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
+        const town = makeTown(q, r);        // TOWN-UI: full Town entity (was { q, r })
+        state.towns.push(town);
+        Crown.stampFounding(state, town, paid);   // DESIGN PASS: foundedTick/foundPaid for the Take lock + destroy refund
         if (typeof Sim !== "undefined" && Sim.statFounded) Sim.statFounded(state);   // onboarding: cities founded
         // v0.51 (N): NO reveal at placement — a city reveals its neighbours only once
         // it has finished CONSTRUCTION (renderer.revealConstructed), not when founded.
@@ -9027,7 +9209,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
             || (t.gold || 0) > 0;
           if (developed) {
             // v0.51 §11: refund the gold spent (city + buildings), lose resources.
-            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost." + cityRefundNote(t), () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -9063,7 +9245,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
       if (!t) return;
       const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
-      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost." + cityRefundNote(t), () => {
         destroyCityRefund(t);
       });
     }
@@ -9974,6 +10156,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   //     prices:{goodId:price}, buildings:[{typeId,q,r,workers}], happiness }
   // Seeded with sensible starting values so the panel (and, later, Sim.tick) has
   // real data to show even before the economy tick lands.
+  const startGold = () => (CONFIG.town && typeof CONFIG.town.startGold === "number") ? CONFIG.town.startGold : 1000;
   function makeTown(q, r) {
     const town = {
       id: nextTownId(),
@@ -9985,7 +10168,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // EC-A: town.gold is the city's TRADE budget (the external trader spends it
       // to buy goods) — NOT construction money. Construction gold is the Kingdom
       // treasury (state.treasury); construction resources are town.stock.
-      gold: 1000,
+      gold: startGold(),   // DESIGN PASS: CONFIG.town.startGold (was a literal 1000)
       // EC-A/EC-B: a city starts with ZERO population — houses + happiness grow it
       // (Sim.tick, owned by EC-B). No auto-seeded buildings: center only.
       pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 },   // === CC: 4th tier ===
@@ -10011,7 +10194,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   function ensureTown(t) {
     if (t.id == null) t.id = nextTownId();
     if (t.level == null) t.level = 1;
-    if (t.gold == null) t.gold = 1000;   // EC-A: trade budget
+    if (t.gold == null) t.gold = startGold();   // EC-A: trade budget
     if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===
     if (!t.stock) t.stock = { ...CONFIG.town.startStock };
     if (!t.prices) t.prices = {};
@@ -10022,6 +10205,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
     if (t.built == null) t.built = true;   // v0.51: legacy/loaded cities are already built (only makeTown starts false)
     if (typeof Ledger !== "undefined") Ledger.normalizeTown(t);   // PP-A: bounded gold ledger (legacy saves self-heal)
+    if (typeof Crown !== "undefined") Crown.normalizeTown(t);     // DESIGN PASS: foundedTick/foundPaid/takenGold
     return t;
   }
 
@@ -10188,16 +10372,53 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   // ---- header strip: gold · slots · happiness · upgrade · Give/Take ----------
+  // DESIGN PASS: the stat spans are built ONCE and updated via textContent on every
+  // refresh (they used to freeze under the cursor — a hovered header showed 70% while
+  // the city sat at 40%). Only the button group is rebuilt, and only when it is not
+  // hovered (a mid-click rebuild would swallow the click). Player actions force it.
+  let ppHd = null;   // { gold, slots, happy, mod, btns, cool, btnHtml }
+  function ppHeadSkeleton() {
+    if (ppHd && ppHeadEl.contains(ppHd.gold)) return ppHd;
+    ppHeadEl.innerHTML =
+      '<span class="pp-stat" id="ppGold" title="City gold (its trade budget)"></span>' +
+      '<span class="pp-stat" id="ppSlots" title="Building slots used / capacity"></span>' +
+      '<span class="pp-stat pp-face" id="ppHappy" title="City happiness"></span>' +
+      '<span class="pp-stat pp-mod" id="ppMod"></span>' +
+      '<span class="pp-headbtns" id="ppHeadBtns"></span>' +
+      '<span class="pp-cool" id="ppCool"></span>';
+    const q = (id) => ppHeadEl.querySelector("#" + id);
+    ppHd = { gold: q("ppGold"), slots: q("ppSlots"), happy: q("ppHappy"), mod: q("ppMod"),
+             btns: q("ppHeadBtns"), cool: q("ppCool"), btnHtml: "" };
+    return ppHd;
+  }
   function renderPPHead(t, force) {
     if (!ppHeadEl) return;
-    // Don't rebuild under the cursor — a mid-click rebuild would swallow the
-    // click and an open title-tooltip would flicker. Player actions force it.
-    if (!force && ppHeadEl.matches(":hover")) return;
+    const hd = ppHeadSkeleton();
     const used = Buildings.usedSlots(t);
     const cap = Buildings.slotCap(t.level, state);
     const h = Math.max(0, Math.min(100, Math.round(t.happiness || 0)));
     const face = h >= 70 ? "🙂" : h >= 40 ? "😐" : "☹";
-    const faceCls = h >= 70 ? "good" : h >= 40 ? "mid" : "bad";
+    hd.gold.textContent = "🪙 " + Math.round(t.gold || 0).toLocaleString();
+    hd.slots.textContent = "🏠 " + used + "/" + cap;
+    hd.happy.textContent = face + " " + h + "%";
+    hd.happy.className = "pp-stat pp-face " + (h >= 70 ? "good" : h >= 40 ? "mid" : "bad");
+    // DESIGN PASS: the live Give/Take happiness nudge + time left ("😟 −30 · 0:42").
+    const mod = Crown.activeMod(state, t);
+    if (mod) {
+      const neg = mod.delta < 0;
+      hd.mod.textContent = (neg ? "😟 −" : "😊 +") + Math.abs(Math.round(mod.delta)) + " · " + Crown.fmtTicks(mod.ticksLeft);
+      hd.mod.className = "pp-stat pp-mod " + (neg ? "bad" : "good");
+      hd.mod.title = neg ? "Taxed by the Crown — residents are unhappy, so fewer stay and work until this wears off"
+                         : "A gift from the Crown — residents are happier until this wears off";
+      hd.mod.style.display = "";
+    } else {
+      hd.mod.style.display = "none";
+    }
+    const cd = Crown.cooldownLeft(state, t);
+    hd.cool.textContent = cd > 0 ? "⏳ transfer cooldown " + Crown.fmtTicks(cd) : "";
+    hd.cool.style.display = cd > 0 ? "" : "none";
+
+    if (!force && hd.btns.matches(":hover")) return;
     const req = Town.upgradeReq(t);
     let upBtn;
     if (!req) {
@@ -10211,23 +10432,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // city can't yet afford it; Town.upgrade gates the click.
       upBtn = `<button data-town-upgrade data-tip="cityUpgrade"${res.ok ? "" : ' style="opacity:.5"'} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
     }
-    const cooling = (t.cooldownUntil || 0) > (state.tick || 0);
-    let coolStr = "";
-    if (cooling) {
-      const secs = Math.ceil(((t.cooldownUntil || 0) - (state.tick || 0)) * 0.5);   // 500 ms/tick
-      coolStr = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
-    }
-    const canGive = !cooling && (state.treasury || 0) >= 1000;
-    const canTake = !cooling && (t.gold || 0) >= 1000;
-    const coolTip = cooling ? " — cooldown " + coolStr : "";
-    ppHeadEl.innerHTML =
-      `<span class="pp-stat" title="City gold (its trade budget)">🪙 ${Math.round(t.gold || 0).toLocaleString()}</span>` +
-      `<span class="pp-stat" title="Building slots used / capacity">🏠 ${used}/${cap}</span>` +
-      `<span class="pp-stat pp-face ${faceCls}" title="City happiness">${face} ${h}%</span>` +
-      `<span class="pp-headbtns">${upBtn}` +
-      `<button data-pp-give ${canGive ? "" : "disabled"} title="${escAttr("Give 1000🪙 from the Kingdom to this city — +10 happiness for 1 min" + coolTip)}">Give 1k</button>` +
-      `<button data-pp-take ${canTake ? "" : "disabled"} title="${escAttr("Take 1000🪙 from this city into the Kingdom — −30 happiness for 1 min, so fewer residents stay and work" + coolTip)}">Take 1k</button></span>` +
-      (cooling ? `<span class="pp-cool">⏳ transfer cooldown ${coolStr}</span>` : "");
+    // DESIGN PASS: Give/Take gates come from the pure Crown helpers (same rule as the
+    // city cards); a refused Take explains itself in its tooltip.
+    const tr = CONFIG.town.transfer || {}, amt = tr.amount || 1000;
+    const g = Crown.canGive(state, t), k = Crown.canTake(state, t);
+    const giveTip = "Give " + amt + "🪙 from the Kingdom to this city — +" + (tr.giveHappy || 10) + " happiness for 1 min" + (g.ok ? "" : " — " + g.reason);
+    const takeTip = k.ok ? "Take " + amt + "🪙 from this city into the Kingdom — −" + Math.abs(tr.takeHappy || 30) + " happiness for 1 min, so fewer residents stay and work"
+                         : k.reason;
+    const html = upBtn +
+      `<button data-pp-give ${g.ok ? "" : "disabled"} title="${escAttr(giveTip)}">Give 1k</button>` +
+      `<button data-pp-take ${k.ok ? "" : "disabled"} title="${escAttr(takeTip)}">Take 1k</button>`;
+    if (html !== hd.btnHtml) { hd.btns.innerHTML = html; hd.btnHtml = html; }
   }
 
   // ---- Tab 1: Overview --------------------------------------------------------
@@ -12542,9 +12757,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       return PALETTE[i];
     }
 
-    const GIVE_AMT = 1000, TAKE_AMT = 1000;
-    const COOLDOWN_TICKS = 240;   // ~2 min at 1× (500 ms/tick)
-    const HAPPY_TICKS = 120;      // ~1 min the happiness nudge lasts
+    // DESIGN PASS: amounts/cooldown/happiness now live in CONFIG.town.transfer (Crown).
+    const GIVE_AMT = (CONFIG.town.transfer && CONFIG.town.transfer.amount) || 1000;
+    const TAKE_TIP = "Take " + GIVE_AMT + " g from this city into the Kingdom (−happiness)";
 
     const cardsEl = document.getElementById("cityCards");
     const kingdomGoldEl = document.getElementById("kingdomGold");
@@ -12573,30 +12788,37 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const isLive = (town) => !!town && (state.towns || []).includes(town);
     const liveTown = (id) => (state.towns || []).find(x => x.id === id) || null;
 
+    // DESIGN PASS: the transfer rules live in the pure Crown module (Crown.canGive /
+    // canTake / give / take — tested headlessly); this wrapper adds the live-town
+    // guard, the save and the player-facing feedback: a floater over the city, a
+    // floater + pulse on the 👑 chip and the 'place' SFX.
+    function chipFloat(text, cls) {
+      const chip = document.getElementById("kingdomChip");
+      if (!chip) return;
+      chip.classList.remove("kc-pulse"); void chip.offsetWidth; chip.classList.add("kc-pulse");
+      const f = document.createElement("span");
+      f.className = "kc-float " + cls; f.textContent = text;
+      f.addEventListener("animationend", () => f.remove());
+      chip.appendChild(f);
+      setTimeout(() => { if (f.parentNode) f.remove(); }, 1600);   // reduced-motion: no animationend
+    }
+    function transferFx(town, taken) {
+      const amt = Math.round(GIVE_AMT).toLocaleString();
+      if (window.Juice && Juice.townPopup) Juice.townPopup(town, (taken ? "−" : "+") + amt + "🪙", taken ? "#ff9b7a" : "#bfe8a8");
+      chipFloat((taken ? "+" : "−") + amt, taken ? "gain" : "loss");
+      if (typeof SFX !== "undefined") SFX.play("place");
+      if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    }
     function give(town) {
-      if (!isLive(town)) return false;
-      if (onCooldown(town)) return false;
-      if ((state.treasury || 0) < GIVE_AMT) return false;
-      state.treasury -= GIVE_AMT;
-      town.gold = (town.gold || 0) + GIVE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, +GIVE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: +10, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.give(state, town)) return false;
+      transferFx(town, false);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
     }
     function take(town) {
-      if (!isLive(town)) return false;
-      if (onCooldown(town)) return false;
-      if ((town.gold || 0) < TAKE_AMT) return false;
-      town.gold -= TAKE_AMT;
-      state.treasury = (state.treasury || 0) + TAKE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, -TAKE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: -30, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.take(state, town)) return false;
+      transferFx(town, true);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
@@ -12627,7 +12849,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         '</div>' +
         '<div class="cc-btns">' +
           '<button class="cc-give" title="Give 1000 g from the Kingdom to this city (+happiness)">Give 1000</button>' +
-          '<button class="cc-take" title="Take 1000 g from this city into the Kingdom (−happiness)">Take 1000</button>' +
+          '<button class="cc-take" title="' + TAKE_TIP + '">Take 1000</button>' +
         '</div>' +
         '<div class="cc-cool" style="display:none"></div>';
       const parts = {
@@ -12694,10 +12916,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         // === /PP-E ===
 
         const cooling = onCooldown(town);
-        const canGive = !cooling && (state.treasury || 0) >= GIVE_AMT;
-        const canTake = !cooling && (town.gold || 0) >= TAKE_AMT;
-        c.give.disabled = !canGive;
-        c.take.disabled = !canTake;
+        const g = Crown.canGive(state, town), k = Crown.canTake(state, town);   // DESIGN PASS: same gate as the panel
+        c.give.disabled = !g.ok;
+        c.take.disabled = !k.ok;
+        const takeTip = k.ok ? TAKE_TIP : k.reason;
+        if (c.take.title !== takeTip) c.take.title = takeTip;
         if (cooling) {
           const left = Math.max(0, (town.cooldownUntil || 0) - now());
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
@@ -14152,6 +14375,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       p.grow = 0; p.life = p.max = 900; p.color = color; p.text = text;
     }
 
+    // DESIGN PASS: Give/Take feedback — a floating "−1000🪙"/"+1000🪙" over the city.
+    // Also re-primes the tariff detector so the transfer's treasury jump isn't
+    // mistaken for a tariff and popped at an unrelated sale spot.
+    function townPopup(town, text, color) {
+      if (typeof state.treasury === "number") prevTreasury = state.treasury;
+      if (!town || reduced()) return;
+      const p = HexMath.hexToPixel(town.q, town.r, SIZE);
+      textPopup(p.x, p.y - SIZE * 0.9, text, color);
+    }
+
     // ---- detectors (track transitions frame-to-frame; emit unless reduced) ----
     function detectSales() {
       const carts = state.carts || [], seen = {};
@@ -14357,7 +14590,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       draw();
     }
 
-    return { frame, MAX_PARTICLES,
+    return { frame, townPopup, MAX_PARTICLES,
              get count() { return parts.length; },
              get reducedMotion() { return reduced(); } };
   })();

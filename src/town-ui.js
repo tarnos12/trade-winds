@@ -29,6 +29,7 @@
   //     prices:{goodId:price}, buildings:[{typeId,q,r,workers}], happiness }
   // Seeded with sensible starting values so the panel (and, later, Sim.tick) has
   // real data to show even before the economy tick lands.
+  const startGold = () => (CONFIG.town && typeof CONFIG.town.startGold === "number") ? CONFIG.town.startGold : 1000;
   function makeTown(q, r) {
     const town = {
       id: nextTownId(),
@@ -40,7 +41,7 @@
       // EC-A: town.gold is the city's TRADE budget (the external trader spends it
       // to buy goods) — NOT construction money. Construction gold is the Kingdom
       // treasury (state.treasury); construction resources are town.stock.
-      gold: 1000,
+      gold: startGold(),   // DESIGN PASS: CONFIG.town.startGold (was a literal 1000)
       // EC-A/EC-B: a city starts with ZERO population — houses + happiness grow it
       // (Sim.tick, owned by EC-B). No auto-seeded buildings: center only.
       pop: { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 },   // === CC: 4th tier ===
@@ -66,7 +67,7 @@
   function ensureTown(t) {
     if (t.id == null) t.id = nextTownId();
     if (t.level == null) t.level = 1;
-    if (t.gold == null) t.gold = 1000;   // EC-A: trade budget
+    if (t.gold == null) t.gold = startGold();   // EC-A: trade budget
     if (!t.pop) t.pop = { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===
     if (!t.stock) t.stock = { ...CONFIG.town.startStock };
     if (!t.prices) t.prices = {};
@@ -77,6 +78,7 @@
     if (t.happiness == null) t.happiness = 50;   // EC-A: baseline
     if (t.built == null) t.built = true;   // v0.51: legacy/loaded cities are already built (only makeTown starts false)
     if (typeof Ledger !== "undefined") Ledger.normalizeTown(t);   // PP-A: bounded gold ledger (legacy saves self-heal)
+    if (typeof Crown !== "undefined") Crown.normalizeTown(t);     // DESIGN PASS: foundedTick/foundPaid/takenGold
     return t;
   }
 
@@ -243,16 +245,53 @@
   }
 
   // ---- header strip: gold · slots · happiness · upgrade · Give/Take ----------
+  // DESIGN PASS: the stat spans are built ONCE and updated via textContent on every
+  // refresh (they used to freeze under the cursor — a hovered header showed 70% while
+  // the city sat at 40%). Only the button group is rebuilt, and only when it is not
+  // hovered (a mid-click rebuild would swallow the click). Player actions force it.
+  let ppHd = null;   // { gold, slots, happy, mod, btns, cool, btnHtml }
+  function ppHeadSkeleton() {
+    if (ppHd && ppHeadEl.contains(ppHd.gold)) return ppHd;
+    ppHeadEl.innerHTML =
+      '<span class="pp-stat" id="ppGold" title="City gold (its trade budget)"></span>' +
+      '<span class="pp-stat" id="ppSlots" title="Building slots used / capacity"></span>' +
+      '<span class="pp-stat pp-face" id="ppHappy" title="City happiness"></span>' +
+      '<span class="pp-stat pp-mod" id="ppMod"></span>' +
+      '<span class="pp-headbtns" id="ppHeadBtns"></span>' +
+      '<span class="pp-cool" id="ppCool"></span>';
+    const q = (id) => ppHeadEl.querySelector("#" + id);
+    ppHd = { gold: q("ppGold"), slots: q("ppSlots"), happy: q("ppHappy"), mod: q("ppMod"),
+             btns: q("ppHeadBtns"), cool: q("ppCool"), btnHtml: "" };
+    return ppHd;
+  }
   function renderPPHead(t, force) {
     if (!ppHeadEl) return;
-    // Don't rebuild under the cursor — a mid-click rebuild would swallow the
-    // click and an open title-tooltip would flicker. Player actions force it.
-    if (!force && ppHeadEl.matches(":hover")) return;
+    const hd = ppHeadSkeleton();
     const used = Buildings.usedSlots(t);
     const cap = Buildings.slotCap(t.level, state);
     const h = Math.max(0, Math.min(100, Math.round(t.happiness || 0)));
     const face = h >= 70 ? "🙂" : h >= 40 ? "😐" : "☹";
-    const faceCls = h >= 70 ? "good" : h >= 40 ? "mid" : "bad";
+    hd.gold.textContent = "🪙 " + Math.round(t.gold || 0).toLocaleString();
+    hd.slots.textContent = "🏠 " + used + "/" + cap;
+    hd.happy.textContent = face + " " + h + "%";
+    hd.happy.className = "pp-stat pp-face " + (h >= 70 ? "good" : h >= 40 ? "mid" : "bad");
+    // DESIGN PASS: the live Give/Take happiness nudge + time left ("😟 −30 · 0:42").
+    const mod = Crown.activeMod(state, t);
+    if (mod) {
+      const neg = mod.delta < 0;
+      hd.mod.textContent = (neg ? "😟 −" : "😊 +") + Math.abs(Math.round(mod.delta)) + " · " + Crown.fmtTicks(mod.ticksLeft);
+      hd.mod.className = "pp-stat pp-mod " + (neg ? "bad" : "good");
+      hd.mod.title = neg ? "Taxed by the Crown — residents are unhappy, so fewer stay and work until this wears off"
+                         : "A gift from the Crown — residents are happier until this wears off";
+      hd.mod.style.display = "";
+    } else {
+      hd.mod.style.display = "none";
+    }
+    const cd = Crown.cooldownLeft(state, t);
+    hd.cool.textContent = cd > 0 ? "⏳ transfer cooldown " + Crown.fmtTicks(cd) : "";
+    hd.cool.style.display = cd > 0 ? "" : "none";
+
+    if (!force && hd.btns.matches(":hover")) return;
     const req = Town.upgradeReq(t);
     let upBtn;
     if (!req) {
@@ -266,23 +305,17 @@
       // city can't yet afford it; Town.upgrade gates the click.
       upBtn = `<button data-town-upgrade data-tip="cityUpgrade"${res.ok ? "" : ' style="opacity:.5"'} title="${escAttr(tip)}">⬆ Lv ${t.level + 1}</button>`;
     }
-    const cooling = (t.cooldownUntil || 0) > (state.tick || 0);
-    let coolStr = "";
-    if (cooling) {
-      const secs = Math.ceil(((t.cooldownUntil || 0) - (state.tick || 0)) * 0.5);   // 500 ms/tick
-      coolStr = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
-    }
-    const canGive = !cooling && (state.treasury || 0) >= 1000;
-    const canTake = !cooling && (t.gold || 0) >= 1000;
-    const coolTip = cooling ? " — cooldown " + coolStr : "";
-    ppHeadEl.innerHTML =
-      `<span class="pp-stat" title="City gold (its trade budget)">🪙 ${Math.round(t.gold || 0).toLocaleString()}</span>` +
-      `<span class="pp-stat" title="Building slots used / capacity">🏠 ${used}/${cap}</span>` +
-      `<span class="pp-stat pp-face ${faceCls}" title="City happiness">${face} ${h}%</span>` +
-      `<span class="pp-headbtns">${upBtn}` +
-      `<button data-pp-give ${canGive ? "" : "disabled"} title="${escAttr("Give 1000🪙 from the Kingdom to this city — +10 happiness for 1 min" + coolTip)}">Give 1k</button>` +
-      `<button data-pp-take ${canTake ? "" : "disabled"} title="${escAttr("Take 1000🪙 from this city into the Kingdom — −30 happiness for 1 min, so fewer residents stay and work" + coolTip)}">Take 1k</button></span>` +
-      (cooling ? `<span class="pp-cool">⏳ transfer cooldown ${coolStr}</span>` : "");
+    // DESIGN PASS: Give/Take gates come from the pure Crown helpers (same rule as the
+    // city cards); a refused Take explains itself in its tooltip.
+    const tr = CONFIG.town.transfer || {}, amt = tr.amount || 1000;
+    const g = Crown.canGive(state, t), k = Crown.canTake(state, t);
+    const giveTip = "Give " + amt + "🪙 from the Kingdom to this city — +" + (tr.giveHappy || 10) + " happiness for 1 min" + (g.ok ? "" : " — " + g.reason);
+    const takeTip = k.ok ? "Take " + amt + "🪙 from this city into the Kingdom — −" + Math.abs(tr.takeHappy || 30) + " happiness for 1 min, so fewer residents stay and work"
+                         : k.reason;
+    const html = upBtn +
+      `<button data-pp-give ${g.ok ? "" : "disabled"} title="${escAttr(giveTip)}">Give 1k</button>` +
+      `<button data-pp-take ${k.ok ? "" : "disabled"} title="${escAttr(takeTip)}">Take 1k</button>`;
+    if (html !== hd.btnHtml) { hd.btns.innerHTML = html; hd.btnHtml = html; }
   }
 
   // ---- Tab 1: Overview --------------------------------------------------------

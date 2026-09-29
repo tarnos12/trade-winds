@@ -356,6 +356,22 @@ Object.assign(CONFIG, {
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    // DESIGN PASS: a new city's starting purse (its trade budget) — was a literal in
+    // makeTown/ensureTown. Keep startGold <= foundCost: the Take→Destroy refund rule
+    // (Crown.cityRefund) only guarantees found→take→destroy nets ≤ 0 while it holds.
+    startGold: 1000,
+    // DESIGN PASS: Crown Give/Take (pure Crown module). Take is refused until the city
+    // is BUILT, has takeMinPop residents and is takeMinAgeTicks old (600 = 5 game-min),
+    // so a fresh city's founding purse can't be skimmed to make founding free.
+    transfer: {
+      amount: 1000,             // gold moved per Give / Take
+      cooldownTicks: 240,       // per-city cooldown after either (~2 game-min)
+      happyTicks: 120,          // how long the happiness nudge lasts (~1 game-min)
+      giveHappy: 10,            // Give: +happiness while it lasts
+      takeHappy: -30,           // Take: −happiness while it lasts
+      takeMinPop: 2,            // residents needed before a city can be taxed
+      takeMinAgeTicks: 600,     // ticks after founding before Take unlocks (5 game-min)
+    },
     buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,

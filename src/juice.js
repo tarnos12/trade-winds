@@ -174,6 +174,16 @@
       p.grow = 0; p.life = p.max = 900; p.color = color; p.text = text;
     }
 
+    // DESIGN PASS: Give/Take feedback — a floating "−1000🪙"/"+1000🪙" over the city.
+    // Also re-primes the tariff detector so the transfer's treasury jump isn't
+    // mistaken for a tariff and popped at an unrelated sale spot.
+    function townPopup(town, text, color) {
+      if (typeof state.treasury === "number") prevTreasury = state.treasury;
+      if (!town || reduced()) return;
+      const p = HexMath.hexToPixel(town.q, town.r, SIZE);
+      textPopup(p.x, p.y - SIZE * 0.9, text, color);
+    }
+
     // ---- detectors (track transitions frame-to-frame; emit unless reduced) ----
     function detectSales() {
       const carts = state.carts || [], seen = {};
@@ -379,7 +389,7 @@
       draw();
     }
 
-    return { frame, MAX_PARTICLES,
+    return { frame, townPopup, MAX_PARTICLES,
              get count() { return parts.length; },
              get reducedMotion() { return reduced(); } };
   })();

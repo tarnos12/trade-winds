@@ -122,9 +122,18 @@
   }
   // Destroy a whole city: all its buildings + the centre, refunding the founding gold
   // plus every building's gold. Resources/population are lost.
+  // DESIGN PASS: refund = max(0, foundPaid + building gold − gold the Crown has Taken)
+  // (Crown.cityRefund) — found → Take → Destroy used to mint +1000 per cycle. The
+  // city's remaining purse is never refunded (that would be a purse → treasury pipe).
+  // Confirm-dialog copy: the exact refund, and why it is short when the Crown has Taken.
+  function cityRefundNote(town) {
+    const refund = Math.round(Crown.cityRefund(town));
+    const taken = Math.max(0, Math.round(town.takenGold || 0));
+    return " Refund: " + refund.toLocaleString() + "🪙 (gold spent on the city + buildings" +
+      (taken > 0 ? ", minus " + taken.toLocaleString() + "🪙 the Crown took" : "") + "); resources are not refunded.";
+  }
   function destroyCityRefund(town) {
-    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
-    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const refund = Crown.cityRefund(town);
     const idx = state.towns.indexOf(town);
     if (idx < 0) return;
     state.towns.splice(idx, 1);
@@ -148,8 +157,11 @@
       }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
+        const paid = Buildings.foundCost();
         Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
-        state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
+        const town = makeTown(q, r);        // TOWN-UI: full Town entity (was { q, r })
+        state.towns.push(town);
+        Crown.stampFounding(state, town, paid);   // DESIGN PASS: foundedTick/foundPaid for the Take lock + destroy refund
         if (typeof Sim !== "undefined" && Sim.statFounded) Sim.statFounded(state);   // onboarding: cities founded
         // v0.51 (N): NO reveal at placement — a city reveals its neighbours only once
         // it has finished CONSTRUCTION (renderer.revealConstructed), not when founded.
@@ -201,7 +213,7 @@
             || (t.gold || 0) > 0;
           if (developed) {
             // v0.51 §11: refund the gold spent (city + buildings), lose resources.
-            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost." + cityRefundNote(t), () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -237,7 +249,7 @@
       const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
       if (!t) return;
       const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
-      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost." + cityRefundNote(t), () => {
         destroyCityRefund(t);
       });
     }
