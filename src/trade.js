@@ -26,6 +26,12 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.25,           // v0.51: progress (0..1 along the path) per tick — halved so external traders travel 2× slower
+    // === DESIGN PASS (distance): a leg's progress per tick is min(cartSpeed, cartTilesPerTick
+    // / pathSteps) — so a route of ≤ cartTilesPerTick/cartSpeed (= 8) hexes keeps its 4-tick
+    // leg, and longer routes take proportionally longer (2 hexes/tick = 4 hexes/game-second
+    // on road). Paved Roads and the off-road ×0.5 multiply the result. 0 = legacy
+    // (length-blind legs). Trade.legSpeed is shared with the castle's royal buyers. ===
+    cartTilesPerTick: 2,
     transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
@@ -109,13 +115,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return Math.max(unit || 0, official) * qty;
   }
 
-  // === PP-A === CASTLE-AS-SELLER. When the player ENABLES a good in
-  // state.castleTrade, the castle offers whatever it stocks (state.castleStock) at
+  // === PP-A === CASTLE-AS-SELLER. When the player ticks "King sells" for a good in
+  // state.castleTrade, the castle offers its stock (state.castleStock) at
   // basePrice × castleSellMargin, with NO tariff — proceeds go to state.treasury.
   // Castle stock is reserved in state.castleReserved (mirrors town.reserved) so two
-  // buyers can't claim the same units. `SELLER_CASTLE_ID` sorts the castle after
-  // towns on the id tiebreak. Selling ignores the `limit` (that's the BUY target):
-  // the castle may sell down to 0.
+  // buyers can't claim the same units. DESIGN PASS: selling is its own flag (never
+  // implied by "King buys"), and while the king also buys a good he keeps his buy
+  // `limit` and sells only the stock above it. Castle offers rank after every town
+  // offer and are only posted when no town can cover the need (see offersFor).
   const SELLER_CASTLE_ID = 1e9;
   function castleReservedOf(s, g) { return (s.castleReserved && s.castleReserved[g]) || 0; }
   function castleReserve(s, g, n) { if (!s.castleReserved) s.castleReserved = {}; s.castleReserved[g] = (s.castleReserved[g] || 0) + n; }
@@ -126,13 +133,24 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   }
   function castleSellAvailable(state, gid) {
     const ct = state.castleTrade && state.castleTrade[gid];
-    if (!ct || !ct.enabled) return 0;
-    return ((state.castleStock && state.castleStock[gid]) || 0) - castleReservedOf(state, gid);
+    if (!ct) return 0;
+    const f = castleFlags(ct);
+    if (!f.sell) return 0;
+    const keep = f.buy ? (ct.limit || 0) : 0;   // DESIGN PASS: don't sell below the buy limit
+    return Math.max(0, ((state.castleStock && state.castleStock[gid]) || 0) - castleReservedOf(state, gid) - keep);
   }
-  function addCastleOffer(state, offers, fromKey, gid) {
+  // { buy, sell } of a castleTrade entry (legacy { enabled } → buy only).
+  function castleFlags(ct) {
+    if (typeof CastleMarket !== "undefined" && CastleMarket.flagsOf) return CastleMarket.flagsOf(ct);
+    return { buy: !!(ct && (ct.buy || ct.enabled)), sell: !!(ct && ct.sell) };
+  }
+  function addCastleOffer(state, offers, fromKey, gid, need) {
     if (typeof ResearchEconomy === "undefined") return;
     const avail = castleSellAvailable(state, gid);
     if (avail <= 0) return;
+    // DESIGN PASS: the castle is the seller of LAST resort — skip it whenever a town
+    // offer alone can fill this trip (`need` = whole units the trader wants).
+    if (need > 0) for (const o of offers) if (!o.sellerCastle && o.surplus >= need) return;
     const route = Pathing.route(state, fromKey, ResearchEconomy.castleHex());
     if (!route) return;
     offers.push({ seller: null, sellerCastle: true, surplus: avail, route: route, price: castleSellPrice(gid) });
@@ -224,6 +242,37 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     }
     return max;
   }
+  // TRADEFIX: target stock = demand × price-buffer, floored at CONFIG.trade.minStock
+  // for any good the city actually consumes (demand > 0). The floor makes small
+  // cities' shortfalls clear buyThreshold so they trade; goods a city doesn't use
+  // stay at 0 (no hoarding), so seller hold-back + multi-good behavior are unchanged.
+  function tradeNeedOf(t, gid) {
+    const d = (t.demand && t.demand[gid]) || 0;
+    if (!(d > 0)) return 0;
+    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const minStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
+    return Math.max(d * buffer, minStock);
+  }
+  // v0.51 SELL-GATE: how much of `gid` a town holds BACK from export (distinct from
+  // needOf, which is the BUY target — overloading needOf would make a consumer try to
+  // BUY an infinite amount). A big sentinel means "don't sell any":
+  //   • during the post-construction grace window (just built, huts not placed yet), and
+  //   • for a good the town is a structural NET CONSUMER of at full build-out — counting
+  //     placed-but-unbuilt buildings, so a city that will eat more of a good than it
+  //     makes (once its just-placed huts fill) never dumps that good; it imports instead.
+  // A structural net PRODUCER exports its genuine surplus down to the ordinary needOf
+  // floor — its residents are fed from the per-building input buffers (porters keep
+  // those topped from production), so selling the warehouse surplus never starves them.
+  const HOLD_ALL = 1e9;
+  function tradeSellHoldback(t, gid) {
+    if (t.built === false || (t._sellHold || 0) > 0) return HOLD_ALL;   // still under construction, or post-build grace — no exports yet
+    const cons = placedConsMax(t, gid);                          // anticipated units/min at full placed housing/staffing
+    if (cons > 0 && placedProdMax(t, gid) <= cons + 1e-9) return HOLD_ALL;   // structural net consumer — never sell
+    return tradeNeedOf(t, gid);
+  }
+  Trade.needOf = tradeNeedOf;
+  Trade.sellHoldback = tradeSellHoldback;
+
   // Per-city snapshot for a good: net trend now, potential net at full scale, stock,
   // and the price it would pay/ask. role: "seller" | "buyer" | "none".
   Trade.cityGood = function (state, town, gid) {
@@ -279,7 +328,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       let need = buyer.need;
       const cand = sellers.filter(s => s.rem > 1e-6 && s.id !== buyer.id)
         .map(s => ({ s: s, d: PLAN_DIST(s.q, s.r, buyer.q, buyer.r) }))
-        .sort((x, y) => x.d - y.d || x.s.id - y.s.id);
+        .sort((x, y) => (x.s.id === SELLER_CASTLE_ID) - (y.s.id === SELLER_CASTLE_ID) || x.d - y.d || x.s.id - y.s.id);   // DESIGN PASS: castle last
       for (const { s } of cand) {
         if (need <= 1e-6) break;
         const take = Math.min(need, s.rem);
@@ -336,6 +385,18 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return n;
   }
 
+  // === DESIGN PASS (distance): base progress (0..1 of the path) a cart gains per tick on
+  // its current leg, before the paved / off-road multipliers. Capped at `baseSpeed` (the
+  // old length-blind rate) and at cartTilesPerTick hexes per tick, so short routes are
+  // unchanged and travel time grows with route length. A cart with no path (legacy) keeps
+  // the old rate. Shared by Trade and ResearchEconomy (royal buyers / castle market).
+  Trade.legSpeed = function (baseSpeed, cart) {
+    const tpt = CONFIG.trade.cartTilesPerTick;
+    const steps = (cart && Array.isArray(cart.path)) ? cart.path.length - 1 : 0;
+    return (tpt > 0 && steps > 0) ? Math.min(baseSpeed, tpt / steps) : baseSpeed;
+  };
+  const legSpeed = Trade.legSpeed;
+
   // Advance the whole trade layer by one tick. Mutates State only.
   Trade.tick = function (state) {
     if (!state) return state;
@@ -360,7 +421,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const rHas = (id) => (typeof Research !== "undefined" && Research.has) ? Research.has(state, id) : false;
     const extraCarts  = rEffect("extraCarts", 0);                        // more carts on the road
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
-    const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
+    const pavedMult = rHas("paved_roads") ? cfg.pavedRoadSpeed : 1;    // paved roads → faster (per hex, any route length)
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
     // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
     // Clamp the composed rate to [0.10, 0.40]
@@ -371,33 +432,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       baseTariff + rEffect("tariffBonus", 0)));                          // tax ledgers / bureaucracy
     // === /TARIFF-SLIDER ===
 
-    // TRADEFIX: target stock = demand × price-buffer, floored at CONFIG.trade.minStock
-    // for any good the city actually consumes (demand > 0). The floor makes small
-    // cities' shortfalls clear buyThreshold so they trade; goods a city doesn't use
-    // stay at 0 (no hoarding), so seller hold-back + multi-good behavior are unchanged.
-    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const minStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
-    const needOf = (t, gid) => {
-      const d = (t.demand && t.demand[gid]) || 0;
-      return d > 0 ? Math.max(d * buffer, minStock) : 0;
-    };
-    // v0.51 SELL-GATE: how much of `gid` a town holds BACK from export (distinct from
-    // needOf, which is the BUY target — overloading needOf would make a consumer try to
-    // BUY an infinite amount). A big sentinel means "don't sell any":
-    //   • during the post-construction grace window (just built, huts not placed yet), and
-    //   • for a good the town is a structural NET CONSUMER of at full build-out — counting
-    //     placed-but-unbuilt buildings, so a city that will eat more of a good than it
-    //     makes (once its just-placed huts fill) never dumps that good; it imports instead.
-    // A structural net PRODUCER exports its genuine surplus down to the ordinary needOf
-    // floor — its residents are fed from the per-building input buffers (porters keep
-    // those topped from production), so selling the warehouse surplus never starves them.
-    const HOLD_ALL = 1e9;
-    const sellHoldback = (t, gid) => {
-      if (t.built === false || (t._sellHold || 0) > 0) return HOLD_ALL;   // still under construction, or post-build grace — no exports yet
-      const cons = placedConsMax(t, gid);                          // anticipated units/min at full placed housing/staffing
-      if (cons > 0 && placedProdMax(t, gid) <= cons + 1e-9) return HOLD_ALL;   // structural net consumer — never sell
-      return needOf(t, gid);
-    };
+    // TRADEFIX buy target + v0.51 SELL-GATE hold-back (see tradeNeedOf / tradeSellHoldback).
+    // DESIGN PASS: needOf / sellHoldback hoisted to module scope (Trade.needOf /
+    // Trade.sellHoldback) so the castle's royal buyers apply the same export gate.
+    const needOf = tradeNeedOf;
+    const sellHoldback = tradeSellHoldback;
 
     // --- 0. BULLETIN BOARD (v0.51 §3) — every city POSTS an offer per surplus good
     // to a shared board that all traders read. Published with the CURRENT sales-
@@ -497,7 +536,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
 
       // (b) Offers for a good = reachable cities (+ the castle) holding a real surplus.
-      const offersFor = (gid) => {
+      const offersFor = (gid, shortfall) => {
         const out = [];
         for (const seller of towns) {
           if (seller === home || !seller || !seller.stock) continue;
@@ -507,7 +546,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (!route) continue;
           out.push({ seller, surplus, route, price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
         }
-        addCastleOffer(state, out, fromKey, gid);   // PP-A: castle sells enabled goods
+        // PP-A: castle sells "King sells" goods — DESIGN PASS: only when no town covers the trip.
+        addCastleOffer(state, out, fromKey, gid, Math.max(1, Math.floor(Math.min(cartCapacity, shortfall))));
         return out;
       };
       // === TRADEFIX: only dispatch a trader with a PURPOSE. Walk the shortfalls in
@@ -522,7 +562,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const tradeable = [];
       let groupKey = null;
       for (const g of gaps) {
-        const o = offersFor(g.gid);
+        const o = offersFor(g.gid, g.shortfall);
         if (!o.length) continue;
         const key = g.band + ":" + g.layer;
         if (groupKey === null) groupKey = key;
@@ -543,6 +583,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const isBasic = basics.indexOf(want.gid) >= 0;
       const starving = isBasic && ((home.stock[want.gid] || 0) + (incoming[want.gid] || 0)) < needOf(home, want.gid) * 0.25;
       offers.sort((a, b) =>
+        (a.sellerCastle ? 1 : 0) - (b.sellerCastle ? 1 : 0) ||   // DESIGN PASS: castle after every town offer
         b.surplus - a.surplus ||
         (starving ? (a.route.cost - b.route.cost || a.price - b.price)
                   : (a.price - b.price || a.route.cost - b.route.cost)) ||
@@ -630,7 +671,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     }
 
     // --- 2. Advance traders; travel, then PARK to load / unload (not instant) -----
-    // A trader travels (progress += cartSpeed), then dwells to LOAD at the seller and
+    // A trader travels (progress += legSpeed × paved × off-road), then dwells to LOAD at the seller and
     // to UNLOAD at the buyer for ceil(qty / perTick) ticks — so a trade takes visible
     // time (CONFIG.trade.transferRate items/sec of game time). Phases:
     //   outbound → loading (dwell @ seller) → return → unloading (dwell @ buyer) → done.
@@ -735,7 +776,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
 
       // -- Travel (outbound / return) --  OFFROAD: no road link ⇒ half speed.
-      cart.progress += cartSpeed * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
+      // DESIGN PASS (distance): long routes take longer (see CONFIG.trade.cartTilesPerTick).
+      cart.progress += legSpeed(cfg.cartSpeed, cart) * pavedMult * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 

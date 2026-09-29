@@ -452,21 +452,29 @@
 
   // ---- Tab 2: Warehouse (read-only) -------------------------------------------
   let ppWhSort = "az";     // "az" | "stock" | "price" — persists while the panel is open
-  let ppWhPrev = null;     // { townId, tick, stock:{}, rate:{} } net-rate sampler (UI-only)
+  // DESIGN PASS #13: the Rate column is the net stock change averaged over the last
+  // CONFIG.econ.rateWindowTicks (120 = 60 game-s), from a small sample ring (one sample
+  // per ≥4 ticks). The old ~4 s window read −90…+90/min around a true +2.7 because stock
+  // moves in whole-unit batches. UI-only; reset on a city switch or a load (tick went back).
+  let ppWhHist = null;     // { townId, samples: [{ tick, stock:{} }] } oldest first
   function ppWhRates(t) {
+    const now = state.tick || 0;
+    const win = (CONFIG.econ && CONFIG.econ.rateWindowTicks) || 120;
+    // Reset on a city switch, a load (tick went back), or a stale ring (the tab was
+    // closed for over a window — the old samples would pass a long average off as
+    // "the last minute").
+    const lastS = ppWhHist && ppWhHist.samples.length ? ppWhHist.samples[ppWhHist.samples.length - 1] : null;
+    if (!ppWhHist || ppWhHist.townId !== t.id || (lastS && (now < lastS.tick || now - lastS.tick > win)))
+      ppWhHist = { townId: t.id, samples: [] };
+    const S = ppWhHist.samples;
     const cur = {};
     for (const gid in CONFIG.goods) cur[gid] = (t.stock && t.stock[gid]) || 0;
-    if (!ppWhPrev || ppWhPrev.townId !== t.id || (state.tick || 0) < ppWhPrev.tick) {
-      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate: {} };
-      return ppWhPrev.rate;
-    }
-    const dt = (state.tick || 0) - ppWhPrev.tick;
-    if (dt >= 8) {   // ~4 s window at 1× — smooth but honest (net Δstock / tick)
-      const rate = {};
-      for (const gid in cur) rate[gid] = (cur[gid] - (ppWhPrev.stock[gid] || 0)) / dt;
-      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate };
-    }
-    return ppWhPrev.rate;
+    if (!S.length || now - S[S.length - 1].tick >= 4) S.push({ tick: now, stock: cur });
+    while (S.length > 2 && now - S[1].tick >= win) S.shift();   // keep one sample at/before the window start
+    const rate = {};
+    const old = S[0], dt = now - old.tick;
+    if (dt >= 8) for (const gid in cur) rate[gid] = (cur[gid] - (old.stock[gid] || 0))/ dt;
+    return rate;
   }
 
   function renderPPWarehouse(t) {
@@ -495,16 +503,25 @@
       const d = (t.demand && t.demand[gid]) || 0;
       return d > 0 ? Math.max(d * whBuffer, whMinStock) : 0;
     };
+    // DESIGN PASS #13: ▲ uses the trader's REAL export gate (Trade.sellHoldback), so a
+    // structural net consumer — which holds everything back — never shows ▲.
+    const holdOf = gid => (window.Trade && typeof Trade.sellHoldback === "function") ? Trade.sellHoldback(t, gid) : ppWhNeed(gid);
     const ppWhArrow = gid => {
       const demand = (t.demand && t.demand[gid]) || 0;
-      const need = ppWhNeed(gid);
-      const surplus = ((t.stock && t.stock[gid]) || 0) - need;
-      if (demand > 0 && surplus < -0.05)
+      const have = (t.stock && t.stock[gid]) || 0;
+      if (demand > 0 && have - ppWhNeed(gid) < -0.05)
         return '<span class="trend down" title="Shortfall — the trader will buy this">▼</span>';
-      if (surplus > 0.05)
+      if (have - holdOf(gid) > 0.05)
         return '<span class="trend up" title="Surplus — the trader will sell this">▲</span>';
       return '<span class="trend flat" title="Balanced — not traded">–</span>';
     };
+    // Home buffers: residents' own stock (house inbuf) — often most of a small city's food.
+    const inHomes = {};
+    for (const hb of (t.buildings || [])) {
+      const hd = hb && CONFIG.buildings[hb.typeId];
+      if (!hd || hd.kind !== "house" || !hb.inbuf) continue;
+      for (const g in hb.inbuf) inHomes[g] = (inHomes[g] || 0) + (hb.inbuf[g] || 0);
+    }
     // === /TRADEUX ===
     if (ppWhSort === "stock")
       ids.sort((a, b) => ((t.stock && t.stock[b]) || 0) - ((t.stock && t.stock[a]) || 0) || a.localeCompare(b));
@@ -527,18 +544,23 @@
       const price = priceGet(gid);
       const arrow = trendArrow(t, gid, price);
       const r = rates[gid];
-      const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
-        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perMin(r)))}/min</span>`
-        : `<span class="num dim">—</span>`;
+      const rpm = typeof r === "number" ? perMin(r) : null;
+      const dead = (CONFIG.econ && CONFIG.econ.rateDeadbandPerMin) || 0;
+      const rateCell = rpm === null ? `<span class="num dim" title="Measuring…">—</span>`
+        : Math.abs(rpm) < Math.max(dead, 0.005) ? `<span class="num dim" title="Net change over the last minute">≈0</span>`
+        : `<span class="num ${rpm > 0 ? "up" : "down"}" title="Net change over the last minute">${rpm > 0 ? "+" : "−"}${fmt1(Math.abs(rpm))}/min</span>`;
+      const home = inHomes[gid] || 0;
+      const homeTxt = home >= 1 ? `<span class="pp-home" style="display:block;font-size:9px;opacity:.7;white-space:nowrap" title="Held in residents' homes (not in the warehouse)">(+${Math.floor(home)} in homes)</span>` : "";
       const inb = inbound[gid] || 0;
       const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
       const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perMin((t.demand && t.demand[gid]) || 0))}/min` +
-        (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
+        (inb > 0 ? ` · ${Math.round(inb)} en route` : "") + (home >= 1 ? ` · +${Math.floor(home)} in homes` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
-        <span class="num">${fmt(stock)}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
+        <span class="num">${fmt(stock)}${homeTxt}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
         ${rateCell}${inCell}
-        <span class="num">${fmt1(price)}🪙 ${arrow}</span></div>`;
+        ${Sim.hasMarket(t, gid) ? `<span class="num">${fmt1(price)}🪙 ${arrow}</span>`
+          : `<span class="num dim" title="No local market — nothing stocked or consumed here">—</span>`}</div>`;
     }
     return html;
   }
@@ -1441,13 +1463,112 @@
     iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
   // Playtest: workers are auto-assigned, so "assign a worker below" misled players
   // into clicking the slots (which CLOSE them). Say why it's idle and what fixes it.
-  function bpIdleReason(b, def) {
+  // DESIGN PASS #3: honest advice — Huts are the fix for "no free peasants" (☆ only
+  // moves the crew you already have), and the staffing flags Sim.staffTown writes
+  // (blockedReason / selfFeedGood) explain an idle building that is idle on purpose.
+  const STAFF_HOME = { peasant: ["peasants", "Hut"], worker: ["workers", "Cottage"], burgher: ["citizens", "Manor"] };
+  function bpIdleReason(b, def, town) {
     if (b && b.built === false) return "Under construction.";
+    if (b && (b.blockedReason === "upgrading" || b.pendingUpgrade)) return "Upgrading — its workers help elsewhere until the upgrade is done.";
     const slots = (def && def.workerSlots) || 0;
     if (slots > 0 && ((b && b.closedSlots) || 0) >= slots) return "Idle — all worker slots are closed. Click a slot below to reopen it.";
-    const HOME = { peasant: ["peasants", "Huts"], worker: ["workers", "Cottages"], burgher: ["citizens", "Manors"] };
-    const h = HOME[def && def.workerTier] || ["workers", "houses"];
-    return "Idle — no free " + h[0] + ". Build more " + h[1] + ", or turn on ☆ Priority to staff this first.";
+    if (b && b.blockedReason === "full") return "Idle — store full. Its workers help other buildings meanwhile.";
+    const tier = def && def.workerTier;
+    const feeder = bpSelfFeeder(town, tier);
+    if (feeder) {
+      const fdef = CONFIG.buildings[feeder.typeId] || {};
+      return "Waiting — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + (fdef.name || feeder.typeId) + " is staffed first.";
+    }
+    const h = STAFF_HOME[tier] || ["workers", "house"];
+    return "Idle — no free " + h[0] + ". Build a " + h[1] + " in this city.";
+  }
+  // The staffed self-feed producer (Potato Farm / Lumberjack / Coal Mine) of `tier`, if any.
+  function bpSelfFeeder(town, tier) {
+    if (!town || !tier) return null;
+    for (const o of (town.buildings || [])) {
+      if (!o || !o.selfFeedGood || !(o.workers > 0)) continue;
+      const od = CONFIG.buildings[o.typeId];
+      if (od && od.workerTier === tier) return o;
+    }
+    return null;
+  }
+  // ☆ toggled ON: dry-run the staffing with and without the star and say who pays for
+  // it — "☆ Sawmill will take 2 peasants from Potato Farm". Pure preview: Sim.staffTown
+  // with dry=true mutates nothing; b.priority is flipped back before returning.
+  function bpPriorityPreview(town, b) {
+    if (!town || !b || !window.Sim || typeof Sim.staffTown !== "function") return null;
+    const def = CONFIG.buildings[b.typeId] || {};
+    if (!def.workerTier || !(def.workerSlots > 0) || b.built === false) return null;
+    const i = town.buildings.indexOf(b);
+    if (i < 0) return null;
+    b.priority = false; const before = Sim.staffTown(town, true);
+    b.priority = true;  const after = Sim.staffTown(town, true);
+    const word = (STAFF_HOME[def.workerTier] || ["workers"])[0];
+    const one = word.replace(/s$/, "");
+    const name = def.name || b.typeId;
+    const parts = [];
+    for (let k = 0; k < town.buildings.length; k++) {
+      const lost = Math.round((before[k] || 0) - (after[k] || 0));   // pop is fractional; speak in whole people
+      if (k === i || lost <= 0) continue;
+      const o = town.buildings[k], od = CONFIG.buildings[o.typeId] || {};
+      let only = "";
+      if (od.output) {
+        let makers = 0;
+        for (const x of town.buildings) { const xd = x && CONFIG.buildings[x.typeId]; if (xd && xd.output && xd.output.goodId === od.output.goodId) makers++; }
+        if (makers === 1) only = " (your only " + goodIcon(od.output.goodId) + ")";
+      }
+      parts.push(lost + " " + (lost === 1 ? one : word) + " from " + (od.name || o.typeId) + only);
+    }
+    if (parts.length) return "☆ " + name + " will take " + parts.join(", ") + ".";
+    if ((after[i] || 0) <= (before[i] || 0)) {
+      const feeder = bpSelfFeeder(town, def.workerTier);
+      const fd = feeder && CONFIG.buildings[feeder.typeId];
+      if (feeder && feeder !== b) return "☆ " + name + " — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + ((fd && fd.name) || feeder.typeId) + " is staffed first.";
+      if (!(after[i] > 0)) return "☆ " + name + " — no free " + word + " to take. Build a " + (STAFF_HOME[def.workerTier] || ["", "house"])[1] + " in this city.";
+    }
+    return null;
+  }
+  // DESIGN PASS #13: a readable per-minute number (≈X/min, 1 decimal) — the old "+1 per
+  // batch" rounded a Sawmill's 5.0/min down to 3.75 and ignored happiness.
+  const fmtRate = v => { const r = Math.round(v * 10) / 10; return (Math.abs(r - Math.round(r)) < 1e-9) ? String(Math.round(r)) : r.toFixed(1); };
+  // A building this city could build that USES good `gid` (available now), for advice.
+  function bpConsumerOf(gid) {
+    for (const id in CONFIG.buildings) {
+      const d = CONFIG.buildings[id];
+      if (!d || !d.inputs || !(d.inputs[gid] > 0)) continue;
+      const avail = d.startUnlocked || !d.unlockedBy || (window.Research && Research.has && Research.has(state, d.unlockedBy));
+      if (avail) return d;
+    }
+    return null;
+  }
+  // Status line under the chain (Sim.buildingStatus) — names the REAL block.
+  function bpStatusLine(town, b, def, st, rates, cycleSec) {
+    const out = def.output.goodId, ic = goodIcon(out);
+    const tierWord = (STAFF_HOME[def.workerTier] || ["workers"])[0];
+    if (st === "warehouseFull") {
+      const cap = (CONFIG.town && CONFIG.town.storageCap) || 80;
+      const have = Math.floor((town.stock && town.stock[out]) || 0);
+      const w = Math.round(b.workers || 0);
+      const cons = bpConsumerOf(out);
+      const fixes = [];
+      if (cons) fixes.push("Build a " + (cons.name || cons.id));
+      fixes.push((fixes.length ? "road" : "Road") + " it to a city that needs " + GOOD_LABEL(out).toLowerCase());
+      if (w > 0) fixes.push("close a slot to free " + w + " " + (w === 1 ? tierWord.replace(/s$/, "") : tierWord));
+      const last = fixes.pop();
+      return "Paused — this city's " + ic + " store is full (" + have + "/" + cap + ") and nobody is buying. " +
+        (fixes.length ? fixes.join(", ") + ", or " + last : last) + "." +
+        (w > 0 ? "" : " Its " + tierWord + " help other buildings meanwhile.");
+    }
+    if (st === "awaitingPorter") return "Store full — a porter is on the way.";
+    if (st === "noInputs") {
+      const miss = [];
+      for (const gid in (def.inputs || {})) {
+        if (((b.inbuf && b.inbuf[gid]) || 0) + ((town.stock && town.stock[gid]) || 0) < 1) miss.push(goodIcon(gid));
+      }
+      return "Waiting on inputs — no " + miss.join(" ") + " in this building or the warehouse.";
+    }
+    if (st === "working") return "Producing ≈" + fmtRate(rates ? rates.outPerMin : 0) + " " + ic + "/min — a batch every " + cycleSec + " s.";
+    return bpIdleReason(b, def, town);
   }
   function renderProducerChain(town, b, def) {
     const out = def.output.goodId, oc = goodColor(out);
@@ -1458,11 +1579,23 @@
     const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
     const intervalTicks = Math.max(1, Math.round(cycSec * (1000 / baseTickMs)));
     const workers = b.workers || 0;
-    const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
     const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
+    const st = pr ? pr.status : (workers ? "working" : "noWorkers");
     const pct = pr ? Math.round(pr.prog * 100) : 0;
-    const barCol = !workers ? "#8a8574" : (pr && pr.starved ? "#e0a63c" : "#7fc24b");
-    const perBatchOut = Math.max(1, Math.round((def.output.ratePerWorker || 0) * Math.max(1, workers) * outMult * intervalTicks));
+    const barCol = st === "working" ? "#7fc24b" : "#e0a63c";   // DESIGN PASS #13: any stall → amber
+    // DESIGN PASS #13: headline ≈X/min at the current crew (hf × research × upgrade, as
+    // Sim.tick); a stalled building makes 0 — its "when running" rate goes in the title.
+    const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
+    const fullW = Math.max(0, (def.workerSlots || 0) + slotPlus - (b.closedSlots || 0));
+    const rates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b) : null;
+    const runRates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b, workers > 0 ? workers : fullW) : null;
+    const running = st === "working";
+    const shown = running ? rates : runRates;
+    const outPM = shown ? shown.outPerMin : 0;
+    const perBatch = outPM * cycSec / 60;
+    const headTxt = running ? "≈" + fmtRate(outPM) + "/min" : "0/min";
+    const headTip = running ? "≈" + fmtRate(outPM) + " " + GOOD_LABEL(out) + " per minute at " + fmtRate(workers) + " workers and " + Math.round((town.happiness != null ? town.happiness : 100)) + "% happiness"
+                            : "Stopped — ≈" + fmtRate(outPM) + "/min when running with " + fmtRate(shown ? shown.workers : 0) + " workers";
     // v0.51 §2: the output bar shows this building's OWN store (what porters collect),
     // not the shared warehouse — the "x/cap" per building the reference shows.
     const cap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
@@ -1474,7 +1607,9 @@
         const need = Math.max(1, Math.round(def.inputs[gid] * Math.max(1, workers) * intervalTicks));
         const have = Math.floor((town.stock && town.stock[gid]) || 0);
         const okc = have >= need ? "#a6e0a8" : "#e0844a";
-        inHtml += `<span class="bp-chip2" style="border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch"><span style="font-size:15px">${goodIcon(gid)}</span> <b style="color:${okc}">${have}</b><span style="opacity:.55">/${need}</span></span>`;
+        const usePM = shown && shown.inPerMin ? (shown.inPerMin[gid] || 0) : 0;
+        inHtml += `<span class="bp-chip2" style="border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch, uses ≈${fmtRate(usePM)}/min"><span style="font-size:15px">${goodIcon(gid)}</span> <b style="color:${okc}">${have}</b><span style="opacity:.55">/${need}</span></span>` +
+          `<span style="font-size:10px;opacity:.75;text-align:center">uses ${fmtRate(usePM)}/min</span>`;
       }
     } else {
       const srcTerr = def.terrain || def.adjacent || "";
@@ -1494,16 +1629,14 @@
         <div class="bp-out">
           <span class="bp-out-icon" style="color:${oc}">${goodIcon(out)}</span>
           <div>
-            <div class="bp-out-amt">+${perBatchOut}</div>
+            <div class="bp-out-amt" data-bp-rate title="${escAttr(headTip)}"${running ? "" : ' style="opacity:.6"'}>${headTxt}</div>
+            <div class="bp-out-stock" style="opacity:.65">(+${fmtRate(perBatch)} every ${cycleSec} s)</div>
             <div class="bp-out-stock" title="This building's own store — internal porters carry it to the city warehouse">${stock}/${cap} 🎒</div>
             <div class="bp-stockbar"><span style="width:${capPct}%"></span></div>
           </div>
         </div>
       </div>
-      <div class="tp-hint2">${workers > 0
-        ? (stock >= cap ? "Store full — waiting for a porter to collect."
-          : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
-        : bpIdleReason(b, def)}</div>`;
+      <div class="tp-hint2" data-bp-status="${st}">${bpStatusLine(town, b, def, st, rates, cycleSec)}</div>`;
   }
 
   // Building level shown in the header banner badge (upgrade level, min 1).
@@ -1534,7 +1667,7 @@
     let btns = "";
     if (!isHouse) {
       const pri = !!b.priority;
-      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first">${pri ? "⭐" : "☆"}</button>`;
+      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first (after basic food when the city runs low; full or upgrading buildings go last)">${pri ? "⭐" : "☆"}</button>`;
     }
     // v0.51: NOT the disabled attribute (a disabled button swallows hover, hiding the
     // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
@@ -1635,7 +1768,7 @@
 
     // --- priority star footer (bottom of the panel) ---
     const pri = !!b.priority;
-    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
+    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first — after basic food when the city runs low; a full or upgrading building goes last">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
 
     bpBodyEl.innerHTML = html;
   }
@@ -1868,7 +2001,16 @@
       renderBuildingPanel();
       return;
     }
-    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); return; }
+    if (e.target.closest("[data-priority]")) {
+      // DESIGN PASS #3: turning ☆ on previews who loses workers for it.
+      if (b.priority) b.priority = false;
+      else {
+        const msg = bpPriorityPreview(bpTown, b);
+        b.priority = true;
+        if (msg && typeof showToast === "function") showToast(msg);
+      }
+      renderBuildingPanel(); return;
+    }
     // Demolish: enter the existing destroy-building mode and close this panel; the
     // player then clicks the building (input.js confirms before removing it).
     const demo = e.target.closest("[data-demolish]");

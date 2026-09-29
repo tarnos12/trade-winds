@@ -774,10 +774,22 @@ Buildings.placeAdvancedProvisioner = function (state, q, r) {
   // switch on castle fish-buying so the advanced line has its second input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
-  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "fish", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /ADVANCED PROVISIONER ===================================================
+
+// DESIGN PASS (king buys / king sells): a Provisioner switches on castle BUYING of
+// its input only. An entry the player already buys keeps its limit; a "King sells"
+// tick the player set is preserved (never switched on here).
+Buildings.enableCastleBuy = function (state, gid, lim) {
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const cur = state.castleTrade[gid];
+  const f = (typeof CastleMarket !== "undefined" && CastleMarket.flagsOf) ? CastleMarket.flagsOf(cur)
+    : { buy: !!(cur && (cur.buy || cur.enabled)), sell: !!(cur && cur.sell) };
+  const keepLim = f.buy && typeof cur.limit === "number" && isFinite(cur.limit) && cur.limit >= 0;
+  state.castleTrade[gid] = { buy: true, sell: f.sell, limit: keepLim ? cur.limit : lim };
+};
 
 // === BASIC PROVISIONER (v0.51 §9) — a castle-adjacent building (no research) that
 // enables the basic provision line (2 potato → 1). Placed like the Advanced one and
@@ -799,7 +811,7 @@ Buildings.placeProvisioner = function (state, q, r) {
   // switch on castle potato-buying so the basic line has its input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.potatoLimit) || 40;
-  if (!state.castleTrade.potato || !state.castleTrade.potato.enabled) state.castleTrade.potato = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "potato", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /BASIC PROVISIONER ======================================================

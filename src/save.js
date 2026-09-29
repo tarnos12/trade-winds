@@ -140,6 +140,12 @@
       data.researchCenter = data.researchCenter || null;
       data.saveVersion = 2;
     }
+    // v2 → v3 (DESIGN PASS, king buys / king sells): castleTrade[gid] { enabled, limit }
+    // becomes { buy, sell, limit }; the old flag maps to buy only (never auto-sell).
+    if (data.saveVersion === 2) {
+      if (typeof CastleMarket !== "undefined" && CastleMarket.normalize) data.castleTrade = CastleMarket.normalize(data.castleTrade);
+      data.saveVersion = 3;
+    }
     if (data.saveVersion !== CONFIG.saveVersion) return null; // unknown/newer → reject
     return data;
   }

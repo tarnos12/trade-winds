@@ -192,10 +192,15 @@ Technical:
 
 ## 7. Market & trade (reference)
 
-- **Price per town/good** from stock vs demand:
-  `ratio = stock / (demand · bufferTarget)` (bufferTarget ≈ 2);
-  `price = clamp(basePrice · (1.6 − 0.8·ratio), 0.4·base, 3.0·base)`, smoothed per
-  tick. Surplus → 40 % of base; scarcity → 300 %.
+- **Price per town/good** from stock vs minutes of **consumption** (residents +
+  processor inputs; construction bills and the research share are lumps, not rates,
+  so they drive trade buying but not prices):
+  `ratio = stock / (max(0.5, consumption per min) · coverMin)` (coverMin = 2 min);
+  `price = basePrice · clamp(1.9 − ratio, 0.4, 1.9)`, smoothed per tick. Surplus
+  (≥ 1.5× a comfortable stock) → 40 % of base; a comfortable 2 min → 90 %;
+  empty shelf → 190 %. Nothing stocked and nothing consumed → no market (base
+  price, shown as "—"). Specialised cities therefore price their import
+  several times above their export.
 - **Carts** (towns at center L2+): pick profitable routes
   (`profit = (priceThere − priceHere)·load − distanceCost`) with a small top-3
   randomness so carts don't herd; a purposeful-dispatch floor (`minStock`) stops

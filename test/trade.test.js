@@ -569,7 +569,7 @@ Pathing.invalidate();
 {
   const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 100000, stock: { grain: 0 }, demand: { grain: 8 } });
   const st = { roads: new Set([K(1, 0)]), towns: [buyer], carts: [], treasury: 0, tradeSeed: 1,
-    castleStock: { grain: 50 }, castleReserved: {}, castleTrade: { grain: { enabled: true, limit: 100 } } };
+    castleStock: { grain: 50 }, castleReserved: {}, castleTrade: { grain: { buy: false, sell: true, limit: 100 } } };   // DESIGN PASS: selling is its own "King sells" flag (legacy {enabled} = buy only)
   const price = CONFIG.goods.grain.basePrice * (CONFIG.trade.castleSellMargin || 1);
   Trade.tick(st);
   const c = st.carts[0];
@@ -593,7 +593,7 @@ function detState() {
   const buyer = ctrlTown({ id: 1, q: 2, r: 0, gold: 1e9, stock: { grain: 0, iron: 0 }, demand: { grain: 40, iron: 40 } });
   const seller = ctrlTown({ id: 100, q: 0, r: 0, gold: 0, stock: { iron: 5000 }, prices: { iron: 4 }, demand: {} });
   return { roads: new Set([K(1, 0), K(-1, 0)]), towns: [seller, buyer], carts: [], treasury: 0, tradeSeed: 42,
-    castleStock: { grain: 5000 }, castleReserved: {}, castleTrade: { grain: { enabled: true, limit: 100000 } } };
+    castleStock: { grain: 5000 }, castleReserved: {}, castleTrade: { grain: { buy: false, sell: true, limit: 100000 } } };   // DESIGN PASS: explicit "King sells"
 }
 {
   const a = detState(); for (let i = 0; i < 60; i++) Trade.tick(a);

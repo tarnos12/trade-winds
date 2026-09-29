@@ -351,7 +351,7 @@ MissionEngine.DEFAULT = {
         { type: "earn_tax",   amount: 150 },                // lifetime tariff — ~12 g/min with 3 trading cities (customs valuation)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
-      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build Huts or ☆ Priority them.",
+      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build more Huts in that city (☆ Priority only reshuffles the workers a city already has).",
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
@@ -370,6 +370,134 @@ MissionEngine.DEFAULT = {
 // (same object) so tests can capture either from the vm sandbox.
 var Missions = MissionEngine;
 // === /MISSION-ENGINE ===
+
+// === DESIGN PASS #3: SMARTER STAFFING ======================================
+// Worker assignment, derived every tick by Sim.tick (and dry-run by the UI's ☆
+// preview). Four passes, array order within each (deterministic):
+//   1. SELF-FEED — a producer whose output is a BASIC need of the tier that staffs
+//      it (peasants: potato/wood; workers: coal) goes first, up to its full slots,
+//      while the town holds under CONFIG.econ.selfFeedCoverSec game-seconds of that
+//      good (warehouse + house buffers ÷ the present tiers' consumption). A ☆ can no
+//      longer strip the only Potato Farm and starve the city that staffs it.
+//   2. ☆ priority, not blocked.   3. the rest, not blocked.
+//   4. BLOCKED producers (output store full, or waiting on an upgrade; ☆ first) — last, so
+//      their crews work somewhere useful (CONFIG.econ.staffBlockedLast).
+// "Full" has hysteresis: it trips at storeCap − 1 and clears only once the store has
+// drained a whole batch, so porters' 10-unit pickups don't make crews flicker; self-feed
+// likewise holds until the cover reaches selfFeedReleaseMult × selfFeedCoverSec.
+// Input-starved processors are deliberately NOT blocked: an unstaffed processor gets
+// no input-buffer target, so demoting it would keep it starved.
+// dry=false WRITES b.workers / b._blocked / b.blockedReason / b.selfFeedGood and
+// returns null; dry=true mutates nothing and returns the planned workers per index.
+const STAFF_TIER_POP = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
+Sim.staffTown = function (town, dry) {
+  const buildings = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  const n = buildings.length;
+  const plan = dry ? new Array(n).fill(0) : null;
+  const pop = (town && town.pop) || {};
+  const stock = (town && town.stock) || {};
+  const E = CONFIG.econ || {};
+  const N = CONFIG.needs;
+  const baseTickMs = E.baseTickMs || 500;
+  const prodIntervalSec = E.productionIntervalSec || { extractor: 8, processor: 12 };
+  const blockedLast = E.staffBlockedLast !== false;
+  const coverTicks = (E.selfFeedCoverSec || 0) * (1000 / baseTickMs);
+  const releaseMult = Math.max(1, E.selfFeedReleaseMult || 1);
+  const pool = {
+    peasant: pop.peasants || 0,
+    worker:  pop.workers  || 0,
+    burgher: pop.burghers || 0,
+    aristocrat: pop.aristocrats || 0,   // === CC: aristocrats staff nothing (no aristocrat producers) — harmless ===
+  };
+  // Lazily-built per-good cover (ticks of consumption on hand) for the self-feed pass.
+  let houseHave = null, bcm = null, lcm = null;
+  const coverCache = {};
+  // Returns the cover in TICKS of good g (Infinity when nobody present eats it).
+  const coverOf = (g) => {
+    if (g in coverCache) return coverCache[g];
+    if (!houseHave) {
+      houseHave = {};
+      for (const hb of buildings) {
+        const hd = hb && CONFIG.buildings[hb.typeId];
+        if (!hd || hd.kind !== "house" || hb.built === false || !hb.inbuf) continue;
+        for (const k in hb.inbuf) houseHave[k] = (houseHave[k] || 0) + (hb.inbuf[k] || 0);
+      }
+      const one = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+      bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult) ? Buildings.basicConsumptionMult(town) : one;
+      lcm = (typeof Buildings !== "undefined" && Buildings.luxuryConsumptionMult) ? Buildings.luxuryConsumptionMult(town) : one;
+    }
+    let perTick = 0;   // the PRESENT tiers' draw of g (same formula as the consumption step)
+    for (const tk in N.tiers) {
+      const np = pop[tk] || 0, spec = N.tiers[tk];
+      if (np <= 0 || !spec.perCapita[g]) continue;
+      perTick += spec.perCapita[g] * np * (spec.basic.indexOf(g) >= 0 ? (bcm[tk] || 1) : (lcm[tk] || 1));
+    }
+    const have = (stock[g] || 0) + (houseHave[g] || 0);
+    return (coverCache[g] = perTick > 0 ? have / perTick : Infinity);
+  };
+  // Classify: 0 unstaffable · 1 self-feed · 2 ☆ · 3 normal · 4 blocked ☆ · 5 blocked.
+  const cls = new Uint8Array(n);
+  const eff = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const b = buildings[i];
+    if (!b) continue;
+    const type = CONFIG.buildings[b.typeId];
+    if (b.built === false || !type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
+      if (!dry) {
+        b.workers = 0;
+        if (b._blocked) b._blocked = false;
+        if (b.blockedReason) b.blockedReason = null;
+        if (b.selfFeedGood) b.selfFeedGood = null;
+      }
+      continue;
+    }
+    // === RU-A: upgrade slotPlus adds effective worker slots ===
+    const upg = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? Buildings.upgradeEffect(b) : {};
+    eff[i] = Math.max(0, type.workerSlots + (upg.slotPlus || 0) - (b.closedSlots || 0));
+    // BLOCKED? (pending upgrade, or a full output store with hysteresis)
+    let full = false;
+    const out = type.output;
+    if (out) {
+      const storeCap = type.storeCap || E.buildingStoreCap || 30;
+      const buf = (b._prodAcc || 0) + ((b.store && b.store[out.goodId]) || 0);
+      if (b._blocked) {
+        const sec = (typeof type.cycleSec === "number") ? type.cycleSec : (prodIntervalSec[type.kind] || 0);
+        const batch = Math.max(1, (out.ratePerWorker || 0) * eff[i] * Math.round(sec * (1000 / baseTickMs)) * (upg.outputMult || 1));
+        full = buf > Math.max(1, storeCap - batch);
+      } else {
+        full = buf >= storeCap - 1;
+      }
+    }
+    const reason = b.pendingUpgrade ? "upgrading" : (full ? "full" : null);
+    // SELF-FEED? engages under coverTicks; once engaged it holds until the cover is
+    // selfFeedReleaseMult× that, so the crew doesn't bounce on every batch.
+    const tierSpec = N.tiers[STAFF_TIER_POP[type.workerTier]];
+    const sfGood = (out && !reason && coverTicks > 0 && tierSpec && tierSpec.basic.indexOf(out.goodId) >= 0 &&
+      coverOf(out.goodId) < coverTicks * (b.selfFeedGood === out.goodId ? releaseMult : 1)) ? out.goodId : null;
+    if (!dry) {
+      if (!!b._blocked !== full) b._blocked = full;
+      if ((b.blockedReason || null) !== reason) b.blockedReason = reason;
+      if ((b.selfFeedGood || null) !== sfGood) b.selfFeedGood = sfGood;
+    }
+    if (sfGood) cls[i] = 1;
+    else if (reason && blockedLast) cls[i] = b.priority ? 4 : 5;
+    else cls[i] = b.priority ? 2 : 3;
+  }
+  for (let pass = 1; pass <= 5; pass++) {
+    for (let i = 0; i < n; i++) {
+      if (cls[i] !== pass) continue;
+      const b = buildings[i];
+      const tier = CONFIG.buildings[b.typeId].workerTier;
+      const avail = pool[tier] || 0;
+      const take = Math.min(eff[i], avail);
+      const w = take > 0 ? take : 0;
+      pool[tier] = avail - w;
+      if (dry) plan[i] = w; else b.workers = w;
+    }
+  }
+  return plan;
+};
+// === /DESIGN PASS #3 ========================================================
 
 // Advance the whole economy by one tick. Mutates every town in State.towns:
 //   worker assignment → production → consumption → happiness → population → prices.
@@ -441,45 +569,21 @@ Sim.tick = function (State) {
     const buildings = Array.isArray(town.buildings) ? town.buildings : [];
     const demand = {};                 // rebuilt every tick (drives Sim.priceFor)
     const addDemand = (g, amt) => { if (amt > 0) demand[g] = (demand[g] || 0) + amt; };
+    // DESIGN PASS #6: CONSUMPTION demand (residents + processor inputs) is also tallied
+    // on its own — Sim.priceFor prices against this rate only; construction bills and the
+    // research share stay in `demand` (trade buy targets) but no longer pin prices.
+    const consDemand = {};
+    const addConsDemand = (g, amt) => { if (amt > 0) { consDemand[g] = (consDemand[g] || 0) + amt; addDemand(g, amt); } };
 
     // Work efficiency from the PREVIOUS tick's happiness (default 100 => 1.2x).
     const h = (typeof town.happiness === "number") ? town.happiness : 100;
     const hf = N.effMin + (Math.min(100, Math.max(0, h)) / 100) * (N.effMax - N.effMin);
 
     // --- 0. Worker assignment (derived every tick) ---------------------
-    // Greedy, deterministic fill in building array order: each producer draws
-    // from its tier's remaining labour pool, up to workerSlots. Houses (and any
-    // building without a workerTier) get 0. Sim WRITES b.workers here.
-    const pool = {
-      peasant: pop.peasants || 0,
-      worker:  pop.workers  || 0,
-      burgher: pop.burghers || 0,
-      aristocrat: pop.aristocrats || 0,   // === CC: aristocrats staff nothing (no aristocrat producers) — harmless ===
-    };
-    // === CB-A: unbuilt buildings get no workers; effective slots subtract
-    // closedSlots; PRIORITY-true buildings are staffed first (two passes, in
-    // array order within each pass → deterministic). Legacy buildings lacking
-    // `built` are treated as built (b.built !== false).
-    const assignWorkers = (b) => {
-      if (!b) return;
-      if (b.built === false) { b.workers = 0; return; }   // under construction
-      const type = CONFIG.buildings[b.typeId];
-      if (!type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
-        b.workers = 0; return;
-      }
-      // === RU-A: upgrade slotPlus adds effective worker slots ===
-      const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
-      const eff = Math.max(0, type.workerSlots + slotPlus - (b.closedSlots || 0));
-      // === /RU-A ===
-      const tier = type.workerTier;
-      const avail = pool[tier] || 0;
-      const take = Math.min(eff, avail);
-      b.workers = take > 0 ? take : 0;
-      pool[tier] = avail - b.workers;
-    };
-    for (const b of buildings) if (b && b.priority) assignWorkers(b);
-    for (const b of buildings) if (!b || !b.priority) assignWorkers(b);
-    // === /CB-A ===
+    // DESIGN PASS #3: Sim.staffTown (above) — self-feed basics first when the city
+    // runs low, then ☆, then array order, blocked producers (full store / upgrading)
+    // last. Unbuilt buildings and houses get 0. Sim WRITES b.workers here.
+    Sim.staffTown(town, false);
 
     // === CB-A/RU-A: construction + upgrade delivery — RUNS BEFORE PRODUCTION.
     // WOODFIX (batch-2 E/G+D-root): this block MUST precede the production step
@@ -595,7 +699,7 @@ Sim.tick = function (State) {
             // thin mid-transit. Real gating is at the TOWN level (buffer + warehouse both
             // empty ⇒ genuine shortage), not a per-building logistics cliff.
             if (qty > 0) effW = Math.min(effW, ((b.inbuf[gid] || 0) + (stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
-            addDemand(gid, qty * w);
+            addConsDemand(gid, qty * w);
           }
         }
         if (effW < 0) effW = 0;
@@ -761,7 +865,7 @@ Sim.tick = function (State) {
     const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
-      addDemand(gid, req);
+      addConsDemand(gid, req);
       const have = (houseAvail[gid] || 0) + (stock[gid] || 0);  // v0.51 §2: house buffers (porter-delivered) + the town warehouse as reserve
       gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
       const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
@@ -984,6 +1088,7 @@ Sim.tick = function (State) {
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
     town.demand = demand;
+    town.consDemand = consDemand;   // DESIGN PASS #6 (rebuilt every tick; old saves self-heal)
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
 
@@ -1243,18 +1348,56 @@ Sim.houseIncome = function (town, building) {
 // === /PP-A ===
 
 // (v0.47) Read-only production progress for the map + panel progress bars. Returns
-// { prog, working, starved, kind, out } for a producing building, or null for a
-// house / non-producer. `prog` (0..1) is how far this building is toward its next
-// whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick advances); at
-// interval 0 (release-every-tick kinds) it reports the banked fraction. `starved`
-// = a processor that lacks its full input recipe in the town stock right now. Pure.
+// { prog, working, starved, status, kind, out, intervalTicks } for a producing
+// building, or null for a house / non-producer. `prog` (0..1) is how far this building
+// is toward its next whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick
+// advances); at interval 0 (release-every-tick kinds) it reports the banked fraction.
+// DESIGN PASS #13: `status` says WHY a bar isn't moving, mirroring Sim.tick's stall gates:
+//   upgrading      — pending upgrade (production stops)
+//   warehouseFull  — own store full AND the city warehouse holds storageCap of the good
+//                    (porters have nowhere to unload — the real block, not the porters)
+//   awaitingPorter — own store full, warehouse has room: a porter will empty it
+//   noWorkers      — nobody staffed
+//   noInputs       — a processor with < 1 whole unit of an input in its buffer + warehouse
+//   working
+// Staffing's "full" flag (b.blockedReason) also reads as full while it has pulled the crew off.
+// When not working the DISPLAYED prog freezes at its last working value (a UI memo in a
+// WeakMap — _prodTimer is never touched, so batch cadence and determinism are unchanged).
+// The interval honours type.cycleSec (same rule as Sim.tick's intervalTicksFor).
+const BP_FROZEN = (typeof WeakMap !== "undefined") ? new WeakMap() : null;
+Sim.buildingStatus = function (town, b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  if (b.pendingUpgrade || b.blockedReason === "upgrading") return "upgrading";
+  const g = def.output.goodId;
+  const storeCap = def.storeCap || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+  const buffered = (b._prodAcc || 0) + ((b.store && b.store[g]) || 0);
+  // Staffing's "full" flag holds (hysteresis) while porters drain the store; it only
+  // reads as full while the crew is actually OFF the building — a staffed building
+  // below storeCap passes Sim.tick's stall gate and really is producing (review fix).
+  if (buffered >= storeCap - 1e-9 || (b.blockedReason === "full" && !((b.workers || 0) > 0))) {
+    const cap = CONFIG.town && CONFIG.town.storageCap;
+    const whStock = (town && town.stock && town.stock[g]) || 0;
+    return (cap && whStock >= cap) ? "warehouseFull" : "awaitingPorter";
+  }
+  if (!((b.workers || 0) > 0) || b.built === false) return "noWorkers";
+  if (def.inputs) {
+    const stock = (town && town.stock) || {};
+    for (const gid in def.inputs) {
+      if (((b.inbuf && b.inbuf[gid]) || 0) + (stock[gid] || 0) < 1) return "noInputs";
+    }
+  }
+  return "working";
+};
 Sim.buildingProgress = function (state, town, b) {
   const def = b && CONFIG.buildings[b.typeId];
   if (!def || !def.output || def.kind === "house") return null;
   const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
   const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
-  const intervalTicks = Math.round((psec[def.kind] || 0) * (1000 / baseTickMs));
-  const working = (b.workers || 0) > 0 && b.built !== false;
+  const sec = (typeof def.cycleSec === "number") ? def.cycleSec : (psec[def.kind] || 0);
+  const intervalTicks = Math.round(sec * (1000 / baseTickMs));
+  const status = Sim.buildingStatus(town, b);
+  const working = status === "working";
   let prog = 0;
   if (intervalTicks > 0) {
     const t = (typeof b._prodTimer === "number") ? b._prodTimer : intervalTicks;
@@ -1262,11 +1405,41 @@ Sim.buildingProgress = function (state, town, b) {
   } else {
     prog = Math.max(0, Math.min(1, (b._prodAcc || 0) % 1));
   }
-  let starved = false;
-  if (def.inputs && town && town.stock) {
-    for (const gid in def.inputs) if ((town.stock[gid] || 0) < def.inputs[gid]) { starved = true; break; }
+  if (BP_FROZEN) {
+    if (working) BP_FROZEN.set(b, prog);
+    else prog = BP_FROZEN.has(b) ? BP_FROZEN.get(b) : 0;
+  } else if (!working) prog = 0;
+  return { prog, working, starved: status === "noInputs", status, intervalTicks, kind: def.kind, out: def.output.goodId };
+};
+
+// DESIGN PASS #13: nominal per-minute flows of one producer at its CURRENT staffing,
+// mirroring Sim.tick's production maths: output = ratePerWorker × workers × hf (town
+// happiness from the last tick) × research × upgrade outputMult; inputs = recipe qty ×
+// workers (inputs are not scaled by hf/research/upgrades in Sim.tick). `workers`
+// overrides the staffed count (e.g. full slots for a "when staffed" preview). Pure.
+Sim.buildingRates = function (state, town, b, workers) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  const E = CONFIG.econ || {}, N = CONFIG.needs || {};
+  const perMin = E.ticksPerMin || 120;
+  const w = (typeof workers === "number") ? workers : (b.pendingUpgrade ? 0 : (b.workers || 0));
+  const h = (town && typeof town.happiness === "number") ? town.happiness : 100;
+  const effMin = (typeof N.effMin === "number") ? N.effMin : 1, effMax = (typeof N.effMax === "number") ? N.effMax : 1;
+  const hf = effMin + (Math.min(100, Math.max(0, h)) / 100) * (effMax - effMin);
+  let resMult = 1;
+  if (typeof Research !== "undefined" && Research.effect && state) {
+    resMult = Research.effect(state, "globalOutput", 1);
+    if (def.kind === "extractor") {
+      resMult *= Research.effect(state, "extractorOutput", 1);
+      if (MINE_TERRAINS[def.terrain]) resMult *= Research.effect(state, "mineOutput", 1);
+    } else if (def.kind === "processor") {
+      resMult *= Research.effect(state, "processorOutput", 1);
+    }
   }
-  return { prog: working ? prog : 0, working, starved, intervalTicks, kind: def.kind, out: def.output.goodId };
+  const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+  const inPerMin = {};
+  if (def.inputs) for (const gid in def.inputs) inPerMin[gid] = def.inputs[gid] * w * perMin;
+  return { good: def.output.goodId, outPerMin: def.output.ratePerWorker * w * hf * resMult * upgMult * perMin, inPerMin, workers: w, hf };
 };
 
 // === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can
@@ -1290,7 +1463,7 @@ Sim.ccRenameGoodMap = function (obj, map) {
 Sim.CC_migrateGoods = function (state) {
   if (!state || typeof state !== "object") return state;
   const GM = Sim.CC_GOOD_RENAMES, BM = Sim.CC_BUILDING_RENAMES;
-  const GOODMAPS = ["stock", "prices", "demand", "reserved", "produced", "consumed", "delivered", "need"];
+  const GOODMAPS = ["stock", "prices", "demand", "consDemand", "reserved", "produced", "consumed", "delivered", "need"];
   for (const t of (state.towns || [])) {
     if (!t) continue;
     for (const key of GOODMAPS) Sim.ccRenameGoodMap(t[key], GM);

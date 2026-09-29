@@ -1383,7 +1383,7 @@
 /* BUILD:config START */
 // Single source of truth for all balance/layout constants (GDD §9.1).
 const CONFIG = {
-  saveVersion: 2,
+  saveVersion: 3,   // DESIGN PASS: v3 = castleTrade split into { buy, sell, limit } (save.js migrate)
   // Biome mix is quantile-driven (see MapGen.generate): these are *target
   // fractions* of the board, so the map stays varied for any seed.
   map: {
@@ -2500,10 +2500,10 @@ const MapGen = {
 // Added to the shared CONFIG via a NON-DESTRUCTIVE merge so it composes with
 // the Phase-1 CONFIG and with the other Phase-2 slices (T4 sim, T6 UI).
 Object.assign(CONFIG, {
-  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier; `inputs`
-  // (goodId → qty consumed per unit produced) reference other goods by id.
-  // NB: "beer = grain + water" in the GDD — water is ambient, not a tracked
-  // good, so only grain appears here.
+  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier.
+  // DESIGN PASS #13: the stale per-good `inputs` table (e.g. planks = 2 wood, while the
+  // Sawmill is really 1:1) was deleted — nothing read it. The ONE recipe source is
+  // CONFIG.buildings[].inputs / .output (per-worker-tick rates).
   goods: {
     // --- tier 1 (raw) ---
     wood:   { id: "wood",   tier: 1, basePrice: 5 },
@@ -2516,25 +2516,25 @@ Object.assign(CONFIG, {
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
     // === CC: content chains v2 — 4-tier needs matrix + aristocrat luxuries. ===
     // --- tier 2 (processed / mined) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
-    planks:      { id: "planks",      tier: 2, basePrice: 14, inputs: { wood: 2 } },              // wood 5×2=10
-    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22, inputs: { wood: 1, iron: 1 } },     // === CC: Forge; migrates old "tools" ===
-    flour:       { id: "flour",       tier: 2, basePrice: 12, inputs: { grain: 2 } },             // grain 4×2=8
-    mead:        { id: "mead",        tier: 2, basePrice: 14, inputs: { grain: 2 } },             // === CC: Brewery; migrates old "beer" ===
-    clothes:     { id: "clothes",     tier: 2, basePrice: 22, inputs: { wool: 2 } },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
-    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28, inputs: { planks: 1, stone: 1 } },  // === CC: StoneTools Maker ===
-    oil:         { id: "oil",         tier: 2, basePrice: 15, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
+    planks:      { id: "planks",      tier: 2, basePrice: 14 },              // wood 5×2=10
+    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22 },     // === CC: Forge; migrates old "tools" ===
+    flour:       { id: "flour",       tier: 2, basePrice: 12 },             // grain 4×2=8
+    mead:        { id: "mead",        tier: 2, basePrice: 14 },             // === CC: Brewery; migrates old "beer" ===
+    clothes:     { id: "clothes",     tier: 2, basePrice: 22 },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
+    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28 },  // === CC: StoneTools Maker ===
+    oil:         { id: "oil",         tier: 2, basePrice: 15 },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
     coal:        { id: "coal",        tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
     gold:        { id: "gold",        tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
-    bricks:      { id: "bricks",      tier: 2, basePrice: 16, inputs: { clay: 2 } },              // === TV2: clay 6×2=12 (Brickworks) ===
+    bricks:      { id: "bricks",      tier: 2, basePrice: 16 },              // === TV2: clay 6×2=12 (Brickworks) ===
     // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
-    bread:          { id: "bread",          tier: 3, basePrice: 30,  inputs: { flour: 2 } },                 // flour 12×2=24
-    pottery:        { id: "pottery",        tier: 3, basePrice: 22,  inputs: { clay: 2 } },                  // === CC: Pottery (clay 6×2=12) ===
-    lamp:           { id: "lamp",           tier: 3, basePrice: 40,  inputs: { oil: 2 } },                   // === CC: Lamp Maker (oil 18×2=36) ===
-    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70,  inputs: { coal: 2, iron: 2 } },         // === CC: Armory (coal10×2+iron8×2=36) ===
-    chairs:         { id: "chairs",         tier: 3, basePrice: 64,  inputs: { planks: 2, oil: 1 } },        // === CC: Carpentry; migrates old "furniture" ===
-    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120, inputs: { gold: 1, iron_tool: 1 } },    // === CC: Goldsmith; migrates old "jewelry" ===
-    brandy:         { id: "brandy",         tier: 3, basePrice: 72,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
-    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
+    bread:          { id: "bread",          tier: 3, basePrice: 30 },                 // flour 12×2=24
+    pottery:        { id: "pottery",        tier: 3, basePrice: 22 },                  // === CC: Pottery (clay 6×2=12) ===
+    lamp:           { id: "lamp",           tier: 3, basePrice: 40 },                   // === CC: Lamp Maker (oil 18×2=36) ===
+    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70 },         // === CC: Armory (coal10×2+iron8×2=36) ===
+    chairs:         { id: "chairs",         tier: 3, basePrice: 64 },        // === CC: Carpentry; migrates old "furniture" ===
+    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120 },    // === CC: Goldsmith; migrates old "jewelry" ===
+    brandy:         { id: "brandy",         tier: 3, basePrice: 72 },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
+    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240 }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -2886,9 +2886,32 @@ Object.assign(CONFIG, {
 // bufferTarget lives under econ (existing key) — merge in place so we don't
 // clobber baseTickMs or anything a sibling slice added.
 Object.assign(CONFIG.econ, {
-  bufferTarget: 2.0,   // "comfortable" stock = bufferTarget × demand (GDD §6.1)
+  bufferTarget: 2.0,   // trade/castle buy target = bufferTarget × per-tick demand (NOT the price model any more)
   priceSmoothing: 0.10, // lerp factor toward the target price each tick
-  minDemand: 0.5,      // demand floor so priceFor never divides by ~0
+  minDemand: 0.5,      // legacy per-tick floor (kept for old readers; priceFor uses minDemandPerMin)
+  // DESIGN PASS #6: unit-correct price model. Prices compare stock against MINUTES of
+  // CONSUMPTION (residents + processor inputs; construction bills / research share are
+  // excluded — they are a lump, not a rate): ratio = stock / (max(minDemandPerMin,
+  // consDemand×ticksPerMin) × coverMin); target = base × clamp(priceCeilMult − ratio,
+  // priceFloorMult, priceCeilMult). ratio 0.9 ⇒ base; ≥1.5 ⇒ 0.4×; empty shelf ⇒ 1.9×.
+  ticksPerMin: 120,     // 2 ticks = 1 game-second
+  minDemandPerMin: 0.5, // demand floor (units/min) so a tiny demand can't blow the ratio up
+  coverMin: 2,          // a "comfortable" stock = this many minutes of consumption
+  priceCeilMult: 1.9,   // price at an empty shelf (and the clamp ceiling), × basePrice
+  priceFloorMult: 0.4,  // surplus floor, × basePrice
+  // DESIGN PASS #3 (Sim.staffTown): a producer of its own staffing tier's BASIC need
+  // (Potato Farm, Lumberjack, Coal Mine) is staffed ahead of ☆ while the city holds less
+  // than this many game-seconds of that good (0 = off). Blocked producers (store full /
+  // upgrading) are staffed LAST when staffBlockedLast is on.
+  selfFeedCoverSec: 120,
+  selfFeedReleaseMult: 2,   // …and stays staffed first until the cover is back to 2× that (anti-flicker)
+  staffBlockedLast: true,
+  // DESIGN PASS #13: rate readouts (warehouse Rate column, Kingdom resource Net rate)
+  // average the net stock change over this many ticks (120 = 60 game-s) and show
+  // "≈0" when |rate| is under the deadband (units/min) — integer batches made the old
+  // 4–10 s windows swing ±90/min around a true +2.7.
+  rateWindowTicks: 120,
+  rateDeadbandPerMin: 0.5,
 });
 
 // Sim — pure, deterministic economy namespace. THIS SLICE OWNS ONLY priceFor;
@@ -2902,31 +2925,55 @@ var Sim = (typeof Sim !== "undefined" && Sim) || {};
 // terrains are gone. Forest/fish extractors are deliberately excluded. ===
 const MINE_TERRAINS = { stone_deposit: 1, iron_deposit: 1, gold_deposit: 1, coal_deposit: 1, clay_deposit: 1 };
 
-// Local price of one good in one town from stock vs demand (GDD §6.1):
-//   ratio = stock / (demand * bufferTarget)
-//   target = clamp(basePrice * (1.6 - 0.8*ratio), basePrice*0.4, basePrice*3.0)
-// then lerp the town's stored price 10%/tick toward the target (anti-jitter).
-// Demand is read from town.demand[goodId] when the sim provides it (T4), else a
-// small floor keeps this well-defined. First read (no stored price) snaps to the
-// target; later reads move gradually. Mutates town.prices[goodId] and returns it.
+// DESIGN PASS #6 — consumption demand per tick for one good: town.consDemand (residents +
+// processor inputs, published by Sim.tick). Falls back to town.demand for a town that has
+// not been ticked yet (fresh makeTown, hand-built test towns, pre-#6 saves).
+Sim.consDemandOf = function (town, goodId) {
+  const cd = town && (town.consDemand || town.demand);
+  return (cd && cd[goodId]) || 0;
+};
+
+// Shared cover ratio (GDD §7): warehouse stock vs coverMin minutes of consumption.
+// 1 = exactly a comfortable stock; <1 short; >1 surplus. The one copy of this maths —
+// the price engine, the kingdom surplus/shortage columns and the "wanted" chatter row
+// all read it, so what the player sees agrees with what the price does.
+Sim.coverRatio = function (town, goodId) {
+  const E = CONFIG.econ;
+  const stock = (town && town.stock && town.stock[goodId]) || 0;
+  const perMin = Sim.consDemandOf(town, goodId) * E.ticksPerMin;
+  return stock / (Math.max(E.minDemandPerMin, perMin) * E.coverMin);
+};
+
+// True when a good has a local market at all (something stocked or consumed here).
+// With neither, priceFor returns basePrice and the UI shows "—".
+Sim.hasMarket = function (town, goodId) {
+  return ((town && town.stock && town.stock[goodId]) || 0) > 0 || Sim.consDemandOf(town, goodId) > 0;
+};
+
+// Local price of one good in one town (GDD §7, DESIGN PASS #6 unit-correct model):
+//   ratio  = Sim.coverRatio(town, good)
+//   target = basePrice × clamp(priceCeilMult − ratio, priceFloorMult, priceCeilMult)
+// then lerp the town's stored price priceSmoothing/tick toward the target (anti-jitter).
+// No stock AND no consumption ⇒ target = basePrice (no market). First read (no stored
+// price) snaps to the target. Mutates town.prices[goodId] and returns it.
 Sim.priceFor = function (town, goodId) {
   const good = CONFIG.goods[goodId];
   if (!good) return 0;
   const base = good.basePrice;
-  const buffer = CONFIG.econ.bufferTarget;
+  const E = CONFIG.econ;
 
-  const stock = (town.stock && town.stock[goodId]) || 0;
-  const rawDemand = (town.demand && town.demand[goodId]);
-  const demand = Math.max(CONFIG.econ.minDemand, rawDemand || 0);
-
-  const ratio = stock / (demand * buffer);
-  const target = Math.min(base * 3.0, Math.max(base * 0.4, base * (1.6 - 0.8 * ratio)));
+  let target;
+  if (!Sim.hasMarket(town, goodId)) target = base;   // DESIGN PASS #6: no market ⇒ base, shown as "—"
+  else {
+    const ratio = Sim.coverRatio(town, goodId);
+    target = base * Math.min(E.priceCeilMult, Math.max(E.priceFloorMult, E.priceCeilMult - ratio));
+  }
 
   if (!town.prices) town.prices = {};
   const prev = town.prices[goodId];
   const next = (prev === undefined || prev === null)
     ? target                                        // first read: snap to target
-    : prev + (target - prev) * CONFIG.econ.priceSmoothing; // else: 10%/tick lerp
+    : prev + (target - prev) * E.priceSmoothing;    // else: 10%/tick lerp
   town.prices[goodId] = next;
   return next;
 };
@@ -3287,7 +3334,7 @@ MissionEngine.DEFAULT = {
         { type: "earn_tax",   amount: 150 },                // lifetime tariff — ~12 g/min with 3 trading cities (customs valuation)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
-      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build Huts or ☆ Priority them.",
+      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build more Huts in that city (☆ Priority only reshuffles the workers a city already has).",
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
@@ -3306,6 +3353,134 @@ MissionEngine.DEFAULT = {
 // (same object) so tests can capture either from the vm sandbox.
 var Missions = MissionEngine;
 // === /MISSION-ENGINE ===
+
+// === DESIGN PASS #3: SMARTER STAFFING ======================================
+// Worker assignment, derived every tick by Sim.tick (and dry-run by the UI's ☆
+// preview). Four passes, array order within each (deterministic):
+//   1. SELF-FEED — a producer whose output is a BASIC need of the tier that staffs
+//      it (peasants: potato/wood; workers: coal) goes first, up to its full slots,
+//      while the town holds under CONFIG.econ.selfFeedCoverSec game-seconds of that
+//      good (warehouse + house buffers ÷ the present tiers' consumption). A ☆ can no
+//      longer strip the only Potato Farm and starve the city that staffs it.
+//   2. ☆ priority, not blocked.   3. the rest, not blocked.
+//   4. BLOCKED producers (output store full, or waiting on an upgrade; ☆ first) — last, so
+//      their crews work somewhere useful (CONFIG.econ.staffBlockedLast).
+// "Full" has hysteresis: it trips at storeCap − 1 and clears only once the store has
+// drained a whole batch, so porters' 10-unit pickups don't make crews flicker; self-feed
+// likewise holds until the cover reaches selfFeedReleaseMult × selfFeedCoverSec.
+// Input-starved processors are deliberately NOT blocked: an unstaffed processor gets
+// no input-buffer target, so demoting it would keep it starved.
+// dry=false WRITES b.workers / b._blocked / b.blockedReason / b.selfFeedGood and
+// returns null; dry=true mutates nothing and returns the planned workers per index.
+const STAFF_TIER_POP = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" };
+Sim.staffTown = function (town, dry) {
+  const buildings = (town && Array.isArray(town.buildings)) ? town.buildings : [];
+  const n = buildings.length;
+  const plan = dry ? new Array(n).fill(0) : null;
+  const pop = (town && town.pop) || {};
+  const stock = (town && town.stock) || {};
+  const E = CONFIG.econ || {};
+  const N = CONFIG.needs;
+  const baseTickMs = E.baseTickMs || 500;
+  const prodIntervalSec = E.productionIntervalSec || { extractor: 8, processor: 12 };
+  const blockedLast = E.staffBlockedLast !== false;
+  const coverTicks = (E.selfFeedCoverSec || 0) * (1000 / baseTickMs);
+  const releaseMult = Math.max(1, E.selfFeedReleaseMult || 1);
+  const pool = {
+    peasant: pop.peasants || 0,
+    worker:  pop.workers  || 0,
+    burgher: pop.burghers || 0,
+    aristocrat: pop.aristocrats || 0,   // === CC: aristocrats staff nothing (no aristocrat producers) — harmless ===
+  };
+  // Lazily-built per-good cover (ticks of consumption on hand) for the self-feed pass.
+  let houseHave = null, bcm = null, lcm = null;
+  const coverCache = {};
+  // Returns the cover in TICKS of good g (Infinity when nobody present eats it).
+  const coverOf = (g) => {
+    if (g in coverCache) return coverCache[g];
+    if (!houseHave) {
+      houseHave = {};
+      for (const hb of buildings) {
+        const hd = hb && CONFIG.buildings[hb.typeId];
+        if (!hd || hd.kind !== "house" || hb.built === false || !hb.inbuf) continue;
+        for (const k in hb.inbuf) houseHave[k] = (houseHave[k] || 0) + (hb.inbuf[k] || 0);
+      }
+      const one = { peasants: 1, workers: 1, burghers: 1, aristocrats: 1 };
+      bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult) ? Buildings.basicConsumptionMult(town) : one;
+      lcm = (typeof Buildings !== "undefined" && Buildings.luxuryConsumptionMult) ? Buildings.luxuryConsumptionMult(town) : one;
+    }
+    let perTick = 0;   // the PRESENT tiers' draw of g (same formula as the consumption step)
+    for (const tk in N.tiers) {
+      const np = pop[tk] || 0, spec = N.tiers[tk];
+      if (np <= 0 || !spec.perCapita[g]) continue;
+      perTick += spec.perCapita[g] * np * (spec.basic.indexOf(g) >= 0 ? (bcm[tk] || 1) : (lcm[tk] || 1));
+    }
+    const have = (stock[g] || 0) + (houseHave[g] || 0);
+    return (coverCache[g] = perTick > 0 ? have / perTick : Infinity);
+  };
+  // Classify: 0 unstaffable · 1 self-feed · 2 ☆ · 3 normal · 4 blocked ☆ · 5 blocked.
+  const cls = new Uint8Array(n);
+  const eff = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const b = buildings[i];
+    if (!b) continue;
+    const type = CONFIG.buildings[b.typeId];
+    if (b.built === false || !type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
+      if (!dry) {
+        b.workers = 0;
+        if (b._blocked) b._blocked = false;
+        if (b.blockedReason) b.blockedReason = null;
+        if (b.selfFeedGood) b.selfFeedGood = null;
+      }
+      continue;
+    }
+    // === RU-A: upgrade slotPlus adds effective worker slots ===
+    const upg = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? Buildings.upgradeEffect(b) : {};
+    eff[i] = Math.max(0, type.workerSlots + (upg.slotPlus || 0) - (b.closedSlots || 0));
+    // BLOCKED? (pending upgrade, or a full output store with hysteresis)
+    let full = false;
+    const out = type.output;
+    if (out) {
+      const storeCap = type.storeCap || E.buildingStoreCap || 30;
+      const buf = (b._prodAcc || 0) + ((b.store && b.store[out.goodId]) || 0);
+      if (b._blocked) {
+        const sec = (typeof type.cycleSec === "number") ? type.cycleSec : (prodIntervalSec[type.kind] || 0);
+        const batch = Math.max(1, (out.ratePerWorker || 0) * eff[i] * Math.round(sec * (1000 / baseTickMs)) * (upg.outputMult || 1));
+        full = buf > Math.max(1, storeCap - batch);
+      } else {
+        full = buf >= storeCap - 1;
+      }
+    }
+    const reason = b.pendingUpgrade ? "upgrading" : (full ? "full" : null);
+    // SELF-FEED? engages under coverTicks; once engaged it holds until the cover is
+    // selfFeedReleaseMult× that, so the crew doesn't bounce on every batch.
+    const tierSpec = N.tiers[STAFF_TIER_POP[type.workerTier]];
+    const sfGood = (out && !reason && coverTicks > 0 && tierSpec && tierSpec.basic.indexOf(out.goodId) >= 0 &&
+      coverOf(out.goodId) < coverTicks * (b.selfFeedGood === out.goodId ? releaseMult : 1)) ? out.goodId : null;
+    if (!dry) {
+      if (!!b._blocked !== full) b._blocked = full;
+      if ((b.blockedReason || null) !== reason) b.blockedReason = reason;
+      if ((b.selfFeedGood || null) !== sfGood) b.selfFeedGood = sfGood;
+    }
+    if (sfGood) cls[i] = 1;
+    else if (reason && blockedLast) cls[i] = b.priority ? 4 : 5;
+    else cls[i] = b.priority ? 2 : 3;
+  }
+  for (let pass = 1; pass <= 5; pass++) {
+    for (let i = 0; i < n; i++) {
+      if (cls[i] !== pass) continue;
+      const b = buildings[i];
+      const tier = CONFIG.buildings[b.typeId].workerTier;
+      const avail = pool[tier] || 0;
+      const take = Math.min(eff[i], avail);
+      const w = take > 0 ? take : 0;
+      pool[tier] = avail - w;
+      if (dry) plan[i] = w; else b.workers = w;
+    }
+  }
+  return plan;
+};
+// === /DESIGN PASS #3 ========================================================
 
 // Advance the whole economy by one tick. Mutates every town in State.towns:
 //   worker assignment → production → consumption → happiness → population → prices.
@@ -3377,45 +3552,21 @@ Sim.tick = function (State) {
     const buildings = Array.isArray(town.buildings) ? town.buildings : [];
     const demand = {};                 // rebuilt every tick (drives Sim.priceFor)
     const addDemand = (g, amt) => { if (amt > 0) demand[g] = (demand[g] || 0) + amt; };
+    // DESIGN PASS #6: CONSUMPTION demand (residents + processor inputs) is also tallied
+    // on its own — Sim.priceFor prices against this rate only; construction bills and the
+    // research share stay in `demand` (trade buy targets) but no longer pin prices.
+    const consDemand = {};
+    const addConsDemand = (g, amt) => { if (amt > 0) { consDemand[g] = (consDemand[g] || 0) + amt; addDemand(g, amt); } };
 
     // Work efficiency from the PREVIOUS tick's happiness (default 100 => 1.2x).
     const h = (typeof town.happiness === "number") ? town.happiness : 100;
     const hf = N.effMin + (Math.min(100, Math.max(0, h)) / 100) * (N.effMax - N.effMin);
 
     // --- 0. Worker assignment (derived every tick) ---------------------
-    // Greedy, deterministic fill in building array order: each producer draws
-    // from its tier's remaining labour pool, up to workerSlots. Houses (and any
-    // building without a workerTier) get 0. Sim WRITES b.workers here.
-    const pool = {
-      peasant: pop.peasants || 0,
-      worker:  pop.workers  || 0,
-      burgher: pop.burghers || 0,
-      aristocrat: pop.aristocrats || 0,   // === CC: aristocrats staff nothing (no aristocrat producers) — harmless ===
-    };
-    // === CB-A: unbuilt buildings get no workers; effective slots subtract
-    // closedSlots; PRIORITY-true buildings are staffed first (two passes, in
-    // array order within each pass → deterministic). Legacy buildings lacking
-    // `built` are treated as built (b.built !== false).
-    const assignWorkers = (b) => {
-      if (!b) return;
-      if (b.built === false) { b.workers = 0; return; }   // under construction
-      const type = CONFIG.buildings[b.typeId];
-      if (!type || type.kind === "house" || !type.workerTier || !(type.workerSlots > 0)) {
-        b.workers = 0; return;
-      }
-      // === RU-A: upgrade slotPlus adds effective worker slots ===
-      const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
-      const eff = Math.max(0, type.workerSlots + slotPlus - (b.closedSlots || 0));
-      // === /RU-A ===
-      const tier = type.workerTier;
-      const avail = pool[tier] || 0;
-      const take = Math.min(eff, avail);
-      b.workers = take > 0 ? take : 0;
-      pool[tier] = avail - b.workers;
-    };
-    for (const b of buildings) if (b && b.priority) assignWorkers(b);
-    for (const b of buildings) if (!b || !b.priority) assignWorkers(b);
-    // === /CB-A ===
+    // DESIGN PASS #3: Sim.staffTown (above) — self-feed basics first when the city
+    // runs low, then ☆, then array order, blocked producers (full store / upgrading)
+    // last. Unbuilt buildings and houses get 0. Sim WRITES b.workers here.
+    Sim.staffTown(town, false);
 
     // === CB-A/RU-A: construction + upgrade delivery — RUNS BEFORE PRODUCTION.
     // WOODFIX (batch-2 E/G+D-root): this block MUST precede the production step
@@ -3531,7 +3682,7 @@ Sim.tick = function (State) {
             // thin mid-transit. Real gating is at the TOWN level (buffer + warehouse both
             // empty ⇒ genuine shortage), not a per-building logistics cliff.
             if (qty > 0) effW = Math.min(effW, ((b.inbuf[gid] || 0) + (stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
-            addDemand(gid, qty * w);
+            addConsDemand(gid, qty * w);
           }
         }
         if (effW < 0) effW = 0;
@@ -3697,7 +3848,7 @@ Sim.tick = function (State) {
     const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
-      addDemand(gid, req);
+      addConsDemand(gid, req);
       const have = (houseAvail[gid] || 0) + (stock[gid] || 0);  // v0.51 §2: house buffers (porter-delivered) + the town warehouse as reserve
       gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
       const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
@@ -3920,6 +4071,7 @@ Sim.tick = function (State) {
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
     town.demand = demand;
+    town.consDemand = consDemand;   // DESIGN PASS #6 (rebuilt every tick; old saves self-heal)
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
 
@@ -4179,18 +4331,56 @@ Sim.houseIncome = function (town, building) {
 // === /PP-A ===
 
 // (v0.47) Read-only production progress for the map + panel progress bars. Returns
-// { prog, working, starved, kind, out } for a producing building, or null for a
-// house / non-producer. `prog` (0..1) is how far this building is toward its next
-// whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick advances); at
-// interval 0 (release-every-tick kinds) it reports the banked fraction. `starved`
-// = a processor that lacks its full input recipe in the town stock right now. Pure.
+// { prog, working, starved, status, kind, out, intervalTicks } for a producing
+// building, or null for a house / non-producer. `prog` (0..1) is how far this building
+// is toward its next whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick
+// advances); at interval 0 (release-every-tick kinds) it reports the banked fraction.
+// DESIGN PASS #13: `status` says WHY a bar isn't moving, mirroring Sim.tick's stall gates:
+//   upgrading      — pending upgrade (production stops)
+//   warehouseFull  — own store full AND the city warehouse holds storageCap of the good
+//                    (porters have nowhere to unload — the real block, not the porters)
+//   awaitingPorter — own store full, warehouse has room: a porter will empty it
+//   noWorkers      — nobody staffed
+//   noInputs       — a processor with < 1 whole unit of an input in its buffer + warehouse
+//   working
+// Staffing's "full" flag (b.blockedReason) also reads as full while it has pulled the crew off.
+// When not working the DISPLAYED prog freezes at its last working value (a UI memo in a
+// WeakMap — _prodTimer is never touched, so batch cadence and determinism are unchanged).
+// The interval honours type.cycleSec (same rule as Sim.tick's intervalTicksFor).
+const BP_FROZEN = (typeof WeakMap !== "undefined") ? new WeakMap() : null;
+Sim.buildingStatus = function (town, b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  if (b.pendingUpgrade || b.blockedReason === "upgrading") return "upgrading";
+  const g = def.output.goodId;
+  const storeCap = def.storeCap || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+  const buffered = (b._prodAcc || 0) + ((b.store && b.store[g]) || 0);
+  // Staffing's "full" flag holds (hysteresis) while porters drain the store; it only
+  // reads as full while the crew is actually OFF the building — a staffed building
+  // below storeCap passes Sim.tick's stall gate and really is producing (review fix).
+  if (buffered >= storeCap - 1e-9 || (b.blockedReason === "full" && !((b.workers || 0) > 0))) {
+    const cap = CONFIG.town && CONFIG.town.storageCap;
+    const whStock = (town && town.stock && town.stock[g]) || 0;
+    return (cap && whStock >= cap) ? "warehouseFull" : "awaitingPorter";
+  }
+  if (!((b.workers || 0) > 0) || b.built === false) return "noWorkers";
+  if (def.inputs) {
+    const stock = (town && town.stock) || {};
+    for (const gid in def.inputs) {
+      if (((b.inbuf && b.inbuf[gid]) || 0) + (stock[gid] || 0) < 1) return "noInputs";
+    }
+  }
+  return "working";
+};
 Sim.buildingProgress = function (state, town, b) {
   const def = b && CONFIG.buildings[b.typeId];
   if (!def || !def.output || def.kind === "house") return null;
   const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
   const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
-  const intervalTicks = Math.round((psec[def.kind] || 0) * (1000 / baseTickMs));
-  const working = (b.workers || 0) > 0 && b.built !== false;
+  const sec = (typeof def.cycleSec === "number") ? def.cycleSec : (psec[def.kind] || 0);
+  const intervalTicks = Math.round(sec * (1000 / baseTickMs));
+  const status = Sim.buildingStatus(town, b);
+  const working = status === "working";
   let prog = 0;
   if (intervalTicks > 0) {
     const t = (typeof b._prodTimer === "number") ? b._prodTimer : intervalTicks;
@@ -4198,11 +4388,41 @@ Sim.buildingProgress = function (state, town, b) {
   } else {
     prog = Math.max(0, Math.min(1, (b._prodAcc || 0) % 1));
   }
-  let starved = false;
-  if (def.inputs && town && town.stock) {
-    for (const gid in def.inputs) if ((town.stock[gid] || 0) < def.inputs[gid]) { starved = true; break; }
+  if (BP_FROZEN) {
+    if (working) BP_FROZEN.set(b, prog);
+    else prog = BP_FROZEN.has(b) ? BP_FROZEN.get(b) : 0;
+  } else if (!working) prog = 0;
+  return { prog, working, starved: status === "noInputs", status, intervalTicks, kind: def.kind, out: def.output.goodId };
+};
+
+// DESIGN PASS #13: nominal per-minute flows of one producer at its CURRENT staffing,
+// mirroring Sim.tick's production maths: output = ratePerWorker × workers × hf (town
+// happiness from the last tick) × research × upgrade outputMult; inputs = recipe qty ×
+// workers (inputs are not scaled by hf/research/upgrades in Sim.tick). `workers`
+// overrides the staffed count (e.g. full slots for a "when staffed" preview). Pure.
+Sim.buildingRates = function (state, town, b, workers) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  const E = CONFIG.econ || {}, N = CONFIG.needs || {};
+  const perMin = E.ticksPerMin || 120;
+  const w = (typeof workers === "number") ? workers : (b.pendingUpgrade ? 0 : (b.workers || 0));
+  const h = (town && typeof town.happiness === "number") ? town.happiness : 100;
+  const effMin = (typeof N.effMin === "number") ? N.effMin : 1, effMax = (typeof N.effMax === "number") ? N.effMax : 1;
+  const hf = effMin + (Math.min(100, Math.max(0, h)) / 100) * (effMax - effMin);
+  let resMult = 1;
+  if (typeof Research !== "undefined" && Research.effect && state) {
+    resMult = Research.effect(state, "globalOutput", 1);
+    if (def.kind === "extractor") {
+      resMult *= Research.effect(state, "extractorOutput", 1);
+      if (MINE_TERRAINS[def.terrain]) resMult *= Research.effect(state, "mineOutput", 1);
+    } else if (def.kind === "processor") {
+      resMult *= Research.effect(state, "processorOutput", 1);
+    }
   }
-  return { prog: working ? prog : 0, working, starved, intervalTicks, kind: def.kind, out: def.output.goodId };
+  const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+  const inPerMin = {};
+  if (def.inputs) for (const gid in def.inputs) inPerMin[gid] = def.inputs[gid] * w * perMin;
+  return { good: def.output.goodId, outPerMin: def.output.ratePerWorker * w * hf * resMult * upgMult * perMin, inPerMin, workers: w, hf };
 };
 
 // === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can
@@ -4226,7 +4446,7 @@ Sim.ccRenameGoodMap = function (obj, map) {
 Sim.CC_migrateGoods = function (state) {
   if (!state || typeof state !== "object") return state;
   const GM = Sim.CC_GOOD_RENAMES, BM = Sim.CC_BUILDING_RENAMES;
-  const GOODMAPS = ["stock", "prices", "demand", "reserved", "produced", "consumed", "delivered", "need"];
+  const GOODMAPS = ["stock", "prices", "demand", "consDemand", "reserved", "produced", "consumed", "delivered", "need"];
   for (const t of (state.towns || [])) {
     if (!t) continue;
     for (const key of GOODMAPS) Sim.ccRenameGoodMap(t[key], GM);
@@ -5029,10 +5249,22 @@ Buildings.placeAdvancedProvisioner = function (state, q, r) {
   // switch on castle fish-buying so the advanced line has its second input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
-  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "fish", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /ADVANCED PROVISIONER ===================================================
+
+// DESIGN PASS (king buys / king sells): a Provisioner switches on castle BUYING of
+// its input only. An entry the player already buys keeps its limit; a "King sells"
+// tick the player set is preserved (never switched on here).
+Buildings.enableCastleBuy = function (state, gid, lim) {
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const cur = state.castleTrade[gid];
+  const f = (typeof CastleMarket !== "undefined" && CastleMarket.flagsOf) ? CastleMarket.flagsOf(cur)
+    : { buy: !!(cur && (cur.buy || cur.enabled)), sell: !!(cur && cur.sell) };
+  const keepLim = f.buy && typeof cur.limit === "number" && isFinite(cur.limit) && cur.limit >= 0;
+  state.castleTrade[gid] = { buy: true, sell: f.sell, limit: keepLim ? cur.limit : lim };
+};
 
 // === BASIC PROVISIONER (v0.51 §9) — a castle-adjacent building (no research) that
 // enables the basic provision line (2 potato → 1). Placed like the Advanced one and
@@ -5054,7 +5286,7 @@ Buildings.placeProvisioner = function (state, q, r) {
   // switch on castle potato-buying so the basic line has its input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.potatoLimit) || 40;
-  if (!state.castleTrade.potato || !state.castleTrade.potato.enabled) state.castleTrade.potato = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "potato", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /BASIC PROVISIONER ======================================================
@@ -5237,6 +5469,12 @@ Object.assign(CONFIG, {
     distanceCostPerStep: 0.5,  // (legacy) retained for compat; route.cost is now only a seller tiebreak
     cartCapacity: 10,          // max units one external trader hauls per trip
     cartSpeed: 0.25,           // v0.51: progress (0..1 along the path) per tick — halved so external traders travel 2× slower
+    // === DESIGN PASS (distance): a leg's progress per tick is min(cartSpeed, cartTilesPerTick
+    // / pathSteps) — so a route of ≤ cartTilesPerTick/cartSpeed (= 8) hexes keeps its 4-tick
+    // leg, and longer routes take proportionally longer (2 hexes/tick = 4 hexes/game-second
+    // on road). Paved Roads and the off-road ×0.5 multiply the result. 0 = legacy
+    // (length-blind legs). Trade.legSpeed is shared with the castle's royal buyers. ===
+    cartTilesPerTick: 2,
     transferRate: 2.5,         // v0.51: items/sec (game time) a parked trader loads/unloads — halved so loading/unloading a cargo takes visibly longer
     maxCartsPerTown: 3,        // (legacy) cap kept for config compat; the buy model runs 1 trader/city
     topRandom: 3,              // pick among the top-N sellers / tied shortfalls (anti-herding)
@@ -5320,13 +5558,14 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return Math.max(unit || 0, official) * qty;
   }
 
-  // === PP-A === CASTLE-AS-SELLER. When the player ENABLES a good in
-  // state.castleTrade, the castle offers whatever it stocks (state.castleStock) at
+  // === PP-A === CASTLE-AS-SELLER. When the player ticks "King sells" for a good in
+  // state.castleTrade, the castle offers its stock (state.castleStock) at
   // basePrice × castleSellMargin, with NO tariff — proceeds go to state.treasury.
   // Castle stock is reserved in state.castleReserved (mirrors town.reserved) so two
-  // buyers can't claim the same units. `SELLER_CASTLE_ID` sorts the castle after
-  // towns on the id tiebreak. Selling ignores the `limit` (that's the BUY target):
-  // the castle may sell down to 0.
+  // buyers can't claim the same units. DESIGN PASS: selling is its own flag (never
+  // implied by "King buys"), and while the king also buys a good he keeps his buy
+  // `limit` and sells only the stock above it. Castle offers rank after every town
+  // offer and are only posted when no town can cover the need (see offersFor).
   const SELLER_CASTLE_ID = 1e9;
   function castleReservedOf(s, g) { return (s.castleReserved && s.castleReserved[g]) || 0; }
   function castleReserve(s, g, n) { if (!s.castleReserved) s.castleReserved = {}; s.castleReserved[g] = (s.castleReserved[g] || 0) + n; }
@@ -5337,13 +5576,24 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
   }
   function castleSellAvailable(state, gid) {
     const ct = state.castleTrade && state.castleTrade[gid];
-    if (!ct || !ct.enabled) return 0;
-    return ((state.castleStock && state.castleStock[gid]) || 0) - castleReservedOf(state, gid);
+    if (!ct) return 0;
+    const f = castleFlags(ct);
+    if (!f.sell) return 0;
+    const keep = f.buy ? (ct.limit || 0) : 0;   // DESIGN PASS: don't sell below the buy limit
+    return Math.max(0, ((state.castleStock && state.castleStock[gid]) || 0) - castleReservedOf(state, gid) - keep);
   }
-  function addCastleOffer(state, offers, fromKey, gid) {
+  // { buy, sell } of a castleTrade entry (legacy { enabled } → buy only).
+  function castleFlags(ct) {
+    if (typeof CastleMarket !== "undefined" && CastleMarket.flagsOf) return CastleMarket.flagsOf(ct);
+    return { buy: !!(ct && (ct.buy || ct.enabled)), sell: !!(ct && ct.sell) };
+  }
+  function addCastleOffer(state, offers, fromKey, gid, need) {
     if (typeof ResearchEconomy === "undefined") return;
     const avail = castleSellAvailable(state, gid);
     if (avail <= 0) return;
+    // DESIGN PASS: the castle is the seller of LAST resort — skip it whenever a town
+    // offer alone can fill this trip (`need` = whole units the trader wants).
+    if (need > 0) for (const o of offers) if (!o.sellerCastle && o.surplus >= need) return;
     const route = Pathing.route(state, fromKey, ResearchEconomy.castleHex());
     if (!route) return;
     offers.push({ seller: null, sellerCastle: true, surplus: avail, route: route, price: castleSellPrice(gid) });
@@ -5435,6 +5685,37 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     }
     return max;
   }
+  // TRADEFIX: target stock = demand × price-buffer, floored at CONFIG.trade.minStock
+  // for any good the city actually consumes (demand > 0). The floor makes small
+  // cities' shortfalls clear buyThreshold so they trade; goods a city doesn't use
+  // stay at 0 (no hoarding), so seller hold-back + multi-good behavior are unchanged.
+  function tradeNeedOf(t, gid) {
+    const d = (t.demand && t.demand[gid]) || 0;
+    if (!(d > 0)) return 0;
+    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
+    const minStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
+    return Math.max(d * buffer, minStock);
+  }
+  // v0.51 SELL-GATE: how much of `gid` a town holds BACK from export (distinct from
+  // needOf, which is the BUY target — overloading needOf would make a consumer try to
+  // BUY an infinite amount). A big sentinel means "don't sell any":
+  //   • during the post-construction grace window (just built, huts not placed yet), and
+  //   • for a good the town is a structural NET CONSUMER of at full build-out — counting
+  //     placed-but-unbuilt buildings, so a city that will eat more of a good than it
+  //     makes (once its just-placed huts fill) never dumps that good; it imports instead.
+  // A structural net PRODUCER exports its genuine surplus down to the ordinary needOf
+  // floor — its residents are fed from the per-building input buffers (porters keep
+  // those topped from production), so selling the warehouse surplus never starves them.
+  const HOLD_ALL = 1e9;
+  function tradeSellHoldback(t, gid) {
+    if (t.built === false || (t._sellHold || 0) > 0) return HOLD_ALL;   // still under construction, or post-build grace — no exports yet
+    const cons = placedConsMax(t, gid);                          // anticipated units/min at full placed housing/staffing
+    if (cons > 0 && placedProdMax(t, gid) <= cons + 1e-9) return HOLD_ALL;   // structural net consumer — never sell
+    return tradeNeedOf(t, gid);
+  }
+  Trade.needOf = tradeNeedOf;
+  Trade.sellHoldback = tradeSellHoldback;
+
   // Per-city snapshot for a good: net trend now, potential net at full scale, stock,
   // and the price it would pay/ask. role: "seller" | "buyer" | "none".
   Trade.cityGood = function (state, town, gid) {
@@ -5490,7 +5771,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       let need = buyer.need;
       const cand = sellers.filter(s => s.rem > 1e-6 && s.id !== buyer.id)
         .map(s => ({ s: s, d: PLAN_DIST(s.q, s.r, buyer.q, buyer.r) }))
-        .sort((x, y) => x.d - y.d || x.s.id - y.s.id);
+        .sort((x, y) => (x.s.id === SELLER_CASTLE_ID) - (y.s.id === SELLER_CASTLE_ID) || x.d - y.d || x.s.id - y.s.id);   // DESIGN PASS: castle last
       for (const { s } of cand) {
         if (need <= 1e-6) break;
         const take = Math.min(need, s.rem);
@@ -5547,6 +5828,18 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     return n;
   }
 
+  // === DESIGN PASS (distance): base progress (0..1 of the path) a cart gains per tick on
+  // its current leg, before the paved / off-road multipliers. Capped at `baseSpeed` (the
+  // old length-blind rate) and at cartTilesPerTick hexes per tick, so short routes are
+  // unchanged and travel time grows with route length. A cart with no path (legacy) keeps
+  // the old rate. Shared by Trade and ResearchEconomy (royal buyers / castle market).
+  Trade.legSpeed = function (baseSpeed, cart) {
+    const tpt = CONFIG.trade.cartTilesPerTick;
+    const steps = (cart && Array.isArray(cart.path)) ? cart.path.length - 1 : 0;
+    return (tpt > 0 && steps > 0) ? Math.min(baseSpeed, tpt / steps) : baseSpeed;
+  };
+  const legSpeed = Trade.legSpeed;
+
   // Advance the whole trade layer by one tick. Mutates State only.
   Trade.tick = function (state) {
     if (!state) return state;
@@ -5571,7 +5864,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     const rHas = (id) => (typeof Research !== "undefined" && Research.has) ? Research.has(state, id) : false;
     const extraCarts  = rEffect("extraCarts", 0);                        // more carts on the road
     const cartCapacity = cfg.cartCapacity * rEffect("cartCapacity", 1);  // larger carts haul more
-    const cartSpeed = cfg.cartSpeed * (rHas("paved_roads") ? cfg.pavedRoadSpeed : 1); // paved roads → faster
+    const pavedMult = rHas("paved_roads") ? cfg.pavedRoadSpeed : 1;    // paved roads → faster (per hex, any route length)
     // === TARIFF-SLIDER === P5D-D: the player-set base (state.tariffRate, GDD §6.3)
     // replaces the CONFIG constant as the base; research tariffBonus still adds on top.
     // Clamp the composed rate to [0.10, 0.40]
@@ -5582,33 +5875,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       baseTariff + rEffect("tariffBonus", 0)));                          // tax ledgers / bureaucracy
     // === /TARIFF-SLIDER ===
 
-    // TRADEFIX: target stock = demand × price-buffer, floored at CONFIG.trade.minStock
-    // for any good the city actually consumes (demand > 0). The floor makes small
-    // cities' shortfalls clear buyThreshold so they trade; goods a city doesn't use
-    // stay at 0 (no hoarding), so seller hold-back + multi-good behavior are unchanged.
-    const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const minStock = (CONFIG.trade && CONFIG.trade.minStock) || 0;
-    const needOf = (t, gid) => {
-      const d = (t.demand && t.demand[gid]) || 0;
-      return d > 0 ? Math.max(d * buffer, minStock) : 0;
-    };
-    // v0.51 SELL-GATE: how much of `gid` a town holds BACK from export (distinct from
-    // needOf, which is the BUY target — overloading needOf would make a consumer try to
-    // BUY an infinite amount). A big sentinel means "don't sell any":
-    //   • during the post-construction grace window (just built, huts not placed yet), and
-    //   • for a good the town is a structural NET CONSUMER of at full build-out — counting
-    //     placed-but-unbuilt buildings, so a city that will eat more of a good than it
-    //     makes (once its just-placed huts fill) never dumps that good; it imports instead.
-    // A structural net PRODUCER exports its genuine surplus down to the ordinary needOf
-    // floor — its residents are fed from the per-building input buffers (porters keep
-    // those topped from production), so selling the warehouse surplus never starves them.
-    const HOLD_ALL = 1e9;
-    const sellHoldback = (t, gid) => {
-      if (t.built === false || (t._sellHold || 0) > 0) return HOLD_ALL;   // still under construction, or post-build grace — no exports yet
-      const cons = placedConsMax(t, gid);                          // anticipated units/min at full placed housing/staffing
-      if (cons > 0 && placedProdMax(t, gid) <= cons + 1e-9) return HOLD_ALL;   // structural net consumer — never sell
-      return needOf(t, gid);
-    };
+    // TRADEFIX buy target + v0.51 SELL-GATE hold-back (see tradeNeedOf / tradeSellHoldback).
+    // DESIGN PASS: needOf / sellHoldback hoisted to module scope (Trade.needOf /
+    // Trade.sellHoldback) so the castle's royal buyers apply the same export gate.
+    const needOf = tradeNeedOf;
+    const sellHoldback = tradeSellHoldback;
 
     // --- 0. BULLETIN BOARD (v0.51 §3) — every city POSTS an offer per surplus good
     // to a shared board that all traders read. Published with the CURRENT sales-
@@ -5708,7 +5979,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
         (a.gid < b.gid ? -1 : a.gid > b.gid ? 1 : 0));
 
       // (b) Offers for a good = reachable cities (+ the castle) holding a real surplus.
-      const offersFor = (gid) => {
+      const offersFor = (gid, shortfall) => {
         const out = [];
         for (const seller of towns) {
           if (seller === home || !seller || !seller.stock) continue;
@@ -5718,7 +5989,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
           if (!route) continue;
           out.push({ seller, surplus, route, price: priceOf(seller, gid) * salesAdjOf(seller, gid) });
         }
-        addCastleOffer(state, out, fromKey, gid);   // PP-A: castle sells enabled goods
+        // PP-A: castle sells "King sells" goods — DESIGN PASS: only when no town covers the trip.
+        addCastleOffer(state, out, fromKey, gid, Math.max(1, Math.floor(Math.min(cartCapacity, shortfall))));
         return out;
       };
       // === TRADEFIX: only dispatch a trader with a PURPOSE. Walk the shortfalls in
@@ -5733,7 +6005,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const tradeable = [];
       let groupKey = null;
       for (const g of gaps) {
-        const o = offersFor(g.gid);
+        const o = offersFor(g.gid, g.shortfall);
         if (!o.length) continue;
         const key = g.band + ":" + g.layer;
         if (groupKey === null) groupKey = key;
@@ -5754,6 +6026,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       const isBasic = basics.indexOf(want.gid) >= 0;
       const starving = isBasic && ((home.stock[want.gid] || 0) + (incoming[want.gid] || 0)) < needOf(home, want.gid) * 0.25;
       offers.sort((a, b) =>
+        (a.sellerCastle ? 1 : 0) - (b.sellerCastle ? 1 : 0) ||   // DESIGN PASS: castle after every town offer
         b.surplus - a.surplus ||
         (starving ? (a.route.cost - b.route.cost || a.price - b.price)
                   : (a.price - b.price || a.route.cost - b.route.cost)) ||
@@ -5841,7 +6114,7 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     }
 
     // --- 2. Advance traders; travel, then PARK to load / unload (not instant) -----
-    // A trader travels (progress += cartSpeed), then dwells to LOAD at the seller and
+    // A trader travels (progress += legSpeed × paved × off-road), then dwells to LOAD at the seller and
     // to UNLOAD at the buyer for ceil(qty / perTick) ticks — so a trade takes visible
     // time (CONFIG.trade.transferRate items/sec of game time). Phases:
     //   outbound → loading (dwell @ seller) → return → unloading (dwell @ buyer) → done.
@@ -5946,7 +6219,8 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
       }
 
       // -- Travel (outbound / return) --  OFFROAD: no road link ⇒ half speed.
-      cart.progress += cartSpeed * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
+      // DESIGN PASS (distance): long routes take longer (see CONFIG.trade.cartTilesPerTick).
+      cart.progress += legSpeed(cfg.cartSpeed, cart) * pavedMult * (cart.road === false ? (cfg.offRoadSpeedMult || 0.5) : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 
@@ -6609,7 +6883,7 @@ Object.assign(CONFIG, {
   researchEconomy: {
     maxTraders: 10,     // hard cap on concurrent castle-owned traders
     cartCapacity: 10,   // units one royal buyer hauls per trip
-    cartSpeed: 0.5,     // progress (0..1) added per tick (paved-roads boosts it)
+    cartSpeed: 0.5,     // max progress (0..1) per tick; long routes are capped by CONFIG.trade.cartTilesPerTick (paved-roads boosts it)
     transferRate: 5,    // items/sec (game time) a parked royal buyer loads/unloads — not instant
     buyThreshold: 0,    // min still-needed qty before a buyer is sent (0 = any)
     topRandom: 3,       // seeded pick among top-N materials / sellers (anti-herding)
@@ -6827,7 +7101,9 @@ var ResearchEconomy = (function () {
     const needOf = (t, gid) => Math.max(0, ((t.demand && t.demand[gid]) || 0) - townShare(state, gid)) * buffer;
     const cartCapacity = C.cartCapacity;
     const paved = (typeof Research !== "undefined" && Research.has && Research.has(state, "paved_roads"));
-    const cartSpeed = C.cartSpeed * (paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1);
+    const pavedMult = paved ? ((CONFIG.trade && CONFIG.trade.pavedRoadSpeed) || 1) : 1;
+    const offRoadMult = (CONFIG.trade && CONFIG.trade.offRoadSpeedMult) || 0.5;
+    const legSpeed = (typeof Trade !== "undefined" && Trade.legSpeed) ? Trade.legSpeed : (s) => s;
 
     // --- 1. Dispatch. Castle traders buy the UNION of (a) the active node's
     //     still-to-consume materials AND (b) the Research Center's outstanding
@@ -6897,6 +7173,7 @@ var ResearchEconomy = (function () {
           fromId: CASTLE_ID, toId: pick.seller.id,
           goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
           path: pick.route.path.slice(),         // castle → seller hex keys
+          road: pick.route.road !== false,       // DESIGN PASS (distance): off-road ⇒ half speed, like town traders
           progress: 0, phase: "outbound", done: false,
         });
       }
@@ -6932,8 +7209,10 @@ var ResearchEconomy = (function () {
         continue;
       }
 
-      // -- Travel (outbound / return) --
-      cart.progress += cartSpeed;
+      // -- Travel (outbound / return) --  DESIGN PASS (distance): the same per-hex rule as
+      // town traders (CONFIG.trade.cartTilesPerTick), plus the off-road ×0.5 royal buyers
+      // used to skip. A pre-pass in-flight cart has no `road` flag ⇒ treated as on-road.
+      cart.progress += legSpeed(C.cartSpeed, cart) * pavedMult * (cart.road === false ? offRoadMult : 1);
       if (cart.progress < 1) continue;
       cart.progress = 1;
 
@@ -7107,7 +7386,9 @@ var Market = (typeof Market !== "undefined" && Market) || {};
 
 Market.MAX_SAMPLES = 600;     // 5 min at 500 ms / tick — buffer hard cap per good
 Market.TREND_LOOKBACK = 60;   // compare "now" vs ~30 s ago for the trend arrow
-Market.RATE_WINDOW = 20;      // ~10 s window the net-production rate averages over
+// DESIGN PASS #13: 20 → 120 samples (60 game-s). Stock moves in whole-unit batches, so a
+// 10 s window swung ±30–90/min around a flat true rate. 120 ≤ MAX_SAMPLES.
+Market.RATE_WINDOW = 120;     // ~60 s window the net-production rate averages over
 
 // Blank, well-formed market container.
 Market.fresh = function () { return { hist: {}, head: 0, len: 0 }; };
@@ -7160,6 +7441,14 @@ Market.normalize = function (state) {
   return m;
 };
 
+// A town "has a market" for gid when it stocks it or consumes it (demand > 0).
+// Defers to Sim.hasMarket (the price engine's own test) when loaded.
+Market.townHasMarket = function (town, gid) {
+  if (!town) return false;
+  if (typeof Sim !== "undefined" && Sim.hasMarket) return Sim.hasMarket(town, gid);
+  return ((town.stock && town.stock[gid]) || 0) > 0 || ((town.demand && town.demand[gid]) || 0) > 0;
+};
+
 // Sample once into the ring. Call AFTER Sim.tick / Trade.tick each econ step.
 Market.tick = function (state) {
   if (!state) return state;
@@ -7179,6 +7468,10 @@ Market.tick = function (state) {
       total += (town.stock && town.stock[gid]) || 0;
       // Read the published price (Sim.tick already republished it this tick);
       // count only towns that "value" the good (hold a finite price for it).
+      // DESIGN PASS #13: …AND have a local market for it (stock or consumption) — a
+      // town that neither holds nor uses a good just parks at basePrice (was 1.9× →
+      // the phantom "22.4 planks"), and must not drag the kingdom average.
+      if (!Market.townHasMarket(town, gid)) continue;
       const p = town.prices && town.prices[gid];
       if (typeof p === "number" && isFinite(p)) { pSum += p; pN++; }
     }
@@ -7198,6 +7491,8 @@ Market.tick = function (state) {
 //   capacity  #towns × storageCap (the theoretical kingdom ceiling)
 //   trend     avg now vs ~TREND_LOOKBACK samples ago, with a 2% deadband
 //   netRate   mean per-tick change in total over the last ~RATE_WINDOW samples
+//   priced    DESIGN PASS #13: some town has a market for the good right now; when
+//             false the UI shows "—" instead of avg (which is just basePrice then)
 Market.summary = function (state) {
   const goods = (typeof CONFIG !== "undefined" && CONFIG.goods) || {};
   const towns = (state && Array.isArray(state.towns)) ? state.towns : [];
@@ -7222,7 +7517,9 @@ Market.summary = function (state) {
       const steps = (n - 1) - rIdx;
       if (steps > 0) netRate = (total - arr[rIdx].total) / steps;
     }
-    out[gid] = { total: total, avg: avg, capacity: cap, trend: trend, netRate: netRate };
+    let priced = false;
+    for (let i = 0; i < towns.length && !priced; i++) priced = Market.townHasMarket(towns[i], gid);
+    out[gid] = { total: total, avg: avg, capacity: cap, trend: trend, netRate: netRate, priced: priced };
   }
   return out;
 };
@@ -7304,7 +7601,7 @@ var Ledger = (function () {
 // CASTLE MARKET (buying side). A self-contained layer that runs AFTER
 // ResearchEconomy.tick in the accumulator, sharing the SAME castle-trader fleet
 // (kind:"castle") and cap (CONFIG.researchEconomy.maxTraders). It dispatches royal
-// buyers for the goods the player ENABLED in state.castleTrade, up to each good's
+// buyers for the goods the player marked "King buys" in state.castleTrade, up to each good's
 // `limit`, into state.castleStock (no tariff — same as research buying). Research
 // materials get FIRST pick because ResearchEconomy.tick fills the fleet first; the
 // market only sees whatever cap remains. Its carts are advanced + settled by
@@ -7312,6 +7609,18 @@ var Ledger = (function () {
 // and movement stays in one place — a cart dispatched here first advances on the
 // NEXT tick (1-tick latency; harmless). Deterministic via state.castleMarketSeed.
 var CastleMarket = (function () {
+  // DESIGN PASS (king buys / king sells): castleTrade[gid] is { buy, sell, limit }.
+  // `buy` sends royal buyers up to `limit`; `sell` lets cities buy castle stock
+  // (only the part above `limit` while `buy` is on). A pre-split entry
+  // { enabled } maps to buy-only — the old flag silently made the castle a
+  // tax-free reseller (it became the potato middleman once a Provisioner stood).
+  function flagsOf(v) {
+    if (!v || typeof v !== "object") return { buy: false, sell: false };
+    if ("buy" in v || "sell" in v) return { buy: !!v.buy, sell: !!v.sell };
+    return { buy: !!v.enabled, sell: false };   // legacy { enabled } → buy only
+  }
+  function buys(state, gid) { return flagsOf(state && state.castleTrade && state.castleTrade[gid]).buy; }
+  function sells(state, gid) { return flagsOf(state && state.castleTrade && state.castleTrade[gid]).sell; }
   function normalize(raw) {
     const out = {};
     if (!raw || typeof raw !== "object") return out;
@@ -7319,7 +7628,8 @@ var CastleMarket = (function () {
       const v = raw[gid];
       if (!v || typeof v !== "object") continue;
       const limit = (typeof v.limit === "number" && isFinite(v.limit) && v.limit >= 0) ? v.limit : 0;
-      out[gid] = { enabled: !!v.enabled, limit: limit };
+      const f = flagsOf(v);
+      out[gid] = { buy: f.buy, sell: f.sell, limit: limit };
     }
     return out;
   }
@@ -7333,13 +7643,13 @@ var CastleMarket = (function () {
   // Units still worth buying toward a good's limit = limit − held − in-flight.
   function remaining(state, gid) {
     const ct = state.castleTrade && state.castleTrade[gid];
-    if (!ct || !ct.enabled) return 0;
+    if (!ct || !flagsOf(ct).buy) return 0;
     const held = (state.castleStock && state.castleStock[gid]) || 0;
     return (ct.limit || 0) - held - inFlightCastle(state, gid);
   }
   function enabledSellStock(state) {
     const out = {}; const ct = (state && state.castleTrade) || {};
-    for (const gid in ct) if (ct[gid] && ct[gid].enabled) out[gid] = (state.castleStock && state.castleStock[gid]) || 0;
+    for (const gid in ct) if (flagsOf(ct[gid]).sell) out[gid] = (state.castleStock && state.castleStock[gid]) || 0;
     return out;
   }
   function tick(state) {
@@ -7358,8 +7668,12 @@ var CastleMarket = (function () {
     const rng = mulberry32(state.castleMarketSeed | 0);
     state.castleMarketSeed = (Math.imul(state.castleMarketSeed | 0, 1664525) + 1013904223) | 0;
 
+    // DESIGN PASS: the castle buys only what a town would EXPORT anyway — stock above
+    // Trade.sellHoldback (minStock floor, structural-consumer hold, post-build grace) —
+    // so royal buyers stop draining importers down to crumbs at scarcity prices.
     const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+    const holdOf = (typeof Trade !== "undefined" && Trade.sellHoldback) ? Trade.sellHoldback
+      : (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
     const reservedOf = (t, gid) => (t && t.reserved && t.reserved[gid]) || 0;
     const reserve = (t, gid, n) => { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; };
     const priceOf = (town, gid) => {
@@ -7377,7 +7691,7 @@ var CastleMarket = (function () {
       // (a) enabled goods still under their limit (respecting held + in-flight).
       const gaps = [];
       for (const gid in ct) {
-        if (!ct[gid] || !ct[gid].enabled) continue;
+        if (!flagsOf(ct[gid]).buy) continue;
         const rem = remaining(state, gid);
         if (rem > C.buyThreshold && rem > 0) gaps.push({ gid, rem });
       }
@@ -7390,7 +7704,7 @@ var CastleMarket = (function () {
       const offers = [];
       for (const seller of towns) {
         if (!seller || !seller.stock) continue;
-        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - needOf(seller, want.gid);
+        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - holdOf(seller, want.gid);
         if (surplus <= 0) continue;
         const route = Pathing.route(state, fromKey, townKey(seller));
         if (!route) continue;
@@ -7413,12 +7727,13 @@ var CastleMarket = (function () {
         id: (state._nextCartId = (state._nextCartId || 0) + 1),
         kind: "castle", fromId: ResearchEconomy.CASTLE_ID, toId: pick.seller.id,
         goodId: want.gid, qty: qty, unitBuy: agreedUnit, agreedGold: agreedGold,
-        path: pick.route.path.slice(), progress: 0, phase: "outbound", done: false,
+        path: pick.route.path.slice(), road: pick.route.road !== false,   // DESIGN PASS (distance): off-road ⇒ half speed
+        progress: 0, phase: "outbound", done: false,
       });
     }
     return state;
   }
-  return { tick, normalize, enabledSellStock, remaining, inFlightCastle };
+  return { tick, normalize, flagsOf, buys, sells, enabledSellStock, remaining, inFlightCastle };
 })();
 // === /PP-A ===
 /* BUILD:castle-market END */
@@ -8107,7 +8422,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const col = sells ? "#6fc24b" : (buys ? (cg.latent ? "#e0a63c" : "#e0563f") : "#b8b2a6");
       const net = Math.round(Math.abs(cg.net) || 0);
       const left = arrow + (net > 0 ? " " + net + "/m" : "");
-      const right = "  🏬" + Math.round(cg.stock) + "  🪙" + (cg.price ? cg.price.toFixed(1) : "0");
+      const right = "  🏬" + Math.round(cg.stock) + "  🪙" +
+        (Sim.hasMarket(t, gid) ? (cg.price ? cg.price.toFixed(1) : "0") : "—");   // DESIGN PASS #6: no market ⇒ "—"
       const fontPx = Math.max(9, Math.round(SIZE * 0.2));
       ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
       ctx.textAlign = "left"; ctx.textBaseline = "middle";
@@ -8282,8 +8598,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // workers, amber "n/m" when it runs short. Output scales with workers, so a short
   // building is slow rather than broken; this makes the shortage scannable on the map
   // (Anno's "insufficient workforce" icon). Closed slots don't count as missing.
+  // DESIGN PASS #13: status glyph drawn beside a stalled producer's progress bar.
+  const STALL_GLYPH = { warehouseFull: "📦", awaitingPorter: "📦", noInputs: "⛔", upgrading: "⬆", noWorkers: "👷" };
   function drawStaffBadge(b, def, p, rad) {
     if (!def || def.kind === "house" || !def.workerTier || !(def.workerSlots > 0)) return;
+    if (b.blockedReason) return;   // DESIGN PASS #3: full/upgrading — its crew was moved on purpose, not missing
     const slotPlus = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0;
     const open = Math.max(0, def.workerSlots + slotPlus - (b.closedSlots || 0));
     if (open <= 0) return;
@@ -8416,8 +8735,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           drawStaffBadge(b, def, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
           // v0.47: production/consumption progress bar under producers — fills as the
-          // building nears its next whole-unit batch (green = producing, amber =
-          // waiting on inputs). Houses/non-producers return null and get no bar.
+          // building nears its next whole-unit batch. Houses/non-producers return null.
+          // DESIGN PASS #13: green ONLY while really producing (Sim.buildingProgress
+          // status); any stall freezes the bar, turns it amber and adds a glyph naming
+          // the cause (📦 store full · ⛔ no input · ⬆ upgrading · 👷 no workers).
           if (typeof Sim !== "undefined" && Sim.buildingProgress) {
             const pr = Sim.buildingProgress(state, t, b);
             if (pr) {
@@ -8425,10 +8746,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
               const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.14);
               ctx.fillStyle = "rgba(18,14,9,0.78)";
               ctx.fillRect(bx, by, bw, bh);
-              ctx.fillStyle = !pr.working ? "#8a8574" : (pr.starved ? "#e0a63c" : "#7fc24b");
+              ctx.fillStyle = pr.working ? "#7fc24b" : "#e0a63c";
               ctx.fillRect(bx, by, bw * pr.prog, bh);
-              ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1;
+              ctx.strokeStyle = pr.working ? "rgba(0,0,0,0.55)" : "rgba(224,166,60,0.9)"; ctx.lineWidth = 1;
               ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+              const glyph = STALL_GLYPH[pr.status];
+              if (glyph) {
+                const gpx = Math.max(7, Math.round(SIZE * 0.2));
+                ctx.font = "bold " + gpx + "px system-ui, sans-serif";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffce4d";
+                ctx.fillText(glyph, bx + bw + gpx * 0.6, by + bh / 2);
+              }
             }
           }
           // v0.51 §2: internal-STORE fill bar (what porters collect) — sits just below
@@ -9549,6 +9877,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       data.researchCenter = data.researchCenter || null;
       data.saveVersion = 2;
     }
+    // v2 → v3 (DESIGN PASS, king buys / king sells): castleTrade[gid] { enabled, limit }
+    // becomes { buy, sell, limit }; the old flag maps to buy only (never auto-sell).
+    if (data.saveVersion === 2) {
+      if (typeof CastleMarket !== "undefined" && CastleMarket.normalize) data.castleTrade = CastleMarket.normalize(data.castleTrade);
+      data.saveVersion = 3;
+    }
     if (data.saveVersion !== CONFIG.saveVersion) return null; // unknown/newer → reject
     return data;
   }
@@ -10352,21 +10686,29 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
   // ---- Tab 2: Warehouse (read-only) -------------------------------------------
   let ppWhSort = "az";     // "az" | "stock" | "price" — persists while the panel is open
-  let ppWhPrev = null;     // { townId, tick, stock:{}, rate:{} } net-rate sampler (UI-only)
+  // DESIGN PASS #13: the Rate column is the net stock change averaged over the last
+  // CONFIG.econ.rateWindowTicks (120 = 60 game-s), from a small sample ring (one sample
+  // per ≥4 ticks). The old ~4 s window read −90…+90/min around a true +2.7 because stock
+  // moves in whole-unit batches. UI-only; reset on a city switch or a load (tick went back).
+  let ppWhHist = null;     // { townId, samples: [{ tick, stock:{} }] } oldest first
   function ppWhRates(t) {
+    const now = state.tick || 0;
+    const win = (CONFIG.econ && CONFIG.econ.rateWindowTicks) || 120;
+    // Reset on a city switch, a load (tick went back), or a stale ring (the tab was
+    // closed for over a window — the old samples would pass a long average off as
+    // "the last minute").
+    const lastS = ppWhHist && ppWhHist.samples.length ? ppWhHist.samples[ppWhHist.samples.length - 1] : null;
+    if (!ppWhHist || ppWhHist.townId !== t.id || (lastS && (now < lastS.tick || now - lastS.tick > win)))
+      ppWhHist = { townId: t.id, samples: [] };
+    const S = ppWhHist.samples;
     const cur = {};
     for (const gid in CONFIG.goods) cur[gid] = (t.stock && t.stock[gid]) || 0;
-    if (!ppWhPrev || ppWhPrev.townId !== t.id || (state.tick || 0) < ppWhPrev.tick) {
-      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate: {} };
-      return ppWhPrev.rate;
-    }
-    const dt = (state.tick || 0) - ppWhPrev.tick;
-    if (dt >= 8) {   // ~4 s window at 1× — smooth but honest (net Δstock / tick)
-      const rate = {};
-      for (const gid in cur) rate[gid] = (cur[gid] - (ppWhPrev.stock[gid] || 0)) / dt;
-      ppWhPrev = { townId: t.id, tick: state.tick || 0, stock: cur, rate };
-    }
-    return ppWhPrev.rate;
+    if (!S.length || now - S[S.length - 1].tick >= 4) S.push({ tick: now, stock: cur });
+    while (S.length > 2 && now - S[1].tick >= win) S.shift();   // keep one sample at/before the window start
+    const rate = {};
+    const old = S[0], dt = now - old.tick;
+    if (dt >= 8) for (const gid in cur) rate[gid] = (cur[gid] - (old.stock[gid] || 0))/ dt;
+    return rate;
   }
 
   function renderPPWarehouse(t) {
@@ -10395,16 +10737,25 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const d = (t.demand && t.demand[gid]) || 0;
       return d > 0 ? Math.max(d * whBuffer, whMinStock) : 0;
     };
+    // DESIGN PASS #13: ▲ uses the trader's REAL export gate (Trade.sellHoldback), so a
+    // structural net consumer — which holds everything back — never shows ▲.
+    const holdOf = gid => (window.Trade && typeof Trade.sellHoldback === "function") ? Trade.sellHoldback(t, gid) : ppWhNeed(gid);
     const ppWhArrow = gid => {
       const demand = (t.demand && t.demand[gid]) || 0;
-      const need = ppWhNeed(gid);
-      const surplus = ((t.stock && t.stock[gid]) || 0) - need;
-      if (demand > 0 && surplus < -0.05)
+      const have = (t.stock && t.stock[gid]) || 0;
+      if (demand > 0 && have - ppWhNeed(gid) < -0.05)
         return '<span class="trend down" title="Shortfall — the trader will buy this">▼</span>';
-      if (surplus > 0.05)
+      if (have - holdOf(gid) > 0.05)
         return '<span class="trend up" title="Surplus — the trader will sell this">▲</span>';
       return '<span class="trend flat" title="Balanced — not traded">–</span>';
     };
+    // Home buffers: residents' own stock (house inbuf) — often most of a small city's food.
+    const inHomes = {};
+    for (const hb of (t.buildings || [])) {
+      const hd = hb && CONFIG.buildings[hb.typeId];
+      if (!hd || hd.kind !== "house" || !hb.inbuf) continue;
+      for (const g in hb.inbuf) inHomes[g] = (inHomes[g] || 0) + (hb.inbuf[g] || 0);
+    }
     // === /TRADEUX ===
     if (ppWhSort === "stock")
       ids.sort((a, b) => ((t.stock && t.stock[b]) || 0) - ((t.stock && t.stock[a]) || 0) || a.localeCompare(b));
@@ -10427,18 +10778,23 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const price = priceGet(gid);
       const arrow = trendArrow(t, gid, price);
       const r = rates[gid];
-      const rateCell = (typeof r === "number" && Math.abs(r) >= 0.005)
-        ? `<span class="num ${r > 0 ? "up" : "down"}">${r > 0 ? "+" : "−"}${fmt1(Math.abs(perMin(r)))}/min</span>`
-        : `<span class="num dim">—</span>`;
+      const rpm = typeof r === "number" ? perMin(r) : null;
+      const dead = (CONFIG.econ && CONFIG.econ.rateDeadbandPerMin) || 0;
+      const rateCell = rpm === null ? `<span class="num dim" title="Measuring…">—</span>`
+        : Math.abs(rpm) < Math.max(dead, 0.005) ? `<span class="num dim" title="Net change over the last minute">≈0</span>`
+        : `<span class="num ${rpm > 0 ? "up" : "down"}" title="Net change over the last minute">${rpm > 0 ? "+" : "−"}${fmt1(Math.abs(rpm))}/min</span>`;
+      const home = inHomes[gid] || 0;
+      const homeTxt = home >= 1 ? `<span class="pp-home" style="display:block;font-size:9px;opacity:.7;white-space:nowrap" title="Held in residents' homes (not in the warehouse)">(+${Math.floor(home)} in homes)</span>` : "";
       const inb = inbound[gid] || 0;
       const inCell = inb > 0 ? `<span class="num up">+${Math.round(inb)}</span>` : `<span class="num dim">—</span>`;
       const tip = `${GOOD_LABEL(gid)}: ${fmt(stock)}/${cap} stored · demand ${fmt1(perMin((t.demand && t.demand[gid]) || 0))}/min` +
-        (inb > 0 ? ` · ${Math.round(inb)} en route` : "");
+        (inb > 0 ? ` · ${Math.round(inb)} en route` : "") + (home >= 1 ? ` · +${Math.floor(home)} in homes` : "");
       html += `<div class="pp-wrow" title="${escAttr(tip)}">
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
-        <span class="num">${fmt(stock)}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
+        <span class="num">${fmt(stock)}${homeTxt}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
         ${rateCell}${inCell}
-        <span class="num">${fmt1(price)}🪙 ${arrow}</span></div>`;
+        ${Sim.hasMarket(t, gid) ? `<span class="num">${fmt1(price)}🪙 ${arrow}</span>`
+          : `<span class="num dim" title="No local market — nothing stocked or consumed here">—</span>`}</div>`;
     }
     return html;
   }
@@ -11341,13 +11697,112 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
   // Playtest: workers are auto-assigned, so "assign a worker below" misled players
   // into clicking the slots (which CLOSE them). Say why it's idle and what fixes it.
-  function bpIdleReason(b, def) {
+  // DESIGN PASS #3: honest advice — Huts are the fix for "no free peasants" (☆ only
+  // moves the crew you already have), and the staffing flags Sim.staffTown writes
+  // (blockedReason / selfFeedGood) explain an idle building that is idle on purpose.
+  const STAFF_HOME = { peasant: ["peasants", "Hut"], worker: ["workers", "Cottage"], burgher: ["citizens", "Manor"] };
+  function bpIdleReason(b, def, town) {
     if (b && b.built === false) return "Under construction.";
+    if (b && (b.blockedReason === "upgrading" || b.pendingUpgrade)) return "Upgrading — its workers help elsewhere until the upgrade is done.";
     const slots = (def && def.workerSlots) || 0;
     if (slots > 0 && ((b && b.closedSlots) || 0) >= slots) return "Idle — all worker slots are closed. Click a slot below to reopen it.";
-    const HOME = { peasant: ["peasants", "Huts"], worker: ["workers", "Cottages"], burgher: ["citizens", "Manors"] };
-    const h = HOME[def && def.workerTier] || ["workers", "houses"];
-    return "Idle — no free " + h[0] + ". Build more " + h[1] + ", or turn on ☆ Priority to staff this first.";
+    if (b && b.blockedReason === "full") return "Idle — store full. Its workers help other buildings meanwhile.";
+    const tier = def && def.workerTier;
+    const feeder = bpSelfFeeder(town, tier);
+    if (feeder) {
+      const fdef = CONFIG.buildings[feeder.typeId] || {};
+      return "Waiting — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + (fdef.name || feeder.typeId) + " is staffed first.";
+    }
+    const h = STAFF_HOME[tier] || ["workers", "house"];
+    return "Idle — no free " + h[0] + ". Build a " + h[1] + " in this city.";
+  }
+  // The staffed self-feed producer (Potato Farm / Lumberjack / Coal Mine) of `tier`, if any.
+  function bpSelfFeeder(town, tier) {
+    if (!town || !tier) return null;
+    for (const o of (town.buildings || [])) {
+      if (!o || !o.selfFeedGood || !(o.workers > 0)) continue;
+      const od = CONFIG.buildings[o.typeId];
+      if (od && od.workerTier === tier) return o;
+    }
+    return null;
+  }
+  // ☆ toggled ON: dry-run the staffing with and without the star and say who pays for
+  // it — "☆ Sawmill will take 2 peasants from Potato Farm". Pure preview: Sim.staffTown
+  // with dry=true mutates nothing; b.priority is flipped back before returning.
+  function bpPriorityPreview(town, b) {
+    if (!town || !b || !window.Sim || typeof Sim.staffTown !== "function") return null;
+    const def = CONFIG.buildings[b.typeId] || {};
+    if (!def.workerTier || !(def.workerSlots > 0) || b.built === false) return null;
+    const i = town.buildings.indexOf(b);
+    if (i < 0) return null;
+    b.priority = false; const before = Sim.staffTown(town, true);
+    b.priority = true;  const after = Sim.staffTown(town, true);
+    const word = (STAFF_HOME[def.workerTier] || ["workers"])[0];
+    const one = word.replace(/s$/, "");
+    const name = def.name || b.typeId;
+    const parts = [];
+    for (let k = 0; k < town.buildings.length; k++) {
+      const lost = Math.round((before[k] || 0) - (after[k] || 0));   // pop is fractional; speak in whole people
+      if (k === i || lost <= 0) continue;
+      const o = town.buildings[k], od = CONFIG.buildings[o.typeId] || {};
+      let only = "";
+      if (od.output) {
+        let makers = 0;
+        for (const x of town.buildings) { const xd = x && CONFIG.buildings[x.typeId]; if (xd && xd.output && xd.output.goodId === od.output.goodId) makers++; }
+        if (makers === 1) only = " (your only " + goodIcon(od.output.goodId) + ")";
+      }
+      parts.push(lost + " " + (lost === 1 ? one : word) + " from " + (od.name || o.typeId) + only);
+    }
+    if (parts.length) return "☆ " + name + " will take " + parts.join(", ") + ".";
+    if ((after[i] || 0) <= (before[i] || 0)) {
+      const feeder = bpSelfFeeder(town, def.workerTier);
+      const fd = feeder && CONFIG.buildings[feeder.typeId];
+      if (feeder && feeder !== b) return "☆ " + name + " — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + ((fd && fd.name) || feeder.typeId) + " is staffed first.";
+      if (!(after[i] > 0)) return "☆ " + name + " — no free " + word + " to take. Build a " + (STAFF_HOME[def.workerTier] || ["", "house"])[1] + " in this city.";
+    }
+    return null;
+  }
+  // DESIGN PASS #13: a readable per-minute number (≈X/min, 1 decimal) — the old "+1 per
+  // batch" rounded a Sawmill's 5.0/min down to 3.75 and ignored happiness.
+  const fmtRate = v => { const r = Math.round(v * 10) / 10; return (Math.abs(r - Math.round(r)) < 1e-9) ? String(Math.round(r)) : r.toFixed(1); };
+  // A building this city could build that USES good `gid` (available now), for advice.
+  function bpConsumerOf(gid) {
+    for (const id in CONFIG.buildings) {
+      const d = CONFIG.buildings[id];
+      if (!d || !d.inputs || !(d.inputs[gid] > 0)) continue;
+      const avail = d.startUnlocked || !d.unlockedBy || (window.Research && Research.has && Research.has(state, d.unlockedBy));
+      if (avail) return d;
+    }
+    return null;
+  }
+  // Status line under the chain (Sim.buildingStatus) — names the REAL block.
+  function bpStatusLine(town, b, def, st, rates, cycleSec) {
+    const out = def.output.goodId, ic = goodIcon(out);
+    const tierWord = (STAFF_HOME[def.workerTier] || ["workers"])[0];
+    if (st === "warehouseFull") {
+      const cap = (CONFIG.town && CONFIG.town.storageCap) || 80;
+      const have = Math.floor((town.stock && town.stock[out]) || 0);
+      const w = Math.round(b.workers || 0);
+      const cons = bpConsumerOf(out);
+      const fixes = [];
+      if (cons) fixes.push("Build a " + (cons.name || cons.id));
+      fixes.push((fixes.length ? "road" : "Road") + " it to a city that needs " + GOOD_LABEL(out).toLowerCase());
+      if (w > 0) fixes.push("close a slot to free " + w + " " + (w === 1 ? tierWord.replace(/s$/, "") : tierWord));
+      const last = fixes.pop();
+      return "Paused — this city's " + ic + " store is full (" + have + "/" + cap + ") and nobody is buying. " +
+        (fixes.length ? fixes.join(", ") + ", or " + last : last) + "." +
+        (w > 0 ? "" : " Its " + tierWord + " help other buildings meanwhile.");
+    }
+    if (st === "awaitingPorter") return "Store full — a porter is on the way.";
+    if (st === "noInputs") {
+      const miss = [];
+      for (const gid in (def.inputs || {})) {
+        if (((b.inbuf && b.inbuf[gid]) || 0) + ((town.stock && town.stock[gid]) || 0) < 1) miss.push(goodIcon(gid));
+      }
+      return "Waiting on inputs — no " + miss.join(" ") + " in this building or the warehouse.";
+    }
+    if (st === "working") return "Producing ≈" + fmtRate(rates ? rates.outPerMin : 0) + " " + ic + "/min — a batch every " + cycleSec + " s.";
+    return bpIdleReason(b, def, town);
   }
   function renderProducerChain(town, b, def) {
     const out = def.output.goodId, oc = goodColor(out);
@@ -11358,11 +11813,23 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
     const intervalTicks = Math.max(1, Math.round(cycSec * (1000 / baseTickMs)));
     const workers = b.workers || 0;
-    const outMult = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).outputMult || 1) : 1);
     const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
+    const st = pr ? pr.status : (workers ? "working" : "noWorkers");
     const pct = pr ? Math.round(pr.prog * 100) : 0;
-    const barCol = !workers ? "#8a8574" : (pr && pr.starved ? "#e0a63c" : "#7fc24b");
-    const perBatchOut = Math.max(1, Math.round((def.output.ratePerWorker || 0) * Math.max(1, workers) * outMult * intervalTicks));
+    const barCol = st === "working" ? "#7fc24b" : "#e0a63c";   // DESIGN PASS #13: any stall → amber
+    // DESIGN PASS #13: headline ≈X/min at the current crew (hf × research × upgrade, as
+    // Sim.tick); a stalled building makes 0 — its "when running" rate goes in the title.
+    const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
+    const fullW = Math.max(0, (def.workerSlots || 0) + slotPlus - (b.closedSlots || 0));
+    const rates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b) : null;
+    const runRates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b, workers > 0 ? workers : fullW) : null;
+    const running = st === "working";
+    const shown = running ? rates : runRates;
+    const outPM = shown ? shown.outPerMin : 0;
+    const perBatch = outPM * cycSec / 60;
+    const headTxt = running ? "≈" + fmtRate(outPM) + "/min" : "0/min";
+    const headTip = running ? "≈" + fmtRate(outPM) + " " + GOOD_LABEL(out) + " per minute at " + fmtRate(workers) + " workers and " + Math.round((town.happiness != null ? town.happiness : 100)) + "% happiness"
+                            : "Stopped — ≈" + fmtRate(outPM) + "/min when running with " + fmtRate(shown ? shown.workers : 0) + " workers";
     // v0.51 §2: the output bar shows this building's OWN store (what porters collect),
     // not the shared warehouse — the "x/cap" per building the reference shows.
     const cap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
@@ -11374,7 +11841,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         const need = Math.max(1, Math.round(def.inputs[gid] * Math.max(1, workers) * intervalTicks));
         const have = Math.floor((town.stock && town.stock[gid]) || 0);
         const okc = have >= need ? "#a6e0a8" : "#e0844a";
-        inHtml += `<span class="bp-chip2" style="border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch"><span style="font-size:15px">${goodIcon(gid)}</span> <b style="color:${okc}">${have}</b><span style="opacity:.55">/${need}</span></span>`;
+        const usePM = shown && shown.inPerMin ? (shown.inPerMin[gid] || 0) : 0;
+        inHtml += `<span class="bp-chip2" style="border-color:${goodColor(gid)}" title="${esc(GOOD_LABEL(gid))} — ${have} in stock, ${need} per batch, uses ≈${fmtRate(usePM)}/min"><span style="font-size:15px">${goodIcon(gid)}</span> <b style="color:${okc}">${have}</b><span style="opacity:.55">/${need}</span></span>` +
+          `<span style="font-size:10px;opacity:.75;text-align:center">uses ${fmtRate(usePM)}/min</span>`;
       }
     } else {
       const srcTerr = def.terrain || def.adjacent || "";
@@ -11394,16 +11863,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         <div class="bp-out">
           <span class="bp-out-icon" style="color:${oc}">${goodIcon(out)}</span>
           <div>
-            <div class="bp-out-amt">+${perBatchOut}</div>
+            <div class="bp-out-amt" data-bp-rate title="${escAttr(headTip)}"${running ? "" : ' style="opacity:.6"'}>${headTxt}</div>
+            <div class="bp-out-stock" style="opacity:.65">(+${fmtRate(perBatch)} every ${cycleSec} s)</div>
             <div class="bp-out-stock" title="This building's own store — internal porters carry it to the city warehouse">${stock}/${cap} 🎒</div>
             <div class="bp-stockbar"><span style="width:${capPct}%"></span></div>
           </div>
         </div>
       </div>
-      <div class="tp-hint2">${workers > 0
-        ? (stock >= cap ? "Store full — waiting for a porter to collect."
-          : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
-        : bpIdleReason(b, def)}</div>`;
+      <div class="tp-hint2" data-bp-status="${st}">${bpStatusLine(town, b, def, st, rates, cycleSec)}</div>`;
   }
 
   // Building level shown in the header banner badge (upgrade level, min 1).
@@ -11434,7 +11901,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     let btns = "";
     if (!isHouse) {
       const pri = !!b.priority;
-      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first">${pri ? "⭐" : "☆"}</button>`;
+      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first (after basic food when the city runs low; full or upgrading buildings go last)">${pri ? "⭐" : "☆"}</button>`;
     }
     // v0.51: NOT the disabled attribute (a disabled button swallows hover, hiding the
     // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
@@ -11535,7 +12002,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     // --- priority star footer (bottom of the panel) ---
     const pri = !!b.priority;
-    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
+    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first — after basic food when the city runs low; a full or upgrading building goes last">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
 
     bpBodyEl.innerHTML = html;
   }
@@ -11768,7 +12235,16 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       renderBuildingPanel();
       return;
     }
-    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); return; }
+    if (e.target.closest("[data-priority]")) {
+      // DESIGN PASS #3: turning ☆ on previews who loses workers for it.
+      if (b.priority) b.priority = false;
+      else {
+        const msg = bpPriorityPreview(bpTown, b);
+        b.priority = true;
+        if (msg && typeof showToast === "function") showToast(msg);
+      }
+      renderBuildingPanel(); return;
+    }
     // Demolish: enter the existing destroy-building mode and close this panel; the
     // player then clicks the building (input.js confirms before removing it).
     const demo = e.target.closest("[data-demolish]");
@@ -12240,25 +12716,28 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     let rows = "";
     for (const gid of cwGoodIds()) {
       const e = ct[gid];
-      const enabled = !!(e && e.enabled);
+      // DESIGN PASS: separate "King buys" / "King sells" ticks (both off by default).
+      const f = CastleMarket.flagsOf(e);
+      const enabled = f.buy || f.sell;
       const limit = (e && typeof e.limit === "number") ? e.limit : CW_DEFAULT_LIMIT;
       const stock = Math.floor(cs[gid] || 0);
       const flow = cwGoodFlow(gid);
       let fl = '<span class="cwm-flow flat" title="Idle">—</span>';
       if (flow.selling > 0) fl = '<span class="cwm-flow up" title="Selling: ' + fmt(flow.selling) + ' committed to city buyers">▲</span>';
       else if (flow.buying > 0) fl = '<span class="cwm-flow down" title="Buying: ' + fmt(flow.buying) + ' inbound on royal buyers">▼</span>';
-      else if (enabled && stock < limit) fl = '<span class="cwm-flow down" style="opacity:.5" title="Under limit — royal buyers will buy when a city has surplus">▼</span>';
+      else if (f.buy && stock < limit) fl = '<span class="cwm-flow down" style="opacity:.5" title="Under limit — royal buyers will buy when a city has surplus">▼</span>';
       rows += '<tr class="' + (enabled ? "" : "off") + '">' +
         '<td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + goodIcon(gid) + " " + esc(GOOD_LABEL(gid)) + "</td>" +
         "<td>" + fmt(stock) + "</td>" +
         "<td>" + fmt(cwCastleSellPrice(gid)) + "g</td>" +
         "<td>" + fl + "</td>" +
         '<td><input type="number" class="cwm-lim" data-ct-limit="' + gid + '" min="0" step="5" value="' + limit + '" title="Buy limit: royal buyers stock the castle up to this many"></td>' +
-        '<td><input type="checkbox" data-ct-toggle="' + gid + '"' + (enabled ? " checked" : "") + ' title="Enable castle trading: buy up to the limit, sell castle stock to cities"></td>' +
+        '<td><input type="checkbox" data-ct-buy="' + gid + '"' + (f.buy ? " checked" : "") + ' title="King buys: royal buyers stock the castle up to the limit from cities with a surplus (no tariff)"></td>' +
+        '<td><input type="checkbox" data-ct-sell="' + gid + '"' + (f.sell ? " checked" : "") + ' title="King sells: cities may buy castle stock (tax-free) when no city can supply them — only the stock above the limit while the King also buys"></td>' +
         "</tr>";
     }
     cwMarketRowsEl.innerHTML = '<table class="cwm-tbl"><tr>' +
-      "<th>Good</th><th>Castle</th><th>Price</th><th></th><th>Limit</th><th>Trade</th></tr>" + rows + "</table>";
+      '<th>Good</th><th>Castle</th><th>Price</th><th></th><th>Limit</th><th title="King buys">Buys</th><th title="King sells">Sells</th></tr>' + rows + "</table>";
   }
   // In-flight gold summary. Honest numbers only: Sell = agreed gold city buyers
   // will pay on arrival at the castle (outbound sellerCastle carts); Buy = gold
@@ -12420,20 +12899,24 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (b) castleBuy(b.dataset.buy);
     else if (s) castleSell(s.dataset.sell);
   });
-  // === PP-C === castle-market controls (Warehouse tab): the enable-trading toggle
-  // and the buy-limit input write state.castleTrade[gid] = {enabled, limit} — the
-  // PP-A config the pure CastleMarket/Trade layers read. Already persisted by the
-  // PP-A save/load fields; nothing new is stored.
+  // === PP-C === castle-market controls (Warehouse tab): the "King buys" / "King
+  // sells" ticks (DESIGN PASS: split from one enable toggle) and the buy-limit input
+  // write state.castleTrade[gid] = {buy, sell, limit} — the PP-A config the pure
+  // CastleMarket/Trade layers read. Already persisted by the save/load fields.
+  const cwEntry = (gid) => {
+    if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+    const cur = state.castleTrade[gid];
+    const f = CastleMarket.flagsOf(cur);
+    const lim = (cur && typeof cur.limit === "number" && isFinite(cur.limit) && cur.limit >= 0) ? cur.limit : CW_DEFAULT_LIMIT;
+    return (state.castleTrade[gid] = { buy: f.buy, sell: f.sell, limit: lim });
+  };
   castleEl.addEventListener("change", (e) => {
-    const t = e.target.closest("input[data-ct-toggle]");
+    const t = e.target.closest("input[data-ct-buy], input[data-ct-sell]");
     if (t) {
-      const gid = t.dataset.ctToggle;
+      const gid = t.dataset.ctBuy || t.dataset.ctSell;
       if (!CONFIG.goods[gid]) return;
-      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
-      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
-      cur.enabled = !!t.checked;
-      if (typeof cur.limit !== "number" || !isFinite(cur.limit) || cur.limit < 0) cur.limit = CW_DEFAULT_LIMIT;
-      state.castleTrade[gid] = cur;
+      const cur = cwEntry(gid);
+      if (t.dataset.ctBuy) cur.buy = !!t.checked; else cur.sell = !!t.checked;
       scheduleSave();
       renderCastlePanel(true);   // row dim/flow state changed
       return;
@@ -12442,11 +12925,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     if (l) {
       const gid = l.dataset.ctLimit;
       if (!CONFIG.goods[gid]) return;
-      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
-      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
+      const cur = cwEntry(gid);
       const v = Math.floor(parseFloat(l.value));
       cur.limit = (isFinite(v) && v >= 0) ? v : 0;
-      state.castleTrade[gid] = cur;
       l.value = String(cur.limit);   // reflect the clamped value
       scheduleSave();
     }
@@ -12759,7 +13240,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         prev = c.root;
         const s = sum[gid] || { total: 0, avg: CONFIG.goods[gid].basePrice, trend: 0 };
         c.tot.textContent = Math.round(s.total);
-        c.price.textContent = (Math.round(s.avg * 10) / 10).toFixed(1);
+        // DESIGN PASS #13: no town stocks or uses it → no price to average ("—").
+        c.price.textContent = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1);
         c.tr.className = "rg-tr " + (s.trend > 0 ? "up" : s.trend < 0 ? "down" : "flat");
         c.tr.textContent = s.trend > 0 ? "▲" : s.trend < 0 ? "▼" : "—";
         c.root.classList.toggle("active", gid === openGood);
@@ -12829,10 +13311,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
       // perMin() helper (window.perMin, town-ui.js) rather than a local *TICKS_PER_SEC.
       const rate = (typeof perMin === "function") ? perMin(s.netRate || 0) : (s.netRate || 0);
-      const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/min";
+      // DESIGN PASS #13: 60 game-s window (Market.RATE_WINDOW) + a deadband — inside it
+      // the stock is flat as far as the player can tell, so say "≈0" not ±0.3.
+      const dead = (CONFIG.econ && CONFIG.econ.rateDeadbandPerMin) || 0;
+      const flat = Math.abs(rate) < dead;
+      const rateCls = flat ? "" : rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
+      const rateStr = flat ? "≈0/min" : (rate > 0 ? "+" : "") + (Math.round(rate * 10) / 10).toFixed(1) + "/min";
+      const avgStr = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1) + " g";
       if (rdStats) rdStats.innerHTML =
-        '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
+        '<span class="k">Avg price</span><span class="v">' + avgStr + '</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
         '<span class="k">Producers</span><span class="v">' + rc.producers + '</span>' +
         '<span class="k">Consumers</span><span class="v">' + rc.consumers + '</span>';
@@ -13686,18 +14173,17 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
 
   // ---- kingdom screen (all-towns table) ----------------------------------
-  // Biggest surplus / shortage good, by stock-vs-demand ratio (same model as the
-  // price engine): high ratio = surplus, low ratio (with real demand) = shortage.
+  // Biggest surplus / shortage good, by the price engine's own cover ratio
+  // (DESIGN PASS #6: Sim.coverRatio — stock vs minutes of consumption): high ratio =
+  // surplus, low ratio (with real consumption) = shortage.
   function biggestExtremes(t) {
-    const stock = t.stock || {}, demand = t.demand || {};
-    const buffer = CONFIG.econ.bufferTarget, floor = CONFIG.econ.minDemand;
+    const stock = t.stock || {};
     let surplus = null, surRatio = -Infinity, shortage = null, shoRatio = Infinity;
     for (const gid in CONFIG.goods) {
       const s = stock[gid] || 0;
-      const d = Math.max(floor, demand[gid] || 0);
-      const ratio = s / (d * buffer);
+      const ratio = Sim.coverRatio(t, gid);
       if (s > 0 && ratio > surRatio) { surRatio = ratio; surplus = gid; }
-      if ((demand[gid] || 0) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
+      if (Sim.consDemandOf(t, gid) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
     }
     return { surplus, shortage };
   }
@@ -15121,20 +15607,23 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (tick === wantedTick) return;
       wantedTick = tick;
       wantedComputes++;
-      const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
       const live = new Set();
       for (const t of state.towns || []) {
         if (!t || t.id == null) continue;
         live.add(t.id);
-        // wanted row: goods whose stock doesn't cover demand×buffer, biggest gap
-        // first; acute (yellow ring) when the shelf is essentially empty.
+        // wanted row: goods short of cover, most short first; acute (yellow ring) when
+        // the shelf is essentially empty. DESIGN PASS #6: consumed goods use the price
+        // engine's Sim.coverRatio (stock vs minutes of use); a construction bill / research
+        // share (a lump, not a rate) counts as covered once the stock holds it.
         const d = t.demand || {}, s = t.stock || {};
         const entries = [];
         for (const gid in d) {
           const want = d[gid] || 0;
           if (!(want > 0)) continue;
-          const gap = want * buffer - (s[gid] || 0);
-          if (gap > 0) entries.push([gid, gap, (s[gid] || 0) < 0.5]);
+          const have = s[gid] || 0, cons = Sim.consDemandOf(t, gid), lump = want - cons;
+          let ratio = cons > 0 ? Sim.coverRatio(t, gid) : Infinity;
+          if (lump > 1e-9) ratio = Math.min(ratio, have / lump);
+          if (ratio < 1) entries.push([gid, 1 - ratio, have < 0.5]);
         }
         entries.sort((a, b) => b[1] - a[1]);
         let row = wantedRows.get(t.id);

@@ -1,6 +1,6 @@
 // Single source of truth for all balance/layout constants (GDD §9.1).
 const CONFIG = {
-  saveVersion: 2,
+  saveVersion: 3,   // DESIGN PASS: v3 = castleTrade split into { buy, sell, limit } (save.js migrate)
   // Biome mix is quantile-driven (see MapGen.generate): these are *target
   // fractions* of the board, so the map stays varied for any seed.
   map: {
