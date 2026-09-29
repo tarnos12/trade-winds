@@ -21,7 +21,7 @@ Object.assign(CONFIG, {
     { id: "crop_rotation",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 0 }, name: "Crop Rotation",     desc: "Farms & extractors yield more from every worker.", cost: 150,  timeTicks: 20, prereqs: [],                 effect: { extractorOutput: 1.2 } },
     { id: "deep_veins",      branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 1 }, name: "Deep Veins",        desc: "Miners & quarries strike richer seams.",           cost: 350,  timeTicks: 30, prereqs: ["crop_rotation"],  effect: { mineOutput: 1.25 } },
     { id: "guild_halls",     branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 2 }, name: "Guild Halls",       desc: "Workshops (processors) craft faster.",             cost: 700,  timeTicks: 45, prereqs: ["deep_veins"],     effect: { processorOutput: 1.2 } },
-    { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "Tier-3 processors gain a further boost.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
+    { id: "master_crafts",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 3 }, name: "Master Craftsmen",  desc: "All workshops +35%.",          cost: 1400, timeTicks: 60, prereqs: ["guild_halls"],    effect: { processorOutput: 1.35 } },
     { id: "industrialize",   branch: "production",     band: "kingdom", kind: "kingdom", pos: { col: 0, row: 4 }, name: "Industrialization", desc: "A global lift to all production.",                  cost: 2800, timeTicks: 80, prereqs: ["master_crafts"],  effect: { globalOutput: 1.25 } },
     // ---- Logistics (kingdom): move more goods, further, cheaper ----
     { id: "paved_roads",     branch: "logistics",      band: "kingdom", kind: "kingdom", pos: { col: 1, row: 0 }, name: "Paved Roads",       desc: "Carts travel roads faster.",                       cost: 200,  timeTicks: 20, prereqs: [],                 effect: { paved_roads: true } },
@@ -314,7 +314,10 @@ const Research = {
           budget -= move;
         }
       }
-      if (Object.keys(Research.centerConstructionNeed(state)).length === 0) c.built = true;
+      if (Object.keys(Research.centerConstructionNeed(state)).length === 0) {
+        c.built = true;
+        if (typeof Sim !== "undefined" && Sim.statConstructed) Sim.statConstructed(state, "research_center");   // onboarding objective
+      }
       return;
     }
     if (c.pendingUpgrade) {
@@ -374,7 +377,7 @@ const Research = {
     const S = Research.centerSpeed(state);
     if (S === 0) return;   // no center / under construction → PAUSED (even a zero-material node waits for a center)
     if (!gids.length) {   // zero-material node → complete instantly (center present)
-      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      if (R.unlocked.indexOf(node.id) < 0) { R.unlocked.push(node.id); if (typeof Sim !== "undefined" && Sim.statResearched) Sim.statResearched(state); }
       R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
       return;
     }
@@ -407,7 +410,7 @@ const Research = {
     let complete = true;
     for (const gid of gids) if ((R.consumed[gid] || 0) < M[gid]) { complete = false; break; }
     if (complete) {
-      if (R.unlocked.indexOf(node.id) < 0) R.unlocked.push(node.id);
+      if (R.unlocked.indexOf(node.id) < 0) { R.unlocked.push(node.id); if (typeof Sim !== "undefined" && Sim.statResearched) Sim.statResearched(state); }
       R.active = null; R.completedSec = 0; R.subTick = 0; R.consumed = {};
     }
   },

@@ -45,7 +45,7 @@
     forge: "🔥", armory: "🛡️", pottery_workshop: "🏺", distillery: "🥃", goldsmith: "💍",
     lamp_maker: "🪔", carpentry: "🪑", luxury_tailor: "👗", aristocrat_home: "🏰" };
   const TT_KINGDOM_GLYPH = { production: "🏭", logistics: "🛣️", administration: "📜" };
-  const TT_ROMAN = { 2: "II", 3: "III", 4: "IV" };
+  const TT_ROMAN = { 2: "II", 3: "III", 4: "IV", 5: "V" };
 
   const ttPos = new Map();   // node id → { x, y } (cards only; edges + pips read it)
   let ttSurfaceW = 0, ttSurfaceH = 0;
@@ -84,6 +84,76 @@
     }
     return false;
   }
+  // Playtest: materials the active node still needs that NO city can supply right
+  // now — none in any city's stock and no staffed, built producer. Without this the
+  // player sees "royal buyers are fetching them" forever (e.g. Water Wheel needs
+  // planks before any Sawmill is working). Returns [{gid, maker}] (pure read).
+  function ttUnsourcedMaterials(id) {
+    const node = Research.get(id); if (!node) return [];
+    const M = node.materials || {}, R = state.research || {};
+    const consumed = Research.isActive(state, id) ? (R.consumed || {}) : {};
+    const stock = state.castleStock || {}, out = [];
+    for (const gid of Object.keys(M)) {
+      if ((consumed[gid] || 0) + (stock[gid] || 0) >= M[gid]) continue;
+      if (ttGoodSourced(gid)) continue;
+      let maker = null;
+      for (const k in CONFIG.buildings) { const d = CONFIG.buildings[k]; if (d.output && d.output.goodId === gid) { maker = d.name; break; } }
+      out.push({ gid, maker });
+    }
+    return out;
+  }
+  // Does any city hold `gid` or run a built, staffed producer of it? (pure read)
+  function ttGoodSourced(gid) {
+    for (const t of state.towns || []) {
+      if ((t.stock && t.stock[gid] || 0) >= 1) return true;
+      for (const b of t.buildings || []) {
+        const d = CONFIG.buildings[b.typeId];
+        if (d && d.output && d.output.goodId === gid && b.built !== false && (b.workers || 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+  // DESIGN PASS (research-3): name the RESEARCH a material's producer is locked
+  // behind. Returns null when some producer is start-unlocked, already researched,
+  // or unlocked inside `nodeId`'s own prereq chain (open by the time the node is).
+  // Otherwise { node, chain } for the producer with the shortest missing chain —
+  // chain = unresearched node ids, prerequisites first, ending at the unlock node.
+  function ttPrereqClosure(id) {
+    const seen = new Set(), stack = [id];
+    while (stack.length) {
+      const n = Research.get(stack.pop()); if (!n) continue;
+      for (const p of n.prereqs || []) if (!seen.has(p)) { seen.add(p); stack.push(p); }
+    }
+    return seen;
+  }
+  function ttMissingChain(id, out, seen) {
+    out = out || []; seen = seen || new Set();
+    if (seen.has(id) || Research.has(state, id)) return out;
+    seen.add(id);
+    const n = Research.get(id);
+    for (const p of (n && n.prereqs) || []) ttMissingChain(p, out, seen);
+    out.push(id);
+    return out;
+  }
+  function ttResearchPathFor(gid, nodeId) {
+    const closure = nodeId ? ttPrereqClosure(nodeId) : null;
+    let best = null;
+    for (const k in CONFIG.buildings) {
+      const d = CONFIG.buildings[k];
+      if (!d.output || d.output.goodId !== gid) continue;
+      if (d.startUnlocked || !d.unlockedBy || Research.has(state, d.unlockedBy)) return null;
+      if (closure && closure.has(d.unlockedBy)) return null;
+      const chain = ttMissingChain(d.unlockedBy);
+      if (!best || chain.length < best.chain.length) best = { node: Research.get(d.unlockedBy), chain };
+    }
+    return best;
+  }
+  function ttPathText(p) {
+    const name = esc(p.node ? p.node.name : "?");
+    if (p.chain.length <= 1) return "needs " + name + " — research it first";
+    return "needs " + name + " — research " + p.chain.map(c => esc((Research.get(c) || {}).name || c)).join(" → ");
+  }
+  const ttLabel = gid => GOOD_LABEL(gid).replace(/_/g, " ");
   // === /RESEARCH CENTER (Slice C) ===
   function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
@@ -96,7 +166,7 @@
     if (s === "done") return "✓";
     if (s === "researching") return ttWaitingOnMaterials(id) ? "⏳" : Math.round(Research.activeFraction(state) * 100) + "%";
     if (s === "queued") { const i = (state.research.queue || []).indexOf(id); return "#" + (i + 1); }
-    if (s === "available") return "▶";   // RESEARCH CENTER (Slice C): materials shown in the tooltip, not a gold badge
+    if (s === "available") return ttUnsourcedMaterials(id).length ? "⚠" : "▶";   // ⚠ = a material no city makes yet   // RESEARCH CENTER (Slice C): materials shown in the tooltip, not a gold badge
     return "🔒";
   }
 
@@ -148,7 +218,7 @@
   function ttBuildLayout() {
     const rows = {}, bandH = {};
     for (const b of TT_POP_BANDS) { rows[b] = ttRowsOf(b); bandH[b] = rows[b] * TT.CELL_H + TT.BAND_PAD_Y * 2; }
-    const H = TT_POP_BANDS.reduce((s, b) => s + bandH[b], 0);
+    const H = Math.max(TT_POP_BANDS.reduce((s, b) => s + bandH[b], 0), ttRowsOf("kingdom") * TT.CELL_H + TT.BAND_PAD_Y * 2);
     const bandTops = {}; let y = H;
     for (const b of TT_POP_BANDS) { bandTops[b] = y - bandH[b]; y -= bandH[b]; }   // first (peasant) → bottom
 
@@ -163,7 +233,10 @@
     // positions (cards only)
     ttPos.clear();
     for (const n of Research.nodesInBand("kingdom"))
-      ttPos.set(n.id, { x: TT_KINGDOM_X0 + n.pos.col * TT.CELL_W, y: TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
+      // Playtest: kingdom chains grow UPWARD from the bottom like the population bands,
+      // so their root nodes sit beside the peasant band the tree opens on (they were
+      // pinned to the top of a tall surface — off-screen on first open).
+      ttPos.set(n.id, { x: TT_KINGDOM_X0 + n.pos.col * TT.CELL_W, y: H - TT.BAND_PAD_Y - (n.pos.row + 1) * TT.CELL_H });
     for (const b of TT_POP_BANDS) for (const n of Research.nodesInBand(b)) {
       if (n.kind === "upgrade") continue;
       ttPos.set(n.id, { x: TT_POP_X0 + n.pos.col * TT.CELL_W, y: bandTops[b] + TT.BAND_PAD_Y + n.pos.row * TT.CELL_H });
@@ -255,7 +328,11 @@
       html += `<div class="tt-qactive" data-node="${R.active}">` +
         `<div class="lbl"><span>Researching <b>${esc(node.name)}</b></span><span>${qWaiting ? "⏳" : Math.round(frac * 100) + "%"}</span></div>` +
         (noCenter ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Paused — build a Research Center to resume</div>` :
-          qWaiting ? `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>` : "") +
+          qWaiting ? (() => {
+            const miss = ttUnsourcedMaterials(R.active);
+            if (!miss.length) return `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>`;
+            return `<div style="font-size:11px;color:#f08a7a;margin:3px 0">⚠ No city makes ` + miss.map(m => { const p = ttResearchPathFor(m.gid, R.active); return goodIcon(m.gid) + " " + esc(m.gid.replace(/_/g, " ")) + (p ? " (" + ttPathText(p) + ")" : m.maker ? " (build &amp; staff a " + esc(m.maker) + ")" : ""); }).join(", ") + ` — or Cancel and research something else.</div>`;
+          })() : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
         `<div style="display:flex;align-items:center;gap:8px;margin-top:5px">` +
           `<div style="font-size:11px;opacity:.75;flex:1">${matRows}</div>` +
@@ -294,7 +371,7 @@
     const waiting = ttWaitingOnMaterials(id);
     const noCenter = Research.centerLevel(state) === 0;
     const curTxt = (noCenter && Research.isActive(state, id)) ? "Paused — needs a Research Center" :
-      waiting ? "Waiting for materials — the King's buyers purchase them from cities" :
+      waiting ? (ttUnsourcedMaterials(id).length ? "Stuck — no city makes " + ttUnsourcedMaterials(id).map(m => m.gid.replace(/_/g, " ")).join(", ") + " yet" : "Waiting for materials — the King's buyers purchase them from cities") :
       { done: "Finished", researching: "In Progress",
       queued: "Queued (#" + (((state.research.queue || []).indexOf(id)) + 1) + ")",
       available: "Available", locked: "Locked" }[s] || s;
@@ -313,6 +390,40 @@
       // while active, show live consumed/required progress per material
       const qtyTxt = active ? (Math.min(qty, Math.floor(consumed[gid] || 0)) + "/" + qty) : String(qty);
       html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt}</div>`;
+    }
+    // DESIGN PASS (research-3): a material whose every producer is locked OUTSIDE
+    // this node's prereq chain names the research that opens it (any state but done).
+    const pathed = {};
+    if (s !== "done") for (const gid in mats) {
+      const p = ttResearchPathFor(gid, id);
+      if (!p) continue;
+      pathed[gid] = true;
+      html += `<div style="color:#f08a7a;margin-top:4px">⚠ ${goodIcon(gid)} ${esc(ttLabel(gid))} ${ttPathText(p)}</div>`;
+    }
+    // DESIGN PASS: warn BEFORE the player starts a node that would stall.
+    if (s === "available" || s === "queued") {
+      const miss = ttUnsourcedMaterials(id).filter(m => !pathed[m.gid]);
+      if (miss.length) html += `<div style="color:#f08a7a;margin-top:4px">⚠ No city makes ` +
+        miss.map(m => esc(ttLabel(m.gid)) + (m.maker ? " (needs a staffed " + esc(m.maker) + ")" : "")).join(", ") +
+        ` yet — this research would wait until one does.</div>`;
+    }
+    // DESIGN PASS (research-3): an upgrade level has a SECOND gate — its own build
+    // cost, paid per building in the city. List it, with ⚠ on goods no city makes.
+    if (node.kind === "upgrade") {
+      const entry = (typeof Buildings.upgradeAt === "function") ? Buildings.upgradeAt(node.buildingId, node.level) : null;
+      const cost = (entry && entry.cost) || {};
+      if (Object.keys(cost).length) {
+        html += `<div style="margin-top:4px;opacity:.85">Then each upgrade costs (city pays):</div>`;
+        for (const gid in cost) {
+          if (gid === "gold") { html += `<div>🪙 ${cost[gid]} city gold</div>`; continue; }
+          let warn = "";
+          if (!ttGoodSourced(gid)) {
+            const p = ttResearchPathFor(gid, id);
+            warn = ` <span style="color:#f08a7a">⚠ ` + (p ? ttPathText(p) : "no city makes it yet") + `</span>`;
+          }
+          html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(ttLabel(gid))} ${cost[gid]}${warn}</div>`;
+        }
+      }
     }
     return html;
   }
@@ -446,7 +557,31 @@
   });
 
   // Live refresh: cheap state/badge patch + queue each ~500ms; edges only on change.
+  // Playtest: the 🔬 button shows research status at a glance (the tree is usually
+  // closed) — "42%" while progressing, "⏳" waiting on buyers, "⚠" when no city can
+  // supply a material, "💤" when a built Research Center sits idle.
+  let ttBtnSig = "";
+  function ttUpdateButton() {
+    const R = state.research || {};
+    let txt = "🔬", cls = "", tip = "Research tree";
+    if (R.active && Research.get(R.active)) {
+      const name = Research.get(R.active).name;
+      if (Research.centerLevel(state) === 0) { txt = "🔬 ⏳"; tip = "Research paused — build a Research Center"; }
+      else if (ttWaitingOnMaterials(R.active)) {
+        const miss = ttUnsourcedMaterials(R.active);
+        if (miss.length) { txt = "🔬 ⚠"; cls = "tt-stuck"; tip = name + " is stuck — no city makes " + miss.map(m => m.gid.replace(/_/g, " ")).join(", "); }
+        else { txt = "🔬 ⏳"; tip = name + " — waiting for materials"; }
+      } else { txt = "🔬 " + Math.round(Research.activeFraction(state) * 100) + "%"; tip = "Researching " + name; }
+    } else if (Research.centerLevel(state) > 0) { txt = "🔬 💤"; cls = "tt-idle"; tip = "Research Center is idle — pick a research"; }
+    const sig = txt + "|" + cls + "|" + tip;
+    if (sig === ttBtnSig) return;
+    ttBtnSig = sig;
+    btnResearch.textContent = txt; btnResearch.title = tip;
+    btnResearch.classList.toggle("tt-stuck", cls === "tt-stuck");
+    btnResearch.classList.toggle("tt-idle", cls === "tt-idle");
+  }
   setInterval(() => {
+    ttUpdateButton();
     if (!techOpen) return;
     ttRebuildStates();
     ttRenderQueue();

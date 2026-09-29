@@ -7,9 +7,10 @@ audit — search the banner text, not the number, since edits shift them.
 wrapped in `/* BUILD:<name> START|END */` markers in `index.html` and mirrored 1:1
 in `src/<name>.js` (edit `src/`, run `node tools/build.js`, commit both; `--check`
 guards drift). The shipped `index.html` stays one self-contained offline file — the
-markers are behaviour-neutral comments. The 16 modules (in splice order) are:
+markers are behaviour-neutral comments. The pure-core modules (in splice order) are:
 `config, rng, hexmath, mapgen, goods, sim, buildings, pathing, trade, research,
-research-economy, progress, events, kingdom-market, ledger, castle-market`. The
+research-economy, progress, events, kingdom-market, ledger, castle-market,
+provisions, crown` (`crown` = Give/Take transfer rules + destroy-city refund). The
 impure shell below `PURE_CORE_END` is **not** yet modularized (Phase 2 deferred).
 
 ## Pure deterministic core — `PURE_CORE_START` (~1140) … `PURE_CORE_END` (~5162)
@@ -22,7 +23,7 @@ Everything the headless tests `vm`-eval. Must stay free of DOM / canvas /
 | `HexMath` | `const HexMath = {` (~1239) | Axial hex math. |
 | `MapGen` | `TV2 MapGen v2` (~1310) | Seeded map/biome/deposit/fog generation. |
 | Goods + prices | `GOODS-PRICES START` (~1610) | Goods catalog, building catalog, 4-tier needs matrix, local price model. |
-| `Sim` | `SIM-CORE START` (~2013) | Economy tick: production → consumption → prices → happiness → population; construction delivery. |
+| `Sim` | `SIM-CORE START` (~2013) | Economy tick: staffing (`Sim.staffTown`: self-feed basics → ☆ → rest → blocked last) → production → consumption → prices → happiness → population; construction delivery. Read-only readouts: `Sim.buildingStatus` (working / noWorkers / noInputs / awaitingPorter / warehouseFull / upgrading), `Sim.buildingProgress` (bar prog, frozen while stalled), `Sim.buildingRates` (≈/min output + inputs). |
 | `Buildings` | `BUILDINGS-CORE START` (~2571) | Placement/construction/upgrade rules incl. Research Center; housing. Placement V2 sub-region ~3026. |
 | `Pathing` | `PATHING START` (~3128) | Road-node graph + Dijkstra + route cache. |
 | `Trade` | `TRADE START` (~3211) | Autonomous cart dispatch, route profit, transactions, tariff, gradual load/unload. |
@@ -56,4 +57,5 @@ Fenced `=== X CSS START/END ===` and `=== X HTML START/END ===` blocks per panel
 ## Tests (`test/*.test.js`)
 Each standalone: reads `index.html`, regex-extracts PURE_CORE, `vm`-evals it,
 asserts. board · buildings · sim · trade · research · research_effects ·
-prices · market · balance · migration · progress · ledger · pathing · tariff.
+prices · market · balance · migration · progress · ledger · pathing · tariff · staffing ·
+distance · castle_trade · readouts · crown · alerts · build_reserve · victory_ui (browser).

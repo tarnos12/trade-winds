@@ -412,25 +412,28 @@
     let rows = "";
     for (const gid of cwGoodIds()) {
       const e = ct[gid];
-      const enabled = !!(e && e.enabled);
+      // DESIGN PASS: separate "King buys" / "King sells" ticks (both off by default).
+      const f = CastleMarket.flagsOf(e);
+      const enabled = f.buy || f.sell;
       const limit = (e && typeof e.limit === "number") ? e.limit : CW_DEFAULT_LIMIT;
       const stock = Math.floor(cs[gid] || 0);
       const flow = cwGoodFlow(gid);
       let fl = '<span class="cwm-flow flat" title="Idle">—</span>';
       if (flow.selling > 0) fl = '<span class="cwm-flow up" title="Selling: ' + fmt(flow.selling) + ' committed to city buyers">▲</span>';
       else if (flow.buying > 0) fl = '<span class="cwm-flow down" title="Buying: ' + fmt(flow.buying) + ' inbound on royal buyers">▼</span>';
-      else if (enabled && stock < limit) fl = '<span class="cwm-flow down" style="opacity:.5" title="Under limit — royal buyers will buy when a city has surplus">▼</span>';
+      else if (f.buy && stock < limit) fl = '<span class="cwm-flow down" style="opacity:.5" title="Under limit — royal buyers will buy when a city has surplus">▼</span>';
       rows += '<tr class="' + (enabled ? "" : "off") + '">' +
         '<td><span class="cw-dot" style="background:' + goodColor(gid) + '"></span>' + goodIcon(gid) + " " + esc(GOOD_LABEL(gid)) + "</td>" +
         "<td>" + fmt(stock) + "</td>" +
         "<td>" + fmt(cwCastleSellPrice(gid)) + "g</td>" +
         "<td>" + fl + "</td>" +
         '<td><input type="number" class="cwm-lim" data-ct-limit="' + gid + '" min="0" step="5" value="' + limit + '" title="Buy limit: royal buyers stock the castle up to this many"></td>' +
-        '<td><input type="checkbox" data-ct-toggle="' + gid + '"' + (enabled ? " checked" : "") + ' title="Enable castle trading: buy up to the limit, sell castle stock to cities"></td>' +
+        '<td><input type="checkbox" data-ct-buy="' + gid + '"' + (f.buy ? " checked" : "") + ' title="King buys: royal buyers stock the castle up to the limit from cities with a surplus (no tariff)"></td>' +
+        '<td><input type="checkbox" data-ct-sell="' + gid + '"' + (f.sell ? " checked" : "") + ' title="King sells: cities may buy castle stock (tax-free) when no city can supply them — only the stock above the limit while the King also buys"></td>' +
         "</tr>";
     }
     cwMarketRowsEl.innerHTML = '<table class="cwm-tbl"><tr>' +
-      "<th>Good</th><th>Castle</th><th>Price</th><th></th><th>Limit</th><th>Trade</th></tr>" + rows + "</table>";
+      '<th>Good</th><th>Castle</th><th>Price</th><th></th><th>Limit</th><th title="King buys">Buys</th><th title="King sells">Sells</th></tr>' + rows + "</table>";
   }
   // In-flight gold summary. Honest numbers only: Sell = agreed gold city buyers
   // will pay on arrival at the castle (outbound sellerCastle carts); Buy = gold
@@ -500,7 +503,7 @@
     const treas = state.treasury || 0;
     const town = nearestTownToCastle();
     cwTreasuryEl.textContent = Math.round(treas).toLocaleString() + " g";
-    cwMarketEl.textContent = town ? ("Town #" + town.id) : "base prices";
+    cwMarketEl.textContent = town ? ("City #" + town.id) : "base prices";
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 
@@ -592,20 +595,24 @@
     if (b) castleBuy(b.dataset.buy);
     else if (s) castleSell(s.dataset.sell);
   });
-  // === PP-C === castle-market controls (Warehouse tab): the enable-trading toggle
-  // and the buy-limit input write state.castleTrade[gid] = {enabled, limit} — the
-  // PP-A config the pure CastleMarket/Trade layers read. Already persisted by the
-  // PP-A save/load fields; nothing new is stored.
+  // === PP-C === castle-market controls (Warehouse tab): the "King buys" / "King
+  // sells" ticks (DESIGN PASS: split from one enable toggle) and the buy-limit input
+  // write state.castleTrade[gid] = {buy, sell, limit} — the PP-A config the pure
+  // CastleMarket/Trade layers read. Already persisted by the save/load fields.
+  const cwEntry = (gid) => {
+    if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+    const cur = state.castleTrade[gid];
+    const f = CastleMarket.flagsOf(cur);
+    const lim = (cur && typeof cur.limit === "number" && isFinite(cur.limit) && cur.limit >= 0) ? cur.limit : CW_DEFAULT_LIMIT;
+    return (state.castleTrade[gid] = { buy: f.buy, sell: f.sell, limit: lim });
+  };
   castleEl.addEventListener("change", (e) => {
-    const t = e.target.closest("input[data-ct-toggle]");
+    const t = e.target.closest("input[data-ct-buy], input[data-ct-sell]");
     if (t) {
-      const gid = t.dataset.ctToggle;
+      const gid = t.dataset.ctBuy || t.dataset.ctSell;
       if (!CONFIG.goods[gid]) return;
-      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
-      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
-      cur.enabled = !!t.checked;
-      if (typeof cur.limit !== "number" || !isFinite(cur.limit) || cur.limit < 0) cur.limit = CW_DEFAULT_LIMIT;
-      state.castleTrade[gid] = cur;
+      const cur = cwEntry(gid);
+      if (t.dataset.ctBuy) cur.buy = !!t.checked; else cur.sell = !!t.checked;
       scheduleSave();
       renderCastlePanel(true);   // row dim/flow state changed
       return;
@@ -614,11 +621,9 @@
     if (l) {
       const gid = l.dataset.ctLimit;
       if (!CONFIG.goods[gid]) return;
-      if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
-      const cur = state.castleTrade[gid] || { enabled: false, limit: CW_DEFAULT_LIMIT };
+      const cur = cwEntry(gid);
       const v = Math.floor(parseFloat(l.value));
       cur.limit = (isFinite(v) && v >= 0) ? v : 0;
-      state.castleTrade[gid] = cur;
       l.value = String(cur.limit);   // reflect the clamped value
       scheduleSave();
     }
@@ -669,9 +674,9 @@
       return PALETTE[i];
     }
 
-    const GIVE_AMT = 1000, TAKE_AMT = 1000;
-    const COOLDOWN_TICKS = 240;   // ~2 min at 1× (500 ms/tick)
-    const HAPPY_TICKS = 120;      // ~1 min the happiness nudge lasts
+    // DESIGN PASS: amounts/cooldown/happiness now live in CONFIG.town.transfer (Crown).
+    const GIVE_AMT = (CONFIG.town.transfer && CONFIG.town.transfer.amount) || 1000;
+    const TAKE_TIP = "Take " + GIVE_AMT + " g from this city into the Kingdom (−happiness)";
 
     const cardsEl = document.getElementById("cityCards");
     const kingdomGoldEl = document.getElementById("kingdomGold");
@@ -695,28 +700,42 @@
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
 
+    // DESIGN PASS: only a LIVE town (in state.towns) can be given to / taken from — a
+    // stale object from a replaced game minted free gold (Take) or lost it (Give).
+    const isLive = (town) => !!town && (state.towns || []).includes(town);
+    const liveTown = (id) => (state.towns || []).find(x => x.id === id) || null;
+
+    // DESIGN PASS: the transfer rules live in the pure Crown module (Crown.canGive /
+    // canTake / give / take — tested headlessly); this wrapper adds the live-town
+    // guard, the save and the player-facing feedback: a floater over the city, a
+    // floater + pulse on the 👑 chip and the 'place' SFX.
+    function chipFloat(text, cls) {
+      const chip = document.getElementById("kingdomChip");
+      if (!chip) return;
+      chip.classList.remove("kc-pulse"); void chip.offsetWidth; chip.classList.add("kc-pulse");
+      const f = document.createElement("span");
+      f.className = "kc-float " + cls; f.textContent = text;
+      f.addEventListener("animationend", () => f.remove());
+      chip.appendChild(f);
+      setTimeout(() => { if (f.parentNode) f.remove(); }, 1600);   // reduced-motion: no animationend
+    }
+    function transferFx(town, taken) {
+      const amt = Math.round(GIVE_AMT).toLocaleString();
+      if (window.Juice && Juice.townPopup) Juice.townPopup(town, (taken ? "−" : "+") + amt + "🪙", taken ? "#ff9b7a" : "#bfe8a8");
+      chipFloat((taken ? "+" : "−") + amt, taken ? "gain" : "loss");
+      if (typeof SFX !== "undefined") SFX.play("place");
+      if (typeof updateTreasuryHud === "function") updateTreasuryHud();
+    }
     function give(town) {
-      if (onCooldown(town)) return false;
-      if ((state.treasury || 0) < GIVE_AMT) return false;
-      state.treasury -= GIVE_AMT;
-      town.gold = (town.gold || 0) + GIVE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, +GIVE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: +10, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.give(state, town)) return false;
+      transferFx(town, false);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
     }
     function take(town) {
-      if (onCooldown(town)) return false;
-      if ((town.gold || 0) < TAKE_AMT) return false;
-      town.gold -= TAKE_AMT;
-      state.treasury = (state.treasury || 0) + TAKE_AMT;
-      if (typeof Ledger !== "undefined") Ledger.recordTransfer(town, -TAKE_AMT);   // PP-A ledger
-      if (!Array.isArray(town.happyMods)) town.happyMods = [];
-      town.happyMods.push({ delta: -30, untilTick: now() + HAPPY_TICKS });
-      town.cooldownUntil = now() + COOLDOWN_TICKS;
+      if (!isLive(town) || !Crown.take(state, town)) return false;
+      transferFx(town, true);
       if (typeof scheduleSave === "function") scheduleSave();
       refresh();
       return true;
@@ -724,12 +743,15 @@
 
     // Click a card body (not a button): center the camera and open its panel.
     function focus(town) {
+      if (!isLive(town)) return false;
       const p = HexMath.hexToPixel(town.q, town.r, SIZEc);
       state.cam.x = p.x; state.cam.y = p.y;
       if (typeof openTownPanel === "function") openTownPanel(town);
     }
 
-    function buildCard(town) {
+    // DESIGN PASS: a card captures only its town ID and resolves the live town on click
+    // (Continue/New Game replace state.towns with new objects under the same ids).
+    function buildCard(id) {
       const root = document.createElement("div");
       root.className = "city-card";
       root.innerHTML =
@@ -744,7 +766,7 @@
         '</div>' +
         '<div class="cc-btns">' +
           '<button class="cc-give" title="Give 1000 g from the Kingdom to this city (+happiness)">Give 1000</button>' +
-          '<button class="cc-take" title="Take 1000 g from this city into the Kingdom (−happiness)">Take 1000</button>' +
+          '<button class="cc-take" title="' + TAKE_TIP + '">Take 1000</button>' +
         '</div>' +
         '<div class="cc-cool" style="display:none"></div>';
       const parts = {
@@ -762,15 +784,26 @@
       // v0.49: the avatar carries the city NUMBER (an "image with just a number");
       // Give/Take stay hidden until the player holds Shift (revealBtns below).
       parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
-      parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
-      parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
-      root.addEventListener("click", () => focus(town));
+      parts.give.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; give(t); });
+      parts.take.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; take(t); });
+      root.addEventListener("click", () => { const t = liveTown(id); if (!t) return false; focus(t); });
       return parts;
     }
 
     function refresh() {
       if (!cardsEl) return;
       if (kingdomGoldEl) kingdomGoldEl.textContent = Math.round(state.treasury || 0).toLocaleString();
+      // DESIGN PASS: show the King's tariff income next to the treasury (5-min avg) —
+      // the headline income should be visible, not buried in a panel.
+      const rateEl = document.getElementById("kingdomRate");
+      if (rateEl && typeof Ledger !== "undefined") {
+        let perTick = 0;
+        for (const t of state.towns || []) perTick += Ledger.lastNAverage(t, "crown", 600);
+        const pm = (typeof window.perMin === "function") ? window.perMin(perTick) : perTick * 120;
+        rateEl.textContent = pm >= 0.05 ? "+" + (pm < 10 ? pm.toFixed(1) : Math.round(pm)) + "/min" : "";
+        const chip = document.getElementById("kingdomChip");
+        if (chip) chip.title = "Your royal treasury — the King's gold. Tariff income ≈ " + pm.toFixed(1) + " g/min (last 5 min), earned on trade between your cities.";
+      }
 
       const towns = (state.towns || []).slice().sort((a, b) => (+a.id || 0) - (+b.id || 0));
       const seen = new Set();
@@ -779,7 +812,7 @@
         if (town.id == null) continue;
         seen.add(town.id);
         let c = cards.get(town.id);
-        if (!c) { c = buildCard(town); cards.set(town.id, c); }
+        if (!c) { c = buildCard(town.id); cards.set(town.id, c); }
         // keep DOM order matching id order
         if (c.root.parentNode !== cardsEl || c.root.previousElementSibling !== prev) {
           cardsEl.insertBefore(c.root, prev ? prev.nextElementSibling : cardsEl.firstChild);
@@ -800,10 +833,11 @@
         // === /PP-E ===
 
         const cooling = onCooldown(town);
-        const canGive = !cooling && (state.treasury || 0) >= GIVE_AMT;
-        const canTake = !cooling && (town.gold || 0) >= TAKE_AMT;
-        c.give.disabled = !canGive;
-        c.take.disabled = !canTake;
+        const g = Crown.canGive(state, town), k = Crown.canTake(state, town);   // DESIGN PASS: same gate as the panel
+        c.give.disabled = !g.ok;
+        c.take.disabled = !k.ok;
+        const takeTip = k.ok ? TAKE_TIP : k.reason;
+        if (c.take.title !== takeTip) c.take.title = takeTip;
         if (cooling) {
           const left = Math.max(0, (town.cooldownUntil || 0) - now());
           const secs = Math.ceil(left * 0.5);   // 500 ms per tick
@@ -820,7 +854,15 @@
       }
     }
 
-    return { refresh, cityColor, give, take, PALETTE };
+    // DESIGN PASS: drop every card (DOM + map) — called by newGame()/loadGame() when
+    // state.towns is replaced, then rebuilt from the live towns straight away.
+    function reset() {
+      for (const c of cards.values()) if (c.root.parentNode) c.root.parentNode.removeChild(c.root);
+      cards.clear();
+      refresh();
+    }
+
+    return { refresh, reset, cityColor, give, take, PALETTE };
   })();
   window.CityCards = CityCards;
   // === CITY-CARDS END ===
@@ -920,7 +962,8 @@
         prev = c.root;
         const s = sum[gid] || { total: 0, avg: CONFIG.goods[gid].basePrice, trend: 0 };
         c.tot.textContent = Math.round(s.total);
-        c.price.textContent = (Math.round(s.avg * 10) / 10).toFixed(1);
+        // DESIGN PASS #13: no town stocks or uses it → no price to average ("—").
+        c.price.textContent = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1);
         c.tr.className = "rg-tr " + (s.trend > 0 ? "up" : s.trend < 0 ? "down" : "flat");
         c.tr.textContent = s.trend > 0 ? "▲" : s.trend < 0 ? "▼" : "—";
         c.root.classList.toggle("active", gid === openGood);
@@ -990,10 +1033,15 @@
       // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
       // perMin() helper (window.perMin, town-ui.js) rather than a local *TICKS_PER_SEC.
       const rate = (typeof perMin === "function") ? perMin(s.netRate || 0) : (s.netRate || 0);
-      const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/min";
+      // DESIGN PASS #13: 60 game-s window (Market.RATE_WINDOW) + a deadband — inside it
+      // the stock is flat as far as the player can tell, so say "≈0" not ±0.3.
+      const dead = (CONFIG.econ && CONFIG.econ.rateDeadbandPerMin) || 0;
+      const flat = Math.abs(rate) < dead;
+      const rateCls = flat ? "" : rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
+      const rateStr = flat ? "≈0/min" : (rate > 0 ? "+" : "") + (Math.round(rate * 10) / 10).toFixed(1) + "/min";
+      const avgStr = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1) + " g";
       if (rdStats) rdStats.innerHTML =
-        '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
+        '<span class="k">Avg price</span><span class="v">' + avgStr + '</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
         '<span class="k">Producers</span><span class="v">' + rc.producers + '</span>' +
         '<span class="k">Consumers</span><span class="v">' + rc.consumers + '</span>';

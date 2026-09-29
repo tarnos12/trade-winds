@@ -200,20 +200,18 @@ function build() {
 // One economy step — full accumulator order (minus Events/Tutorial, which are
 // opportunities/UI and irrelevant to steady-state balance).
 function step(C, state) {
-  const { Sim, Trade, Market, ResearchEconomy, CastleMarket, Research, Quests } = C;
+  // Mirrors src/mainloop.js order (Victory/Tutorial are UI-side and skipped).
+  const { Sim, Trade, Market, ResearchEconomy, CastleMarket, Research, Provisioner } = C;
   Sim.tick(state);
   Trade.tick(state);
   if (Market && Market.tick) Market.tick(state);
   ResearchEconomy.tick(state);
   CastleMarket.tick(state);
-  // Slice A: deliver materials from castleStock into the Research Center
-  // (build/upgrade) AFTER the buyers stock the castle, BEFORE research runs —
-  // mirrors the real game's accumulator order (index.html main loop). Without
-  // this the center never finishes construction, so research stays PAUSED and
-  // the whole tier progression stalls at peasants.
+  if (Provisioner && Provisioner.tick) Provisioner.tick(state);   // castle potato → provisions
+  // deliver materials from castleStock into the Research Center (build/upgrade)
+  // AFTER the buyers stock the castle, BEFORE research runs.
   if (Research.tickCenter) Research.tickCenter(state);
   Research.tick(state);
-  Quests.tick(state);
 }
 
 module.exports = { build, step };

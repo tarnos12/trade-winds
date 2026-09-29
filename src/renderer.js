@@ -518,7 +518,8 @@
       const col = sells ? "#6fc24b" : (buys ? (cg.latent ? "#e0a63c" : "#e0563f") : "#b8b2a6");
       const net = Math.round(Math.abs(cg.net) || 0);
       const left = arrow + (net > 0 ? " " + net + "/m" : "");
-      const right = "  🏬" + Math.round(cg.stock) + "  🪙" + (cg.price ? cg.price.toFixed(1) : "0");
+      const right = "  🏬" + Math.round(cg.stock) + "  🪙" +
+        (Sim.hasMarket(t, gid) ? (cg.price ? cg.price.toFixed(1) : "0") : "—");   // DESIGN PASS #6: no market ⇒ "—"
       const fontPx = Math.max(9, Math.round(SIZE * 0.2));
       ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
       ctx.textAlign = "left"; ctx.textBaseline = "middle";
@@ -689,6 +690,37 @@
       drawGoodChip(p.x, baseY - i * step, top[i][0], Math.ceil(top[i][1]), { alpha: 0.96, muted: true });
     }
   }
+  // DESIGN PASS: understaffed marker (top-left) — red "0" when a producer has no
+  // workers, amber "n/m" when it runs short. Output scales with workers, so a short
+  // building is slow rather than broken; this makes the shortage scannable on the map
+  // (Anno's "insufficient workforce" icon). Closed slots don't count as missing.
+  // DESIGN PASS #13: status glyph drawn beside a stalled producer's progress bar.
+  const STALL_GLYPH = { warehouseFull: "📦", awaitingPorter: "📦", noInputs: "⛔", upgrading: "⬆", noWorkers: "👷" };
+  function drawStaffBadge(b, def, p, rad) {
+    if (!def || def.kind === "house" || !def.workerTier || !(def.workerSlots > 0)) return;
+    if (b.blockedReason) return;   // DESIGN PASS #3: full/upgrading — its crew was moved on purpose, not missing
+    const slotPlus = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0;
+    const open = Math.max(0, def.workerSlots + slotPlus - (b.closedSlots || 0));
+    if (open <= 0) return;
+    // v0.52.1: whole workers, same rounding as the building panel (< 0.5 = idle)
+    const w = Math.round(b.workers || 0);
+    if (w >= open) return;
+    const none = w < 1;
+    const label = none ? "👷0" : "👷" + w + "/" + open;
+    const fontPx = Math.max(7, Math.round(SIZE * 0.17));
+    ctx.save();
+    ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width;
+    const bx = p.x - rad * 0.95, by = p.y - rad * 0.95, bw = tw + 6, bh = fontPx + 4;
+    ctx.fillStyle = none ? "rgba(150,40,30,0.92)" : "rgba(150,100,20,0.92)";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx - bw / 2, by - bh / 2, bw, bh, bh / 2); else ctx.rect(bx - bw / 2, by - bh / 2, bw, bh);
+    ctx.fill();
+    ctx.fillStyle = "#fff3e0";
+    ctx.fillText(label, bx, by + 0.5);
+    ctx.restore();
+  }
   function drawUpgradeBadge(b, p, rad) {
     const lvl = b && (b.upgradeLevel || 1);
     if (!lvl || lvl < 2) return;
@@ -797,10 +829,13 @@
         // === RU-B: level badge + pending-upgrade material chips (built only) ===
         if (!(state.zoom < 0.6)) {
           drawUpgradeBadge(b, p, rad);
+          drawStaffBadge(b, def, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
           // v0.47: production/consumption progress bar under producers — fills as the
-          // building nears its next whole-unit batch (green = producing, amber =
-          // waiting on inputs). Houses/non-producers return null and get no bar.
+          // building nears its next whole-unit batch. Houses/non-producers return null.
+          // DESIGN PASS #13: green ONLY while really producing (Sim.buildingProgress
+          // status); any stall freezes the bar, turns it amber and adds a glyph naming
+          // the cause (📦 store full · ⛔ no input · ⬆ upgrading · 👷 no workers).
           if (typeof Sim !== "undefined" && Sim.buildingProgress) {
             const pr = Sim.buildingProgress(state, t, b);
             if (pr) {
@@ -808,10 +843,17 @@
               const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.14);
               ctx.fillStyle = "rgba(18,14,9,0.78)";
               ctx.fillRect(bx, by, bw, bh);
-              ctx.fillStyle = !pr.working ? "#8a8574" : (pr.starved ? "#e0a63c" : "#7fc24b");
+              ctx.fillStyle = pr.working ? "#7fc24b" : "#e0a63c";
               ctx.fillRect(bx, by, bw * pr.prog, bh);
-              ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1;
+              ctx.strokeStyle = pr.working ? "rgba(0,0,0,0.55)" : "rgba(224,166,60,0.9)"; ctx.lineWidth = 1;
               ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+              const glyph = STALL_GLYPH[pr.status];
+              if (glyph) {
+                const gpx = Math.max(7, Math.round(SIZE * 0.2));
+                ctx.font = "bold " + gpx + "px system-ui, sans-serif";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffce4d";
+                ctx.fillText(glyph, bx + bw + gpx * 0.6, by + bh / 2);
+              }
             }
           }
           // v0.51 §2: internal-STORE fill bar (what porters collect) — sits just below
@@ -1107,6 +1149,56 @@
     ctx.lineWidth = 2;
     ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
     ctx.stroke();
+    if (state.mode === "road") drawRoadPreview();
+  }
+
+  // DESIGN PASS: road tool preview — a dashed line from the pending anchor (A) to the
+  // hovered hex along the route the click would lay, plus "N hexes · N×5🪙". The
+  // route comes from InputRoad.preview (BFS cached per hovered hex in input.js).
+  const ROAD_PREVIEW_DASH = [6, 5];
+  const ROAD_PREVIEW_NODASH = [];
+  function drawRoadPreview() {
+    const api = window.InputRoad;
+    const a = api && api.anchor;
+    if (!a || !hoverHex) return;
+    const pv = api.preview(hoverHex.q, hoverHex.r);
+    if (!pv || !pv.route.length) return;
+    const route = pv.route;
+    const inv = 1 / (state.zoom || 1);
+    ctx.save();
+    // anchor ring
+    const pa = HexMath.hexToPixel(a.q, a.r, SIZE);
+    ctx.lineWidth = 2.5 * inv;
+    ctx.strokeStyle = "#f0d590";
+    ctx.beginPath(); ctx.arc(pa.x, pa.y, SIZE * 0.42, 0, Math.PI * 2); ctx.stroke();
+    if (route.length > 1) {
+      ctx.setLineDash(ROAD_PREVIEW_DASH);
+      ctx.lineWidth = 3 * inv;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = pv.straight ? "rgba(224,80,60,0.9)" : "rgba(255,236,180,0.95)";
+      ctx.beginPath();
+      for (let i = 0; i < route.length; i++) {
+        const p = HexMath.hexToPixel(route[i].q, route[i].r, SIZE);
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash(ROAD_PREVIEW_NODASH);
+    }
+    // cost label above the hovered hex (screen-constant size)
+    const n = pv.newHexes, per = Buildings.roadCost();
+    const short = (state.treasury || 0) < pv.cost;
+    const label = n + (n === 1 ? " hex" : " hexes") + " · " + n + "×" + per + "🪙" +
+      (pv.straight ? " · no land route" : short ? " · treasury short" : "");
+    const ph = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
+    ctx.font = "600 " + (12 * inv) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = ctx.measureText(label).width + 12 * inv, hgt = 18 * inv;
+    const ly = ph.y - SIZE * 0.95;
+    ctx.fillStyle = "rgba(34,26,14,0.85)";
+    ctx.fillRect(ph.x - w / 2, ly - hgt / 2, w, hgt);
+    ctx.fillStyle = (pv.straight || short) ? "#f08a70" : "#f4ecdd";
+    ctx.fillText(label, ph.x, ly + 0.5 * inv);
+    ctx.restore();
   }
 
   // === C: TILE HOVER TOOLTIP ==============================================
@@ -1174,12 +1266,13 @@
       const buildables = terrainEligibleBuildings(hoverHex.q, hoverHex.r);
       let html = "<b>" + esc(terrainDisplayName(hex.terrain)) + "</b>";
       if (buildables.length) {
-        const parts = buildables.map(def => {
-          const locked = (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
-          return "<span" + (locked ? ' class="tt-locked"' : "") + ">" + esc(def.name) +
-            (locked ? " (locked)" : "") + "</span>";
-        });
-        html += '<div class="tt-build">' + parts.join(", ") + "</div>";
+        // Name only what can be built here NOW; research-locked options collapse into
+        // a single count so the tip stays short (it used to list ~20 struck-through names).
+        const isLocked = def => (typeof bbBuildingAvailable === "function") && !bbBuildingAvailable(def);
+        const open = buildables.filter(def => !isLocked(def));
+        const lockedN = buildables.length - open.length;
+        if (open.length) html += '<div class="tt-build">Build: ' + open.map(def => esc(def.name)).join(", ") + "</div>";
+        if (lockedN) html += '<div class="tt-build tt-none">+' + lockedN + " more with research 🔬</div>";
       } else {
         html += '<div class="tt-build tt-none">Nothing buildable here</div>';
       }

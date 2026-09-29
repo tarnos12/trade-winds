@@ -28,6 +28,8 @@
   const RENDER_MS = 1000 / 60;       // AB: minimum ms between rendered frames (~60fps)
   let fpsSmoothed = 60, fpsTimer = 0, fpsFrames = 0;
   let _prevBuilds = -1;              // JUICE/AUDIO: edge-detect building/upgrade completions for the "construct" cue
+  let _prevStatsObj = null;          // DESIGN PASS (integration): stats object the baseline belongs to
+  const _NO_STATS = {};
 
   const fpsEl = document.getElementById("fps");
   const statEl = document.getElementById("stat");
@@ -92,8 +94,11 @@
       // see Sim.statConstructed/statUpgraded). Skip the first sample so a loaded
       // save doesn't fanfare its existing buildings.
       if (typeof SFX !== "undefined" && SFX.play) {
-        const st = (state && state.stats) || {};
+        const st = (state && state.stats) || _NO_STATS;
         const nb = ((st.constructed && st.constructed.total) || 0) + ((st.upgraded && st.upgraded.total) || 0);
+        // DESIGN PASS (integration): New Game / Continue now swap in a different stats
+        // object (restored from the save) — re-baseline instead of playing a stray cue.
+        if (st !== _prevStatsObj) { _prevStatsObj = st; _prevBuilds = -1; }
         if (_prevBuilds >= 0 && nb > _prevBuilds) SFX.play("construct", "build complete");
         _prevBuilds = nb;
       }

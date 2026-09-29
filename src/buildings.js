@@ -143,8 +143,9 @@ Object.assign(CONFIG, {
   upgrades: {
     // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
     // v0.51: peasant house ladder — L2/L3 add a housing slot (+1 resident), L4 cuts
-    // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
-    // (delivered from the city's stock / bought via traders), escalating in tier.
+    // basic consumption −30%, L5 cuts luxury consumption −30%. Upgrades cost city gold +
+    // materials (gold from town.gold; materials delivered from the city's stock /
+    // bought via traders), escalating in tier.
     hut: [
       { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { gold: 100, wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
       { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { gold: 250, stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },
@@ -213,6 +214,21 @@ Buildings.canStartUpgrade = function (state, town, b) {
   if (!nxt) return { ok: false, reason: "No upgrade available" };
   const gold = (nxt.cost && nxt.cost.gold) || 0;
   if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
+  // DESIGN PASS (#2): a producer stops while it upgrades (v0.51.14), so an upgrade
+  // that costs the building's OWN output (Lumberjack L2 = 20 wood) could never be
+  // fed by it — starting it below that stock froze the city's only source. Gate it.
+  const def = CONFIG.buildings[b.typeId];
+  const own = def && def.output && def.output.goodId;
+  // REVIEW FIX: cost.gold is the CITY-GOLD price, not the gold good (Gold Mine output) —
+  // same exclusion as upgradeResourceCost, so a Gold Mine ladder can't gate on ore stock.
+  const ownNeed = own && own !== "gold" && nxt.cost ? (nxt.cost[own] || 0) : 0;
+  const ownHave = (town && town.stock && town.stock[own]) || 0;
+  if (ownNeed > 0 && ownHave < ownNeed) {
+    const label = own.charAt(0).toUpperCase() + own.slice(1).replace(/_/g, " ");
+    // v0.52.1: say how much the city holds now (need/have also returned for the UI's icon form)
+    return { ok: false, selfGood: own, need: ownNeed, have: Math.floor(ownHave),
+      reason: "Stock " + ownNeed + " " + label + " first (have " + Math.floor(ownHave) + ") — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
+  }
   return { ok: true };
 };
 
@@ -225,6 +241,46 @@ Buildings.startUpgrade = function (state, town, b) {
   if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
+};
+
+// DESIGN PASS (#2): cancel a pending upgrade — refund the gold the city paid and
+// return the delivered materials to the city's stock (clamped at storageCap; any
+// excess is lost, like any over-cap arrival). Returns true when something was cancelled.
+Buildings.cancelUpgrade = function (state, town, b) {
+  if (!b || !b.pendingUpgrade) return false;
+  const entry = Buildings.upgradeAt(b.typeId, b.pendingUpgrade.toLevel);
+  const gold = (entry && entry.cost && entry.cost.gold) || 0;
+  if (town) {
+    if (gold > 0) town.gold = (town.gold || 0) + gold;
+    if (!town.stock) town.stock = {};
+    const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+    const dv = b.pendingUpgrade.delivered || {};
+    for (const gid in dv) {
+      const have = town.stock[gid] || 0;
+      if ((dv[gid] || 0) > 0) town.stock[gid] = Math.max(have, Math.min(cap, have + dv[gid]));
+    }
+  }
+  b.pendingUpgrade = null;
+  return true;
+};
+
+// DESIGN PASS (#2): who makes `gid` in this town? Counts BUILT producers, staffed
+// ones (workers > 0 and not paused by an upgrade) and unbuilt ones, and remembers
+// the first idle/unbuilt producer (for the "why is this stuck" hints). `skip` is
+// excluded (a building asking about its own construction).
+Buildings.localProducers = function (town, gid, skip) {
+  const r = { built: 0, staffed: 0, unbuilt: 0, idle: null, upgrading: null, pending: null };
+  for (const b of (town && town.buildings) || []) {
+    if (!b || b === skip) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || !def.output || def.output.goodId !== gid) continue;
+    if (b.built === false) { r.unbuilt++; if (!r.pending) r.pending = b; continue; }
+    r.built++;
+    if (b.pendingUpgrade) { if (!r.upgrading) r.upgrading = b; continue; }
+    if ((b.workers || 0) > 0) r.staffed++;
+    else if (!r.idle) r.idle = b;
+  }
+  return r;
 };
 
 // The non-gold (resource) portion of an upgrade level's cost.
@@ -609,6 +665,24 @@ Buildings.canPlaceTown = function (state, q, r) {
   return { ok: true };
 };
 
+// v0.52.1: what a city founded at (q,r) could build on around its center — the 6
+// neighbours by terrain, split into USABLE and RESERVED (on/next to the castle or a
+// castle building: the castle compound's no-touch gap, so no city building may sit
+// there). Returns { usable: {terrain: n}, reserved: {terrain: n} }. Pure (city-hover hint).
+Buildings.townSiteTiles = function (state, q, r) {
+  const usable = {}, reserved = {};
+  const map = state && state.map;
+  if (!map || !map.hexes) return { usable, reserved };
+  for (const n of HexMath.neighbors(q, r)) {
+    const hex = map.hexes.get(HexMath.key(n.q, n.r));
+    if (!hex) continue;
+    const res = Buildings.touchesCastle(state, n.q, n.r) || Buildings.touchesCastleBuilding(state, n.q, n.r);
+    const bag = res ? reserved : usable;
+    bag[hex.terrain] = (bag[hex.terrain] || 0) + 1;
+  }
+  return { usable, reserved };
+};
+
 // Back-compat wrapper for existing callers that pass an explicit `town`. Placement
 // v2 resolves the owner by adjacency; this thin shim keeps the old signature by
 // requiring the resolved owner to BE the passed town (so a building can only be
@@ -774,10 +848,22 @@ Buildings.placeAdvancedProvisioner = function (state, q, r) {
   // switch on castle fish-buying so the advanced line has its second input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.advancedProvisioner && CONFIG.advancedProvisioner.fishLimit) || 40;
-  if (!state.castleTrade.fish || !state.castleTrade.fish.enabled) state.castleTrade.fish = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "fish", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /ADVANCED PROVISIONER ===================================================
+
+// DESIGN PASS (king buys / king sells): a Provisioner switches on castle BUYING of
+// its input only. An entry the player already buys keeps its limit; a "King sells"
+// tick the player set is preserved (never switched on here).
+Buildings.enableCastleBuy = function (state, gid, lim) {
+  if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
+  const cur = state.castleTrade[gid];
+  const f = (typeof CastleMarket !== "undefined" && CastleMarket.flagsOf) ? CastleMarket.flagsOf(cur)
+    : { buy: !!(cur && (cur.buy || cur.enabled)), sell: !!(cur && cur.sell) };
+  const keepLim = f.buy && typeof cur.limit === "number" && isFinite(cur.limit) && cur.limit >= 0;
+  state.castleTrade[gid] = { buy: true, sell: f.sell, limit: keepLim ? cur.limit : lim };
+};
 
 // === BASIC PROVISIONER (v0.51 §9) — a castle-adjacent building (no research) that
 // enables the basic provision line (2 potato → 1). Placed like the Advanced one and
@@ -799,7 +885,7 @@ Buildings.placeProvisioner = function (state, q, r) {
   // switch on castle potato-buying so the basic line has its input.
   if (!state.castleTrade || typeof state.castleTrade !== "object") state.castleTrade = {};
   const lim = (CONFIG.basicProvisioner && CONFIG.basicProvisioner.potatoLimit) || 40;
-  if (!state.castleTrade.potato || !state.castleTrade.potato.enabled) state.castleTrade.potato = { enabled: true, limit: lim };
+  Buildings.enableCastleBuy(state, "potato", lim);   // DESIGN PASS: "King buys" only — never auto-sells
   return { ok: true };
 };
 // === /BASIC PROVISIONER ======================================================

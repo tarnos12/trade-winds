@@ -13,8 +13,14 @@
   // CUSTOM preset (MapGen.applyTiers) and state.mapPreset becomes "custom".
   // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
   // custom worlds never clobbers an existing save). ===
-  function newGame(seedInput, presetId, tiers, noSave) {
+  // DESIGN PASS: `genVersion` = MapGen revision to build with (CONFIG.map.genVersion
+  // for a new game; loadGame passes the save's own so old terrain regenerates exactly).
+  function newGame(seedInput, presetId, tiers, noSave, genVersion) {
+    // DESIGN PASS (review): a noSave PREVIEW world must never reach the save — the
+    // 30 s autosave, tab-hide and beforeunload used to write it over the kingdom.
+    previewWorld = !!noSave;
     state.seedInput = seedInput;
+    state.mapgenVersion = genVersion || CONFIG.map.genVersion || 1;
     const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
     if (hasTiers) {
@@ -23,13 +29,13 @@
       state.mapPreset = "custom";
       state.mapTiers = Object.assign({}, tiers, { base: baseId });   // normalize the base id into the stored selection
       // radius null => generate() derives it from the resolved (applyTiers) preset's own rect-scaled radius.
-      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers);
+      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers, state.mapgenVersion);
     } else {
       const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
       state.mapPreset = preset;
       state.mapTiers = null;
       const pr = CONFIG.mapPresets[preset];
-      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset, null, state.mapgenVersion);
     }
     state.roads = new Set();
     // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
@@ -45,7 +51,7 @@
     state.towns = [];
     state.carts = [];
     state.treasury = 10000;   // EC-A: Kingdom starting gold (pays all placement)
-    state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 25%
+    state.tariffRate = CONFIG.trade.tariffRate;   // TARIFF-SLIDER (P5D-D): reset to baseline 30%
     state.tradeSeed = hashSeed(seedInput) ^ 0x5bd1e995;   // deterministic per-game trade RNG
     state.research = Research.fresh();   // RESEARCH (P4-A): reset the tech tree
     state.market = (typeof Market !== "undefined" && Market.fresh) ? Market.fresh() : { hist: {}, head: 0, len: 0 };  // KR-A: fresh market history
@@ -67,15 +73,29 @@
     state.castleLevel = 1;
     state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
+    state.victoryTick = null;    // DESIGN PASS: tick the realm was won (recap time-to-win)
+    state.victorySeen = false;   // v0.52.1: the player dismissed the victory card (Keep ruling / New realm)
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
-    document.getElementById("seed").value = seedInput;
+    // DESIGN PASS: a new map starts with fresh lifetime counters + no mission progress —
+    // the boot-time loadGame() now restores the save's stats/missions into `state`, and
+    // New Game must not inherit them (Tutorial.startFresh(state) then seeds missions).
+    state.stats = undefined;
+    Sim.ensureStats(state);
+    state.missions = null;
+    // DESIGN PASS: the Seed field lives in the ?debug=1-only menu row — null-guard it.
+    const seedEl = document.getElementById("seed");
+    if (seedEl) seedEl.value = seedInput;
     // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
     // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
     // dims; fall back to the legacy castleReveal if a map carries none.
     reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
+    // DESIGN PASS: state.towns was replaced — drop city cards bound to the old game.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
@@ -83,17 +103,20 @@
   // Persistence (versioned; GDD §9.4)
   // ---------------------------------------------------------------
   let saveTimer = null;
+  let previewWorld = false;   // set by newGame(noSave): the live state is a start-screen preview
   function scheduleSave() {
     if (saveTimer) return;
     saveTimer = setTimeout(() => { saveTimer = null; saveGame(); }, 800);
   }
   function saveGame() {
+    if (previewWorld) return;   // DESIGN PASS (review): never persist a start-screen preview
     try {
       const data = {
         saveVersion: CONFIG.saveVersion,
         seed: state.seedInput,
         preset: state.mapPreset,           // === TV2: persist chosen map preset ===
         tiers: state.mapTiers || null,     // === Custom Map: persist the tier selection (null for a plain preset) ===
+        mapgenVersion: state.mapgenVersion, // DESIGN PASS: generator revision the terrain was built with
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -121,6 +144,8 @@
         castleLevel: state.castleLevel,    // P4-B
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
+        victoryTick: state.victoryTick,    // DESIGN PASS: recap time-to-win (null = unknown)
+        victorySeen: !!state.victorySeen,  // v0.52.1: victory card dismissed — don't re-open it on Continue
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
@@ -140,12 +165,21 @@
       data.researchCenter = data.researchCenter || null;
       data.saveVersion = 2;
     }
+    // v2 → v3 (DESIGN PASS, king buys / king sells): castleTrade[gid] { enabled, limit }
+    // becomes { buy, sell, limit }; the old flag maps to buy only (never auto-sell).
+    if (data.saveVersion === 2) {
+      if (typeof CastleMarket !== "undefined" && CastleMarket.normalize) data.castleTrade = CastleMarket.normalize(data.castleTrade);
+      data.saveVersion = 3;
+    }
     if (data.saveVersion !== CONFIG.saveVersion) return null; // unknown/newer → reject
     return data;
   }
   // === TV2: rename ore→iron in a good-keyed map (in place), summing collisions. ===
   function TV2_renameGood(obj, from, to) {
     if (!obj || typeof obj !== "object" || !(from in obj)) return;
+    // DESIGN PASS (integration): castleTrade entries are objects, not counts — move
+    // the entry (keep an existing `to`) instead of string-concatenating it.
+    if (typeof obj[from] !== "number") { if (!(to in obj)) obj[to] = obj[from]; delete obj[from]; return; }
     obj[to] = (typeof obj[to] === "number" ? obj[to] : 0) + obj[from];
     delete obj[from];
   }
@@ -221,8 +255,11 @@
     // when it was a custom world. Old saves (no `tiers`, or preset !== "custom")
     // take the plain-preset path; a "custom" preset with a missing/garbage tiers
     // object falls back to the default preset inside newGame. ===
+    // DESIGN PASS: saves without mapgenVersion predate the stone guarantee → v1,
+    // so their terrain (under placed cities/roads) regenerates unchanged.
     newGame(data.seed, data.preset,
-      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null);
+      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null,
+      false, (typeof data.mapgenVersion === "number" && data.mapgenVersion >= 1) ? Math.floor(data.mapgenVersion) : 1);
     // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
     // would slip past saveShapeOk's array-type check, land in the Set, then throw
     // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it
@@ -265,7 +302,21 @@
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    state.revealAll = !!data.revealAll;
+    state.victoryTick = (typeof data.victoryTick === "number") ? data.victoryTick : null;   // DESIGN PASS: absent on old saves
+    // v0.52.1: a save from before victorySeen that is already won showed its card on
+    // every Continue — treat it as seen (the win still shows in the goal card/tracker).
+    state.victorySeen = (typeof data.victorySeen === "boolean") ? data.victorySeen : state.victory;
+    // DESIGN PASS (#1/#11): restore the saved lifetime stats (recap + missions) and this
+    // game's mission progress (incl. the per-game "hidden"). They were saved but never
+    // loaded, so every Continue restarted m1 and zeroed the lifetime tariff. Assigned
+    // BEFORE StartScreen.continueSave → Tutorial.resume(state); a save with no missions
+    // keeps state.missions null so ensureProg falls back to the localStorage mirror.
+    state.stats = (data.stats && typeof data.stats === "object") ? data.stats : null;
+    if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // migrate/seed missing counters
+    state.missions = (data.missions && typeof data.missions === "object") ? data.missions : null;
+    // DESIGN PASS: full-map reveal is a ?debug=1-only cheat now — a save that had it
+    // toggled on (the button used to be in every player's menu) loads with fog back.
+    state.revealAll = !!data.revealAll && DEBUG_UI;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
     state.gameSpeed = (typeof data.gameSpeed === "number" && data.gameSpeed > 0) ? data.gameSpeed : 1;
@@ -301,6 +352,10 @@
     // gold_ring, furniture→chairs, cloth→clothes) + weaver→tailoring across the
     // loaded save. Pure helper (PURE_CORE) so migration tests can drive it. ===
     Sim.CC_migrateGoods(state);
+    // DESIGN PASS: rebuild the city cards against the freshly loaded town objects.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     terrainDirty = true;
     return true;
     } catch (err) {

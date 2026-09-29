@@ -1,10 +1,19 @@
+  // DESIGN PASS: debug-only UI (map regenerate/seed row, fog reveal, fps + sound log in
+  // the ☰ menu) renders only with ?debug=1 — a tiny <head> script tags <html class="debug">
+  // and CSS hides `.debug-only` otherwise. One source of truth for the shell modules.
+  const DEBUG_UI = document.documentElement.classList.contains("debug");
+
   // In-DOM confirm dialog. Mirrors the research-editor's sandbox-safe uiConfirm
   // (pass-1 commit 1fa3698): native confirm()/alert() are BLOCKED inside the
   // sandboxed Artifact iframe (no allow-modals), so a real dialog element is the
   // only reliable gate. Non-blocking — runs `onConfirm` only when the user
   // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
   // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
-  function uiConfirm(message, onConfirm) {
+  // DESIGN PASS: optional opts {okLabel, danger:false, checkbox:"label"} — the
+  // checkbox state is passed to onConfirm(checked) (used by the missions Hide).
+  function uiConfirm(message, onConfirm, opts) {
+    if (typeof opts === "string") opts = { okLabel: opts };   // lane-c callers pass okLabel directly
+    opts = opts || {};
     const prev = document.getElementById("uiConfirm");
     if (prev) prev.remove();
     const overlay = document.createElement("div");
@@ -21,7 +30,15 @@
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
     const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
-    const confirmNow = () => { close(); onConfirm(); };
+    let cb = null, cbRow = null;
+    if (opts.checkbox) {
+      const lbl = cbRow = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;gap:6px;margin:-4px 0 14px;opacity:.85;cursor:pointer;";
+      cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "uiConfirmCheck";
+      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(opts.checkbox));
+    }
+    const confirmNow = () => { const checked = !!(cb && cb.checked); close(); onConfirm(checked); };
     function onKey(e) {
       if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
       else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
@@ -30,10 +47,13 @@
     cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
     cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     const ok = document.createElement("button");
-    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
-    ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
+    ok.id = "uiConfirmOk"; ok.textContent = opts.okLabel || "Demolish"; ok.onclick = confirmNow;
+    ok.style.cssText = (opts.danger === false ? "background:#c98a3c;color:#201607;" : "background:#a33;color:#fff;") +
+      "border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     row.appendChild(cancel); row.appendChild(ok);
-    box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
+    box.appendChild(msg);
+    if (cbRow) box.appendChild(cbRow);
+    box.appendChild(row); overlay.appendChild(box);
     overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
     document.body.appendChild(overlay);
     document.addEventListener("keydown", onKey, true);
@@ -116,9 +136,18 @@
   }
   // Destroy a whole city: all its buildings + the centre, refunding the founding gold
   // plus every building's gold. Resources/population are lost.
+  // DESIGN PASS: refund = max(0, foundPaid + building gold − gold the Crown has Taken)
+  // (Crown.cityRefund) — found → Take → Destroy used to mint +1000 per cycle. The
+  // city's remaining purse is never refunded (that would be a purse → treasury pipe).
+  // Confirm-dialog copy: the exact refund, and why it is short when the Crown has Taken.
+  function cityRefundNote(town) {
+    const refund = Math.round(Crown.cityRefund(town));
+    const taken = Math.max(0, Math.round(town.takenGold || 0));
+    return " Refund: " + refund.toLocaleString() + "🪙 (gold spent on the city + buildings" +
+      (taken > 0 ? ", minus " + taken.toLocaleString() + "🪙 the Crown took" : "") + "); resources are not refunded.";
+  }
   function destroyCityRefund(town) {
-    let refund = (CONFIG.town && CONFIG.town.foundCost) || 0;
-    for (const b of (Array.isArray(town.buildings) ? town.buildings : [])) refund += buildingGold(b);
+    const refund = Crown.cityRefund(town);
     const idx = state.towns.indexOf(town);
     if (idx < 0) return;
     state.towns.splice(idx, 1);
@@ -142,8 +171,12 @@
       }
     } else if (state.mode === "town") {
       if (canPlace(q, r)) {
+        const paid = Buildings.foundCost();
         Buildings.chargeFounding(state);   // EC-A: treasury pays 1000 to found the city
-        state.towns.push(makeTown(q, r));   // TOWN-UI: full Town entity (was { q, r })
+        const town = makeTown(q, r);        // TOWN-UI: full Town entity (was { q, r })
+        state.towns.push(town);
+        Crown.stampFounding(state, town, paid);   // DESIGN PASS: foundedTick/foundPaid for the Take lock + destroy refund
+        if (typeof Sim !== "undefined" && Sim.statFounded) Sim.statFounded(state);   // onboarding: cities founded
         // v0.51 (N): NO reveal at placement — a city reveals its neighbours only once
         // it has finished CONSTRUCTION (renderer.revealConstructed), not when founded.
         scheduleSave();
@@ -194,7 +227,7 @@
             || (t.gold || 0) > 0;
           if (developed) {
             // v0.51 §11: refund the gold spent (city + buildings), lose resources.
-            uiConfirm("Demolish this city? Its buildings, population and stock are lost; gold spent is refunded.", () => destroyCityRefund(t));
+            uiConfirm("Demolish this city? Its buildings, population and stock are lost." + cityRefundNote(t), () => destroyCityRefund(t));
           } else {
             state.towns.splice(ti, 1); Pathing.invalidate(); changed = true;
           }
@@ -230,7 +263,7 @@
       const t = (state.towns || []).find(tt => tt.q === q && tt.r === r);
       if (!t) return;
       const nB = (Array.isArray(t.buildings) ? t.buildings.length : 0);
-      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost. Gold spent (city + buildings) is refunded; resources are not.", () => {
+      uiConfirm("Destroy this city? Its " + nB + " building" + (nB === 1 ? "" : "s") + ", population and stock are lost." + cityRefundNote(t), () => {
         destroyCityRefund(t);
       });
     }
@@ -248,6 +281,25 @@
     if (!hex || !isVisible(k)) return false;
     if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return false;
     return !!CONFIG.terrain[hex.terrain].road;
+  }
+  // v0.52.1: WHY a hex can't take a road ("water", "the castle", fog, treasury) — or
+  // null when it can. Shown as a toast when the FIRST click of a route lands there
+  // (it used to do nothing, silently) and as the build-bar hover hint.
+  function roadBlockReason(q, r) {
+    const k = HexMath.key(q, r);
+    const hex = state.map && state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return "Roads can't start in unexplored land";
+    if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r)
+      return "Roads can't start on the Research Center";
+    if (!CONFIG.terrain[hex.terrain].road) {
+      const c = Buildings.castleHex ? Buildings.castleHex() : { q: 0, r: 0 };
+      const what = (c.q === q && c.r === r) ? "the castle"
+        : (typeof terrainDisplayName === "function" ? terrainDisplayName(hex.terrain) : hex.terrain).toLowerCase();
+      return "Roads can't start here (" + what + ") — pick land; routes bend around water and mountains";
+    }
+    if (!state.roads.has(k) && (state.treasury || 0) < Buildings.roadCost())
+      return "Treasury too low — a road costs " + Buildings.roadCost() + "🪙 per hex";
+    return null;
   }
   function layRoad(q, r) {
     const k = HexMath.key(q, r);
@@ -303,26 +355,72 @@
   }
   function handleRoadClick(q, r, shift) {
     if (!roadAnchor) {
-      if (!roadEligible(q, r)) return;   // A must be a road-eligible hex
+      if (!roadEligible(q, r)) {         // A must be a road-eligible hex — v0.52.1: say why
+        const why = roadBlockReason(q, r);
+        if (why && typeof showToast === "function") showToast("✗ " + why);
+        return;
+      }
       layRoad(q, r);                     // lay the anchor hex itself
       roadAnchor = { q, r };
       Pathing.invalidate();
       if (typeof updateTreasuryHud === "function") updateTreasuryHud();
       SFX.playThrottled("place", 90);
     } else {
-      placeRoadPath(roadAnchor, { q, r });
-      if (shift) roadAnchor = { q, r };          // chain: B is the next A
-      else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+      finishRoadAt(q, r, shift);
     }
+    roadAnchorChanged();
     scheduleSave();
   }
-  function cancelRoadAnchor() { roadAnchor = null; }
+  // Lay A→B and apply the Shift-chain rule (B becomes the next A) or deselect.
+  function finishRoadAt(q, r, shift) {
+    placeRoadPath(roadAnchor, { q, r });
+    if (shift) roadAnchor = { q, r };          // chain: B is the next A
+    else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+  }
+  function cancelRoadAnchor() { if (roadAnchor) { roadAnchor = null; roadAnchorChanged(); } }
+  // DESIGN PASS: the anchor is exposed read-only so the renderer can draw a dashed
+  // A→hover preview and the build bar can switch its hint. The preview route is a
+  // BFS, so it is cached per (anchor, hovered hex, road count) — not re-run per frame.
+  let roadPrevKey = null, roadPrev = null;
+  function roadPreview(q, r) {
+    if (!roadAnchor) return null;
+    const key = roadAnchor.q + "," + roadAnchor.r + ">" + q + "," + r + "#" + state.roads.size;
+    if (key === roadPrevKey) return roadPrev;
+    roadPrevKey = key;
+    let route = roadRouteAB(roadAnchor, { q, r }), straight = false;
+    if (!route) {                         // mirrors placeRoadPath's straight-line fallback
+      straight = true; route = [];
+      const N = HexMath.dist(roadAnchor.q, roadAnchor.r, q, r);
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        route.push(HexMath.hexRound(roadAnchor.q + (q - roadAnchor.q) * t, roadAnchor.r + (r - roadAnchor.r) * t));
+      }
+    }
+    let newHexes = 0;
+    for (const h of route) {
+      const k = HexMath.key(h.q, h.r);
+      if (!state.roads.has(k) && roadEligible(h.q, h.r)) newHexes++;
+    }
+    roadPrev = { route, straight, newHexes, cost: newHexes * Buildings.roadCost() };
+    return roadPrev;
+  }
+  function roadAnchorChanged() {
+    const api = window.InputRoad;
+    if (api && typeof api.onChange === "function") api.onChange();
+  }
+  window.InputRoad = {
+    get anchor() { return roadAnchor; },
+    preview: roadPreview,
+    blockReason: roadBlockReason,   // v0.52.1: the build bar's "✗ Roads can't start here" hover hint
+    onChange: null,            // set by the build bar (town-ui.js) to refresh its hint
+  };
 
   // ---------------------------------------------------------------
   // Input: pan (drag / WASD), zoom (wheel), build (click / paint)
   // ---------------------------------------------------------------
   const keys = new Set();
   let dragging = false, dragPanned = false, panButton = false;
+  let roadGesture = null;   // DESIGN PASS: {x,y} of a road-mode left press (drag-to-B)
   let last = { x: 0, y: 0 };
   let lastPaintKey = null;
 
@@ -426,10 +524,14 @@
         return;
       }
     }
+    roadGesture = null;
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      if (state.mode === "road") {
+        handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+        roadGesture = { x: e.clientX, y: e.clientY };   // DESIGN PASS: a drag may end at B on mouseup
+      }
       else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
@@ -459,7 +561,21 @@
     }
   });
 
-  window.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", (e) => {
+    // DESIGN PASS: press on A, drag, release on B lays A→B (a drag used to lay only
+    // the anchor hex and leave it armed for a surprise route on the next click).
+    // Thresholds (CONFIG.town.roadDrag*) keep click jitter from completing a route.
+    const g = roadGesture; roadGesture = null;
+    if (g && roadAnchor && state.mode === "road" && e.button === 0 && e.target === canvas) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      const T = CONFIG.town || {};
+      const steps = HexMath.dist(roadAnchor.q, roadAnchor.r, h.q, h.r);
+      const px = Math.abs(e.clientX - g.x) + Math.abs(e.clientY - g.y);
+      if (steps >= (T.roadDragMinSteps || 1) && px >= (T.roadDragMinPx || 8)) {
+        finishRoadAt(h.q, h.r, e.shiftKey);
+        roadAnchorChanged();
+      }
+    }
     dragging = false; panButton = false; lastPaintKey = null;
     canvas.classList.remove("panning");
     scheduleSave();
@@ -534,7 +650,7 @@
   const toolButtons = Array.from(document.querySelectorAll("button.tool"));
   function setMode(mode) {
     state.mode = mode;
-    if (mode !== "road") roadAnchor = null;   // N: leaving road mode drops a pending A→B anchor
+    if (mode !== "road" && roadAnchor) { roadAnchor = null; roadAnchorChanged(); }   // N: leaving road mode drops a pending A→B anchor
     toolButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
     canvas.classList.toggle("building", mode !== "pan");
   }
@@ -556,17 +672,28 @@
   }
   speedButtons.forEach(b => b.addEventListener("click", () => setSpeed(b.dataset.speed)));
 
-  document.getElementById("btnGen").addEventListener("click", () => {
-    newGame(document.getElementById("seed").value.trim() || randomSeed(), state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
+  // DESIGN PASS: Generate / 🎲 used to wipe the kingdom (and its autosave) in one click.
+  // They now exist only in ?debug=1 menus and always go through the confirm overlay;
+  // every handler is null-guarded so boot never depends on the debug markup.
+  const ABANDON_MSG = "Abandon this kingdom? Your save will be overwritten.";
+  function regenerate(seed) {
+    uiConfirm(ABANDON_MSG, () => {
+      const seedEl = document.getElementById("seed");
+      if (seedEl) seedEl.value = seed;
+      newGame(seed, state.mapPreset);  // === TV2: keep preset ===
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh(state);  // P5D-C: fresh game → coach
+    }, "Abandon");
+  }
+  const btnGen = document.getElementById("btnGen");
+  if (btnGen) btnGen.addEventListener("click", () => {
+    const seedEl = document.getElementById("seed");
+    regenerate((seedEl && seedEl.value.trim()) || randomSeed());
   });
-  document.getElementById("btnRandom").addEventListener("click", () => {
-    const s = randomSeed();
-    document.getElementById("seed").value = s;
-    newGame(s, state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
-  });
-  document.getElementById("btnReveal").addEventListener("click", () => {
+  const btnRandom = document.getElementById("btnRandom");
+  if (btnRandom) btnRandom.addEventListener("click", () => regenerate(randomSeed()));
+  const btnReveal = document.getElementById("btnReveal");
+  if (btnReveal) btnReveal.addEventListener("click", () => {
+    if (!DEBUG_UI) return;
     state.revealAll = !state.revealAll;
     terrainDirty = true;
   });

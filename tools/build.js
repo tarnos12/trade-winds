@@ -74,6 +74,7 @@ const MANIFEST = [
   { name: "ledger",           file: "ledger.js" },            // PP-A city gold ledger (Ledger)
   { name: "castle-market",    file: "castle-market.js" },     // castle material market (CastleMarket)
   { name: "provisions",       file: "provisions.js" },        // castle provisioner: raw goods → provisions
+  { name: "crown",            file: "crown.js" },             // DESIGN PASS: pure Give/Take transfers + destroy-city refund
   // --- Impure browser shell (Phase 2). These live inside the single browser IIFE
   //     below PURE_CORE_END; the IIFE scaffold + `state` + boot tail stay INLINE.
   //     Not covered by the pure-core suites — verified by headless browser boot.

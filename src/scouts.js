@@ -570,7 +570,7 @@
           b.className = "scout-ico";
           b.dataset.id = String(s.id);
           b.style.background = cfg.colors[s.color];
-          b.title = cfg.colorNames[s.color] + " Scout";
+          b.title = cfg.colorNames[s.color] + " Scout — click, then Explore to lift fog";   // DESIGN PASS: say what the chip does
           b.textContent = cfg.colorNames[s.color].charAt(0);
           b.addEventListener("click", () => select(s.id));
           bar.appendChild(b);

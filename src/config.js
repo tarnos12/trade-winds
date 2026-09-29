@@ -1,6 +1,6 @@
 // Single source of truth for all balance/layout constants (GDD §9.1).
 const CONFIG = {
-  saveVersion: 2,
+  saveVersion: 3,   // DESIGN PASS: v3 = castleTrade split into { buy, sell, limit } (save.js migrate)
   // Biome mix is quantile-driven (see MapGen.generate): these are *target
   // fractions* of the board, so the map stays varied for any seed.
   map: {
@@ -48,6 +48,17 @@ const CONFIG = {
     // toward the sea / a lake / the board edge. COUNT keyed by a preset's `rivers`
     // LEVEL string; WIDTH varies within this range along each course.
     rivers: { none: 0, few: 1, normal: 3, many: 5 }, riverWidth: [1, 5],
+    // DESIGN PASS: MAP GENERATOR VERSION. Saves regenerate terrain from the seed,
+    // so any change to generation is gated on the version the game was CREATED
+    // with (state.mapgenVersion; saves without it load as 1 = pre-stone-guarantee).
+    //   1: original TV2 generator.  2: + stone guarantee (MapGen.repairStone).
+    genVersion: 2,
+    // DESIGN PASS: STONE GUARANTEE (genVersion >= 2). Research runs on stone, so a
+    // quarry-able stone cluster must sit inside the opening reveal: >= 1
+    // stone_deposit at hex-dist [minDist, maxDist] of the castle with >=
+    // minBuildableNbrs buildable, non-snow, castle-clear neighbours (a city site).
+    // maxDist is also capped at (start reveal - 1) so Small maps keep it in view.
+    stoneGuarantee: { minDist: 3, maxDist: 6, minBuildableNbrs: 2, tiles: 2 },
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },
@@ -221,6 +232,19 @@ const CONFIG = {
   // with everything delivered instantly, a building still takes `buildTime` seconds.
   // buildTime = baseSec[tier] + (upgradeLevel-1)×perUpgradeSec, capped at maxSec.
   build: { baseSec: { peasant: 6, worker: 10, burgher: 14, aristocrat: 18 }, defaultSec: 8, perUpgradeSec: 2, maxSec: 20 },
+  // DESIGN PASS: shortage + idle alerts (Sim.needCoverage / Sim.shortageAlerts feed the
+  // map icons and the Event Log). Cover = (warehouse + home buffers) / per-minute use.
+  // Raise/clear use hysteresis so the 8–12 s production batches can't make it flicker.
+  alerts: {
+    raiseCoverMin: 2,      // a present tier's BASIC need alerts under this many game-minutes of cover (no carts inbound)…
+    clearCoverMin: 4,      // …and the alert clears only once cover is back above this
+    satOk: 0.9,            // a STAFFED local producer holds the early alert back until satEMA dips below this
+    idleAfterSec: 30,      // Event Log: a producer with 0 workers for this many game-seconds is reported…
+    idleRepeatSec: 300,    // …at most once per building per this many game-seconds (5 game-min)
+    idleGraceSec: 60,      // v0.52.1: …and never while its tier still has free homes, nor this soon after the city completes
+    dreamMinAgeSec: 150,   // v0.52.1: "We dream of X" waits until the city is this many game-s old…
+    dreamMinPop: 1,        // …and the luxury's tier has MORE than this many residents
+  },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.
   // road      = a road segment may cross this hex (traders/pathing).

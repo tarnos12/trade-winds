@@ -3,10 +3,10 @@
 // Added to the shared CONFIG via a NON-DESTRUCTIVE merge so it composes with
 // the Phase-1 CONFIG and with the other Phase-2 slices (T4 sim, T6 UI).
 Object.assign(CONFIG, {
-  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier; `inputs`
-  // (goodId → qty consumed per unit produced) reference other goods by id.
-  // NB: "beer = grain + water" in the GDD — water is ambient, not a tracked
-  // good, so only grain appears here.
+  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier.
+  // DESIGN PASS #13: the stale per-good `inputs` table (e.g. planks = 2 wood, while the
+  // Sawmill is really 1:1) was deleted — nothing read it. The ONE recipe source is
+  // CONFIG.buildings[].inputs / .output (per-worker-tick rates).
   goods: {
     // --- tier 1 (raw) ---
     wood:   { id: "wood",   tier: 1, basePrice: 5 },
@@ -19,25 +19,25 @@ Object.assign(CONFIG, {
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
     // === CC: content chains v2 — 4-tier needs matrix + aristocrat luxuries. ===
     // --- tier 2 (processed / mined) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
-    planks:      { id: "planks",      tier: 2, basePrice: 14, inputs: { wood: 2 } },              // wood 5×2=10
-    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22, inputs: { wood: 1, iron: 1 } },     // === CC: Forge; migrates old "tools" ===
-    flour:       { id: "flour",       tier: 2, basePrice: 12, inputs: { grain: 2 } },             // grain 4×2=8
-    mead:        { id: "mead",        tier: 2, basePrice: 14, inputs: { grain: 2 } },             // === CC: Brewery; migrates old "beer" ===
-    clothes:     { id: "clothes",     tier: 2, basePrice: 22, inputs: { wool: 2 } },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
-    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28, inputs: { planks: 1, stone: 1 } },  // === CC: StoneTools Maker ===
-    oil:         { id: "oil",         tier: 2, basePrice: 15, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
+    planks:      { id: "planks",      tier: 2, basePrice: 14 },              // wood 5×2=10
+    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22 },     // === CC: Forge; migrates old "tools" ===
+    flour:       { id: "flour",       tier: 2, basePrice: 12 },             // grain 4×2=8
+    mead:        { id: "mead",        tier: 2, basePrice: 14 },             // === CC: Brewery; migrates old "beer" ===
+    clothes:     { id: "clothes",     tier: 2, basePrice: 22 },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
+    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28 },  // === CC: StoneTools Maker ===
+    oil:         { id: "oil",         tier: 2, basePrice: 15 },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
     coal:        { id: "coal",        tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
     gold:        { id: "gold",        tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
-    bricks:      { id: "bricks",      tier: 2, basePrice: 16, inputs: { clay: 2 } },              // === TV2: clay 6×2=12 (Brickworks) ===
+    bricks:      { id: "bricks",      tier: 2, basePrice: 16 },              // === TV2: clay 6×2=12 (Brickworks) ===
     // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
-    bread:          { id: "bread",          tier: 3, basePrice: 30,  inputs: { flour: 2 } },                 // flour 12×2=24
-    pottery:        { id: "pottery",        tier: 3, basePrice: 22,  inputs: { clay: 2 } },                  // === CC: Pottery (clay 6×2=12) ===
-    lamp:           { id: "lamp",           tier: 3, basePrice: 40,  inputs: { oil: 2 } },                   // === CC: Lamp Maker (oil 18×2=36) ===
-    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70,  inputs: { coal: 2, iron: 2 } },         // === CC: Armory (coal10×2+iron8×2=36) ===
-    chairs:         { id: "chairs",         tier: 3, basePrice: 64,  inputs: { planks: 2, oil: 1 } },        // === CC: Carpentry; migrates old "furniture" ===
-    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120, inputs: { gold: 1, iron_tool: 1 } },    // === CC: Goldsmith; migrates old "jewelry" ===
-    brandy:         { id: "brandy",         tier: 3, basePrice: 72,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
-    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
+    bread:          { id: "bread",          tier: 3, basePrice: 30 },                 // flour 12×2=24
+    pottery:        { id: "pottery",        tier: 3, basePrice: 22 },                  // === CC: Pottery (clay 6×2=12) ===
+    lamp:           { id: "lamp",           tier: 3, basePrice: 40 },                   // === CC: Lamp Maker (oil 18×2=36) ===
+    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70 },         // === CC: Armory (coal10×2+iron8×2=36) ===
+    chairs:         { id: "chairs",         tier: 3, basePrice: 64 },        // === CC: Carpentry; migrates old "furniture" ===
+    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120 },    // === CC: Goldsmith; migrates old "jewelry" ===
+    brandy:         { id: "brandy",         tier: 3, basePrice: 72 },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
+    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240 }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -305,7 +305,7 @@ Object.assign(CONFIG, {
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
       // v0.51: 10 wood (delivered from the city's stock) + 300 gold (from the treasury
-      // at placement). Upgrades L2–L5 cost materials only (see CONFIG.upgrades.hut).
+      // at placement). Upgrades L2–L5 cost city gold + materials (see CONFIG.upgrades.hut).
       startUnlocked: true,
       cost: { wood: 10, gold: 300 },
     },
@@ -349,24 +349,52 @@ Object.assign(CONFIG, {
     // EV3: per-city storage cap — a city holds at most this many of EACH good.
     // Enforced wherever stock increases (Sim production, trade delivery).
     storageCap: 80,
-    // v0.50: a new city starts with 60 wood + 20 potato — enough to raise its first
+    // v0.50: a new city starts with 60 wood + 40 potato — enough to raise its first
     // buildings (hut/lumberjack/potato farm 10 each, sawmill 20; delivered from this
     // stock as they construct) and feed early residents until the potato farm runs.
-    startStock: { wood: 60, potato: 20 },
+    // DESIGN PASS: potato 20 → 40. Onboarding m1 now builds a Timber town with NO farm;
+    // 40 potato feeds its 4 peasants (~5.2/min) for ~7.7 game-min until the m2 Farm
+    // town exports (test/opening.test.js).
+    startStock: { wood: 60, potato: 40 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
+    // DESIGN PASS: a new city's starting purse (its trade budget) — was a literal in
+    // makeTown/ensureTown. Keep startGold <= foundCost: the Take→Destroy refund rule
+    // (Crown.cityRefund) only guarantees found→take→destroy nets ≤ 0 while it holds.
+    startGold: 1000,
+    // DESIGN PASS: Crown Give/Take (pure Crown module). Take is refused until the city
+    // is BUILT, has takeMinPop residents and is takeMinAgeTicks old (600 = 5 game-min),
+    // so a fresh city's founding purse can't be skimmed to make founding free.
+    transfer: {
+      amount: 1000,             // gold moved per Give / Take
+      cooldownTicks: 240,       // per-city cooldown after either (~2 game-min)
+      happyTicks: 120,          // how long the happiness nudge lasts (~1 game-min)
+      giveHappy: 10,            // Give: +happiness while it lasts
+      takeHappy: -30,           // Take: −happiness while it lasts
+      takeMinPop: 2,            // residents needed before a city can be taxed
+      takeMinAgeTicks: 600,     // ticks after founding before Take unlocks (5 game-min)
+    },
     buildSec: 10,               // v0.51: a newly-founded city is UNDER CONSTRUCTION this long before it starts working
     baseCityCap: 4,             // cities you may found before research; +cityCapBonus
                                 // from research raises it (Township Grants +3 → 7,
                                 // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
     roadCost: 5,                // treasury gold per road hex
+    // DESIGN PASS: a road-tool press-drag-release ends the route on the release hex
+    // only if it is at least roadDragMinSteps hexes from the anchor AND the pointer
+    // travelled roadDragMinPx screen px — click jitter across a hex edge never lays a route.
+    roadDragMinSteps: 1,
+    roadDragMinPx: 8,
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
     // CB-A: construction logistics — a town moves at most this many units of
     // construction materials (from its own stock into buildings under
     // construction) per economy tick, shared across all its unbuilt buildings.
     deliveryRate: 5,
+    // v0.52.1: construction/upgrade delivery leaves this many game-minutes of the present
+    // tiers' BASIC use in the warehouse (Sim.basicReserve) — a Hut L2 no longer eats the
+    // peasants' last wood. A bootstrapping producer (unbuilt Lumberjack) is exempt. 0 = off.
+    basicReserveMin: 1,
     // === PP-A === fleet sizing by town level (index = level; 0 unused). External
     // BUYERS a city may keep on the road at once = level*2 (L1 2 … L4 8). Internal
     // TRANSPORTERS multiply the construction/upgrade delivery budget (deliveryRate
@@ -389,9 +417,32 @@ Object.assign(CONFIG, {
 // bufferTarget lives under econ (existing key) — merge in place so we don't
 // clobber baseTickMs or anything a sibling slice added.
 Object.assign(CONFIG.econ, {
-  bufferTarget: 2.0,   // "comfortable" stock = bufferTarget × demand (GDD §6.1)
+  bufferTarget: 2.0,   // trade/castle buy target = bufferTarget × per-tick demand (NOT the price model any more)
   priceSmoothing: 0.10, // lerp factor toward the target price each tick
-  minDemand: 0.5,      // demand floor so priceFor never divides by ~0
+  minDemand: 0.5,      // legacy per-tick floor (kept for old readers; priceFor uses minDemandPerMin)
+  // DESIGN PASS #6: unit-correct price model. Prices compare stock against MINUTES of
+  // CONSUMPTION (residents + processor inputs; construction bills / research share are
+  // excluded — they are a lump, not a rate): ratio = stock / (max(minDemandPerMin,
+  // consDemand×ticksPerMin) × coverMin); target = base × clamp(priceCeilMult − ratio,
+  // priceFloorMult, priceCeilMult). ratio 0.9 ⇒ base; ≥1.5 ⇒ 0.4×; empty shelf ⇒ 1.9×.
+  ticksPerMin: 120,     // 2 ticks = 1 game-second
+  minDemandPerMin: 0.5, // demand floor (units/min) so a tiny demand can't blow the ratio up
+  coverMin: 2,          // a "comfortable" stock = this many minutes of consumption
+  priceCeilMult: 1.9,   // price at an empty shelf (and the clamp ceiling), × basePrice
+  priceFloorMult: 0.4,  // surplus floor, × basePrice
+  // DESIGN PASS #3 (Sim.staffTown): a producer of its own staffing tier's BASIC need
+  // (Potato Farm, Lumberjack, Coal Mine) is staffed ahead of ☆ while the city holds less
+  // than this many game-seconds of that good (0 = off). Blocked producers (store full /
+  // upgrading) are staffed LAST when staffBlockedLast is on.
+  selfFeedCoverSec: 120,
+  selfFeedReleaseMult: 2,   // …and stays staffed first until the cover is back to 2× that (anti-flicker)
+  staffBlockedLast: true,
+  // DESIGN PASS #13: rate readouts (warehouse Rate column, Kingdom resource Net rate)
+  // average the net stock change over this many ticks (120 = 60 game-s) and show
+  // "≈0" when |rate| is under the deadband (units/min) — integer batches made the old
+  // 4–10 s windows swing ±90/min around a true +2.7.
+  rateWindowTicks: 120,
+  rateDeadbandPerMin: 0.5,
 });
 
 // Sim — pure, deterministic economy namespace. THIS SLICE OWNS ONLY priceFor;
@@ -405,31 +456,55 @@ var Sim = (typeof Sim !== "undefined" && Sim) || {};
 // terrains are gone. Forest/fish extractors are deliberately excluded. ===
 const MINE_TERRAINS = { stone_deposit: 1, iron_deposit: 1, gold_deposit: 1, coal_deposit: 1, clay_deposit: 1 };
 
-// Local price of one good in one town from stock vs demand (GDD §6.1):
-//   ratio = stock / (demand * bufferTarget)
-//   target = clamp(basePrice * (1.6 - 0.8*ratio), basePrice*0.4, basePrice*3.0)
-// then lerp the town's stored price 10%/tick toward the target (anti-jitter).
-// Demand is read from town.demand[goodId] when the sim provides it (T4), else a
-// small floor keeps this well-defined. First read (no stored price) snaps to the
-// target; later reads move gradually. Mutates town.prices[goodId] and returns it.
+// DESIGN PASS #6 — consumption demand per tick for one good: town.consDemand (residents +
+// processor inputs, published by Sim.tick). Falls back to town.demand for a town that has
+// not been ticked yet (fresh makeTown, hand-built test towns, pre-#6 saves).
+Sim.consDemandOf = function (town, goodId) {
+  const cd = town && (town.consDemand || town.demand);
+  return (cd && cd[goodId]) || 0;
+};
+
+// Shared cover ratio (GDD §7): warehouse stock vs coverMin minutes of consumption.
+// 1 = exactly a comfortable stock; <1 short; >1 surplus. The one copy of this maths —
+// the price engine, the kingdom surplus/shortage columns and the "wanted" chatter row
+// all read it, so what the player sees agrees with what the price does.
+Sim.coverRatio = function (town, goodId) {
+  const E = CONFIG.econ;
+  const stock = (town && town.stock && town.stock[goodId]) || 0;
+  const perMin = Sim.consDemandOf(town, goodId) * E.ticksPerMin;
+  return stock / (Math.max(E.minDemandPerMin, perMin) * E.coverMin);
+};
+
+// True when a good has a local market at all (something stocked or consumed here).
+// With neither, priceFor returns basePrice and the UI shows "—".
+Sim.hasMarket = function (town, goodId) {
+  return ((town && town.stock && town.stock[goodId]) || 0) > 0 || Sim.consDemandOf(town, goodId) > 0;
+};
+
+// Local price of one good in one town (GDD §7, DESIGN PASS #6 unit-correct model):
+//   ratio  = Sim.coverRatio(town, good)
+//   target = basePrice × clamp(priceCeilMult − ratio, priceFloorMult, priceCeilMult)
+// then lerp the town's stored price priceSmoothing/tick toward the target (anti-jitter).
+// No stock AND no consumption ⇒ target = basePrice (no market). First read (no stored
+// price) snaps to the target. Mutates town.prices[goodId] and returns it.
 Sim.priceFor = function (town, goodId) {
   const good = CONFIG.goods[goodId];
   if (!good) return 0;
   const base = good.basePrice;
-  const buffer = CONFIG.econ.bufferTarget;
+  const E = CONFIG.econ;
 
-  const stock = (town.stock && town.stock[goodId]) || 0;
-  const rawDemand = (town.demand && town.demand[goodId]);
-  const demand = Math.max(CONFIG.econ.minDemand, rawDemand || 0);
-
-  const ratio = stock / (demand * buffer);
-  const target = Math.min(base * 3.0, Math.max(base * 0.4, base * (1.6 - 0.8 * ratio)));
+  let target;
+  if (!Sim.hasMarket(town, goodId)) target = base;   // DESIGN PASS #6: no market ⇒ base, shown as "—"
+  else {
+    const ratio = Sim.coverRatio(town, goodId);
+    target = base * Math.min(E.priceCeilMult, Math.max(E.priceFloorMult, E.priceCeilMult - ratio));
+  }
 
   if (!town.prices) town.prices = {};
   const prev = town.prices[goodId];
   const next = (prev === undefined || prev === null)
     ? target                                        // first read: snap to target
-    : prev + (target - prev) * CONFIG.econ.priceSmoothing; // else: 10%/tick lerp
+    : prev + (target - prev) * E.priceSmoothing;    // else: 10%/tick lerp
   town.prices[goodId] = next;
   return next;
 };

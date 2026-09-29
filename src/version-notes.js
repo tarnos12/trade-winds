@@ -1,6 +1,43 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.51.30";
+  const GAME_VERSION = "0.52.1";
   const PATCH_NOTES = [
+    { v: "0.52.1", notes: [
+      "The victory screen shows once: after Keep ruling it no longer reopens every time you Continue a won realm, and it never pops up (with its fanfare) behind the title screen.",
+      "Fewer false alarms while a new city fills up: no \"idle — build Huts\" log entries while peasants are still moving into free homes, and no \"We dream of 🐟 Fish\" from an empty, just-founded city.",
+      "Building panels agree with themselves while workers arrive: whole workers only, \"0/min\" until someone actually works there, and the batch preview says \"at full crew\" when the crew is short.",
+      "Clearer refusals: \"Stock 20 🪵 first (have 3)\" on a Lumberjack upgrade, a toast when a road can't start on water or mountains, and the city-site hint lists the resource tiles you can use (hexes beside the castle are reserved). Mission tips now suggest Sturdy Hut or Water Wheel as a first upgrade and founding cities away from the castle.",
+      "Upgrades and construction no longer take your people's last wood or food: about a minute of their basic needs stays in the warehouse (a city's first Lumberjack still gets every log it needs).",
+    ] },
+    { v: "0.52.0", notes: [
+      "Continue now brings back your lifetime tariff, goods traded and mission progress, city cards always act on the right city, and the map-wiping Generate / 🎲 buttons are gone from the menu. Opening the Custom map preview can no longer overwrite your saved kingdom.",
+      "No more stuck starts: a building can't begin an upgrade that eats the very goods it makes (\"Stock 20 Wood first\"), a new city finishes its Lumberjack before spending wood elsewhere, upgrading buildings say they're paused, and ✖ Cancel upgrade refunds what was paid.",
+      "Smarter workers: when a city runs low on food or firewood its farm or lumberjack gets staffed first, and a building with a full store lends its workers to the others. Idle buildings tell you exactly why (usually: build a Hut).",
+      "The first missions now teach trading from minute one: a Timber town and a Farm town that sell to each other. The mission panel also shows what's coming next, and new cities start with a bit more food.",
+      "Take 1k now needs a city with people living in it, so founding, taking and demolishing a city no longer prints gold. Give and Take show a floating ± amount over the city and your gold, and the city header shows the mood effect and how long it lasts.",
+      "Prices now really differ between cities: a wood town pays well for potatoes while the farm town sells them cheap, so trade pays more and the King's tariff grows.",
+      "Long trips take longer: traders need more time on long routes, so building roads and placing cities close together really pays off.",
+      "Cities only complain about things their own people need, the warning icon shows the missing good, and the Event Log now tells you about new cities, finished missions and research, shortages and idle buildings — click an entry to jump to that city.",
+      "Early research now asks for spare potatoes instead of stone, the three Kingdom research roots can start with the goods your first cities make, and a tooltip names the research you need first when a material can't be made yet.",
+      "Every new map has usable stone near the castle. If you can't place a Quarry, the hint tells you to send your Scout or to found a city next to the stone.",
+      "Winning is honest now: every Aristocrat luxury has to be supplied (Give no longer wins it for you). The Kingdom Overview shows your goal and the tier ladder, the victory screen shows your stats and best time, and missions can be hidden or restarted from ☰ → 🎯 Missions.",
+      "Castle trading is two choices per good, \"King buys\" and \"King sells\". The Provisioner only buys what it uses, so the castle no longer undercuts your cities' potato trade, and it never sells goods your research still needs.",
+      "Building panels show real numbers: output per minute, what each input uses per minute, and a progress bar that turns amber with a reason (📦 store full, ⛔ no input, ⬆ upgrading, 👷 no workers) whenever production stops.",
+      "The Road tool works as described: click a start hex, then an end hex (or drag), with a dashed preview showing how many hexes and how much gold. Plus lots of small text fixes: prices on buttons, \"City #\" everywhere, and the city-card happiness bar fills properly.",
+    ] },
+    { v: "0.51.32", notes: [
+      "The King's tariff is now charged on each good's official value (the higher of its base price or the sale price). Cheap surplus goods used to earn almost nothing — the tariff is roughly 3× bigger for the same trade.",
+      "Your gold chip shows your tariff income (👑 +g/min), and every city's panel shows how much tariff it earns the King — a city that makes everything it needs exports nothing and earns you nothing.",
+      "Buildings short of workers show a 👷 badge on the map (red 0 = idle, amber = running short).",
+      "Research that no city can supply yet is marked ⚠ in the tree before you start it, and its tooltip names the building you need. Mission 3 now points you at Quarry first (most research needs stone).",
+      "Mission goals retuned for the new tariff: Trade Routes 150, The Good Life 1000; new tips on specialising cities, Take 1k and worker shortages.",
+    ] },
+    { v: "0.51.31", notes: [
+      "New opening missions that teach the real loop: found a city → a second city and your first tariff → Research Center and first research → sawmill and an upgrade → trade routes → the King's works → the good life. Each mission now has a 💡 tip, and progress shows whole numbers.",
+      "The 🔬 button shows research at a glance: progress %, ⏳ waiting for materials, ⚠ stuck (no city makes a needed material — the tree says which building to add), or 💤 when the Research Center is idle.",
+      "The research tree opens with Kingdom research visible beside the peasant nodes (it used to be off-screen at the top).",
+      "An idle building now says why (no free peasants → build Huts or turn on Priority) instead of asking you to click the worker slots, which closes them.",
+      "Give/Take 1k explain the happiness effect; the mission panel slides left when a city or building panel is open; shorter tile tooltips; removed the unused Bridge button.",
+    ] },
     { v: "0.51.30", notes: [
       "Cleaner screen: the top-right now holds only the game controls (clock, speed, ☰ menu), and every button that opens a panel sits together in the top-left next to your gold — research, castle, kingdom overview and your scouts. Patch notes moved into the ☰ menu.",
       "The build bar at the bottom is just its category buttons until you start placing something; the hint and Cancel button appear only while you're placing, or to tell you why a spot is blocked.",
