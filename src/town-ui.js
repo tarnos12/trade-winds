@@ -460,7 +460,11 @@
   function ppWhRates(t) {
     const now = state.tick || 0;
     const win = (CONFIG.econ && CONFIG.econ.rateWindowTicks) || 120;
-    if (!ppWhHist || ppWhHist.townId !== t.id || (ppWhHist.samples.length && now < ppWhHist.samples[ppWhHist.samples.length - 1].tick))
+    // Reset on a city switch, a load (tick went back), or a stale ring (the tab was
+    // closed for over a window — the old samples would pass a long average off as
+    // "the last minute").
+    const lastS = ppWhHist && ppWhHist.samples.length ? ppWhHist.samples[ppWhHist.samples.length - 1] : null;
+    if (!ppWhHist || ppWhHist.townId !== t.id || (lastS && (now < lastS.tick || now - lastS.tick > win)))
       ppWhHist = { townId: t.id, samples: [] };
     const S = ppWhHist.samples;
     const cur = {};
@@ -1465,7 +1469,7 @@
   const STAFF_HOME = { peasant: ["peasants", "Hut"], worker: ["workers", "Cottage"], burgher: ["citizens", "Manor"] };
   function bpIdleReason(b, def, town) {
     if (b && b.built === false) return "Under construction.";
-    if (b && b.blockedReason === "upgrading") return "Upgrading — its workers help elsewhere until the upgrade is done.";
+    if (b && (b.blockedReason === "upgrading" || b.pendingUpgrade)) return "Upgrading — its workers help elsewhere until the upgrade is done.";
     const slots = (def && def.workerSlots) || 0;
     if (slots > 0 && ((b && b.closedSlots) || 0) >= slots) return "Idle — all worker slots are closed. Click a slot below to reopen it.";
     if (b && b.blockedReason === "full") return "Idle — store full. Its workers help other buildings meanwhile.";

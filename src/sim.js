@@ -1360,7 +1360,7 @@ Sim.houseIncome = function (town, building) {
 //   noWorkers      — nobody staffed
 //   noInputs       — a processor with < 1 whole unit of an input in its buffer + warehouse
 //   working
-// Staffing's "full" flag (b.blockedReason, which pulls the crew off) also reads as full.
+// Staffing's "full" flag (b.blockedReason) also reads as full while it has pulled the crew off.
 // When not working the DISPLAYED prog freezes at its last working value (a UI memo in a
 // WeakMap — _prodTimer is never touched, so batch cadence and determinism are unchanged).
 // The interval honours type.cycleSec (same rule as Sim.tick's intervalTicksFor).
@@ -1372,7 +1372,10 @@ Sim.buildingStatus = function (town, b) {
   const g = def.output.goodId;
   const storeCap = def.storeCap || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
   const buffered = (b._prodAcc || 0) + ((b.store && b.store[g]) || 0);
-  if (buffered >= storeCap - 1e-9 || b.blockedReason === "full") {
+  // Staffing's "full" flag holds (hysteresis) while porters drain the store; it only
+  // reads as full while the crew is actually OFF the building — a staffed building
+  // below storeCap passes Sim.tick's stall gate and really is producing (review fix).
+  if (buffered >= storeCap - 1e-9 || (b.blockedReason === "full" && !((b.workers || 0) > 0))) {
     const cap = CONFIG.town && CONFIG.town.storageCap;
     const whStock = (town && town.stock && town.stock[g]) || 0;
     return (cap && whStock >= cap) ? "warehouseFull" : "awaitingPorter";

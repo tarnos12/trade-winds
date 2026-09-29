@@ -52,6 +52,9 @@ function mkTown(types) {
   ok("full store AND warehouse at storageCap → 'warehouseFull'", Sim.buildingStatus(t, lj) === "warehouseFull");
   lj.store = { wood: 5 }; lj.blockedReason = "full"; lj.workers = 0;
   ok("staffing's full flag (crew pulled) still reads as full, not noWorkers", Sim.buildingStatus(t, lj) === "warehouseFull");
+  lj.workers = 2;
+  ok("  …but a STAFFED building under storeCap with the flag still set is working (it produces)", Sim.buildingStatus(t, lj) === "working");
+  lj.workers = 0;
   lj.blockedReason = null;
   ok("no crew → 'noWorkers'", Sim.buildingStatus(t, lj) === "noWorkers");
   lj.pendingUpgrade = { toLevel: 2 };
@@ -130,7 +133,7 @@ function mkTown(types) {
   const t = mkTown(["lumberjack", "potato_farm", "hut", "hut"]);
   const st = { towns: [t], tick: 0 };
   const lj = t.buildings[0];
-  let whFull = 0, porterMoved = 0, greenButStuck = 0;
+  let whFull = 0, porterMoved = 0, greenButStuck = 0, fullButProducing = 0;
   for (let k = 0; k < 20 * PM; k++) {
     const s = Sim.buildingStatus(t, lj);
     const store0 = (lj.store && lj.store.wood) || 0, acc0 = lj._prodAcc || 0;
@@ -141,10 +144,15 @@ function mkTown(types) {
     // "working" must mean the buffer actually grew (or a batch released) — the old bar
     // stayed green on 79% of this Lumberjack's staffed ticks while nothing was made.
     if (s === "working" && (lj.workers || 0) > 0 && !((lj._prodAcc || 0) + store1 > acc0 + store0 - 1e-9) && store1 >= store0) greenButStuck++;
+    // REVIEW FIX: staffing's "full" hysteresis flag outlives the full store; a staffed
+    // Lumberjack below storeCap IS producing, so it must not read as a full-store stall
+    // (was ~26% of its ticks: amber bar, "0/min", "Paused — store full").
+    if ((s === "warehouseFull" || s === "awaitingPorter") && (lj._prodAcc || 0) > acc0 + 1e-9) fullButProducing++;
   }
   ok("m1 city: the Lumberjack reports warehouseFull at some point (wood at the 80 cap)", whFull > 0, "ticks=" + whFull);
   ok("m1 city: while warehouseFull, no porter could empty the store (the real block)", porterMoved === 0, "moved=" + porterMoved);
   ok("m1 city: 'working' never shown while the buffer is stuck", greenButStuck === 0, "ticks=" + greenButStuck);
+  ok("m1 city: a full-store stall is never shown while the Lumberjack is producing", fullButProducing === 0, "ticks=" + fullButProducing);
 }
 
 // ---------------------------------------------------------------------------
