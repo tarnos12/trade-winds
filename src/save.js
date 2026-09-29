@@ -70,12 +70,22 @@
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
-    document.getElementById("seed").value = seedInput;
+    // DESIGN PASS: a new map starts with fresh lifetime counters + no mission progress —
+    // the boot-time loadGame() now restores the save's stats/missions into `state`, and
+    // New Game must not inherit them (Tutorial.startFresh(state) then seeds missions).
+    state.stats = undefined;
+    Sim.ensureStats(state);
+    state.missions = null;
+    // DESIGN PASS: the Seed field lives in the ?debug=1-only menu row — null-guard it.
+    const seedEl = document.getElementById("seed");
+    if (seedEl) seedEl.value = seedInput;
     // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
     // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
     // dims; fall back to the legacy castleReveal if a map carries none.
     reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
+    // DESIGN PASS: state.towns was replaced — drop city cards bound to the old game.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
@@ -262,10 +272,20 @@
     state.castleReserved = (data.castleReserved && typeof data.castleReserved === "object") ? data.castleReserved : {};
     state.castleMarketSeed = (typeof data.castleMarketSeed === "number") ? data.castleMarketSeed
       : (hashSeed(state.seedInput) ^ 0x2545f491) | 0;
+    // DESIGN PASS: restore lifetime counters + mission progress (both were saved but
+    // never read back, so every Continue restarted m1 and zeroed the lifetime tariff).
+    // Assigned BEFORE StartScreen.continueSave → Tutorial.resume(state). ensureStats
+    // migrates old/garbage stats; a save with no missions keeps state.missions null so
+    // Tutorial's ensureProg falls back to the localStorage mirror (pre-fix saves).
+    state.stats = (data.stats && typeof data.stats === "object") ? data.stats : undefined;
+    Sim.ensureStats(state);
+    state.missions = (data.missions && typeof data.missions === "object") ? data.missions : null;
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    state.revealAll = !!data.revealAll;
+    // DESIGN PASS: full-map reveal is a ?debug=1-only cheat now — a save that had it
+    // toggled on (the button used to be in every player's menu) loads with fog back.
+    state.revealAll = !!data.revealAll && DEBUG_UI;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
     state.gameSpeed = (typeof data.gameSpeed === "number" && data.gameSpeed > 0) ? data.gameSpeed : 1;
@@ -301,6 +321,8 @@
     // gold_ring, furniture→chairs, cloth→clothes) + weaver→tailoring across the
     // loaded save. Pure helper (PURE_CORE) so migration tests can drive it. ===
     Sim.CC_migrateGoods(state);
+    // DESIGN PASS: rebuild the city cards against the freshly loaded town objects.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
     terrainDirty = true;
     return true;
     } catch (err) {

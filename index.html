@@ -4,7 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Trade Winds</title>
+<script>
+  // DESIGN PASS: debug-only menu controls (regenerate map, fog reveal, fps/sounds) render
+  // only with ?debug=1 in the URL — tags <html class="debug">; read by input.js DEBUG_UI.
+  if (/[?&]debug=1(?:&|$)/.test(location.search)) document.documentElement.classList.add("debug");
+</script>
 <style>
+  html:not(.debug) .debug-only { display: none !important; }
   :root {
     --paper: #f2e6cf;
     --ink: #3b2f22;
@@ -1130,7 +1136,7 @@
   <!-- top-right = game controls only (clock, speed, ☰). Panel openers live top-left;
        everything non-essential (patch notes, map tools, help, debug) is inside ☰. -->
   <div class="group" id="topActions">
-    <button id="hudMenuBtn" class="ic" title="Menu — patch notes, map, tools, help, debug">☰</button>
+    <button id="hudMenuBtn" class="ic" title="Menu — patch notes, map tools, help">☰</button>
   </div>
 </div>
 
@@ -1151,7 +1157,7 @@
 
   <div class="hm-sec">
     <div class="hm-lbl">Map</div>
-    <div class="hm-row">
+    <div class="hm-row debug-only">
       <label class="seedlbl" for="seed">Seed</label>
       <input id="seed" type="text" spellcheck="false" />
       <button id="btnGen" title="Generate a fresh map from this seed">Generate</button>
@@ -1161,7 +1167,7 @@
       <button class="tool" data-mode="pan" title="Pan the camera (drag)">✋ Pan</button>
       <button class="tool" data-mode="erase" title="Remove roads / town markers">🧹 Erase</button>
       <button id="btnCenter" title="Recenter on the castle">🎯 Center</button>
-      <button id="btnReveal" title="Toggle full-map reveal (debug)">👁 Reveal fog</button>
+      <button id="btnReveal" class="debug-only" title="Toggle full-map reveal (debug)">👁 Reveal fog</button>
     </div>
   </div>
 
@@ -1174,7 +1180,7 @@
     </div>
   </div>
 
-  <div class="hm-sec">
+  <div class="hm-sec debug-only">
     <div class="hm-lbl">Debug</div>
     <div class="hm-debug"><span class="fps" id="fps">—</span> fps · <span id="stat">—</span></div>
     <div id="sfxDebug" aria-hidden="true">
@@ -8818,13 +8824,19 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 /* BUILD:renderer END */
 
 /* BUILD:input START */
+  // DESIGN PASS: debug-only UI (map regenerate/seed row, fog reveal, fps + sound log in
+  // the ☰ menu) renders only with ?debug=1 — a tiny <head> script tags <html class="debug">
+  // and CSS hides `.debug-only` otherwise. One source of truth for the shell modules.
+  const DEBUG_UI = document.documentElement.classList.contains("debug");
+
   // In-DOM confirm dialog. Mirrors the research-editor's sandbox-safe uiConfirm
   // (pass-1 commit 1fa3698): native confirm()/alert() are BLOCKED inside the
   // sandboxed Artifact iframe (no allow-modals), so a real dialog element is the
   // only reliable gate. Non-blocking — runs `onConfirm` only when the user
   // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
   // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
-  function uiConfirm(message, onConfirm) {
+  // `okLabel` (optional) relabels the destructive button; default "Demolish".
+  function uiConfirm(message, onConfirm, okLabel) {
     const prev = document.getElementById("uiConfirm");
     if (prev) prev.remove();
     const overlay = document.createElement("div");
@@ -8850,7 +8862,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
     cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     const ok = document.createElement("button");
-    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
+    ok.id = "uiConfirmOk"; ok.textContent = okLabel || "Demolish"; ok.onclick = confirmNow;
     ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     row.appendChild(cancel); row.appendChild(ok);
     box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
@@ -9377,17 +9389,28 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
   speedButtons.forEach(b => b.addEventListener("click", () => setSpeed(b.dataset.speed)));
 
-  document.getElementById("btnGen").addEventListener("click", () => {
-    newGame(document.getElementById("seed").value.trim() || randomSeed(), state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
+  // DESIGN PASS: Generate / 🎲 used to wipe the kingdom (and its autosave) in one click.
+  // They now exist only in ?debug=1 menus and always go through the confirm overlay;
+  // every handler is null-guarded so boot never depends on the debug markup.
+  const ABANDON_MSG = "Abandon this kingdom? Your save will be overwritten.";
+  function regenerate(seed) {
+    uiConfirm(ABANDON_MSG, () => {
+      const seedEl = document.getElementById("seed");
+      if (seedEl) seedEl.value = seed;
+      newGame(seed, state.mapPreset);  // === TV2: keep preset ===
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh(state);  // P5D-C: fresh game → coach
+    }, "Abandon");
+  }
+  const btnGen = document.getElementById("btnGen");
+  if (btnGen) btnGen.addEventListener("click", () => {
+    const seedEl = document.getElementById("seed");
+    regenerate((seedEl && seedEl.value.trim()) || randomSeed());
   });
-  document.getElementById("btnRandom").addEventListener("click", () => {
-    const s = randomSeed();
-    document.getElementById("seed").value = s;
-    newGame(s, state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
-  });
-  document.getElementById("btnReveal").addEventListener("click", () => {
+  const btnRandom = document.getElementById("btnRandom");
+  if (btnRandom) btnRandom.addEventListener("click", () => regenerate(randomSeed()));
+  const btnReveal = document.getElementById("btnReveal");
+  if (btnReveal) btnReveal.addEventListener("click", () => {
+    if (!DEBUG_UI) return;
     state.revealAll = !state.revealAll;
     terrainDirty = true;
   });
@@ -9479,12 +9502,22 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
-    document.getElementById("seed").value = seedInput;
+    // DESIGN PASS: a new map starts with fresh lifetime counters + no mission progress —
+    // the boot-time loadGame() now restores the save's stats/missions into `state`, and
+    // New Game must not inherit them (Tutorial.startFresh(state) then seeds missions).
+    state.stats = undefined;
+    Sim.ensureStats(state);
+    state.missions = null;
+    // DESIGN PASS: the Seed field lives in the ?debug=1-only menu row — null-guard it.
+    const seedEl = document.getElementById("seed");
+    if (seedEl) seedEl.value = seedInput;
     // v0.43: reveal a SIZE-BASED radius around the castle (bigger boards open with a
     // bigger viewport) — MapGen.generate stamps state.map.revealRadius from the board
     // dims; fall back to the legacy castleReveal if a map carries none.
     reveal(0, 0, (state.map && state.map.revealRadius) || CONFIG.fog.castleReveal);
     terrainDirty = true;
+    // DESIGN PASS: state.towns was replaced — drop city cards bound to the old game.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
@@ -9671,10 +9704,20 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.castleReserved = (data.castleReserved && typeof data.castleReserved === "object") ? data.castleReserved : {};
     state.castleMarketSeed = (typeof data.castleMarketSeed === "number") ? data.castleMarketSeed
       : (hashSeed(state.seedInput) ^ 0x2545f491) | 0;
+    // DESIGN PASS: restore lifetime counters + mission progress (both were saved but
+    // never read back, so every Continue restarted m1 and zeroed the lifetime tariff).
+    // Assigned BEFORE StartScreen.continueSave → Tutorial.resume(state). ensureStats
+    // migrates old/garbage stats; a save with no missions keeps state.missions null so
+    // Tutorial's ensureProg falls back to the localStorage mirror (pre-fix saves).
+    state.stats = (data.stats && typeof data.stats === "object") ? data.stats : undefined;
+    Sim.ensureStats(state);
+    state.missions = (data.missions && typeof data.missions === "object") ? data.missions : null;
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
-    state.revealAll = !!data.revealAll;
+    // DESIGN PASS: full-map reveal is a ?debug=1-only cheat now — a save that had it
+    // toggled on (the button used to be in every player's menu) loads with fog back.
+    state.revealAll = !!data.revealAll && DEBUG_UI;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
     state.gameSpeed = (typeof data.gameSpeed === "number" && data.gameSpeed > 0) ? data.gameSpeed : 1;
@@ -9710,6 +9753,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // gold_ring, furniture→chairs, cloth→clothes) + weaver→tailoring across the
     // loaded save. Pure helper (PURE_CORE) so migration tests can drive it. ===
     Sim.CC_migrateGoods(state);
+    // DESIGN PASS: rebuild the city cards against the freshly loaded town objects.
+    if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
     terrainDirty = true;
     return true;
     } catch (err) {
@@ -12523,7 +12568,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
 
+    // DESIGN PASS: only a LIVE town (in state.towns) can be given to / taken from — a
+    // stale object from a replaced game minted free gold (Take) or lost it (Give).
+    const isLive = (town) => !!town && (state.towns || []).includes(town);
+    const liveTown = (id) => (state.towns || []).find(x => x.id === id) || null;
+
     function give(town) {
+      if (!isLive(town)) return false;
       if (onCooldown(town)) return false;
       if ((state.treasury || 0) < GIVE_AMT) return false;
       state.treasury -= GIVE_AMT;
@@ -12537,6 +12588,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       return true;
     }
     function take(town) {
+      if (!isLive(town)) return false;
       if (onCooldown(town)) return false;
       if ((town.gold || 0) < TAKE_AMT) return false;
       town.gold -= TAKE_AMT;
@@ -12552,12 +12604,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     // Click a card body (not a button): center the camera and open its panel.
     function focus(town) {
+      if (!isLive(town)) return false;
       const p = HexMath.hexToPixel(town.q, town.r, SIZEc);
       state.cam.x = p.x; state.cam.y = p.y;
       if (typeof openTownPanel === "function") openTownPanel(town);
     }
 
-    function buildCard(town) {
+    // DESIGN PASS: a card captures only its town ID and resolves the live town on click
+    // (Continue/New Game replace state.towns with new objects under the same ids).
+    function buildCard(id) {
       const root = document.createElement("div");
       root.className = "city-card";
       root.innerHTML =
@@ -12590,9 +12645,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // v0.49: the avatar carries the city NUMBER (an "image with just a number");
       // Give/Take stay hidden until the player holds Shift (revealBtns below).
       parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
-      parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
-      parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
-      root.addEventListener("click", () => focus(town));
+      parts.give.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; give(t); });
+      parts.take.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; take(t); });
+      root.addEventListener("click", () => { const t = liveTown(id); if (!t) return false; focus(t); });
       return parts;
     }
 
@@ -12618,7 +12673,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         if (town.id == null) continue;
         seen.add(town.id);
         let c = cards.get(town.id);
-        if (!c) { c = buildCard(town); cards.set(town.id, c); }
+        if (!c) { c = buildCard(town.id); cards.set(town.id, c); }
         // keep DOM order matching id order
         if (c.root.parentNode !== cardsEl || c.root.previousElementSibling !== prev) {
           cardsEl.insertBefore(c.root, prev ? prev.nextElementSibling : cardsEl.firstChild);
@@ -12659,7 +12714,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
     }
 
-    return { refresh, cityColor, give, take, PALETTE };
+    // DESIGN PASS: drop every card (DOM + map) — called by newGame()/loadGame() when
+    // state.towns is replaced, then rebuilt from the live towns straight away.
+    function reset() {
+      for (const c of cards.values()) if (c.root.parentNode) c.root.parentNode.removeChild(c.root);
+      cards.clear();
+      refresh();
+    }
+
+    return { refresh, reset, cityColor, give, take, PALETTE };
   })();
   window.CityCards = CityCards;
   // === CITY-CARDS END ===
@@ -15812,13 +15875,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       newGame(seed, preset, tiers);
       setMode(state.mode);
       begin();
-      if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: onboarding on a new game
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh(state);  // P5D-C: onboarding on a new game (DESIGN PASS: pass live state)
     }
     function continueSave() {
       if (!loadGame()) { refreshContinue(); return false; }   // no valid save
       setMode(state.mode);
       begin();
-      if (typeof Tutorial !== "undefined") Tutorial.resume();     // P5D-C: resume an in-progress tutorial
+      if (typeof Tutorial !== "undefined") Tutorial.resume(state);     // P5D-C: resume the SAVE's own mission progress (DESIGN PASS: pass live state)
       return true;
     }
 
@@ -16195,7 +16258,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
 
     function onSkip() {
-      const state = (typeof window !== "undefined" && window.state) || (typeof globalThis !== "undefined" && globalThis.state) || null;
+      const state = liveState(null);   // DESIGN PASS: the last live state handed to tick/startFresh/resume
       if (state) { const p = ensureProg(state); p.done = true; p.skipped = true; persist(state); }
       else { try { localStorage.setItem(LS_KEY, JSON.stringify({ done: true, skipped: true, activated: {}, baselines: {}, completed: {} })); } catch (e) {} }
       active = false; celebrating = false;
@@ -16203,8 +16266,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
 
     // Resolve the live game state for the poll (browser shell global).
+    let boundState = null;   // DESIGN PASS: remembered live state (shell `state` is not on window)
     function liveState(s) {
-      if (s) return s;
+      if (s) { boundState = s; return s; }
+      if (boundState) return boundState;
       if (typeof window !== "undefined" && window.state) return window.state;
       if (typeof globalThis !== "undefined" && globalThis.state) return globalThis.state;
       return null;
@@ -16213,16 +16278,19 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // ---- public API ----------------------------------------------------------
     // Fresh game: reset this playthrough's mission progress unless the player has
     // already finished/skipped the missions (LS gate), then run from the roots.
-    function startFresh() {
+    // DESIGN PASS: callers pass the live `state` — the shell `state` is IIFE-scoped (no
+    // window.state), so liveState(null) resolved nothing and New Game never reset, nor
+    // Continue ever read, this game's own mission progress.
+    function startFresh(s) {
       ensureEls();
       reloadSet();
       const gate = loadProgFromLS();
       if (gate.done) {
-        const st = liveState(null);
+        const st = liveState(s);
         if (st) { st.missions = freshProg(); st.missions.done = true; }
         active = false; celebrating = false; hide(); return;
       }
-      const st = liveState(null);
+      const st = liveState(s);
       if (st) st.missions = freshProg();     // new playthrough → clear baselines/activation
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
@@ -16230,12 +16298,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
 
     // Loaded game: resume the saved mission progress; leave finished/skipped alone.
-    function resume() {
+    function resume(s) {
       ensureEls();
       reloadSet();
-      const st = liveState(null);
+      const st = liveState(s);
       const p = st ? ensureProg(st) : loadProgFromLS();
-      if (p.done) { active = false; celebrating = false; hide(); return; }
+      // DESIGN PASS: also honour the LS gate — before resume() saw the live state, a
+      // Skip only reached localStorage, so a pre-fix save's missions lack `done`.
+      if (p.done || (st && loadProgFromLS().done)) { active = false; celebrating = false; hide(); return; }
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
       if (st) { show(); refresh(st); } else show();

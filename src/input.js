@@ -1,10 +1,16 @@
+  // DESIGN PASS: debug-only UI (map regenerate/seed row, fog reveal, fps + sound log in
+  // the ☰ menu) renders only with ?debug=1 — a tiny <head> script tags <html class="debug">
+  // and CSS hides `.debug-only` otherwise. One source of truth for the shell modules.
+  const DEBUG_UI = document.documentElement.classList.contains("debug");
+
   // In-DOM confirm dialog. Mirrors the research-editor's sandbox-safe uiConfirm
   // (pass-1 commit 1fa3698): native confirm()/alert() are BLOCKED inside the
   // sandboxed Artifact iframe (no allow-modals), so a real dialog element is the
   // only reliable gate. Non-blocking — runs `onConfirm` only when the user
   // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
   // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
-  function uiConfirm(message, onConfirm) {
+  // `okLabel` (optional) relabels the destructive button; default "Demolish".
+  function uiConfirm(message, onConfirm, okLabel) {
     const prev = document.getElementById("uiConfirm");
     if (prev) prev.remove();
     const overlay = document.createElement("div");
@@ -30,7 +36,7 @@
     cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
     cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     const ok = document.createElement("button");
-    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
+    ok.id = "uiConfirmOk"; ok.textContent = okLabel || "Demolish"; ok.onclick = confirmNow;
     ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     row.appendChild(cancel); row.appendChild(ok);
     box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
@@ -557,17 +563,28 @@
   }
   speedButtons.forEach(b => b.addEventListener("click", () => setSpeed(b.dataset.speed)));
 
-  document.getElementById("btnGen").addEventListener("click", () => {
-    newGame(document.getElementById("seed").value.trim() || randomSeed(), state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
+  // DESIGN PASS: Generate / 🎲 used to wipe the kingdom (and its autosave) in one click.
+  // They now exist only in ?debug=1 menus and always go through the confirm overlay;
+  // every handler is null-guarded so boot never depends on the debug markup.
+  const ABANDON_MSG = "Abandon this kingdom? Your save will be overwritten.";
+  function regenerate(seed) {
+    uiConfirm(ABANDON_MSG, () => {
+      const seedEl = document.getElementById("seed");
+      if (seedEl) seedEl.value = seed;
+      newGame(seed, state.mapPreset);  // === TV2: keep preset ===
+      if (typeof Tutorial !== "undefined") Tutorial.startFresh(state);  // P5D-C: fresh game → coach
+    }, "Abandon");
+  }
+  const btnGen = document.getElementById("btnGen");
+  if (btnGen) btnGen.addEventListener("click", () => {
+    const seedEl = document.getElementById("seed");
+    regenerate((seedEl && seedEl.value.trim()) || randomSeed());
   });
-  document.getElementById("btnRandom").addEventListener("click", () => {
-    const s = randomSeed();
-    document.getElementById("seed").value = s;
-    newGame(s, state.mapPreset);  // === TV2: keep preset ===
-    if (typeof Tutorial !== "undefined") Tutorial.startFresh();  // P5D-C: fresh game → coach
-  });
-  document.getElementById("btnReveal").addEventListener("click", () => {
+  const btnRandom = document.getElementById("btnRandom");
+  if (btnRandom) btnRandom.addEventListener("click", () => regenerate(randomSeed()));
+  const btnReveal = document.getElementById("btnReveal");
+  if (btnReveal) btnReveal.addEventListener("click", () => {
+    if (!DEBUG_UI) return;
     state.revealAll = !state.revealAll;
     terrainDirty = true;
   });

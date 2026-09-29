@@ -695,7 +695,13 @@
     const now = () => (state.tick || 0);
     const onCooldown = (t) => (t.cooldownUntil || 0) > now();
 
+    // DESIGN PASS: only a LIVE town (in state.towns) can be given to / taken from — a
+    // stale object from a replaced game minted free gold (Take) or lost it (Give).
+    const isLive = (town) => !!town && (state.towns || []).includes(town);
+    const liveTown = (id) => (state.towns || []).find(x => x.id === id) || null;
+
     function give(town) {
+      if (!isLive(town)) return false;
       if (onCooldown(town)) return false;
       if ((state.treasury || 0) < GIVE_AMT) return false;
       state.treasury -= GIVE_AMT;
@@ -709,6 +715,7 @@
       return true;
     }
     function take(town) {
+      if (!isLive(town)) return false;
       if (onCooldown(town)) return false;
       if ((town.gold || 0) < TAKE_AMT) return false;
       town.gold -= TAKE_AMT;
@@ -724,12 +731,15 @@
 
     // Click a card body (not a button): center the camera and open its panel.
     function focus(town) {
+      if (!isLive(town)) return false;
       const p = HexMath.hexToPixel(town.q, town.r, SIZEc);
       state.cam.x = p.x; state.cam.y = p.y;
       if (typeof openTownPanel === "function") openTownPanel(town);
     }
 
-    function buildCard(town) {
+    // DESIGN PASS: a card captures only its town ID and resolves the live town on click
+    // (Continue/New Game replace state.towns with new objects under the same ids).
+    function buildCard(id) {
       const root = document.createElement("div");
       root.className = "city-card";
       root.innerHTML =
@@ -762,9 +772,9 @@
       // v0.49: the avatar carries the city NUMBER (an "image with just a number");
       // Give/Take stay hidden until the player holds Shift (revealBtns below).
       parts.avatar.style.cssText += ";display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:#201607;width:26px;height:26px";
-      parts.give.addEventListener("click", (e) => { e.stopPropagation(); give(town); });
-      parts.take.addEventListener("click", (e) => { e.stopPropagation(); take(town); });
-      root.addEventListener("click", () => focus(town));
+      parts.give.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; give(t); });
+      parts.take.addEventListener("click", (e) => { e.stopPropagation(); const t = liveTown(id); if (!t) return false; take(t); });
+      root.addEventListener("click", () => { const t = liveTown(id); if (!t) return false; focus(t); });
       return parts;
     }
 
@@ -790,7 +800,7 @@
         if (town.id == null) continue;
         seen.add(town.id);
         let c = cards.get(town.id);
-        if (!c) { c = buildCard(town); cards.set(town.id, c); }
+        if (!c) { c = buildCard(town.id); cards.set(town.id, c); }
         // keep DOM order matching id order
         if (c.root.parentNode !== cardsEl || c.root.previousElementSibling !== prev) {
           cardsEl.insertBefore(c.root, prev ? prev.nextElementSibling : cardsEl.firstChild);
@@ -831,7 +841,15 @@
       }
     }
 
-    return { refresh, cityColor, give, take, PALETTE };
+    // DESIGN PASS: drop every card (DOM + map) — called by newGame()/loadGame() when
+    // state.towns is replaced, then rebuilt from the live towns straight away.
+    function reset() {
+      for (const c of cards.values()) if (c.root.parentNode) c.root.parentNode.removeChild(c.root);
+      cards.clear();
+      refresh();
+    }
+
+    return { refresh, reset, cityColor, give, take, PALETTE };
   })();
   window.CityCards = CityCards;
   // === CITY-CARDS END ===
