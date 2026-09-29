@@ -211,8 +211,32 @@
     const need = Buildings.upgradeConstructionNeed(b);
     return Object.keys(need).map(gid => {
       const short = !((town && town.stock && (town.stock[gid] || 0) > 0.05));
-      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" : ""}`;
+      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" + ppSupplyCause(town, gid, b) : ""}`;
     }).join(" · ");
+  }
+  // DESIGN PASS (#2): WHY a material isn't coming — links a stalled delivery to the
+  // local producer that should make it (unstaffed Sawmill → build a Hut), or says no
+  // building here makes it. "" when a staffed local producer exists (it's on its way).
+  // `self` = the building asking (its own construction/upgrade).
+  function ppSupplyCause(town, gid, self) {
+    if (!town || typeof Buildings === "undefined" || !Buildings.localProducers) return "";
+    const p = Buildings.localProducers(town, gid, self && self.built === false ? self : null);
+    if (p.staffed > 0) return "";
+    const nm = (x) => (CONFIG.buildings[x.typeId] && CONFIG.buildings[x.typeId].name) || x.typeId;
+    if (p.idle) {
+      const def = CONFIG.buildings[p.idle.typeId] || {};
+      let house = "house";
+      for (const id in CONFIG.buildings) {
+        const hd = CONFIG.buildings[id];
+        if (hd && hd.kind === "house" && hd.houseTier === def.workerTier) { house = hd.name || id; break; }
+      }
+      return ` — your ${nm(p.idle)} has no workers: build a ${house} in this city or ☆ Priority it`;
+    }
+    if (p.upgrading) return p.upgrading === self
+      ? ` — this ${nm(self)} is paused while it upgrades: import it or cancel`
+      : ` — your ${nm(p.upgrading)} is paused while it upgrades`;
+    if (p.pending) return ` — your ${nm(p.pending)} is still under construction`;
+    return ` — no building in this city makes ${GOOD_LABEL(gid)}`;
   }
   // === /D ===
 
@@ -1500,7 +1524,9 @@
           </div>
         </div>
       </div>
-      <div class="tp-hint2">${workers > 0
+      <div class="tp-hint2">${b.pendingUpgrade   // DESIGN PASS (#2): honest status — Sim pauses a producer while it upgrades
+        ? "⬆ Upgrading — production paused until materials arrive (" + (ppUpgradePct(b) || 0) + "%)."
+        : workers > 0
         ? (stock >= cap ? "Store full — waiting for a porter to collect."
           : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
         : bpIdleReason(b, def)}</div>`;
@@ -1582,7 +1608,8 @@
       }
       html += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const need = bpConstructionNeed(b);
-      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g) +
+        (((town.stock && town.stock[g]) || 0) > 0.05 ? "" : ppSupplyCause(town, g, b))).join(" · ");   // DESIGN PASS (#2): say why it's stuck
       html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
     }
 
@@ -1687,6 +1714,8 @@
       out += `<div class="tp-tbar"><span class="bar${pct > 0 ? "" : " idle"}"><span style="width:${pct}%"></span></span><span class="st">${pct}%</span></div>`;
       out += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       out += `<div class="tp-hint2">${waitStr ? "Waiting on delivery: " + esc(waitStr) : "All materials delivered — finishing up"}</div>`;
+      // DESIGN PASS (#2): a way out of a stuck upgrade — refunds the gold, returns delivered goods.
+      out += `<button class="bp-star" data-cancel-upgrade title="Refund the gold and return delivered materials to the city">✖ Cancel upgrade</button>`;
       return out;
     }
 
@@ -1876,6 +1905,11 @@
       if (typeof setMode === "function") setMode("eraseBuilding");
       closeBuildingPanel();
       return;
+    }
+    // DESIGN PASS (#2): cancel a pending upgrade (refund gold + delivered goods)
+    if (e.target.closest("[data-cancel-upgrade]")) {
+      if (typeof Buildings !== "undefined" && Buildings.cancelUpgrade) Buildings.cancelUpgrade(state, bpTown, b);
+      renderBuildingPanel(); return;
     }
     // === RU-B: "Upgrade" button in the Upgrades section ===
     const upgBtn = e.target.closest("[data-upgrade]");

@@ -92,8 +92,15 @@
       const d = t.demand || {}, s = t.stock || {};
       // (a) severe shortage of a BASIC need: empty shelf + real demand
       for (const gid of N.basicNeeds || []) {
-        if ((d[gid] || 0) > 0 && (s[gid] || 0) < 0.5)
+        if ((d[gid] || 0) > 0 && (s[gid] || 0) < 0.5) {
+          // DESIGN PASS (#2): name the fix when this city's own producer is still unbuilt.
+          const p = (typeof Buildings !== "undefined" && Buildings.localProducers) ? Buildings.localProducers(t, gid) : null;
+          if (p && p.pending && !p.built) {
+            const def = CONFIG.buildings[p.pending.typeId] || {};
+            return "We have no " + goodIcon(gid) + " " + GOOD_LABEL(gid) + " — finish the " + (def.name || p.pending.typeId) + " or import it";
+          }
           return "We don't have any " + goodIcon(gid) + " " + GOOD_LABEL(gid) + "!";
+        }
       }
       // (b) a tier is very happy (pays the people-tax bonus above happyBase)
       const th = t.tierHappiness || {};

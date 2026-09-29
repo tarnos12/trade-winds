@@ -513,9 +513,35 @@ Sim.tick = function (State) {
         * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
       // === /PP-A ===
       const targets = [];   // { b, kind: "build" | "upgrade" }
-      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      // DESIGN PASS (#2) BOOTSTRAP: an unbuilt producer whose OWN construction needs
+      // the good it makes (Lumberjack ← 10 wood), in a town with no BUILT producer of
+      // that good, is served FIRST, and the remaining need of those producers is held
+      // back from every other site — else "huts first" spent the start wood and the
+      // Lumberjack could never be finished (wood 0 forever). `boot` stays null on the
+      // hot path once a town has its producers built.
+      let boot = null;   // gid → units reserved for unbuilt self-bootstrapping producers
+      for (const b of buildings) {
+        if (!b || b.built !== false) continue;
+        const def = CONFIG.buildings[b.typeId];
+        const og = def && def.output && def.output.goodId;
+        if (!og) continue;
+        const cn = Buildings.constructionNeed(b);
+        if (!(cn[og] > 0)) continue;
+        let hasBuilt = false;
+        for (const o of buildings) {
+          if (o && o.built !== false && CONFIG.buildings[o.typeId] && CONFIG.buildings[o.typeId].output &&
+              CONFIG.buildings[o.typeId].output.goodId === og) { hasBuilt = true; break; }
+        }
+        if (hasBuilt) continue;
+        if (!boot) boot = {};
+        boot[og] = (boot[og] || 0) + cn[og];
+        targets.push({ b, kind: "build", boot: og });
+      }
+      const nBoot = targets.length;
+      const isBoot = (b) => { for (let i = 0; i < nBoot; i++) if (targets[i].b === b) return true; return false; };
+      for (const b of buildings) if (b && b.built === false && b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
-      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.built === false && !b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
       for (const t of targets) {
         const b = t.b;
@@ -526,8 +552,13 @@ Sim.tick = function (State) {
         for (const gid in need) {
           if (budget <= 0) break;
           const have = stock[gid] || 0;
-          const move = Math.min(need[gid], have, budget);
-          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
+          // BOOTSTRAP: non-producer sites may only take stock above the reserve.
+          const avail = (boot && !t.boot && boot[gid] > 0) ? Math.max(0, have - boot[gid]) : have;
+          const move = Math.min(need[gid], avail, budget);
+          if (move > 0) {
+            stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move;
+            if (t.boot === gid) boot[gid] = Math.max(0, boot[gid] - move);   // delivered → no longer reserved
+          }
         }
         const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
         let matDone = true;

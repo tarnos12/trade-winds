@@ -3449,9 +3449,35 @@ Sim.tick = function (State) {
         * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
       // === /PP-A ===
       const targets = [];   // { b, kind: "build" | "upgrade" }
-      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      // DESIGN PASS (#2) BOOTSTRAP: an unbuilt producer whose OWN construction needs
+      // the good it makes (Lumberjack ← 10 wood), in a town with no BUILT producer of
+      // that good, is served FIRST, and the remaining need of those producers is held
+      // back from every other site — else "huts first" spent the start wood and the
+      // Lumberjack could never be finished (wood 0 forever). `boot` stays null on the
+      // hot path once a town has its producers built.
+      let boot = null;   // gid → units reserved for unbuilt self-bootstrapping producers
+      for (const b of buildings) {
+        if (!b || b.built !== false) continue;
+        const def = CONFIG.buildings[b.typeId];
+        const og = def && def.output && def.output.goodId;
+        if (!og) continue;
+        const cn = Buildings.constructionNeed(b);
+        if (!(cn[og] > 0)) continue;
+        let hasBuilt = false;
+        for (const o of buildings) {
+          if (o && o.built !== false && CONFIG.buildings[o.typeId] && CONFIG.buildings[o.typeId].output &&
+              CONFIG.buildings[o.typeId].output.goodId === og) { hasBuilt = true; break; }
+        }
+        if (hasBuilt) continue;
+        if (!boot) boot = {};
+        boot[og] = (boot[og] || 0) + cn[og];
+        targets.push({ b, kind: "build", boot: og });
+      }
+      const nBoot = targets.length;
+      const isBoot = (b) => { for (let i = 0; i < nBoot; i++) if (targets[i].b === b) return true; return false; };
+      for (const b of buildings) if (b && b.built === false && b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
-      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.built === false && !b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
       for (const t of targets) {
         const b = t.b;
@@ -3462,8 +3488,13 @@ Sim.tick = function (State) {
         for (const gid in need) {
           if (budget <= 0) break;
           const have = stock[gid] || 0;
-          const move = Math.min(need[gid], have, budget);
-          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
+          // BOOTSTRAP: non-producer sites may only take stock above the reserve.
+          const avail = (boot && !t.boot && boot[gid] > 0) ? Math.max(0, have - boot[gid]) : have;
+          const move = Math.min(need[gid], avail, budget);
+          if (move > 0) {
+            stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move;
+            if (t.boot === gid) boot[gid] = Math.max(0, boot[gid] - move);   // delivered → no longer reserved
+          }
         }
         const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
         let matDone = true;
@@ -4468,6 +4499,16 @@ Buildings.canStartUpgrade = function (state, town, b) {
   if (!nxt) return { ok: false, reason: "No upgrade available" };
   const gold = (nxt.cost && nxt.cost.gold) || 0;
   if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
+  // DESIGN PASS (#2): a producer stops while it upgrades (v0.51.14), so an upgrade
+  // that costs the building's OWN output (Lumberjack L2 = 20 wood) could never be
+  // fed by it — starting it below that stock froze the city's only source. Gate it.
+  const def = CONFIG.buildings[b.typeId];
+  const own = def && def.output && def.output.goodId;
+  const ownNeed = own && nxt.cost ? (nxt.cost[own] || 0) : 0;
+  if (ownNeed > 0 && ((town && town.stock && town.stock[own]) || 0) < ownNeed) {
+    const label = own.charAt(0).toUpperCase() + own.slice(1).replace(/_/g, " ");
+    return { ok: false, selfGood: own, reason: "Stock " + ownNeed + " " + label + " first — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
+  }
   return { ok: true };
 };
 
@@ -4480,6 +4521,46 @@ Buildings.startUpgrade = function (state, town, b) {
   if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
+};
+
+// DESIGN PASS (#2): cancel a pending upgrade — refund the gold the city paid and
+// return the delivered materials to the city's stock (clamped at storageCap; any
+// excess is lost, like any over-cap arrival). Returns true when something was cancelled.
+Buildings.cancelUpgrade = function (state, town, b) {
+  if (!b || !b.pendingUpgrade) return false;
+  const entry = Buildings.upgradeAt(b.typeId, b.pendingUpgrade.toLevel);
+  const gold = (entry && entry.cost && entry.cost.gold) || 0;
+  if (town) {
+    if (gold > 0) town.gold = (town.gold || 0) + gold;
+    if (!town.stock) town.stock = {};
+    const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+    const dv = b.pendingUpgrade.delivered || {};
+    for (const gid in dv) {
+      const have = town.stock[gid] || 0;
+      if ((dv[gid] || 0) > 0) town.stock[gid] = Math.max(have, Math.min(cap, have + dv[gid]));
+    }
+  }
+  b.pendingUpgrade = null;
+  return true;
+};
+
+// DESIGN PASS (#2): who makes `gid` in this town? Counts BUILT producers, staffed
+// ones (workers > 0 and not paused by an upgrade) and unbuilt ones, and remembers
+// the first idle/unbuilt producer (for the "why is this stuck" hints). `skip` is
+// excluded (a building asking about its own construction).
+Buildings.localProducers = function (town, gid, skip) {
+  const r = { built: 0, staffed: 0, unbuilt: 0, idle: null, upgrading: null, pending: null };
+  for (const b of (town && town.buildings) || []) {
+    if (!b || b === skip) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || !def.output || def.output.goodId !== gid) continue;
+    if (b.built === false) { r.unbuilt++; if (!r.pending) r.pending = b; continue; }
+    r.built++;
+    if (b.pendingUpgrade) { if (!r.upgrading) r.upgrading = b; continue; }
+    if ((b.workers || 0) > 0) r.staffed++;
+    else if (!r.idle) r.idle = b;
+  }
+  return r;
 };
 
 // The non-gold (resource) portion of an upgrade level's cost.
@@ -10111,8 +10192,32 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const need = Buildings.upgradeConstructionNeed(b);
     return Object.keys(need).map(gid => {
       const short = !((town && town.stock && (town.stock[gid] || 0) > 0.05));
-      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" : ""}`;
+      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" + ppSupplyCause(town, gid, b) : ""}`;
     }).join(" · ");
+  }
+  // DESIGN PASS (#2): WHY a material isn't coming — links a stalled delivery to the
+  // local producer that should make it (unstaffed Sawmill → build a Hut), or says no
+  // building here makes it. "" when a staffed local producer exists (it's on its way).
+  // `self` = the building asking (its own construction/upgrade).
+  function ppSupplyCause(town, gid, self) {
+    if (!town || typeof Buildings === "undefined" || !Buildings.localProducers) return "";
+    const p = Buildings.localProducers(town, gid, self && self.built === false ? self : null);
+    if (p.staffed > 0) return "";
+    const nm = (x) => (CONFIG.buildings[x.typeId] && CONFIG.buildings[x.typeId].name) || x.typeId;
+    if (p.idle) {
+      const def = CONFIG.buildings[p.idle.typeId] || {};
+      let house = "house";
+      for (const id in CONFIG.buildings) {
+        const hd = CONFIG.buildings[id];
+        if (hd && hd.kind === "house" && hd.houseTier === def.workerTier) { house = hd.name || id; break; }
+      }
+      return ` — your ${nm(p.idle)} has no workers: build a ${house} in this city or ☆ Priority it`;
+    }
+    if (p.upgrading) return p.upgrading === self
+      ? ` — this ${nm(self)} is paused while it upgrades: import it or cancel`
+      : ` — your ${nm(p.upgrading)} is paused while it upgrades`;
+    if (p.pending) return ` — your ${nm(p.pending)} is still under construction`;
+    return ` — no building in this city makes ${GOOD_LABEL(gid)}`;
   }
   // === /D ===
 
@@ -11400,7 +11505,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
           </div>
         </div>
       </div>
-      <div class="tp-hint2">${workers > 0
+      <div class="tp-hint2">${b.pendingUpgrade   // DESIGN PASS (#2): honest status — Sim pauses a producer while it upgrades
+        ? "⬆ Upgrading — production paused until materials arrive (" + (ppUpgradePct(b) || 0) + "%)."
+        : workers > 0
         ? (stock >= cap ? "Store full — waiting for a porter to collect."
           : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
         : bpIdleReason(b, def)}</div>`;
@@ -11482,7 +11589,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
       html += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const need = bpConstructionNeed(b);
-      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g)).join(" · ");
+      const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g) +
+        (((town.stock && town.stock[g]) || 0) > 0.05 ? "" : ppSupplyCause(town, g, b))).join(" · ");   // DESIGN PASS (#2): say why it's stuck
       html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
     }
 
@@ -11587,6 +11695,8 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       out += `<div class="tp-tbar"><span class="bar${pct > 0 ? "" : " idle"}"><span style="width:${pct}%"></span></span><span class="st">${pct}%</span></div>`;
       out += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       out += `<div class="tp-hint2">${waitStr ? "Waiting on delivery: " + esc(waitStr) : "All materials delivered — finishing up"}</div>`;
+      // DESIGN PASS (#2): a way out of a stuck upgrade — refunds the gold, returns delivered goods.
+      out += `<button class="bp-star" data-cancel-upgrade title="Refund the gold and return delivered materials to the city">✖ Cancel upgrade</button>`;
       return out;
     }
 
@@ -11776,6 +11886,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (typeof setMode === "function") setMode("eraseBuilding");
       closeBuildingPanel();
       return;
+    }
+    // DESIGN PASS (#2): cancel a pending upgrade (refund gold + delivered goods)
+    if (e.target.closest("[data-cancel-upgrade]")) {
+      if (typeof Buildings !== "undefined" && Buildings.cancelUpgrade) Buildings.cancelUpgrade(state, bpTown, b);
+      renderBuildingPanel(); return;
     }
     // === RU-B: "Upgrade" button in the Upgrades section ===
     const upgBtn = e.target.closest("[data-upgrade]");
@@ -15163,8 +15278,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const d = t.demand || {}, s = t.stock || {};
       // (a) severe shortage of a BASIC need: empty shelf + real demand
       for (const gid of N.basicNeeds || []) {
-        if ((d[gid] || 0) > 0 && (s[gid] || 0) < 0.5)
+        if ((d[gid] || 0) > 0 && (s[gid] || 0) < 0.5) {
+          // DESIGN PASS (#2): name the fix when this city's own producer is still unbuilt.
+          const p = (typeof Buildings !== "undefined" && Buildings.localProducers) ? Buildings.localProducers(t, gid) : null;
+          if (p && p.pending && !p.built) {
+            const def = CONFIG.buildings[p.pending.typeId] || {};
+            return "We have no " + goodIcon(gid) + " " + GOOD_LABEL(gid) + " — finish the " + (def.name || p.pending.typeId) + " or import it";
+          }
           return "We don't have any " + goodIcon(gid) + " " + GOOD_LABEL(gid) + "!";
+        }
       }
       // (b) a tier is very happy (pays the people-tax bonus above happyBase)
       const th = t.tierHappiness || {};

@@ -213,6 +213,16 @@ Buildings.canStartUpgrade = function (state, town, b) {
   if (!nxt) return { ok: false, reason: "No upgrade available" };
   const gold = (nxt.cost && nxt.cost.gold) || 0;
   if (gold > 0 && (!town || (town.gold || 0) < gold)) return { ok: false, reason: "City needs " + gold + " gold" };
+  // DESIGN PASS (#2): a producer stops while it upgrades (v0.51.14), so an upgrade
+  // that costs the building's OWN output (Lumberjack L2 = 20 wood) could never be
+  // fed by it — starting it below that stock froze the city's only source. Gate it.
+  const def = CONFIG.buildings[b.typeId];
+  const own = def && def.output && def.output.goodId;
+  const ownNeed = own && nxt.cost ? (nxt.cost[own] || 0) : 0;
+  if (ownNeed > 0 && ((town && town.stock && town.stock[own]) || 0) < ownNeed) {
+    const label = own.charAt(0).toUpperCase() + own.slice(1).replace(/_/g, " ");
+    return { ok: false, selfGood: own, reason: "Stock " + ownNeed + " " + label + " first — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
+  }
   return { ok: true };
 };
 
@@ -225,6 +235,46 @@ Buildings.startUpgrade = function (state, town, b) {
   if (gold > 0 && town) town.gold = (town.gold || 0) - gold;
   b.pendingUpgrade = { toLevel: nxt.level, delivered: {} };
   return true;
+};
+
+// DESIGN PASS (#2): cancel a pending upgrade — refund the gold the city paid and
+// return the delivered materials to the city's stock (clamped at storageCap; any
+// excess is lost, like any over-cap arrival). Returns true when something was cancelled.
+Buildings.cancelUpgrade = function (state, town, b) {
+  if (!b || !b.pendingUpgrade) return false;
+  const entry = Buildings.upgradeAt(b.typeId, b.pendingUpgrade.toLevel);
+  const gold = (entry && entry.cost && entry.cost.gold) || 0;
+  if (town) {
+    if (gold > 0) town.gold = (town.gold || 0) + gold;
+    if (!town.stock) town.stock = {};
+    const cap = (CONFIG.town && CONFIG.town.storageCap) || Infinity;
+    const dv = b.pendingUpgrade.delivered || {};
+    for (const gid in dv) {
+      const have = town.stock[gid] || 0;
+      if ((dv[gid] || 0) > 0) town.stock[gid] = Math.max(have, Math.min(cap, have + dv[gid]));
+    }
+  }
+  b.pendingUpgrade = null;
+  return true;
+};
+
+// DESIGN PASS (#2): who makes `gid` in this town? Counts BUILT producers, staffed
+// ones (workers > 0 and not paused by an upgrade) and unbuilt ones, and remembers
+// the first idle/unbuilt producer (for the "why is this stuck" hints). `skip` is
+// excluded (a building asking about its own construction).
+Buildings.localProducers = function (town, gid, skip) {
+  const r = { built: 0, staffed: 0, unbuilt: 0, idle: null, upgrading: null, pending: null };
+  for (const b of (town && town.buildings) || []) {
+    if (!b || b === skip) continue;
+    const def = CONFIG.buildings[b.typeId];
+    if (!def || !def.output || def.output.goodId !== gid) continue;
+    if (b.built === false) { r.unbuilt++; if (!r.pending) r.pending = b; continue; }
+    r.built++;
+    if (b.pendingUpgrade) { if (!r.upgrading) r.upgrading = b; continue; }
+    if ((b.workers || 0) > 0) r.staffed++;
+    else if (!r.idle) r.idle = b;
+  }
+  return r;
 };
 
 // The non-gold (resource) portion of an upgrade level's cost.
