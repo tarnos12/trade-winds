@@ -22,7 +22,7 @@ Everything the headless tests `vm`-eval. Must stay free of DOM / canvas /
 | `HexMath` | `const HexMath = {` (~1239) | Axial hex math. |
 | `MapGen` | `TV2 MapGen v2` (~1310) | Seeded map/biome/deposit/fog generation. |
 | Goods + prices | `GOODS-PRICES START` (~1610) | Goods catalog, building catalog, 4-tier needs matrix, local price model. |
-| `Sim` | `SIM-CORE START` (~2013) | Economy tick: staffing (`Sim.staffTown`: self-feed basics → ☆ → rest → blocked last) → production → consumption → prices → happiness → population; construction delivery. |
+| `Sim` | `SIM-CORE START` (~2013) | Economy tick: staffing (`Sim.staffTown`: self-feed basics → ☆ → rest → blocked last) → production → consumption → prices → happiness → population; construction delivery. Read-only readouts: `Sim.buildingStatus` (working / noWorkers / noInputs / awaitingPorter / warehouseFull / upgrading), `Sim.buildingProgress` (bar prog, frozen while stalled), `Sim.buildingRates` (≈/min output + inputs). |
 | `Buildings` | `BUILDINGS-CORE START` (~2571) | Placement/construction/upgrade rules incl. Research Center; housing. Placement V2 sub-region ~3026. |
 | `Pathing` | `PATHING START` (~3128) | Road-node graph + Dijkstra + route cache. |
 | `Trade` | `TRADE START` (~3211) | Autonomous cart dispatch, route profit, transactions, tariff, gradual load/unload. |

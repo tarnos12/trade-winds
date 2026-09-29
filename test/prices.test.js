@@ -44,10 +44,17 @@ const enumeratedCount = EXPECTED[1].length + EXPECTED[2].length + EXPECTED[3].le
 ok("goods count matches enumerated list (26)", Object.keys(CONFIG.goods).length === enumeratedCount);
 // === CC: a processed good's basePrice sits above the summed price of its inputs
 // (positive labour margin) — a sanity floor on the new chains.
-ok("processed goods priced above their input cost", Object.values(CONFIG.goods).every(g => {
-  if (!g.inputs) return true;
+// DESIGN PASS #13: the stale CONFIG.goods[].inputs table was deleted; the margin
+// check now reads the REAL recipes (building inputs per unit of output), so it
+// still guards every processed good instead of passing vacuously.
+const RECIPES = Object.values(CONFIG.buildings).filter(b => b && b.inputs && b.output && b.output.ratePerWorker > 0);
+ok("recipes found for processed goods", RECIPES.length >= 10);
+ok("no good carries a stale inputs table", Object.values(CONFIG.goods).every(g => !("inputs" in g)));
+ok("processed goods priced above their input cost", RECIPES.every(b => {
+  const g = CONFIG.goods[b.output.goodId];
   let inCost = 0;
-  for (const inId in g.inputs) inCost += (CONFIG.goods[inId].basePrice || 0) * g.inputs[inId];
+  for (const inId in b.inputs) inCost += (CONFIG.goods[inId].basePrice || 0) * (b.inputs[inId] / b.output.ratePerWorker);
+  if (!(g.basePrice > inCost)) console.error("    margin<=0:", b.id, g.basePrice, inCost);
   return g.basePrice > inCost;
 }));
 for (const tier of [1, 2, 3]) {
@@ -58,10 +65,8 @@ for (const tier of [1, 2, 3]) {
 ok("every good has valid tier 1-3", Object.values(CONFIG.goods).every(g => [1, 2, 3].includes(g.tier)));
 ok("every good has id matching its key", Object.entries(CONFIG.goods).every(([k, g]) => g.id === k));
 ok("every good has positive basePrice", Object.values(CONFIG.goods).every(g => typeof g.basePrice === "number" && g.basePrice > 0));
-ok("all inputs reference real good ids", Object.values(CONFIG.goods).every(g =>
-  !g.inputs || Object.keys(g.inputs).every(inId => CONFIG.goods[inId])));
-ok("all input quantities positive", Object.values(CONFIG.goods).every(g =>
-  !g.inputs || Object.values(g.inputs).every(q => q > 0)));
+ok("all input quantities positive", RECIPES.every(b =>
+  Object.values(b.inputs).every(q => q > 0)));
 ok("basePrice climbs by tier (avg)", (() => {
   const avg = t => { const gs = Object.values(CONFIG.goods).filter(g => g.tier === t); return gs.reduce((s, g) => s + g.basePrice, 0) / gs.length; };
   return avg(1) < avg(2) && avg(2) < avg(3);

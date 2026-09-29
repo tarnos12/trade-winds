@@ -936,7 +936,8 @@
         prev = c.root;
         const s = sum[gid] || { total: 0, avg: CONFIG.goods[gid].basePrice, trend: 0 };
         c.tot.textContent = Math.round(s.total);
-        c.price.textContent = (Math.round(s.avg * 10) / 10).toFixed(1);
+        // DESIGN PASS #13: no town stocks or uses it → no price to average ("—").
+        c.price.textContent = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1);
         c.tr.className = "rg-tr " + (s.trend > 0 ? "up" : s.trend < 0 ? "down" : "flat");
         c.tr.textContent = s.trend > 0 ? "▲" : s.trend < 0 ? "▼" : "—";
         c.root.classList.toggle("active", gid === openGood);
@@ -1006,10 +1007,15 @@
       // F/4: per-second display (2 ticks = 1 game-second) via UIDev's shared
       // perMin() helper (window.perMin, town-ui.js) rather than a local *TICKS_PER_SEC.
       const rate = (typeof perMin === "function") ? perMin(s.netRate || 0) : (s.netRate || 0);
-      const rateCls = rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
-      const rateStr = (rate > 0 ? "+" : "") + (Math.round(rate * 100) / 100).toFixed(2) + "/min";
+      // DESIGN PASS #13: 60 game-s window (Market.RATE_WINDOW) + a deadband — inside it
+      // the stock is flat as far as the player can tell, so say "≈0" not ±0.3.
+      const dead = (CONFIG.econ && CONFIG.econ.rateDeadbandPerMin) || 0;
+      const flat = Math.abs(rate) < dead;
+      const rateCls = flat ? "" : rate > 0.005 ? "up" : rate < -0.005 ? "down" : "";
+      const rateStr = flat ? "≈0/min" : (rate > 0 ? "+" : "") + (Math.round(rate * 10) / 10).toFixed(1) + "/min";
+      const avgStr = s.priced === false ? "—" : (Math.round(s.avg * 10) / 10).toFixed(1) + " g";
       if (rdStats) rdStats.innerHTML =
-        '<span class="k">Avg price</span><span class="v">' + (Math.round(s.avg * 10) / 10).toFixed(1) + ' g</span>' +
+        '<span class="k">Avg price</span><span class="v">' + avgStr + '</span>' +
         '<span class="k">Net rate</span><span class="v ' + rateCls + '">' + esc(rateStr) + '</span>' +
         '<span class="k">Producers</span><span class="v">' + rc.producers + '</span>' +
         '<span class="k">Consumers</span><span class="v">' + rc.consumers + '</span>';

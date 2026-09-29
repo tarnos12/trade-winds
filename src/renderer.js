@@ -694,6 +694,8 @@
   // workers, amber "n/m" when it runs short. Output scales with workers, so a short
   // building is slow rather than broken; this makes the shortage scannable on the map
   // (Anno's "insufficient workforce" icon). Closed slots don't count as missing.
+  // DESIGN PASS #13: status glyph drawn beside a stalled producer's progress bar.
+  const STALL_GLYPH = { warehouseFull: "📦", awaitingPorter: "📦", noInputs: "⛔", upgrading: "⬆", noWorkers: "👷" };
   function drawStaffBadge(b, def, p, rad) {
     if (!def || def.kind === "house" || !def.workerTier || !(def.workerSlots > 0)) return;
     if (b.blockedReason) return;   // DESIGN PASS #3: full/upgrading — its crew was moved on purpose, not missing
@@ -829,8 +831,10 @@
           drawStaffBadge(b, def, p, rad);
           if (b.pendingUpgrade) drawUpgradeNeed(b, p, rad);
           // v0.47: production/consumption progress bar under producers — fills as the
-          // building nears its next whole-unit batch (green = producing, amber =
-          // waiting on inputs). Houses/non-producers return null and get no bar.
+          // building nears its next whole-unit batch. Houses/non-producers return null.
+          // DESIGN PASS #13: green ONLY while really producing (Sim.buildingProgress
+          // status); any stall freezes the bar, turns it amber and adds a glyph naming
+          // the cause (📦 store full · ⛔ no input · ⬆ upgrading · 👷 no workers).
           if (typeof Sim !== "undefined" && Sim.buildingProgress) {
             const pr = Sim.buildingProgress(state, t, b);
             if (pr) {
@@ -838,10 +842,17 @@
               const bx = p.x - bw / 2, by = p.y + rad + Math.max(2, SIZE * 0.14);
               ctx.fillStyle = "rgba(18,14,9,0.78)";
               ctx.fillRect(bx, by, bw, bh);
-              ctx.fillStyle = !pr.working ? "#8a8574" : (pr.starved ? "#e0a63c" : "#7fc24b");
+              ctx.fillStyle = pr.working ? "#7fc24b" : "#e0a63c";
               ctx.fillRect(bx, by, bw * pr.prog, bh);
-              ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1;
+              ctx.strokeStyle = pr.working ? "rgba(0,0,0,0.55)" : "rgba(224,166,60,0.9)"; ctx.lineWidth = 1;
               ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+              const glyph = STALL_GLYPH[pr.status];
+              if (glyph) {
+                const gpx = Math.max(7, Math.round(SIZE * 0.2));
+                ctx.font = "bold " + gpx + "px system-ui, sans-serif";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffce4d";
+                ctx.fillText(glyph, bx + bw + gpx * 0.6, by + bh / 2);
+              }
             }
           }
           // v0.51 §2: internal-STORE fill bar (what porters collect) — sits just below

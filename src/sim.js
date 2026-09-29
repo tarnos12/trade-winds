@@ -1348,18 +1348,53 @@ Sim.houseIncome = function (town, building) {
 // === /PP-A ===
 
 // (v0.47) Read-only production progress for the map + panel progress bars. Returns
-// { prog, working, starved, kind, out } for a producing building, or null for a
-// house / non-producer. `prog` (0..1) is how far this building is toward its next
-// whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick advances); at
-// interval 0 (release-every-tick kinds) it reports the banked fraction. `starved`
-// = a processor that lacks its full input recipe in the town stock right now. Pure.
+// { prog, working, starved, status, kind, out, intervalTicks } for a producing
+// building, or null for a house / non-producer. `prog` (0..1) is how far this building
+// is toward its next whole-unit batch RELEASE (the same _prodTimer countdown Sim.tick
+// advances); at interval 0 (release-every-tick kinds) it reports the banked fraction.
+// DESIGN PASS #13: `status` says WHY a bar isn't moving, mirroring Sim.tick's stall gates:
+//   upgrading      — pending upgrade (production stops)
+//   warehouseFull  — own store full AND the city warehouse holds storageCap of the good
+//                    (porters have nowhere to unload — the real block, not the porters)
+//   awaitingPorter — own store full, warehouse has room: a porter will empty it
+//   noWorkers      — nobody staffed
+//   noInputs       — a processor with < 1 whole unit of an input in its buffer + warehouse
+//   working
+// Staffing's "full" flag (b.blockedReason, which pulls the crew off) also reads as full.
+// When not working the DISPLAYED prog freezes at its last working value (a UI memo in a
+// WeakMap — _prodTimer is never touched, so batch cadence and determinism are unchanged).
+// The interval honours type.cycleSec (same rule as Sim.tick's intervalTicksFor).
+const BP_FROZEN = (typeof WeakMap !== "undefined") ? new WeakMap() : null;
+Sim.buildingStatus = function (town, b) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  if (b.pendingUpgrade || b.blockedReason === "upgrading") return "upgrading";
+  const g = def.output.goodId;
+  const storeCap = def.storeCap || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
+  const buffered = (b._prodAcc || 0) + ((b.store && b.store[g]) || 0);
+  if (buffered >= storeCap - 1e-9 || b.blockedReason === "full") {
+    const cap = CONFIG.town && CONFIG.town.storageCap;
+    const whStock = (town && town.stock && town.stock[g]) || 0;
+    return (cap && whStock >= cap) ? "warehouseFull" : "awaitingPorter";
+  }
+  if (!((b.workers || 0) > 0) || b.built === false) return "noWorkers";
+  if (def.inputs) {
+    const stock = (town && town.stock) || {};
+    for (const gid in def.inputs) {
+      if (((b.inbuf && b.inbuf[gid]) || 0) + (stock[gid] || 0) < 1) return "noInputs";
+    }
+  }
+  return "working";
+};
 Sim.buildingProgress = function (state, town, b) {
   const def = b && CONFIG.buildings[b.typeId];
   if (!def || !def.output || def.kind === "house") return null;
   const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
   const psec = (CONFIG.econ && CONFIG.econ.productionIntervalSec) || {};
-  const intervalTicks = Math.round((psec[def.kind] || 0) * (1000 / baseTickMs));
-  const working = (b.workers || 0) > 0 && b.built !== false;
+  const sec = (typeof def.cycleSec === "number") ? def.cycleSec : (psec[def.kind] || 0);
+  const intervalTicks = Math.round(sec * (1000 / baseTickMs));
+  const status = Sim.buildingStatus(town, b);
+  const working = status === "working";
   let prog = 0;
   if (intervalTicks > 0) {
     const t = (typeof b._prodTimer === "number") ? b._prodTimer : intervalTicks;
@@ -1367,11 +1402,41 @@ Sim.buildingProgress = function (state, town, b) {
   } else {
     prog = Math.max(0, Math.min(1, (b._prodAcc || 0) % 1));
   }
-  let starved = false;
-  if (def.inputs && town && town.stock) {
-    for (const gid in def.inputs) if ((town.stock[gid] || 0) < def.inputs[gid]) { starved = true; break; }
+  if (BP_FROZEN) {
+    if (working) BP_FROZEN.set(b, prog);
+    else prog = BP_FROZEN.has(b) ? BP_FROZEN.get(b) : 0;
+  } else if (!working) prog = 0;
+  return { prog, working, starved: status === "noInputs", status, intervalTicks, kind: def.kind, out: def.output.goodId };
+};
+
+// DESIGN PASS #13: nominal per-minute flows of one producer at its CURRENT staffing,
+// mirroring Sim.tick's production maths: output = ratePerWorker × workers × hf (town
+// happiness from the last tick) × research × upgrade outputMult; inputs = recipe qty ×
+// workers (inputs are not scaled by hf/research/upgrades in Sim.tick). `workers`
+// overrides the staffed count (e.g. full slots for a "when staffed" preview). Pure.
+Sim.buildingRates = function (state, town, b, workers) {
+  const def = b && CONFIG.buildings[b.typeId];
+  if (!def || !def.output || def.kind === "house") return null;
+  const E = CONFIG.econ || {}, N = CONFIG.needs || {};
+  const perMin = E.ticksPerMin || 120;
+  const w = (typeof workers === "number") ? workers : (b.pendingUpgrade ? 0 : (b.workers || 0));
+  const h = (town && typeof town.happiness === "number") ? town.happiness : 100;
+  const effMin = (typeof N.effMin === "number") ? N.effMin : 1, effMax = (typeof N.effMax === "number") ? N.effMax : 1;
+  const hf = effMin + (Math.min(100, Math.max(0, h)) / 100) * (effMax - effMin);
+  let resMult = 1;
+  if (typeof Research !== "undefined" && Research.effect && state) {
+    resMult = Research.effect(state, "globalOutput", 1);
+    if (def.kind === "extractor") {
+      resMult *= Research.effect(state, "extractorOutput", 1);
+      if (MINE_TERRAINS[def.terrain]) resMult *= Research.effect(state, "mineOutput", 1);
+    } else if (def.kind === "processor") {
+      resMult *= Research.effect(state, "processorOutput", 1);
+    }
   }
-  return { prog: working ? prog : 0, working, starved, intervalTicks, kind: def.kind, out: def.output.goodId };
+  const upgMult = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).outputMult || 1) : 1;
+  const inPerMin = {};
+  if (def.inputs) for (const gid in def.inputs) inPerMin[gid] = def.inputs[gid] * w * perMin;
+  return { good: def.output.goodId, outPerMin: def.output.ratePerWorker * w * hf * resMult * upgMult * perMin, inPerMin, workers: w, hf };
 };
 
 // === CC: save-good migration (PURE — lives in PURE_CORE so migration tests can

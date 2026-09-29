@@ -3,10 +3,10 @@
 // Added to the shared CONFIG via a NON-DESTRUCTIVE merge so it composes with
 // the Phase-1 CONFIG and with the other Phase-2 slices (T4 sim, T6 UI).
 Object.assign(CONFIG, {
-  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier; `inputs`
-  // (goodId → qty consumed per unit produced) reference other goods by id.
-  // NB: "beer = grain + water" in the GDD — water is ambient, not a tracked
-  // good, so only grain appears here.
+  // 14 goods across 3 tiers (GDD §5.1). basePrice climbs with tier.
+  // DESIGN PASS #13: the stale per-good `inputs` table (e.g. planks = 2 wood, while the
+  // Sawmill is really 1:1) was deleted — nothing read it. The ONE recipe source is
+  // CONFIG.buildings[].inputs / .output (per-worker-tick rates).
   goods: {
     // --- tier 1 (raw) ---
     wood:   { id: "wood",   tier: 1, basePrice: 5 },
@@ -19,25 +19,25 @@ Object.assign(CONFIG, {
     wool:   { id: "wool",   tier: 1, basePrice: 7 },
     // === CC: content chains v2 — 4-tier needs matrix + aristocrat luxuries. ===
     // --- tier 2 (processed / mined) --- basePrice ≈ input cost × ~1.4–1.5 (labour margin).
-    planks:      { id: "planks",      tier: 2, basePrice: 14, inputs: { wood: 2 } },              // wood 5×2=10
-    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22, inputs: { wood: 1, iron: 1 } },     // === CC: Forge; migrates old "tools" ===
-    flour:       { id: "flour",       tier: 2, basePrice: 12, inputs: { grain: 2 } },             // grain 4×2=8
-    mead:        { id: "mead",        tier: 2, basePrice: 14, inputs: { grain: 2 } },             // === CC: Brewery; migrates old "beer" ===
-    clothes:     { id: "clothes",     tier: 2, basePrice: 22, inputs: { wool: 2 } },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
-    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28, inputs: { planks: 1, stone: 1 } },  // === CC: StoneTools Maker ===
-    oil:         { id: "oil",         tier: 2, basePrice: 15, inputs: { fish: 2 } },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
+    planks:      { id: "planks",      tier: 2, basePrice: 14 },              // wood 5×2=10
+    iron_tool:   { id: "iron_tool",   tier: 2, basePrice: 22 },     // === CC: Forge; migrates old "tools" ===
+    flour:       { id: "flour",       tier: 2, basePrice: 12 },             // grain 4×2=8
+    mead:        { id: "mead",        tier: 2, basePrice: 14 },             // === CC: Brewery; migrates old "beer" ===
+    clothes:     { id: "clothes",     tier: 2, basePrice: 22 },              // === CC: T2 now, Tailoring wool→clothes; migrates old "cloth" ===
+    stone_tools: { id: "stone_tools", tier: 2, basePrice: 28 },  // === CC: StoneTools Maker ===
+    oil:         { id: "oil",         tier: 2, basePrice: 15 },              // === CC: Oil Maker (fish 5×2=10) === === BALPV: 18→15 restores T2 ×1.5 band; repairs lamp (40/30) & chairs margins downstream ===
     coal:        { id: "coal",        tier: 2, basePrice: 10 },  // === TV2: mined raw (tier = pricing band) ===
     gold:        { id: "gold",        tier: 2, basePrice: 42 },  // === TV2: mined raw, high value ===
-    bricks:      { id: "bricks",      tier: 2, basePrice: 16, inputs: { clay: 2 } },              // === TV2: clay 6×2=12 (Brickworks) ===
+    bricks:      { id: "bricks",      tier: 2, basePrice: 16 },              // === TV2: clay 6×2=12 (Brickworks) ===
     // --- tier 3 (luxury) --- basePrice ≈ input cost × ~1.3–2 (scarcer, higher margin).
-    bread:          { id: "bread",          tier: 3, basePrice: 30,  inputs: { flour: 2 } },                 // flour 12×2=24
-    pottery:        { id: "pottery",        tier: 3, basePrice: 22,  inputs: { clay: 2 } },                  // === CC: Pottery (clay 6×2=12) ===
-    lamp:           { id: "lamp",           tier: 3, basePrice: 40,  inputs: { oil: 2 } },                   // === CC: Lamp Maker (oil 18×2=36) ===
-    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70,  inputs: { coal: 2, iron: 2 } },         // === CC: Armory (coal10×2+iron8×2=36) ===
-    chairs:         { id: "chairs",         tier: 3, basePrice: 64,  inputs: { planks: 2, oil: 1 } },        // === CC: Carpentry; migrates old "furniture" ===
-    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120, inputs: { gold: 1, iron_tool: 1 } },    // === CC: Goldsmith; migrates old "jewelry" ===
-    brandy:         { id: "brandy",         tier: 3, basePrice: 72,  inputs: { mead: 2, pottery: 1 } },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
-    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240, inputs: { clothes: 2, gold_ring: 1 } }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
+    bread:          { id: "bread",          tier: 3, basePrice: 30 },                 // flour 12×2=24
+    pottery:        { id: "pottery",        tier: 3, basePrice: 22 },                  // === CC: Pottery (clay 6×2=12) ===
+    lamp:           { id: "lamp",           tier: 3, basePrice: 40 },                   // === CC: Lamp Maker (oil 18×2=36) ===
+    iron_armor:     { id: "iron_armor",     tier: 3, basePrice: 70 },         // === CC: Armory (coal10×2+iron8×2=36) ===
+    chairs:         { id: "chairs",         tier: 3, basePrice: 64 },        // === CC: Carpentry; migrates old "furniture" ===
+    gold_ring:      { id: "gold_ring",      tier: 3, basePrice: 120 },    // === CC: Goldsmith; migrates old "jewelry" ===
+    brandy:         { id: "brandy",         tier: 3, basePrice: 72 },      // === CC: Distillery (mead14×2+pottery22=50) === === BALPV: 60→72 (1.44× band) so the distillery is worth scarce burgher labour ===
+    luxury_clothes: { id: "luxury_clothes", tier: 3, basePrice: 240 }, // === CC: Luxury Tailor (clothes22×2+ring120=164) === === BALPV: 200→240 (1.46× band) — deepest chain carries the fattest absolute margin ===
   },
 
   // Player-placed buildings (Town Interiors, GDD §4.1, §5.2). Redesigned into
@@ -409,6 +409,12 @@ Object.assign(CONFIG.econ, {
   selfFeedCoverSec: 120,
   selfFeedReleaseMult: 2,   // …and stays staffed first until the cover is back to 2× that (anti-flicker)
   staffBlockedLast: true,
+  // DESIGN PASS #13: rate readouts (warehouse Rate column, Kingdom resource Net rate)
+  // average the net stock change over this many ticks (120 = 60 game-s) and show
+  // "≈0" when |rate| is under the deadband (units/min) — integer batches made the old
+  // 4–10 s windows swing ±90/min around a true +2.7.
+  rateWindowTicks: 120,
+  rateDeadbandPerMin: 0.5,
 });
 
 // Sim — pure, deterministic economy namespace. THIS SLICE OWNS ONLY priceFor;

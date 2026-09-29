@@ -20,7 +20,9 @@ var Market = (typeof Market !== "undefined" && Market) || {};
 
 Market.MAX_SAMPLES = 600;     // 5 min at 500 ms / tick — buffer hard cap per good
 Market.TREND_LOOKBACK = 60;   // compare "now" vs ~30 s ago for the trend arrow
-Market.RATE_WINDOW = 20;      // ~10 s window the net-production rate averages over
+// DESIGN PASS #13: 20 → 120 samples (60 game-s). Stock moves in whole-unit batches, so a
+// 10 s window swung ±30–90/min around a flat true rate. 120 ≤ MAX_SAMPLES.
+Market.RATE_WINDOW = 120;     // ~60 s window the net-production rate averages over
 
 // Blank, well-formed market container.
 Market.fresh = function () { return { hist: {}, head: 0, len: 0 }; };
@@ -73,6 +75,14 @@ Market.normalize = function (state) {
   return m;
 };
 
+// A town "has a market" for gid when it stocks it or consumes it (demand > 0).
+// Defers to Sim.hasMarket (the price engine's own test) when loaded.
+Market.townHasMarket = function (town, gid) {
+  if (!town) return false;
+  if (typeof Sim !== "undefined" && Sim.hasMarket) return Sim.hasMarket(town, gid);
+  return ((town.stock && town.stock[gid]) || 0) > 0 || ((town.demand && town.demand[gid]) || 0) > 0;
+};
+
 // Sample once into the ring. Call AFTER Sim.tick / Trade.tick each econ step.
 Market.tick = function (state) {
   if (!state) return state;
@@ -92,6 +102,10 @@ Market.tick = function (state) {
       total += (town.stock && town.stock[gid]) || 0;
       // Read the published price (Sim.tick already republished it this tick);
       // count only towns that "value" the good (hold a finite price for it).
+      // DESIGN PASS #13: …AND have a local market for it (stock or consumption) — a
+      // town that neither holds nor uses a good just parks at basePrice (was 1.9× →
+      // the phantom "22.4 planks"), and must not drag the kingdom average.
+      if (!Market.townHasMarket(town, gid)) continue;
       const p = town.prices && town.prices[gid];
       if (typeof p === "number" && isFinite(p)) { pSum += p; pN++; }
     }
@@ -111,6 +125,8 @@ Market.tick = function (state) {
 //   capacity  #towns × storageCap (the theoretical kingdom ceiling)
 //   trend     avg now vs ~TREND_LOOKBACK samples ago, with a 2% deadband
 //   netRate   mean per-tick change in total over the last ~RATE_WINDOW samples
+//   priced    DESIGN PASS #13: some town has a market for the good right now; when
+//             false the UI shows "—" instead of avg (which is just basePrice then)
 Market.summary = function (state) {
   const goods = (typeof CONFIG !== "undefined" && CONFIG.goods) || {};
   const towns = (state && Array.isArray(state.towns)) ? state.towns : [];
@@ -135,7 +151,9 @@ Market.summary = function (state) {
       const steps = (n - 1) - rIdx;
       if (steps > 0) netRate = (total - arr[rIdx].total) / steps;
     }
-    out[gid] = { total: total, avg: avg, capacity: cap, trend: trend, netRate: netRate };
+    let priced = false;
+    for (let i = 0; i < towns.length && !priced; i++) priced = Market.townHasMarket(towns[i], gid);
+    out[gid] = { total: total, avg: avg, capacity: cap, trend: trend, netRate: netRate, priced: priced };
   }
   return out;
 };
