@@ -48,6 +48,17 @@ const CONFIG = {
     // toward the sea / a lake / the board edge. COUNT keyed by a preset's `rivers`
     // LEVEL string; WIDTH varies within this range along each course.
     rivers: { none: 0, few: 1, normal: 3, many: 5 }, riverWidth: [1, 5],
+    // DESIGN PASS: MAP GENERATOR VERSION. Saves regenerate terrain from the seed,
+    // so any change to generation is gated on the version the game was CREATED
+    // with (state.mapgenVersion; saves without it load as 1 = pre-stone-guarantee).
+    //   1: original TV2 generator.  2: + stone guarantee (MapGen.repairStone).
+    genVersion: 2,
+    // DESIGN PASS: STONE GUARANTEE (genVersion >= 2). Research runs on stone, so a
+    // quarry-able stone cluster must sit inside the opening reveal: >= 1
+    // stone_deposit at hex-dist [minDist, maxDist] of the castle with >=
+    // minBuildableNbrs buildable, non-snow, castle-clear neighbours (a city site).
+    // maxDist is also capped at (start reveal - 1) so Small maps keep it in view.
+    stoneGuarantee: { minDist: 3, maxDist: 6, minBuildableNbrs: 2, tiles: 2 },
     frac: { water: 0.30, mountains: 0.07, hills: 0.11,     // legacy — unused by TV2 MapGen v2
             forest: 0.28, fertile: 0.20, wasteland: 0.16 }, //  (kept so old refs don't crash)
   },

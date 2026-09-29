@@ -13,8 +13,11 @@
   // CUSTOM preset (MapGen.applyTiers) and state.mapPreset becomes "custom".
   // `noSave` skips the autosave (used by the start-screen live PREVIEW so rolling
   // custom worlds never clobbers an existing save). ===
-  function newGame(seedInput, presetId, tiers, noSave) {
+  // DESIGN PASS: `genVersion` = MapGen revision to build with (CONFIG.map.genVersion
+  // for a new game; loadGame passes the save's own so old terrain regenerates exactly).
+  function newGame(seedInput, presetId, tiers, noSave, genVersion) {
     state.seedInput = seedInput;
+    state.mapgenVersion = genVersion || CONFIG.map.genVersion || 1;
     const hasTiers = tiers && typeof tiers === "object";
     // === TV2: map preset (persisted). Radius comes from the chosen preset. ===
     if (hasTiers) {
@@ -23,13 +26,13 @@
       state.mapPreset = "custom";
       state.mapTiers = Object.assign({}, tiers, { base: baseId });   // normalize the base id into the stored selection
       // radius null => generate() derives it from the resolved (applyTiers) preset's own rect-scaled radius.
-      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers);
+      state.map = MapGen.generate(seedInput, null, "custom", state.mapTiers, state.mapgenVersion);
     } else {
       const preset = (CONFIG.mapPresets && CONFIG.mapPresets[presetId]) ? presetId : (CONFIG.mapPresetDefault || "fertile");
       state.mapPreset = preset;
       state.mapTiers = null;
       const pr = CONFIG.mapPresets[preset];
-      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset);
+      state.map = MapGen.generate(seedInput, (pr && pr.radius) || CONFIG.map.radius, preset, null, state.mapgenVersion);
     }
     state.roads = new Set();
     // BUGFIX: every OTHER state.roads mutation site (place ~6045, erase ~6059,
@@ -94,6 +97,7 @@
         seed: state.seedInput,
         preset: state.mapPreset,           // === TV2: persist chosen map preset ===
         tiers: state.mapTiers || null,     // === Custom Map: persist the tier selection (null for a plain preset) ===
+        mapgenVersion: state.mapgenVersion, // DESIGN PASS: generator revision the terrain was built with
         cam: state.cam, zoom: state.zoom, mode: state.mode,
         revealAll: state.revealAll,
         roads: Array.from(state.roads),
@@ -221,8 +225,11 @@
     // when it was a custom world. Old saves (no `tiers`, or preset !== "custom")
     // take the plain-preset path; a "custom" preset with a missing/garbage tiers
     // object falls back to the default preset inside newGame. ===
+    // DESIGN PASS: saves without mapgenVersion predate the stone guarantee → v1,
+    // so their terrain (under placed cities/roads) regenerates unchanged.
     newGame(data.seed, data.preset,
-      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null);
+      (data.preset === "custom" && data.tiers && typeof data.tiers === "object") ? data.tiers : null,
+      false, (typeof data.mapgenVersion === "number" && data.mapgenVersion >= 1) ? Math.floor(data.mapgenVersion) : 1);
     // P2: SANITIZE road keys — a corrupt array ELEMENT (null / number / etc.)
     // would slip past saveShapeOk's array-type check, land in the Set, then throw
     // in drawRoads' `k.split(...)` INSIDE the shared rAF frame() before it

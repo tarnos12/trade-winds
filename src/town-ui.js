@@ -961,11 +961,39 @@
     setMode("pan");
     placing = { typeId };
     closeFlyout();   // CBM: selecting an item closes the submenu
-    buildBarHintEl.className = "";
-    buildBarHintEl.textContent = "Placing " + (CONFIG.buildings[typeId].name || typeId) +
-      " — click a hex bordering a city.";
+    const noSite = depositSiteHint(typeId);   // DESIGN PASS: say WHY a deposit extractor has nowhere to go
+    buildBarHintEl.className = noSite ? "bad" : "";
+    buildBarHintEl.textContent = noSite || ("Placing " + (CONFIG.buildings[typeId].name || typeId) +
+      " — click a hex bordering a city.");
     updateBuildBar();
     if (activeTown) renderTownPanel();
+  }
+  // DESIGN PASS: for a deposit extractor (Quarry, mines, Clay Pit) with NO valid
+  // site among the revealed hexes, the reason the player needs: nothing in sight
+  // → send the Scout; in sight but no city borders it → found one beside it.
+  // Returns "" when a valid site exists (or for other buildings). Cached on the
+  // revealed-hex / city / building counts so the mousemove hint stays cheap.
+  let dshCache = { key: "", map: null, text: "" };
+  function depositSiteHint(typeId) {
+    const def = CONFIG.buildings[typeId];
+    if (!def || def.kind !== "extractor" || def.adjacent || !/_deposit$/.test(def.terrain || "")) return "";
+    let nb = 0; for (const t of (state.towns || [])) nb += (t.buildings || []).length;
+    const key = typeId + "|" + (state.revealAll ? "all" : state.revealed.size) + "|" + (state.towns || []).length + "|" + nb;
+    if (dshCache.key === key && dshCache.map === state.map) return dshCache.text;   // same world (a New Game swaps state.map)
+    const gid = (def.output && def.output.goodId) || def.terrain;
+    const noun = String(GOOD_LABEL(gid) || gid).toLowerCase();
+    let seen = false, valid = false;
+    for (const [k, hx] of state.map.hexes) {
+      if (hx.terrain !== def.terrain || !isVisible(k)) continue;
+      if (Buildings.touchesCastle(state, hx.q, hx.r)) continue;   // castle-adjacent veins can never host a city building
+      seen = true;
+      if (Buildings.canPlaceBuilding(state, typeId, hx.q, hx.r).ok) { valid = true; break; }
+    }
+    const text = valid ? "" : (!seen
+      ? "No " + noun + " in sight — send your Scout (top-left) to explore"
+      : "No city borders the " + noun + " in sight — found a city beside it first");
+    dshCache = { key, map: state.map, text };
+    return text;
   }
   function cancelPlacing() {
     if (!placing) return;
@@ -982,7 +1010,8 @@
     const h = hexAtScreen(sx, sy);
     const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
     if (!res.ok) {
-      buildBarHintEl.textContent = "✗ " + res.reason;
+      const noSite = depositSiteHint(placing.typeId);   // DESIGN PASS
+      buildBarHintEl.textContent = "✗ " + (noSite || res.reason);
       buildBarHintEl.className = "bad";
       return;
     }
@@ -1155,9 +1184,10 @@
       buildBarHintEl.className = res.ok ? "ok" : "bad";
     } else if (placing) {
       const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
+      const noSite = res.ok ? "" : depositSiteHint(placing.typeId);   // DESIGN PASS: keep the "why nowhere" hint up
       buildBarHintEl.textContent = res.ok
         ? "✓ valid — click to build in Town #" + res.town.id
-        : "✗ " + res.reason;
+        : (noSite ? "✗ " + noSite : "✗ " + res.reason);
       buildBarHintEl.className = res.ok ? "ok" : "bad";
     } else if (state.mode === "town") {
       // === POLISH: canPlaceTown is pure and knows nothing about fog, but the
