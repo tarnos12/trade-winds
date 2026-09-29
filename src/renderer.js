@@ -702,10 +702,11 @@
     const slotPlus = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0;
     const open = Math.max(0, def.workerSlots + slotPlus - (b.closedSlots || 0));
     if (open <= 0) return;
-    const w = b.workers || 0;
-    if (w >= open - 0.05) return;
-    const none = w < 0.05;
-    const label = none ? "👷0" : "👷" + Math.floor(w + 0.05) + "/" + open;
+    // v0.52.1: whole workers, same rounding as the building panel (< 0.5 = idle)
+    const w = Math.round(b.workers || 0);
+    if (w >= open) return;
+    const none = w < 1;
+    const label = none ? "👷0" : "👷" + w + "/" + open;
     const fontPx = Math.max(7, Math.round(SIZE * 0.17));
     ctx.save();
     ctx.font = "bold " + fontPx + "px system-ui, sans-serif";

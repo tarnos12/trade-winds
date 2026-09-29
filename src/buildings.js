@@ -222,9 +222,12 @@ Buildings.canStartUpgrade = function (state, town, b) {
   // REVIEW FIX: cost.gold is the CITY-GOLD price, not the gold good (Gold Mine output) —
   // same exclusion as upgradeResourceCost, so a Gold Mine ladder can't gate on ore stock.
   const ownNeed = own && own !== "gold" && nxt.cost ? (nxt.cost[own] || 0) : 0;
-  if (ownNeed > 0 && ((town && town.stock && town.stock[own]) || 0) < ownNeed) {
+  const ownHave = (town && town.stock && town.stock[own]) || 0;
+  if (ownNeed > 0 && ownHave < ownNeed) {
     const label = own.charAt(0).toUpperCase() + own.slice(1).replace(/_/g, " ");
-    return { ok: false, selfGood: own, reason: "Stock " + ownNeed + " " + label + " first — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
+    // v0.52.1: say how much the city holds now (need/have also returned for the UI's icon form)
+    return { ok: false, selfGood: own, need: ownNeed, have: Math.floor(ownHave),
+      reason: "Stock " + ownNeed + " " + label + " first (have " + Math.floor(ownHave) + ") — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
   }
   return { ok: true };
 };
@@ -660,6 +663,24 @@ Buildings.canPlaceTown = function (state, q, r) {
     return { ok: false, reason: "Too close to a castle building" };
   }
   return { ok: true };
+};
+
+// v0.52.1: what a city founded at (q,r) could build on around its center — the 6
+// neighbours by terrain, split into USABLE and RESERVED (on/next to the castle or a
+// castle building: the castle compound's no-touch gap, so no city building may sit
+// there). Returns { usable: {terrain: n}, reserved: {terrain: n} }. Pure (city-hover hint).
+Buildings.townSiteTiles = function (state, q, r) {
+  const usable = {}, reserved = {};
+  const map = state && state.map;
+  if (!map || !map.hexes) return { usable, reserved };
+  for (const n of HexMath.neighbors(q, r)) {
+    const hex = map.hexes.get(HexMath.key(n.q, n.r));
+    if (!hex) continue;
+    const res = Buildings.touchesCastle(state, n.q, n.r) || Buildings.touchesCastleBuilding(state, n.q, n.r);
+    const bag = res ? reserved : usable;
+    bag[hex.terrain] = (bag[hex.terrain] || 0) + 1;
+  }
+  return { usable, reserved };
 };
 
 // Back-compat wrapper for existing callers that pass an explicit `town`. Placement

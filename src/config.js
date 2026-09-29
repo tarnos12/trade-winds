@@ -241,6 +241,9 @@ const CONFIG = {
     satOk: 0.9,            // a STAFFED local producer holds the early alert back until satEMA dips below this
     idleAfterSec: 30,      // Event Log: a producer with 0 workers for this many game-seconds is reported…
     idleRepeatSec: 300,    // …at most once per building per this many game-seconds (5 game-min)
+    idleGraceSec: 60,      // v0.52.1: …and never while its tier still has free homes, nor this soon after the city completes
+    dreamMinAgeSec: 150,   // v0.52.1: "We dream of X" waits until the city is this many game-s old…
+    dreamMinPop: 1,        // …and the luxury's tier has MORE than this many residents
   },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.

@@ -440,7 +440,9 @@
           if (!b) continue;
           const def = CONFIG.buildings[b.typeId];
           let rec = idleRec.get(b);
-          if (!isIdleProducer(b, def)) { if (rec) rec.since = -1; continue; }
+          // v0.52.1: not news while that tier is still moving into free homes (the normal
+          // first-minute ramp) or right after the city completes — Sim.idleIsNews.
+          if (!isIdleProducer(b, def) || !Sim.idleIsNews(state, t, def)) { if (rec) rec.since = -1; continue; }
           if (!rec) { rec = { since: tick, last: -Infinity }; idleRec.set(b, rec); }
           else if (rec.since < 0) rec.since = tick;
           if (tick - rec.since >= idleAfter && tick - rec.last >= idleRepeat) {

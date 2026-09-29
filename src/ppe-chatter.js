@@ -135,7 +135,7 @@
       }
       // (b) once per city: the first research-locked luxury, pointing at the research
       if (!dreamed.has(t.id)) {
-        const line = dreamLine(cov);
+        const line = dreamLine(cov, Sim.dreamTiers(state, t));   // v0.52.1: settled city + tier pop > 1 only
         if (line) { dreamed.add(t.id); return line; }
       }
       // (c) a tier is very happy (pays the people-tax bonus above happyBase)
@@ -151,10 +151,14 @@
     }
     // "We dream of 🐟 Fish — research the Fishery 🔬" for the first present-tier luxury
     // with no available producer; the research name comes from the building's unlockedBy.
-    function dreamLine(cov) {
+    // v0.52.1: only a luxury of a tier in `tiers` (Sim.dreamTiers: > 1 resident, city
+    // ≥ CONFIG.alerts.dreamMinAgeSec old) — a just-founded, empty city doesn't dream.
+    function dreamLine(cov, tiers) {
+      if (!tiers || !tiers.length) return null;
       const producible = (typeof Market !== "undefined" && Market.producible) ? Market.producible(state) : {};
       for (const e of cov) {
         if (e.cls !== "extra" || producible[e.gid]) continue;
+        if (!tiers.some((k) => Needs.tier(k).extra.indexOf(e.gid) >= 0)) continue;
         let node = null;
         for (const bid in CONFIG.buildings) {
           const def = CONFIG.buildings[bid];

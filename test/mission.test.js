@@ -331,6 +331,8 @@ if (!engineAvailable) {
     { type: "construct", building: "sawmill", count: 1 }, { type: "upgrade", building: "any", count: 1 }]));
   ok("m4 tip: 3rd Hut before the Sawmill; ⬆ is on the building panel",
      /3rd Hut/.test(D[3].tip) && /building's panel/.test(D[3].tip));
+  ok("m4 tip: first ⬆ = Sturdy Hut or Water Wheel (not the self-gated Lumberjack)",
+     /Sturdy Hut/.test(D[3].tip) && /Water Wheel/.test(D[3].tip));
   ok("m5 tip no longer claims roads double speed; still teaches speciality",
      !/twice as fast/.test(D[4].tip) && /speciality/.test(D[4].tip));
   ok("m6 tip leads with the 👷 badge (reachable lesson), then Take", D[5].tip.indexOf("👷") === 0 && /Take 1k/.test(D[5].tip));
@@ -338,7 +340,8 @@ if (!engineAvailable) {
      D.every((mm, i) => JSON.stringify(mm.prereqs) === JSON.stringify(i ? [D[i - 1].id] : [])));
 
   // 'Next up' preview helpers
-  ok("firstSentence cuts at the first terminator", E.firstSentence(D[1].tip) === "Found a Farm town on fertile land: two Potato Farms and two Huts, no Lumberjack.");
+  ok("firstSentence cuts at the first terminator", E.firstSentence(D[1].tip) === "Found a Farm town on fertile land away from the castle: two Potato Farms and two Huts, no Lumberjack.");
+  ok("m2 tip: found the Farm town away from the castle (its neighbours are reserved)", /away from the castle/.test(D[1].tip));
   ok("firstSentence keeps a one-sentence tip whole", E.firstSentence(D[0].tip) === D[0].tip);
   ok("firstSentence of a tip without a terminator is the whole tip", E.firstSentence("  no stop here ") === "no stop here");
   ok("firstSentence of a missing tip is ''", E.firstSentence(undefined) === "");

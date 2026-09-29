@@ -1,6 +1,13 @@
   // === VERSION / PATCH NOTES ===  (bump GAME_VERSION + prepend an entry on each change)
-  const GAME_VERSION = "0.52.0";
+  const GAME_VERSION = "0.52.1";
   const PATCH_NOTES = [
+    { v: "0.52.1", notes: [
+      "The victory screen shows once: after Keep ruling it no longer reopens every time you Continue a won realm, and it never pops up (with its fanfare) behind the title screen.",
+      "Fewer false alarms while a new city fills up: no \"idle — build Huts\" log entries while peasants are still moving into free homes, and no \"We dream of 🐟 Fish\" from an empty, just-founded city.",
+      "Building panels agree with themselves while workers arrive: whole workers only, \"0/min\" until someone actually works there, and the batch preview says \"at full crew\" when the crew is short.",
+      "Clearer refusals: \"Stock 20 🪵 first (have 3)\" on a Lumberjack upgrade, a toast when a road can't start on water or mountains, and the city-site hint lists the resource tiles you can use (hexes beside the castle are reserved). Mission tips now suggest Sturdy Hut or Water Wheel as a first upgrade and founding cities away from the castle.",
+      "Upgrades and construction no longer take your people's last wood or food: about a minute of their basic needs stays in the warehouse (a city's first Lumberjack still gets every log it needs).",
+    ] },
     { v: "0.52.0", notes: [
       "Continue now brings back your lifetime tariff, goods traded and mission progress, city cards always act on the right city, and the map-wiping Generate / 🎲 buttons are gone from the menu. Opening the Custom map preview can no longer overwrite your saved kingdom.",
       "No more stuck starts: a building can't begin an upgrade that eats the very goods it makes (\"Stock 20 Wood first\"), a new city finishes its Lumberjack before spending wood elsewhere, upgrading buildings say they're paused, and ✖ Cancel upgrade refunds what was paid.",

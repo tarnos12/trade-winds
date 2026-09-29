@@ -117,6 +117,7 @@ Victory.check = function (state) {
       // DESIGN PASS: remember WHEN the realm was won (recap time-to-win). Old saves
       // won before this field existed simply have none (recap shows "—").
       state.victoryTick = (typeof state.tick === "number") ? state.tick : null;
+      state.victorySeen = false;   // v0.52.1: a fresh win (false→true) — the card shows until dismissed
       break;
     }
   }

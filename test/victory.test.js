@@ -151,6 +151,16 @@ function withHome(th, opts) {
   Victory.check(both);
   ok("both at/over threshold wins", both.victory === true);
   ok("victoryTick latches the winning tick", both.victoryTick === 1234);
+  // v0.52.1: a fresh false→true win clears victorySeen so the card shows until dismissed…
+  const seen = mkState([ mkTown({ buildings: [homeBuilt()], tierHappiness: { aristocrats: 100 },
+                                  tierNeedHappiness: { aristocrats: 100 }, pop: { aristocrats: 1 } }) ]);
+  seen.victorySeen = true;   // (stale flag — e.g. a hand-edited save)
+  Victory.check(seen);
+  ok("v0.52.1: a fresh win resets victorySeen to false", seen.victory === true && seen.victorySeen === false);
+  // …and the latch never touches it again once the player has dismissed the card
+  seen.victorySeen = true;
+  Victory.check(seen);
+  ok("v0.52.1: the latch keeps a dismissed win dismissed", seen.victorySeen === true);
   ok("estateHappiness = min of the two", Victory.estateHappiness({ tierHappiness: { aristocrats: 100 }, tierNeedHappiness: { aristocrats: 90 } }) === 90);
   ok("estateHappiness falls back to tierHappiness (pre-tick town)", Victory.estateHappiness({ tierHappiness: { aristocrats: 95 } }) === 95);
   ok("estateHappiness null without aristocrats", Victory.estateHappiness({ tierHappiness: { aristocrats: null } }) === null);

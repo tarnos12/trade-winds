@@ -372,7 +372,7 @@ MissionEngine.DEFAULT = {
         { type: "construct", building: "hut",        count: 2 },      // peasants to staff it
       ] },
     { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-      tip: "Found a Farm town on fertile land: two Potato Farms and two Huts, no Lumberjack. Each city buys the other's surplus and the King taxes every sale — watch 👑 +g/min beside your gold.",
+      tip: "Found a Farm town on fertile land away from the castle: two Potato Farms and two Huts, no Lumberjack. Each city buys the other's surplus and the King taxes every sale — watch 👑 +g/min beside your gold.",
       objectives: [
         { type: "found_city", count: 2 },                             // a trading partner
         { type: "construct", building: "potato_farm", count: 2 },     // its speciality: food
@@ -387,7 +387,7 @@ MissionEngine.DEFAULT = {
     { id: "m4", name: "A Growing Town", icon: "🌾", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
       // DESIGN PASS: a Sawmill eats 5 wood/min and its 2 peasants starve the wood export
       // unless the Timber town grows a 3rd Hut first; ⬆ lives on the BUILDING panel.
-      tip: "A Sawmill needs 2 free peasants — build a 3rd Hut in your Timber town first (a Sawmill eats 5 wood/min). Research a ⬆II in 🔬, then press ⬆ in that building's panel (not the city's). A building pauses while it upgrades.",
+      tip: "A Sawmill needs 2 free peasants — build a 3rd Hut in your Timber town first (a Sawmill eats 5 wood/min). For your first ⬆ research Sturdy Hut or Water Wheel in 🔬 (a Lumberjack ⬆ needs 20 🪵 stocked first), then press ⬆ in that building's panel (not the city's). A building pauses while it upgrades.",
       objectives: [
         { type: "construct", building: "sawmill", count: 1 }, // build a workshop (processor)
         { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
@@ -597,6 +597,7 @@ Sim.tick = function (State) {
       const buildTicks = Math.max(1, Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * (1000 / baseTickMs)));
       if (town._buildT >= buildTicks) {
         town.built = true; town._buildT = buildTicks;
+        town.builtTick = State.tick || 0;   // v0.52.1: city age for the alert/bubble grace windows (Sim.cityAgeTicks)
         // v0.51 SELL-GATE: on finishing construction, open a no-export grace window so a
         // brand-new city doesn't dump its founding stock before the player has placed its
         // huts (Trade reads town._sellHold; it ticks down below).
@@ -695,6 +696,11 @@ Sim.tick = function (State) {
       for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
       for (const b of buildings) if (b && b.built === false && !b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
+      // v0.52.1 RESIDENT RESERVE: construction/upgrade sites (never a BOOTSTRAP producer —
+      // it is the cure for that very shortage) leave ~CONFIG.town.basicReserveMin game-min
+      // of the present tiers' BASIC use in the warehouse, so a Hut L2 can't take the
+      // peasants' last wood. Computed only when a non-boot site exists (cold path).
+      const resv = (targets.length > nBoot) ? Sim.basicReserve(town) : null;
       for (const t of targets) {
         const b = t.b;
         if (t.kind === "build" && !b.delivered) b.delivered = {};
@@ -704,8 +710,14 @@ Sim.tick = function (State) {
         for (const gid in need) {
           if (budget <= 0) break;
           const have = stock[gid] || 0;
-          // BOOTSTRAP: non-producer sites may only take stock above the reserve.
-          const avail = (boot && !t.boot && boot[gid] > 0) ? Math.max(0, have - boot[gid]) : have;
+          // BOOTSTRAP: non-producer sites may only take stock above the reserve(s) —
+          // the unbuilt self-producer's remaining need + the residents' basic reserve.
+          let hold = 0;
+          if (!t.boot) {
+            if (boot && boot[gid] > 0) hold += boot[gid];
+            if (resv && resv[gid] > 0) hold += resv[gid];
+          }
+          const avail = hold > 0 ? Math.max(0, have - hold) : have;
           const move = Math.min(need[gid], avail, budget);
           if (move > 0) {
             stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move;
@@ -1679,6 +1691,73 @@ Sim.emptyBasicNeed = function (state, town, cov) {
   for (const e of (cov || Sim.needCoverage(state, town)))
     if (e.cls === "basic" && e.perMin > 0 && e.have < 0.5) return e.gid;
   return null;
+};
+// v0.52.1: units of each present-tier BASIC good the warehouse keeps back from
+// construction/upgrade delivery — `mins` (default CONFIG.town.basicReserveMin) game-
+// minutes of the residents' basic use (same per-capita × house-upgrade multiplier as
+// consumption). Returns null when nothing is reserved (no residents / knob 0). Pure.
+Sim.basicReserve = function (town, mins) {
+  const m = (typeof mins === "number") ? mins : ((CONFIG.town && CONFIG.town.basicReserveMin) || 0);
+  if (!(m > 0) || !town || !town.pop) return null;
+  const tpm = 60000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);   // ticks per game-minute
+  const bcm = (typeof Buildings !== "undefined" && Buildings.basicConsumptionMult) ? Buildings.basicConsumptionMult(town) : {};
+  let out = null;
+  for (const k of Needs.tierKeys()) {
+    const n = town.pop[k] || 0;
+    if (!(n > 0)) continue;
+    const spec = Needs.tier(k), rates = spec.perCapita || {};
+    for (const gid of spec.basic) {
+      const r = (rates[gid] || 0) * n * (bcm[k] || 1) * tpm * m;
+      if (r > 0) { if (!out) out = {}; out[gid] = (out[gid] || 0) + r; }
+    }
+  }
+  return out;
+};
+
+// v0.52.1: game-ticks since the city finished construction (town.builtTick; older
+// saves fall back to foundedTick + buildSec). Infinity when unknown (legacy cities are
+// old news) and 0 while still under construction. Pure.
+Sim.cityAgeTicks = function (state, town) {
+  if (!town) return Infinity;
+  if (town.built === false) return 0;
+  const now = (state && typeof state.tick === "number") ? state.tick : 0;
+  const tps = 1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);
+  let at = null;
+  if (typeof town.builtTick === "number") at = town.builtTick;
+  else if (typeof town.foundedTick === "number") at = town.foundedTick + Math.round(((CONFIG.town && CONFIG.town.buildSec) || 10) * tps);
+  return at === null ? Infinity : Math.max(0, now - at);
+};
+// v0.52.1: free homes for a pop tier (housing capacity − residents; may be negative).
+Sim.freeHousing = function (state, town, tierKey) {
+  if (!town || !tierKey) return 0;
+  const cap = (typeof Buildings !== "undefined" && Buildings.housingCapacity) ? Buildings.housingCapacity(town, state) : {};
+  return (cap[tierKey] || 0) - ((town.pop && town.pop[tierKey]) || 0);
+};
+// v0.52.1: is an idle producer (0 workers) worth an Event Log line? Not while its
+// worker tier is still moving into free homes (free housing ≥ 0.5 — the normal
+// first-minute ramp), nor within CONFIG.alerts.idleGraceSec of the city completing.
+// Only when that tier's homes are full is "no free peasants — build Huts" true.
+Sim.idleIsNews = function (state, town, def) {
+  if (!town || !def) return false;
+  const key = SIM_TIER_KEY[def.workerTier];
+  if (key && Sim.freeHousing(state, town, key) >= 0.5) return false;
+  const tps = 1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);
+  const grace = ((CONFIG.alerts && typeof CONFIG.alerts.idleGraceSec === "number") ? CONFIG.alerts.idleGraceSec : 60) * tps;
+  return Sim.cityAgeTicks(state, town) >= grace;
+};
+// v0.52.1: the "We dream of X — research Y" bubble waits until a luxury's tier really
+// lives here (> CONFIG.alerts.dreamMinPop residents) and the city is settled
+// (≥ dreamMinAgeSec game-s since completion). Returns the tier keys that may dream.
+Sim.dreamTiers = function (state, town) {
+  const out = [];
+  if (!town || !town.pop || town.built === false) return out;
+  const A = CONFIG.alerts || {};
+  const tps = 1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);
+  const minAge = ((typeof A.dreamMinAgeSec === "number") ? A.dreamMinAgeSec : 150) * tps;
+  if (Sim.cityAgeTicks(state, town) < minAge) return out;
+  const minPop = (typeof A.dreamMinPop === "number") ? A.dreamMinPop : 1;
+  for (const k of Needs.tierKeys()) if ((town.pop[k] || 0) > minPop) out.push(k);
+  return out;
 };
 // === /NEED-COVERAGE ===
 // === SIM-CORE END ===

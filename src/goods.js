@@ -391,6 +391,10 @@ Object.assign(CONFIG, {
     // construction materials (from its own stock into buildings under
     // construction) per economy tick, shared across all its unbuilt buildings.
     deliveryRate: 5,
+    // v0.52.1: construction/upgrade delivery leaves this many game-minutes of the present
+    // tiers' BASIC use in the warehouse (Sim.basicReserve) — a Hut L2 no longer eats the
+    // peasants' last wood. A bootstrapping producer (unbuilt Lumberjack) is exempt. 0 = off.
+    basicReserveMin: 1,
     // === PP-A === fleet sizing by town level (index = level; 0 unused). External
     // BUYERS a city may keep on the road at once = level*2 (L1 2 … L4 8). Internal
     // TRANSPORTERS multiply the construction/upgrade delivery budget (deliveryRate

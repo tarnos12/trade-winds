@@ -110,24 +110,43 @@
     winNoticeEl.classList.add("hidden");
     winNoticeEl.setAttribute("aria-hidden", "true");
   }
-  document.getElementById("wnClose").addEventListener("click", closeVictory);   // "Keep ruling"
+  // v0.52.1: dismissing the card (Keep ruling / New realm) marks this realm's win as
+  // SEEN in the save — Continue on a won save no longer re-opens it every time.
+  function dismissVictory() {
+    closeVictory();
+    if (state.victory && !state.victorySeen) {
+      state.victorySeen = true;
+      try { if (typeof scheduleSave === "function") scheduleSave(); } catch (e) {}
+    }
+  }
+  document.getElementById("wnClose").addEventListener("click", dismissVictory);   // "Keep ruling"
   // DESIGN PASS: "New realm" — a fresh seed on the same map type (custom keeps its tiers).
   const wnNewBtn = document.getElementById("wnNew");
   if (wnNewBtn) wnNewBtn.addEventListener("click", () => {
-    closeVictory();
+    dismissVictory();
     const preset = state.mapPreset || CONFIG.mapPresetDefault || "fertile";
     const tiers = (preset === "custom" && state.mapTiers) ? JSON.parse(JSON.stringify(state.mapTiers)) : undefined;
     if (window.StartScreen) window.StartScreen.startNew(randomSeed(), preset, tiers);
   });
 
   // Live refresh (500ms, same cadence as the other panels). Also catches a
-  // victory reached via the tick path (e.g. quest-driven) or a loaded save.
+  // victory reached via the tick path or a loaded save.
+  // v0.52.1: the card auto-opens only for a win the player hasn't dismissed yet
+  // (state.victorySeen false — Victory.check clears it on the false→true latch) and
+  // NEVER behind the start screen (boot loads the save as the menu's backdrop, which
+  // used to pop the card + fanfare under the title screen).
+  function startScreenOpen() {
+    return !!(window.StartScreen && typeof window.StartScreen.isOpen === "function" && window.StartScreen.isOpen());
+  }
+  function pollVictory() {
+    if (!state.victory) { if (winShown) winShown = false; return; }   // DESIGN PASS: a new realm can be won again
+    if (!winShown && !state.victorySeen && !startScreenOpen()) showVictory();
+  }
   updateProgressHud();
-  if (state.victory) showVictory();
+  pollVictory();
   setInterval(() => {
     updateProgressHud();
-    if (state.victory) showVictory();
-    else if (winShown) winShown = false;   // DESIGN PASS: a new realm can be won again
+    pollVictory();
   }, 500);
 
   window.ProgressUI = { updateProgressHud, showVictory, Town, Castle };

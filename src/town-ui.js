@@ -214,8 +214,21 @@
     const need = Buildings.upgradeConstructionNeed(b);
     return Object.keys(need).map(gid => {
       const short = !((town && town.stock && (town.stock[gid] || 0) > 0.05));
-      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" + ppSupplyCause(town, gid, b) : ""}`;
+      return `${fmt(need[gid])} ${goodIcon(gid)} ${GOOD_LABEL(gid)}${short ? " (none in city stock)" + ppSupplyCause(town, gid, b) : ppReserveNote(town, gid, b)}`;
     }).join(" · ");
+  }
+  // v0.52.1: the city HAS some of `gid`, but no more than the residents' basic reserve
+  // (Sim.basicReserve — construction/upgrades leave ~1 game-min of it) → say so, else a
+  // stalled delivery with stock on the shelf looks like a bug. A bootstrapping producer
+  // (unbuilt, makes gid itself) is exempt in the Sim, so it gets no note.
+  function ppReserveNote(town, gid, b) {
+    if (!town || !window.Sim || !Sim.basicReserve) return "";
+    const def = b && CONFIG.buildings[b.typeId];
+    if (b && b.built === false && def && def.output && def.output.goodId === gid) return "";
+    const r = Sim.basicReserve(town);
+    const have = (town.stock && town.stock[gid]) || 0;
+    if (!r || !(r[gid] > 0) || have > r[gid] + 0.5) return "";
+    return " (the last " + Math.ceil(r[gid]) + " " + goodIcon(gid) + " stay for residents — import or make more)";
   }
   // DESIGN PASS (#2): WHY a material isn't coming — links a stalled delivery to the
   // local producer that should make it (unstaffed Sawmill → build a Hut), or says no
@@ -767,15 +780,40 @@
   // The hint follows the pending anchor exposed by input.js (window.InputRoad).
   const ROAD_HINT_START = "Click where the road starts.";
   const ROAD_HINT_END = "Now click where the road should end — Esc cancels.";
-  function setRoadHint() {
+  // v0.52.1: the city-site hover names the resource tiles around the center that a city
+  // can actually build on — " · 🌲 Forest 2 · 🌾 Fertile 1 (2 reserved by the castle)"
+  // — because hexes beside the castle compound are off-limits to city buildings.
+  const SITE_TERRAIN = [
+    ["forest", "🌲 Forest"], ["fertile", "🌾 Fertile"], ["water", "💧 Water"], ["fish", "🐟 Fish"],
+    ["stone_deposit", "🪨 Stone"], ["clay_deposit", "🟫 Clay"], ["iron_deposit", "🔩 Iron"],
+    ["coal_deposit", "⬛ Coal"], ["gold_deposit", "🪙 Gold"], ["barren", "Barren"], ["desert", "Desert"],
+    ["snow", "Snow"], ["mountains", "⛰ Mountains"],
+  ];
+  function townSiteSummary(q, r) {
+    if (!Buildings.townSiteTiles) return "";
+    const t = Buildings.townSiteTiles(state, q, r);
+    const parts = [];
+    for (const [terr, label] of SITE_TERRAIN) {
+      const u = t.usable[terr] || 0, rv = t.reserved[terr] || 0;
+      if (!u && !rv) continue;
+      parts.push(label + " " + u + (rv ? " (" + rv + " reserved by the castle)" : ""));
+    }
+    return parts.length ? " · " + parts.join(" · ") : "";
+  }
+  function setRoadHint(hov) {
     const armed = !!(window.InputRoad && window.InputRoad.anchor);
-    const txt = armed ? ROAD_HINT_END : ROAD_HINT_START;
-    if (buildBarHintEl.textContent !== txt) { buildBarHintEl.textContent = txt; buildBarHintEl.className = ""; }
+    // v0.52.1: before the first click, hovering a hex a road can't start on says why.
+    const h = armed ? null : (hov || (typeof hoverHex !== "undefined" ? hoverHex : null));
+    const why = (h && window.InputRoad && window.InputRoad.blockReason) ? window.InputRoad.blockReason(h.q, h.r) : null;
+    const txt = why ? "✗ " + why : (armed ? ROAD_HINT_END : ROAD_HINT_START);
+    const cls = why ? "bad" : "";
+    if (buildBarHintEl.textContent !== txt || buildBarHintEl.className !== cls) { buildBarHintEl.textContent = txt; buildBarHintEl.className = cls; }
   }
   if (window.InputRoad) window.InputRoad.onChange = () => {
     if (placing || placingResearchCenter) return;
     if (state.mode === "road") setRoadHint();
-    else if (buildBarHintEl.textContent === ROAD_HINT_START || buildBarHintEl.textContent === ROAD_HINT_END) {
+    else if (buildBarHintEl.textContent === ROAD_HINT_START || buildBarHintEl.textContent === ROAD_HINT_END ||
+             /^✗ (Roads can't start|Treasury too low — a road)/.test(buildBarHintEl.textContent)) {
       buildBarHintEl.className = ""; buildBarHintEl.textContent = BB_DEFAULT_HINT;   // route done → back to idle
     }
   };
@@ -1283,10 +1321,10 @@
       const k = HexMath.key(h.q, h.r);
       const fogged = !isVisible(k);
       const res = fogged ? { ok: false, reason: "Unexplored — reveal this area first" } : Buildings.canPlaceTown(state, h.q, h.r);
-      buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city · " + Buildings.foundCost().toLocaleString("en-US") + "🪙" : "✗ " + res.reason;
+      buildBarHintEl.textContent = res.ok ? "✓ valid town site" + townSiteSummary(h.q, h.r) + " — click to found a city · " + Buildings.foundCost().toLocaleString("en-US") + "🪙" : "✗ " + res.reason;
       buildBarHintEl.className = res.ok ? "ok" : "bad";
     } else if (state.mode === "road") {
-      setRoadHint();
+      setRoadHint(h);
     } else if (state.mode === "eraseRoad") {
       // === J === live hint for the road-destroy mode (no confirmation on click).
       const ok = state.roads.has(HexMath.key(h.q, h.r));
@@ -1599,6 +1637,10 @@
       return "Waiting — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + (fdef.name || feeder.typeId) + " is staffed first.";
     }
     const h = STAFF_HOME[tier] || ["workers", "house"];
+    // v0.52.1: during the normal ramp the homes aren't full yet — newcomers will staff it.
+    const tk = { peasant: "peasants", worker: "workers", burgher: "burghers", aristocrat: "aristocrats" }[tier];
+    const free = (tk && window.Sim && Sim.freeHousing) ? Sim.freeHousing(state, town, tk) : 0;
+    if (free >= 0.5) return "Waiting — " + h[0] + " are still moving in (" + Math.round(free) + " home" + (Math.round(free) === 1 ? "" : "s") + " free); they'll staff it shortly.";
     return "Idle — no free " + h[0] + ". Build a " + h[1] + " in this city.";
   }
   // The staffed self-feed producer (Potato Farm / Lumberjack / Coal Mine) of `tier`, if any.
@@ -1702,8 +1744,13 @@
     const baseTickMs = (CONFIG.econ && CONFIG.econ.baseTickMs) || 500;
     const intervalTicks = Math.max(1, Math.round(cycSec * (1000 / baseTickMs)));
     const workers = b.workers || 0;
+    // v0.52.1: the panel speaks in WHOLE workers (the avatars round too) — a building
+    // with < 0.5 of a worker during the ramp reads as idle everywhere, never
+    // "Workers 0 / 2" beside "≈2.1/min".
+    const wHead = Math.round(workers);
     const pr = (window.Sim && window.Sim.buildingProgress) ? window.Sim.buildingProgress(state, town, b) : null;
-    const st = pr ? pr.status : (workers ? "working" : "noWorkers");
+    let st = pr ? pr.status : (workers ? "working" : "noWorkers");
+    if (st === "working" && wHead < 1) st = "noWorkers";
     const pct = pr ? Math.round(pr.prog * 100) : 0;
     const barCol = st === "working" ? "#7fc24b" : "#e0a63c";   // DESIGN PASS #13: any stall → amber
     // DESIGN PASS #13: headline ≈X/min at the current crew (hf × research × upgrade, as
@@ -1711,14 +1758,18 @@
     const slotPlus = (Buildings.upgradeEffect ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0);
     const fullW = Math.max(0, (def.workerSlots || 0) + slotPlus - (b.closedSlots || 0));
     const rates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b) : null;
-    const runRates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b, workers > 0 ? workers : fullW) : null;
     const running = st === "working";
+    const runRates = window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b, running ? workers : fullW) : null;
     const shown = running ? rates : runRates;
     const outPM = shown ? shown.outPerMin : 0;
-    const perBatch = outPM * cycSec / 60;
+    // v0.52.1: the per-batch preview is the FULL-crew batch whenever the crew is short
+    // (idle included), and says so — "(+1.3 every 16 s at full crew)".
+    const shortCrew = wHead < fullW;
+    const fullRates = shortCrew && window.Sim && Sim.buildingRates ? Sim.buildingRates(state, town, b, fullW) : shown;
+    const perBatch = (fullRates ? fullRates.outPerMin : 0) * cycSec / 60;
     const headTxt = running ? "≈" + fmtRate(outPM) + "/min" : "0/min";
-    const headTip = running ? "≈" + fmtRate(outPM) + " " + GOOD_LABEL(out) + " per minute at " + fmtRate(workers) + " workers and " + Math.round((town.happiness != null ? town.happiness : 100)) + "% happiness"
-                            : "Stopped — ≈" + fmtRate(outPM) + "/min when running with " + fmtRate(shown ? shown.workers : 0) + " workers";
+    const headTip = running ? "≈" + fmtRate(outPM) + " " + GOOD_LABEL(out) + " per minute at " + wHead + " worker" + (wHead === 1 ? "" : "s") + " and " + Math.round((town.happiness != null ? town.happiness : 100)) + "% happiness"
+                            : "Stopped — ≈" + fmtRate(outPM) + "/min when running with " + Math.round(shown ? shown.workers : 0) + " workers";
     // v0.51 §2: the output bar shows this building's OWN store (what porters collect),
     // not the shared warehouse — the "x/cap" per building the reference shows.
     const cap = (def.storeCap) || (CONFIG.econ && CONFIG.econ.buildingStoreCap) || 30;
@@ -1753,7 +1804,7 @@
           <span class="bp-out-icon" style="color:${oc}">${goodIcon(out)}</span>
           <div>
             <div class="bp-out-amt" data-bp-rate title="${escAttr(headTip)}"${running ? "" : ' style="opacity:.6"'}>${headTxt}</div>
-            <div class="bp-out-stock" style="opacity:.65">(+${fmtRate(perBatch)} every ${cycleSec} s)</div>
+            <div class="bp-out-stock" style="opacity:.65">(+${fmtRate(perBatch)} every ${cycleSec} s${shortCrew ? " at full crew" : ""})</div>
             <div class="bp-out-stock" title="This building's own store — internal porters carry it to the city warehouse">${stock}/${cap} 🎒</div>
             <div class="bp-stockbar"><span style="width:${capPct}%"></span></div>
           </div>
@@ -1777,7 +1828,17 @@
     const nxt = (typeof Buildings.nextUpgrade === "function") ? Buildings.nextUpgrade(state, b) : null;
     if (!nxt) return { has: true, ok: false, reason: "No further upgrade available" };
     const can = (typeof Buildings.canStartUpgrade === "function") ? Buildings.canStartUpgrade(state, town, b) : { ok: false };
-    return { has: true, ok: !!can.ok, reason: can.reason };
+    return { has: true, ok: !!can.ok, reason: bpUpgradeReason(can) };
+  }
+  // v0.52.1: the self-output refusal in icon form with the live amount —
+  // "Stock 20 🪵 first (have 3) — this Lumberjack stops producing while it upgrades".
+  function bpUpgradeReason(can) {
+    if (!can || can.ok) return "";
+    if (can.selfGood && typeof can.need === "number") {
+      const nm = String(can.reason || "").split(" — ").slice(1).join(" — ");
+      return "Stock " + can.need + " " + goodIcon(can.selfGood) + " first (have " + (can.have || 0) + ")" + (nm ? " — " + nm : "");
+    }
+    return can.reason || "";
   }
 
   // Reference-style action-icon row under the header: ⭐ priority (producers) and
@@ -1839,7 +1900,7 @@
       html += `<div style="margin:4px 0 6px">${chips || "<span class='tp-empty'>no materials required</span>"}</div>`;
       const need = bpConstructionNeed(b);
       const needStr = Object.keys(need).map(g => fmt(need[g]) + " " + goodIcon(g) + " " + GOOD_LABEL(g) +
-        (((town.stock && town.stock[g]) || 0) > 0.05 ? "" : ppSupplyCause(town, g, b))).join(" · ");   // DESIGN PASS (#2): say why it's stuck
+        (((town.stock && town.stock[g]) || 0) > 0.05 ? ppReserveNote(town, g, b) : ppSupplyCause(town, g, b))).join(" · ");   // DESIGN PASS (#2): say why it's stuck
       html += `<div class="tp-hint2">Still needs: ${needStr ? esc(needStr) : "nothing — finishing up"}</div>`;
     }
 
@@ -1959,7 +2020,8 @@
       const chips = bpUpgradeChips(rc, {});
       const goldCost = (nxt.cost && nxt.cost.gold) || 0;
       const effectStr = bpEffectSummary(nxt.effect);
-      const can = (typeof Buildings.canStartUpgrade === "function") ? Buildings.canStartUpgrade(state, town, b) : { ok: false, reason: "Unavailable" };
+      const can0 = (typeof Buildings.canStartUpgrade === "function") ? Buildings.canStartUpgrade(state, town, b) : { ok: false, reason: "Unavailable" };
+      const can = can0.ok ? can0 : { ok: false, reason: bpUpgradeReason(can0) };   // v0.52.1: 🪵 + have-count
       out += `<div class="bp-upgrade-next">
         <div class="tp-row"><span class="k">${esc(nxt.name)}</span><span class="v">${fmt(goldCost)}g</span></div>
         <div style="margin:4px 0 6px">${chips}</div>
@@ -2166,7 +2228,9 @@
     const upgBtn = e.target.closest("[data-upgrade]");
     if (upgBtn && !upgBtn.disabled) {
       if (typeof Buildings !== "undefined" && typeof Buildings.startUpgrade === "function") {
-        Buildings.startUpgrade(state, bpTown, b);
+        const why = Buildings.canStartUpgrade ? Buildings.canStartUpgrade(state, bpTown, b) : { ok: true };
+        if (!Buildings.startUpgrade(state, bpTown, b) && !why.ok && typeof showToast === "function")
+          showToast("✗ " + bpUpgradeReason(why));   // v0.52.1: the dimmed ⬆ says why instead of a silent no-op
       }
       renderBuildingPanel();
     }

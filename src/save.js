@@ -74,6 +74,7 @@
     state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
     state.victoryTick = null;    // DESIGN PASS: tick the realm was won (recap time-to-win)
+    state.victorySeen = false;   // v0.52.1: the player dismissed the victory card (Keep ruling / New realm)
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -144,6 +145,7 @@
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
         victoryTick: state.victoryTick,    // DESIGN PASS: recap time-to-win (null = unknown)
+        victorySeen: !!state.victorySeen,  // v0.52.1: victory card dismissed — don't re-open it on Continue
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
@@ -301,6 +303,9 @@
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
     state.victoryTick = (typeof data.victoryTick === "number") ? data.victoryTick : null;   // DESIGN PASS: absent on old saves
+    // v0.52.1: a save from before victorySeen that is already won showed its card on
+    // every Continue — treat it as seen (the win still shows in the goal card/tracker).
+    state.victorySeen = (typeof data.victorySeen === "boolean") ? data.victorySeen : state.victory;
     // DESIGN PASS (#1/#11): restore the saved lifetime stats (recap + missions) and this
     // game's mission progress (incl. the per-game "hidden"). They were saved but never
     // loaded, so every Continue restarted m1 and zeroed the lifetime tariff. Assigned

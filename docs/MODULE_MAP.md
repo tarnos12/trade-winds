@@ -58,4 +58,4 @@ Fenced `=== X CSS START/END ===` and `=== X HTML START/END ===` blocks per panel
 Each standalone: reads `index.html`, regex-extracts PURE_CORE, `vm`-evals it,
 asserts. board · buildings · sim · trade · research · research_effects ·
 prices · market · balance · migration · progress · ledger · pathing · tariff · staffing ·
-distance · castle_trade · readouts · crown · alerts.
+distance · castle_trade · readouts · crown · alerts · build_reserve · victory_ui (browser).

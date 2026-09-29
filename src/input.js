@@ -282,6 +282,25 @@
     if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r) return false;
     return !!CONFIG.terrain[hex.terrain].road;
   }
+  // v0.52.1: WHY a hex can't take a road ("water", "the castle", fog, treasury) — or
+  // null when it can. Shown as a toast when the FIRST click of a route lands there
+  // (it used to do nothing, silently) and as the build-bar hover hint.
+  function roadBlockReason(q, r) {
+    const k = HexMath.key(q, r);
+    const hex = state.map && state.map.hexes.get(k);
+    if (!hex || !isVisible(k)) return "Roads can't start in unexplored land";
+    if (state.researchCenter && state.researchCenter.q === q && state.researchCenter.r === r)
+      return "Roads can't start on the Research Center";
+    if (!CONFIG.terrain[hex.terrain].road) {
+      const c = Buildings.castleHex ? Buildings.castleHex() : { q: 0, r: 0 };
+      const what = (c.q === q && c.r === r) ? "the castle"
+        : (typeof terrainDisplayName === "function" ? terrainDisplayName(hex.terrain) : hex.terrain).toLowerCase();
+      return "Roads can't start here (" + what + ") — pick land; routes bend around water and mountains";
+    }
+    if (!state.roads.has(k) && (state.treasury || 0) < Buildings.roadCost())
+      return "Treasury too low — a road costs " + Buildings.roadCost() + "🪙 per hex";
+    return null;
+  }
   function layRoad(q, r) {
     const k = HexMath.key(q, r);
     if (state.roads.has(k) || !roadEligible(q, r)) return false;
@@ -336,7 +355,11 @@
   }
   function handleRoadClick(q, r, shift) {
     if (!roadAnchor) {
-      if (!roadEligible(q, r)) return;   // A must be a road-eligible hex
+      if (!roadEligible(q, r)) {         // A must be a road-eligible hex — v0.52.1: say why
+        const why = roadBlockReason(q, r);
+        if (why && typeof showToast === "function") showToast("✗ " + why);
+        return;
+      }
       layRoad(q, r);                     // lay the anchor hex itself
       roadAnchor = { q, r };
       Pathing.invalidate();
@@ -388,6 +411,7 @@
   window.InputRoad = {
     get anchor() { return roadAnchor; },
     preview: roadPreview,
+    blockReason: roadBlockReason,   // v0.52.1: the build bar's "✗ Roads can't start here" hover hint
     onChange: null,            // set by the build bar (town-ui.js) to refresh its hint
   };
 
