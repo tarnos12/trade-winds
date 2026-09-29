@@ -133,6 +133,49 @@ function withHome(th, opts) {
   ok("detector re-derives victory after load", reloaded.victory === true);
 })();
 
+// --- 6. DESIGN PASS: the win reads min(tierHappiness, tierNeedHappiness) ---------
+// tierNeedHappiness excludes Give/Take (tempMod): a Give-inflated tierHappiness of 100
+// over a 90% need-happiness must NOT win; a Take-depressed tierHappiness still blocks.
+(function () {
+  const give = mkState([ mkTown({ buildings: [homeBuilt()], tierHappiness: { aristocrats: 100 },
+                                  tierNeedHappiness: { aristocrats: 90 }, pop: { aristocrats: 1 } }) ]);
+  Victory.check(give);
+  ok("Give-inflated happiness (100) over 90% needs does NOT win", give.victory !== true);
+  const take = mkState([ mkTown({ buildings: [homeBuilt()], tierHappiness: { aristocrats: 70 },
+                                  tierNeedHappiness: { aristocrats: 100 }, pop: { aristocrats: 1 } }) ]);
+  Victory.check(take);
+  ok("Take-depressed happiness (70) still blocks a win at 100% needs", take.victory !== true);
+  const both = mkState([ mkTown({ buildings: [homeBuilt()], tierHappiness: { aristocrats: 100 },
+                                  tierNeedHappiness: { aristocrats: T }, pop: { aristocrats: 1 } }) ]);
+  both.tick = 1234;
+  Victory.check(both);
+  ok("both at/over threshold wins", both.victory === true);
+  ok("victoryTick latches the winning tick", both.victoryTick === 1234);
+  ok("estateHappiness = min of the two", Victory.estateHappiness({ tierHappiness: { aristocrats: 100 }, tierNeedHappiness: { aristocrats: 90 } }) === 90);
+  ok("estateHappiness falls back to tierHappiness (pre-tick town)", Victory.estateHappiness({ tierHappiness: { aristocrats: 95 } }) === 95);
+  ok("estateHappiness null without aristocrats", Victory.estateHappiness({ tierHappiness: { aristocrats: null } }) === null);
+})();
+
+// --- 7. DESIGN PASS: Victory.estate — the win tracker's estate + goods tally --------
+(function () {
+  const A = CONFIG.needs.tiers.aristocrats, ALL = [...A.basic, ...A.extra];
+  ok("no aristocrat_home anywhere => no estate", Victory.estate(mkState([ mkTown({}) ])) === null);
+  const ema = {}; for (const g of ALL) ema[g] = 1; ema.luxury_clothes = 0;
+  const lo = mkTown({ id: 1, buildings: [homeBuilt()], tierHappiness: { aristocrats: 60 }, pop: { aristocrats: 1 }, satEMA: {} });
+  const hi = mkTown({ id: 2, buildings: [homeBuilt()], tierHappiness: { aristocrats: 90 }, tierNeedHappiness: { aristocrats: 90 },
+                      pop: { aristocrats: 2 }, satEMA: ema });
+  const es = Victory.estate(mkState([lo, hi]));
+  ok("estate = the town with the highest need-happiness", es && es.town === hi);
+  ok("estate counts 7/8 goods with luxury_clothes unmet", es.have === ALL.length - 1 && es.total === ALL.length);
+  ok("estate lists the missing good", es.missing.length === 1 && es.missing[0] === "luxury_clothes");
+  ok("estate reports happiness 90", es.happiness === 90 && es.built === true);
+  // an unpopulated scaffold home still shows up, tallying goods by stock
+  const scaf = mkTown({ id: 3, buildings: [homeScaffold()], stock: { lamp: 5 } });
+  const es2 = Victory.estate(mkState([scaf]));
+  ok("a scaffold home is an estate (built:false, no residents)", es2 && es2.built === false && es2.happiness === null);
+  ok("an empty estate tallies goods by stock", es2.have === 1 && es2.missing.indexOf("lamp") < 0);
+})();
+
 // -----------------------------------------------------------------------------
 if (fail) { console.error(`victory: ${pass} passed, ${fail} FAILED`); process.exit(1); }
 console.log(`victory: ${pass} passed`);

@@ -124,6 +124,8 @@ Sim.ensureStats = function (state) {
   if (!st.traded || typeof st.traded !== "object") st.traded = { byGood: {} };
   if (!st.traded.byGood || typeof st.traded.byGood !== "object") st.traded.byGood = {};
   if (typeof st.taxEarned !== "number") st.taxEarned = 0;
+  // DESIGN PASS: peak kingdom population (victory recap). Old saves seed it from now.
+  if (typeof st.peakPop !== "number") st.peakPop = Sim.kingdomPop(state);
   // v0.51: cities founded + research completed (onboarding missions). Old saves seed
   // them from the live state so a returning player's progress still counts.
   if (typeof st.founded !== "number") st.founded = Array.isArray(state.towns) ? state.towns.length : 0;
@@ -131,6 +133,15 @@ Sim.ensureStats = function (state) {
     st.researched = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked.length : 0;
   state.stats = st;
   return st;
+};
+// Total population across every town (all four tiers). Pure, allocation-free.
+Sim.kingdomPop = function (state) {
+  let n = 0;
+  for (const t of ((state && state.towns) || [])) {
+    const p = t && t.pop; if (!p) continue;
+    n += (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);
+  }
+  return n;
 };
 // Increment the "building constructed" counter (built false→true). typeId optional.
 Sim.statConstructed = function (state, typeId) {
@@ -307,6 +318,33 @@ MissionEngine.evaluate = function (missionSet, statsOrState, opts) {
   };
 };
 
+// DESIGN PASS: 'Next up' preview. The mission that follows `id` in prereq order: the
+// first mission (set order) that lists `id` as a prereq and is neither active nor
+// complete in `ev` (an evaluate() result). Falls back to null. Pure; used by
+// Tutorial.render to show a greyed "Next: …" line under the primary mission so the
+// player can prepare (e.g. build the Research Center during the m2 tariff wait).
+MissionEngine.nextMission = function (missionSet, ev, id) {
+  const set = (missionSet && Array.isArray(missionSet.missions)) ? missionSet : null;
+  if (!set || !id) return null;
+  const byId = (ev && ev.byId) || {};
+  for (const m of set.missions) {
+    if (!m || !Array.isArray(m.prereqs) || m.prereqs.indexOf(id) < 0) continue;
+    const r = byId[m.id];
+    if (r && (r.active || r.complete)) continue;
+    return m;
+  }
+  return null;
+};
+
+// First sentence of a tip (up to and including the first '.', '!' or '?' that is
+// followed by whitespace or the end). A tip with no terminator is returned whole.
+MissionEngine.firstSentence = function (tip) {
+  if (typeof tip !== "string") return "";
+  const s = tip.trim();
+  const m = /^[\s\S]*?[.!?](?=\s|$)/.exec(s);
+  return m ? m[0] : s;
+};
+
 // The bundled DEFAULT mission set — the original 5-mission onboarding arc ported to
 // typed objectives (construct/upgrade/trade_good/earn_tax). Steps that don't map to
 // a counter (found town, lay road, unlock tech, victory) use the CLOSEST objective.
@@ -320,38 +358,47 @@ MissionEngine.DEFAULT = {
   // research-locked) → then grow, trade, and reach the win. Each mission carries a
   // one-line `tip` rendered under its objectives.
   missions: [
+    // DESIGN PASS: specialisation is taught from minute one. The old m1 recipe (Lumberjack
+    // + Potato Farm + 2 Huts) built a self-sufficient city that exports nothing (0 g/min
+    // tariff); a Timber town + a Farm town with the SAME building count earn ~9 g/min
+    // (test/opening.test.js). CONFIG.town.startStock.potato 40 feeds the Timber town's
+    // 4 peasants for ~7.7 min until the Farm town exports.
     { id: "m1", name: "Found Your Realm", icon: "🏰", pos: { col: 0, row: 0 }, retroactive: true, prereqs: [],
-      tip: "🏗 Build → City, then 🌾 Peasant: a Lumberjack, a Potato Farm and two Huts beside it.",
+      tip: "🏗 Build → City beside a forest, then 🌾 Peasant: two Lumberjacks and two Huts — your Timber town.",
       objectives: [
-        { type: "found_city", count: 1 },                   // found your first city
-        { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
+        { type: "found_city", count: 1 },                             // found your first city
+        { type: "construct", building: "lumberjack", count: 2 },      // its speciality: wood
+        { type: "construct", building: "hut",        count: 2 },      // peasants to staff it
       ] },
     { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-      tip: "The King earns a tariff whenever your cities trade — found a second city that makes what the first lacks. Watch 👑 +g/min beside your gold.",
+      tip: "Found a Farm town on fertile land: two Potato Farms and two Huts, no Lumberjack. Each city buys the other's surplus and the King taxes every sale — watch 👑 +g/min beside your gold.",
       objectives: [
-        { type: "found_city", count: 2 },                   // a trading partner
-        { type: "earn_tax",   amount: 10 },                 // your first tariffs (early trade is small — just see it arrive)
+        { type: "found_city", count: 2 },                             // a trading partner
+        { type: "construct", building: "potato_farm", count: 2 },     // its speciality: food
+        { type: "earn_tax",   amount: 10 },                           // your first tariffs (early trade is small — just see it arrive)
       ] },
     { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
-      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — most research needs stone. ⚠ marks research no city can supply yet.",
+      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — city buildings and upgrades need stone. ⚠ marks research no city can supply yet; its tooltip names the research that fixes it. No stone in sight? Send your Scout (top-left) to explore.",
       objectives: [
         { type: "construct", building: "research_center", count: 1 },
         { type: "research",  count: 1 },
       ] },
     { id: "m4", name: "A Growing Town", icon: "🌾", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
-      tip: "A Sawmill turns wood into planks. Upgrade a building from its panel (⬆) once its upgrade is researched.",
+      // DESIGN PASS: a Sawmill eats 5 wood/min and its 2 peasants starve the wood export
+      // unless the Timber town grows a 3rd Hut first; ⬆ lives on the BUILDING panel.
+      tip: "A Sawmill needs 2 free peasants — build a 3rd Hut in your Timber town first (a Sawmill eats 5 wood/min). Research a ⬆II in 🔬, then press ⬆ in that building's panel (not the city's). A building pauses while it upgrades.",
       objectives: [
         { type: "construct", building: "sawmill", count: 1 }, // build a workshop (processor)
         { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
       ] },
     { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
-      tip: "Roads let traders travel twice as fast. A city that makes everything it needs exports nothing and earns no tariff — give each city a speciality.",
+      tip: "Roads speed traders on long routes. A city that makes everything it needs exports nothing — give each new city a speciality.",
       objectives: [
         { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
         { type: "earn_tax",   amount: 150 },                // lifetime tariff — ~12 g/min with 3 trading cities (customs valuation)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
-      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build more Huts in that city (☆ Priority only reshuffles the workers a city already has).",
+      tip: "👷 badges mark buildings short of workers — build a Hut in that city (☆ Priority only reshuffles the workers a city already has). Short of gold? Take 1k from a city's panel (its people are unhappy for a minute).",
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings
@@ -617,9 +664,35 @@ Sim.tick = function (State) {
         * ((typeof Buildings !== "undefined" && Buildings.transporterCount) ? Buildings.transporterCount(town) : 1);
       // === /PP-A ===
       const targets = [];   // { b, kind: "build" | "upgrade" }
-      for (const b of buildings) if (b && b.built === false && b.priority) targets.push({ b, kind: "build" });
+      // DESIGN PASS (#2) BOOTSTRAP: an unbuilt producer whose OWN construction needs
+      // the good it makes (Lumberjack ← 10 wood), in a town with no BUILT producer of
+      // that good, is served FIRST, and the remaining need of those producers is held
+      // back from every other site — else "huts first" spent the start wood and the
+      // Lumberjack could never be finished (wood 0 forever). `boot` stays null on the
+      // hot path once a town has its producers built.
+      let boot = null;   // gid → units reserved for unbuilt self-bootstrapping producers
+      for (const b of buildings) {
+        if (!b || b.built !== false) continue;
+        const def = CONFIG.buildings[b.typeId];
+        const og = def && def.output && def.output.goodId;
+        if (!og) continue;
+        const cn = Buildings.constructionNeed(b);
+        if (!(cn[og] > 0)) continue;
+        let hasBuilt = false;
+        for (const o of buildings) {
+          if (o && o.built !== false && CONFIG.buildings[o.typeId] && CONFIG.buildings[o.typeId].output &&
+              CONFIG.buildings[o.typeId].output.goodId === og) { hasBuilt = true; break; }
+        }
+        if (hasBuilt) continue;
+        if (!boot) boot = {};
+        boot[og] = (boot[og] || 0) + cn[og];
+        targets.push({ b, kind: "build", boot: og });
+      }
+      const nBoot = targets.length;
+      const isBoot = (b) => { for (let i = 0; i < nBoot; i++) if (targets[i].b === b) return true; return false; };
+      for (const b of buildings) if (b && b.built === false && b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && b.priority)   targets.push({ b, kind: "upgrade" });
-      for (const b of buildings) if (b && b.built === false && !b.priority) targets.push({ b, kind: "build" });
+      for (const b of buildings) if (b && b.built === false && !b.priority && !(nBoot && isBoot(b))) targets.push({ b, kind: "build" });
       for (const b of buildings) if (b && b.pendingUpgrade && !b.priority)  targets.push({ b, kind: "upgrade" });
       for (const t of targets) {
         const b = t.b;
@@ -630,8 +703,13 @@ Sim.tick = function (State) {
         for (const gid in need) {
           if (budget <= 0) break;
           const have = stock[gid] || 0;
-          const move = Math.min(need[gid], have, budget);
-          if (move > 0) { stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move; }
+          // BOOTSTRAP: non-producer sites may only take stock above the reserve.
+          const avail = (boot && !t.boot && boot[gid] > 0) ? Math.max(0, have - boot[gid]) : have;
+          const move = Math.min(need[gid], avail, budget);
+          if (move > 0) {
+            stock[gid] = have - move; dst[gid] = (dst[gid] || 0) + move; budget -= move;
+            if (t.boot === gid) boot[gid] = Math.max(0, boot[gid] - move);   // delivered → no longer reserved
+          }
         }
         const remain = t.kind === "build" ? Buildings.constructionNeed(b) : Buildings.upgradeConstructionNeed(b);
         let matDone = true;
@@ -972,23 +1050,33 @@ Sim.tick = function (State) {
     // and the weighted average over one tier == that tier's eased value.
     const prevAgg = (typeof town.happiness === "number") ? town.happiness : null;
     if (!town.tierHappiness || typeof town.tierHappiness !== "object") town.tierHappiness = {};
+    // DESIGN PASS: tierNeedHappiness = the same eased per-tier value WITHOUT tempMod
+    // (Give/Take). Victory reads min(tierHappiness, tierNeedHappiness), so a Give can
+    // no longer bridge a missing luxury while a Take still delays the win. Derived
+    // state: seeded from tierHappiness when absent, so no save migration.
+    if (!town.tierNeedHappiness || typeof town.tierNeedHappiness !== "object") town.tierNeedHappiness = {};
     if (totalPop > 0) {
       let wsum = 0, hsum = 0;
       for (const tk of ["peasants", "workers", "burghers", "aristocrats"]) {   // === CC: 4 tiers ===
         const n = pop[tk] || 0;
-        if (n <= 0) { town.tierHappiness[tk] = null; continue; }
+        if (n <= 0) { town.tierHappiness[tk] = null; town.tierNeedHappiness[tk] = null; continue; }
         let bs = classSatTier(tk, N.tiers[tk].basic); if (bs === null) bs = 1;   // === CC: per-tier basic list ===
         let es = classSatTier(tk, N.tiers[tk].extra); if (es === null) es = 1;   // === CC: per-tier extra list ===
-        const ht = Math.max(0, Math.min(100, N.basicHappy * bs + N.extraHappy * es + tempMod));
+        const hNeed = N.basicHappy * bs + N.extraHappy * es;
+        const ht = Math.max(0, Math.min(100, hNeed + tempMod));
         const prevT = (typeof town.tierHappiness[tk] === "number") ? town.tierHappiness[tk]
                     : (prevAgg != null ? prevAgg : ht);
         const eased = prevT + (ht - prevT) * N.happyEase;
+        const htN = Math.max(0, Math.min(100, hNeed));
+        const prevN = (typeof town.tierNeedHappiness[tk] === "number") ? town.tierNeedHappiness[tk] : prevT;
+        town.tierNeedHappiness[tk] = prevN + (htN - prevN) * N.happyEase;
         town.tierHappiness[tk] = eased;
         wsum += n; hsum += n * eased;
       }
       town.happiness = wsum > 0 ? hsum / wsum : (prevAgg != null ? prevAgg : 0);
     } else {
       town.tierHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };  // === CC ===
+      town.tierNeedHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };
       const hTarget = Math.max(0, Math.min(100,
         N.basicHappy * basicSat + N.extraHappy * extraSat + tempMod));
       const hPrev = (prevAgg != null) ? prevAgg : hTarget;
@@ -1101,6 +1189,9 @@ Sim.tick = function (State) {
       else if (stock[gid] > capG) stock[gid] = capG;
     }
   }
+  // DESIGN PASS: track the kingdom's peak population for the victory recap.
+  const popNow = Sim.kingdomPop(State);
+  if (popNow > State.stats.peakPop) State.stats.peakPop = popNow;
   return State;
 };
 

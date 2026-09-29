@@ -157,7 +157,11 @@ const MapGen = {
   // === Custom map: pass presetId "custom" (or any `tiers` object carrying a
   // `base`) plus a `tiers` selection; the resolved preset is built via applyTiers
   // and the stream stays deterministic (same seed + tiers => identical map). ===
-  generate(seedInput, radius, presetId, tiers) {
+  // DESIGN PASS: `genVersion` (optional) selects the generator revision — see
+  // CONFIG.map.genVersion. Omitted => current; loadGame passes the save's own
+  // version so an old game regenerates the exact terrain it was created on.
+  generate(seedInput, radius, presetId, tiers, genVersion) {
+    genVersion = genVersion || (CONFIG.map && CONFIG.map.genVersion) || 1;
     presetId = presetId || (CONFIG.mapPresetDefault || "fertile");
     let preset;
     if (tiers && typeof tiers === "object" && (presetId === "custom" || tiers.base)) {
@@ -469,6 +473,17 @@ const MapGen = {
     // fertile + a usable fish tile). K=4 sits INSIDE any size-based reveal radius
     // (>=10), so the revealed OPENING always contains wood + fertile land. ----
     MapGen.repairPlayability(hexes, 4, 6, 3, 6, 1);
+    // ---- reveal radius scales with board size (v0.43); save.js reveals it at new-game. ----
+    const revealTier = W <= 40 ? "small" : (W <= 58 ? "normal" : "large");
+    const revealRadius = (CONFIG.fog && CONFIG.fog.startReveal && CONFIG.fog.startReveal[revealTier]) ||
+      (CONFIG.fog && CONFIG.fog.castleReveal) || 4;
+    // DESIGN PASS (genVersion 2): a quarry-able stone cluster inside the opening
+    // reveal — research and the Fishery/Sheep Farm all need stone. No rng, so the
+    // stream (and every later step) is untouched; v1 saves skip it entirely.
+    if (genVersion >= 2) {
+      const SG = (CONFIG.map && CONFIG.map.stoneGuarantee) || { minDist: 3, maxDist: 6, minBuildableNbrs: 2, tiles: 2 };
+      MapGen.repairStone(hexes, SG.minDist, Math.min(SG.maxDist, revealRadius - 1), SG.minBuildableNbrs, SG.tiles, 4, 6);
+    }
 
     // ---- (12) connectivity — the castle's land MUST reach the main landmass
     // (carve a bridge if islanded), and then EVERY roadable region walled off by a
@@ -478,13 +493,8 @@ const MapGen = {
     MapGen.ensureCastleConnected(hexes);
     MapGen.ensureReachable(hexes);
 
-    // ---- reveal radius scales with board size (v0.43); save.js reveals it at new-game. ----
-    const revealTier = W <= 40 ? "small" : (W <= 58 ? "normal" : "large");
-    const revealRadius = (CONFIG.fog && CONFIG.fog.startReveal && CONFIG.fog.startReveal[revealTier]) ||
-      (CONFIG.fog && CONFIG.fog.castleReveal) || 4;
-
     return { seed, radius, preset: presetId, hexes, revealRadius, rect: { width: W, height: H },
-      tiers: (presetId === "custom" ? tiers : undefined) };
+      tiers: (presetId === "custom" ? tiers : undefined), genVersion };
   },
   // === v0.43: carve ONE winding river. Starts at a high-elevation inland land
   // hex, then repeatedly steps to a low-elevation neighbour (meandering: it picks
@@ -723,6 +733,54 @@ const MapGen = {
   //   4. last resort (no water AND no barren/desert in the band): any other
   //      buildable ground (snow/fertile) → fish, preferring hexes OUTSIDE the
   //      fertile/forest repair radius so the start-kit guarantees keep.
+  // === DESIGN PASS (genVersion 2): STONE GUARANTEE. Ensure >= 1 stone_deposit at
+  // hex-dist [minD, maxD] of the castle that a city can reach: >= minNbrs
+  // neighbours that are buildable, not houseOnly (snow) and not castle-adjacent
+  // (dist >= 2 — the castle-gap rule). If none exists, convert the NEAREST
+  // barren/desert hex in the band (fertile only as a fallback, and never below
+  // the fertile start guarantee within fertK) into a `tiles`-hex stone cluster,
+  // keeping >= minNbrs city sites beside the seed. Forest, water, fish and
+  // deposits are never touched, and no conversion may strand a fish tile.
+  // Deterministic: priority → dist → key tie-breaks, no rng.
+  repairStone(hexes, minD, maxD, minNbrs, tiles, fertK, minFertile) {
+    const dist = (h) => HexMath.dist(0, 0, h.q, h.r);
+    const nbrsOf = (h) => HexMath.neighbors(h.q, h.r).map(n => hexes.get(HexMath.key(n.q, n.r))).filter(Boolean);
+    const citySite = (x) => { const td = CONFIG.terrain[x.terrain];
+      return !!(td && td.buildable && !td.houseOnly) && dist(x) >= 2; };
+    const sites = (h) => nbrsOf(h).filter(citySite);
+    const band = [];
+    for (const h of hexes.values()) { const d = dist(h); if (d >= minD && d <= maxD) band.push(h); }
+    if (band.some(h => h.terrain === "stone_deposit" && sites(h).length >= minNbrs)) return;
+    let fertNear = 0;
+    for (const h of hexes.values()) if (h.terrain === "fertile" && dist(h) <= fertK) fertNear++;
+    const PRI = { barren: 0, desert: 0, fertile: 1 };
+    const inBand = (h) => { const d = dist(h); return d >= minD && d <= maxD; };
+    // may `h` become stone, given `spentFert` near-castle fertile already used this repair?
+    const convertible = (h, spentFert) => {
+      if (!(h.terrain in PRI) || !inBand(h)) return false;
+      if (h.terrain === "fertile" && dist(h) <= fertK && fertNear - spentFert - 1 < minFertile) return false;
+      return !MapGen.strandsFish(hexes, h);
+    };
+    const fertCost = (h) => (h.terrain === "fertile" && dist(h) <= fertK ? 1 : 0);
+    const order = (a, b) => PRI[a.terrain] - PRI[b.terrain] || dist(a) - dist(b) ||
+      (HexMath.key(a.q, a.r) < HexMath.key(b.q, b.r) ? -1 : 1);
+    const cands = band.filter(h => convertible(h, 0)).sort(order);
+    let single = null;
+    for (const h of cands) {
+      const s0 = sites(h);
+      if (s0.length < minNbrs) continue;
+      if (!single) single = h;
+      if (tiles < 2) break;
+      // partner tile: a convertible neighbour whose loss still leaves minNbrs city sites.
+      const partner = nbrsOf(h).filter(x => convertible(x, fertCost(h)) &&
+        s0.filter(y => y !== x).length >= minNbrs).sort(order)[0];
+      if (!partner) continue;
+      h.terrain = "stone_deposit";
+      if (!MapGen.strandsFish(hexes, partner)) partner.terrain = "stone_deposit";
+      return;
+    }
+    if (single) single.terrain = "stone_deposit";   // no room for a pair anywhere — one tile still unblocks research
+  },
   // === TV2-FIX: would turning hex `h` into non-buildable terrain leave an
   // adjacent fish tile with NO buildable-land neighbour (i.e. unreachable)?
   strandsFish(hexes, h) {

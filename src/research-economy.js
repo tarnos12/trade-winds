@@ -31,7 +31,9 @@ Object.assign(CONFIG, {
     // any single peasant-band root node's materials. (v0.47) also seeds potato so
     // the provisioner starts converting immediately, and keeps >=10 stone/wood/
     // potato — the small early cushion the player expects at the castle.
-    starterStock: { wood: 40, stone: 20, potato: 10 },
+    // DESIGN PASS: stone 20 → 40. Building the Research Center costs stone 20, which
+    // used to eat ALL the starting stone; 40 leaves 20 for the first research.
+    starterStock: { wood: 40, stone: 40, potato: 10 },
   },
 });
 
@@ -57,21 +59,29 @@ Object.assign(CONFIG, {
 // the P4-A CONFIG.research nodes (does not edit the RESEARCH-CORE literals), so
 // any layer can read `node.materials`. Early/root nodes need basic raw goods;
 // deeper nodes need processed / luxury goods (the gate scales with tier).
+// DESIGN PASS (research-2/3): Peasant/Worker-band nodes no longer ask for STONE.
+// Construction always takes a city's stone first (unbuilt buildings count as city
+// demand, so royal buyers see no surplus); stone was ~85% of research wait time.
+// Stone is swapped for POTATO ("provisions for the scholars") — the one good the
+// early bands chronically overproduce (price pinned at the floor). Measured A/B:
+// Cottage median 34 → 18 min, Brickworks 85 → 51. The 3 Kingdom roots now use only
+// goods start-unlocked buildings make (wood/planks/potato), so they can start
+// before any research. test/research.test.js guards both rules.
 const RESEARCH_MATERIALS = {
   // -- production branch --
-  crop_rotation: { wood: 20, stone: 10 },
+  crop_rotation: { wood: 20, potato: 15 },   // DESIGN PASS: root — was stone 10 (Quarry-locked)
   deep_veins:    { stone: 25, iron: 15 },   // === TV2: ore → iron ===
   guild_halls:   { planks: 20, stone: 25 },
   master_crafts: { planks: 30, iron_tool: 20, stone_tools: 10 },   // === CC: tools → iron_tool === === STWIRE: stone_tools was inert (no consumer anywhere); wire it into this late production capstone. Already gated on iron_tool (a burgher good), so adding the EASIER worker-made stone_tools raises no effective gate / no bootstrap risk. ===
   industrialize: { iron_tool: 30, chairs: 15 },   // === CC: tools/furniture → iron_tool/chairs ===
   // -- logistics branch --
-  paved_roads:   { stone: 30, wood: 15 },
+  paved_roads:   { wood: 25, planks: 10 },   // DESIGN PASS: root — was stone 30 / wood 15 (Quarry-locked)
   larger_carts:  { planks: 25, wood: 20 },
   extra_caravan: { planks: 30, iron_tool: 15 },   // === CC: tools → iron_tool ===
   warehousing:   { planks: 40, stone: 30 },
   trade_network: { iron_tool: 30, chairs: 20, stone_tools: 15 },   // === CC: tools/furniture → iron_tool/chairs === === STWIRE: second stone_tools sink; this logistics capstone already needs iron_tool+chairs (burgher goods), so the worker-made stone_tools is a lower bar — safe, additive demand. ===
   // -- administration branch --
-  tax_ledgers:   { grain: 20, wood: 15 },
+  tax_ledgers:   { potato: 20, wood: 15 },   // DESIGN PASS: root — was grain 20 (Quarry → Wheat Farm locked)
   tariff_office: { clothes: 15, planks: 20 },      // === CC: cloth → clothes ===
   royal_census:  { bread: 20, clothes: 20 },       // === CC: cloth → clothes ===
   town_charters: { iron_tool: 20, chairs: 15 },    // === CC: tools/furniture → iron_tool/chairs ===
@@ -82,14 +92,14 @@ const RESEARCH_MATERIALS = {
   township_grants: { planks: 20, bread: 15 },      // city-cap chain (base 4 → 7 → 10 → 12)
   provincial_rule: { iron_tool: 20, chairs: 20 },
   imperial_domain: { gold_ring: 20, chairs: 30 },
-  // === RT-A: per-building unlock nodes (peasant: wood/stone; worker: +planks/tools) ==
+  // === RT-A: per-building unlock nodes (peasant: wood/potato; worker: +planks) ==
   unlock_quarry:   { wood: 15 },
   unlock_fishery:  { wood: 15 },
-  unlock_shepherd: { wood: 20, stone: 5 },
-  unlock_mill:     { planks: 15, stone: 10 },
-  unlock_cottage:  { planks: 15, stone: 15 },
-  unlock_brewery:  { planks: 15, stone: 10 },
-  unlock_bakery:   { planks: 20, stone: 10 },   // === BALPW: was {planks:20, iron_tool:10} — bread is a WORKER luxury but iron_tool is a BURGHER-tier good, so the worker food chain was gated behind burgher production and bread was NEVER produced. Re-tier the materials to the worker band (planks+stone, matching unlock_mill/brewery). ===
+  unlock_shepherd: { wood: 20, potato: 5 },
+  unlock_mill:     { planks: 15, potato: 10 },
+  unlock_cottage:  { planks: 15, potato: 15 },
+  unlock_brewery:  { planks: 15, potato: 10 },
+  unlock_bakery:   { planks: 20, potato: 10 },   // DESIGN PASS: stone → potato. === BALPW: was {planks:20, iron_tool:10} — bread is a WORKER luxury but iron_tool is a BURGHER-tier good, so the worker food chain was gated behind burgher production and bread was NEVER produced. Re-tier the materials to the worker band (planks+stone, matching unlock_mill/brewery). ===
   // === BALCA: was {planks:30, iron_tool:15}. iron_tool is a BURGHER-produced good
   // (forge is burgher-staffed), but the MANOR is the sole gateway to burgher HOUSING
   // — with no manor there are no burghers, so nobody can staff a forge to make the
@@ -99,29 +109,29 @@ const RESEARCH_MATERIALS = {
   // matching the manor's own build cost which already lists bricks. ===
   unlock_manor:    { planks: 30, bricks: 15 },   // === BALCA: iron_tool → bricks (un-deadlock burgher housing) ===
   // === TV2: new worker-band unlock nodes ===
-  unlock_iron_mine:  { wood: 20, stone: 10 },
-  unlock_clay_pit:   { wood: 15, stone: 10 },
-  unlock_coal_mine:  { wood: 20, stone: 15 },
-  unlock_gold_mine:  { stone: 20, planks: 10 },
-  unlock_brickworks: { planks: 15, stone: 15 },
-  unlock_farm:       { wood: 20, stone: 5 },
+  unlock_iron_mine:  { wood: 20, potato: 10 },
+  unlock_clay_pit:   { wood: 15, potato: 10 },
+  unlock_coal_mine:  { wood: 20, potato: 15 },
+  unlock_gold_mine:  { planks: 10, potato: 20 },
+  unlock_brickworks: { planks: 15, potato: 15 },
+  unlock_farm:       { wood: 20, potato: 5 },
   // -- per-level upgrade nodes (replace the old development ids) --
   upg_hut_l2:        { wood: 15 },
-  upg_hut_l3:        { wood: 20, stone: 10 },
-  upg_hut_l4:        { wood: 30, stone: 15 },
-  upg_hut_l5:        { stone: 25, planks: 15 },
+  upg_hut_l3:        { wood: 20, potato: 10 },
+  upg_hut_l4:        { wood: 30, potato: 15 },
+  upg_hut_l5:        { potato: 25, planks: 15 },
   upg_lumberjack_l2: { wood: 20 },
-  upg_lumberjack_l3: { wood: 25, stone: 15 },
+  upg_lumberjack_l3: { wood: 25, potato: 15 },
   upg_farm_l2:       { wood: 20 },
-  upg_farm_l3:       { wood: 25, stone: 15 },
+  upg_farm_l3:       { wood: 25, potato: 15 },
   upg_sawmill_l2:    { planks: 10, wood: 15 },
-  upg_sawmill_l3:    { planks: 20, stone: 15 },
+  upg_sawmill_l3:    { planks: 20, potato: 15 },
   // === /RT-A ===============================================
   // === CC: new worker/citizen/aristocrat unlock + upgrade node materials ===
-  unlock_tailoring:        { planks: 15, stone: 10 },
-  unlock_charcoal_burner:  { wood: 20, stone: 5 },
-  unlock_stonetool_maker:  { planks: 15, stone: 15 },
-  unlock_oil_maker:        { planks: 15, stone: 10 },
+  unlock_tailoring:        { planks: 15, potato: 10 },
+  unlock_charcoal_burner:  { wood: 20, potato: 5 },
+  unlock_stonetool_maker:  { planks: 15, potato: 15 },
+  unlock_oil_maker:        { planks: 15, potato: 10 },
   unlock_forge:            { planks: 20, iron: 15 },
   unlock_armory:           { iron: 20, coal: 20 },
   unlock_pottery_workshop: { planks: 20, bricks: 10 },
@@ -198,6 +208,17 @@ var ResearchEconomy = (function () {
     return n > 0 ? rem / n : 0;
   }
   // === /RSF ===
+  // DESIGN PASS: units of `gid` the ACTIVE node still has to draw from castleStock
+  // (required − already consumed). Other castle consumers (the Provisioner) must
+  // leave this much in stock, or they eat materials the royal buyers just bought.
+  function heldForResearch(state, gid) {
+    const R = state && state.research;
+    if (!R || !R.active || typeof Research === "undefined") return 0;
+    const node = Research.get(R.active);
+    const req = node && node.materials && node.materials[gid];
+    if (!req) return 0;
+    return Math.max(0, req - ((R.consumed && R.consumed[gid]) || 0));
+  }
   function activeCastleCarts(state) {
     let n = 0;
     for (const c of (state.carts || [])) if (!c.done && c.kind === "castle") n++;
@@ -380,7 +401,7 @@ var ResearchEconomy = (function () {
   }
 
   return {
-    tick, materialsSatisfied, consumeMaterials, remaining, need, townShare,
+    tick, materialsSatisfied, consumeMaterials, remaining, need, townShare, heldForResearch,
     activeCastleCarts, stock, castleHex, CASTLE_ID,
   };
 })();

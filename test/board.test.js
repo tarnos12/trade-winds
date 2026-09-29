@@ -459,6 +459,75 @@ ok("generate() returns a size-based revealRadius (6/8/10)", (() => {
   return s === 6 && n === 8 && l === 10;
 })());
 
+// ==== DESIGN PASS (item 10): STONE GUARANTEE + mapgen versioning ====
+// Research, the Fishery and the Sheep Farm all need stone, so every NEW map
+// (genVersion 2) opens with a quarry-placeable stone tile inside the start
+// reveal: a stone_deposit at dist >= 2 (castle gap) with a buildable, non-snow,
+// castle-clear neighbour (a city site) that is itself revealed. Before the
+// guarantee ~31% of these 200 maps had none (Oasis 25/40).
+const FNV = (map) => { let x = 2166136261 >>> 0;
+  for (const k of [...map.hexes.keys()].sort()) { const s = k + "=" + map.hexes.get(k).terrain + ";";
+    for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619) >>> 0; } }
+  return x.toString(16); };
+function quarryStoneInReveal(map) {
+  const R = map.revealRadius;
+  const site = (x) => { const td = x && CONFIG.terrain[x.terrain]; return !!(td && td.buildable && !td.houseOnly) && dc(x.q, x.r) >= 2 && dc(x.q, x.r) <= R; };
+  for (const h of map.hexes.values()) {
+    if (h.terrain !== "stone_deposit" || dc(h.q, h.r) < 2 || dc(h.q, h.r) > R) continue;
+    if (HexMath.neighbors(h.q, h.r).some(n => site(map.hexes.get(HexMath.key(n.q, n.r))))) return true;
+  }
+  return false;
+}
+ok("CONFIG.map.genVersion is 2 (stone guarantee)", CONFIG.map.genVersion === 2);
+ok("generate() defaults to the current genVersion", MapGen.generate("harbor", 14, "fertile").genVersion === 2);
+{
+  let missV2 = [], missV1 = 0;
+  for (const pid of presetIds) for (let i = 1; i <= 40; i++) {
+    if (!quarryStoneInReveal(MapGen.generate(String(i), CONFIG.mapPresets[pid].radius, pid))) missV2.push(pid + "/" + i);
+    if (!quarryStoneInReveal(MapGen.generate(String(i), CONFIG.mapPresets[pid].radius, pid, undefined, 1))) missV1++;
+  }
+  ok("v2: 40 seeds x 5 presets all have quarry-placeable stone in the start reveal" + (missV2.length ? " (missing: " + missV2.slice(0, 8).join(", ") + ")" : ""), presetIds.length === 5 && missV2.length === 0);
+  ok("v1 still lacks it on some seeds (guarantee is what fixes it)", missV1 > 0);
+}
+// Small boards (startReveal 6): the guaranteed stone sits at dist <= 5, so the
+// whole cluster AND a city site beside it stay inside the reveal.
+ok("v2 small custom maps: quarry stone inside the 6-hex reveal", ["fertile", "oasis", "isles"].every(base =>
+  ["1", "2", "5", "8", "16", "19", "28", "30"].every(seed => {
+    const map = MapGen.generate(seed, null, "custom", { base, size: "small" });
+    return map.revealRadius === 6 && quarryStoneInReveal(map);
+  })));
+// The repair converts ONLY barren/desert/fertile into stone — never forest, water,
+// fish or another deposit — and never below the fertile/forest/fish guarantees
+// (those are re-checked across the multi-seed loop above; here we diff v1 vs v2).
+ok("v2 only adds stone_deposit (on barren/desert/fertile) vs v1", presetIds.every(pid => {
+  for (let i = 1; i <= 12; i++) {
+    const a = MapGen.generate(String(i), null, pid, undefined, 1), b = MapGen.generate(String(i), null, pid, undefined, 2);
+    for (const [k, h] of b.hexes) { const o = a.hexes.get(k).terrain;
+      if (o !== h.terrain && !(h.terrain === "stone_deposit" && (o === "barren" || o === "desert" || o === "fertile"))) return false; }
+  }
+  return true;
+}));
+ok("v2 keeps fertile>=6 / forest>=3 within 4 and a usable fish (40 seeds x 5 presets)", presetIds.every(pid => {
+  for (let i = 1; i <= 40; i++) {
+    const map = MapGen.generate(String(i), null, pid); const hx = [...map.hexes.values()];
+    const near = hx.filter(h => dc(h.q, h.r) <= 4);
+    if (near.filter(h => h.terrain === "fertile").length < 6 || near.filter(h => h.terrain === "forest").length < 3) return false;
+    if (!hx.some(h => h.terrain === "fish" && dc(h.q, h.r) >= 2 && dc(h.q, h.r) <= 6 &&
+      HexMath.neighbors(h.q, h.r).some(n => { const nh = map.hexes.get(HexMath.key(n.q, n.r)); return nh && buildableT(nh.terrain); }))) return false;
+    if (!hx.every(h => h.terrain !== "fish" ||
+      HexMath.neighbors(h.q, h.r).some(n => { const nh = map.hexes.get(HexMath.key(n.q, n.r)); return nh && buildableT(nh.terrain); }))) return false;
+  }
+  return true;
+}));
+// SAVE COMPAT: a pre-guarantee save (no mapgenVersion → loads as v1) must
+// regenerate the EXACT terrain it was created on — cities and roads sit on it.
+// Hashes captured from the generator before item 10 landed.
+ok("v1: seed '1' Fertile terrain unchanged (FNV fcc22766)", FNV(MapGen.generate("1", CONFIG.mapPresets.fertile.radius, "fertile", undefined, 1)) === "fcc22766");
+ok("v1: seed 'harbor' Fertile terrain unchanged (FNV 24fcbfb6)", FNV(MapGen.generate("harbor", 14, "fertile", undefined, 1)) === "24fcbfb6");
+ok("v1: seed '1' Oasis terrain unchanged (FNV 5e0f9374)", FNV(MapGen.generate("1", CONFIG.mapPresets.oasis.radius, "oasis", undefined, 1)) === "5e0f9374");
+ok("v2 differs from v1 where stone was missing (seed '1' Fertile)", FNV(MapGen.generate("1", CONFIG.mapPresets.fertile.radius, "fertile")) !== "fcc22766");
+ok("v2 is deterministic", FNV(MapGen.generate("7", null, "oasis")) === FNV(MapGen.generate("7", null, "oasis")));
+
 console.log("\nterrain histogram (seed 'harbor', fertile):");
 const hist = {};
 for (const h of map1.hexes.values()) hist[h.terrain] = (hist[h.terrain] || 0) + 1;

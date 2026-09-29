@@ -75,7 +75,9 @@ ok("CONFIG.town.castle = {q:0,r:0}", CONFIG.town.castle && CONFIG.town.castle.q 
 ok("CONFIG.town.baseWorkers.peasants is 0 (population is housing-driven)",
    typeof CONFIG.town.baseWorkers.peasants === "number" && CONFIG.town.baseWorkers.peasants >= 0);
 // EV3: a new city starts with 20 wood (a basic peasant need — firewood).
-ok("CONFIG.town.startStock is { wood: 60, potato: 20 }", CONFIG.town.startStock.wood === 60 && CONFIG.town.startStock.potato === 20);
+// DESIGN PASS #4: potato 20 → 40 so the onboarding Timber town (no farm) feeds its
+// 4 peasants ~7.7 game-min until the Farm town exports (see test/opening.test.js).
+ok("CONFIG.town.startStock is { wood: 60, potato: 40 }", CONFIG.town.startStock.wood === 60 && CONFIG.town.startStock.potato === 40);
 // EV3: per-city storage cap.
 ok("CONFIG.town.storageCap === 80", CONFIG.town.storageCap === 80);
 ok("CONFIG.town.foundCost === 1000", CONFIG.town.foundCost === 1000 && Buildings.foundCost() === 1000);
@@ -560,6 +562,49 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
     ok("startUpgrade leaves town stock untouched", town.stock.wood === 50);
   }
 
+  // -- DESIGN PASS (#2): self-output upgrade gate. A producer pauses while it upgrades,
+  //    so an upgrade costing its OWN output can't be fed by it — refuse to start it
+  //    until the city already holds that much (Lumberjack L2 = 20 wood). --
+  {
+    const st = stWith(["upg_lumberjack_l2"]);
+    const lj = () => ({ typeId: "lumberjack", upgradeLevel: 1, pendingUpgrade: null, built: true });
+    const need = Buildings.upgradeAt("lumberjack", 2).cost.wood;
+    const r4 = Buildings.canStartUpgrade(st, { gold: 10000, stock: { wood: 4 } }, lj());
+    ok("self-output gate: Lumberjack L2 refused at 4 wood", r4.ok === false && r4.selfGood === "wood" && /stops producing while it upgrades/.test(r4.reason));
+    ok("self-output gate: reason names the amount", r4.reason.indexOf("Stock " + need + " Wood first") === 0);
+    ok("self-output gate: Lumberjack L2 allowed at 20 wood", Buildings.canStartUpgrade(st, { gold: 10000, stock: { wood: need } }, lj()).ok === true);
+    ok("self-output gate: startUpgrade refused below the gate", Buildings.startUpgrade(st, { gold: 10000, stock: { wood: 4 } }, lj()) === false);
+    ok("self-output gate: a Farm L2 (wood cost, grain output) is NOT gated by wood",
+      Buildings.canStartUpgrade(stWith(["upg_farm_l2"]), { gold: 10000, stock: { wood: 0 } }, { typeId: "farm", upgradeLevel: 1, pendingUpgrade: null }).ok === true);
+    // REVIEW FIX: cost.gold is city GOLD, not the Gold Mine's "gold" good — a (temporary,
+    // test-only) Gold Mine ladder must not be gated on gold-ore stock.
+    const hadLadder = CONFIG.upgrades.gold_mine;
+    CONFIG.upgrades.gold_mine = [{ level: 2, name: "test", cost: { gold: 200, wood: 5 }, effect: {} }];
+    ok("self-output gate: Gold Mine upgrade gold price is not read as gold-ore stock",
+      Buildings.canStartUpgrade(stWith([]), { gold: 10000, stock: { wood: 10 } }, { typeId: "gold_mine", upgradeLevel: 1, pendingUpgrade: null, built: true }).ok === true);
+    if (hadLadder === undefined) delete CONFIG.upgrades.gold_mine; else CONFIG.upgrades.gold_mine = hadLadder;
+  }
+
+  // -- DESIGN PASS (#2): cancelUpgrade refunds city gold + returns delivered goods (clamped) --
+  {
+    const st = stWith(["upg_lumberjack_l2"]);
+    const town = { gold: 1000, stock: { wood: 20 } };
+    const b = { typeId: "lumberjack", upgradeLevel: 1, pendingUpgrade: null, built: true };
+    const goldCost = Buildings.upgradeAt("lumberjack", 2).cost.gold;
+    ok("cancel: precondition startUpgrade", Buildings.startUpgrade(st, town, b) === true && town.gold === 1000 - goldCost);
+    b.pendingUpgrade.delivered.wood = 12; town.stock.wood = 8;   // as if 12 had been delivered
+    ok("cancel: returns true", Buildings.cancelUpgrade(st, town, b) === true);
+    ok("cancel: clears pendingUpgrade, level unchanged", b.pendingUpgrade === null && b.upgradeLevel === 1);
+    ok("cancel: refunds the gold to the city", town.gold === 1000);
+    ok("cancel: delivered goods back in stock", town.stock.wood === 20);
+    ok("cancel: nothing pending → false", Buildings.cancelUpgrade(st, town, b) === false);
+    const cap = CONFIG.town.storageCap;
+    const t2 = { gold: 0, stock: { wood: cap - 5 } };
+    const b2 = { typeId: "lumberjack", upgradeLevel: 1, pendingUpgrade: { toLevel: 2, delivered: { wood: 15 } } };
+    Buildings.cancelUpgrade(st, t2, b2);
+    ok("cancel: refund clamps at storageCap", t2.stock.wood === cap && t2.gold === goldCost);
+  }
+
   // -- resource cost / construction need --
   {
     const rc = Buildings.upgradeResourceCost("hut", 2);
@@ -745,6 +790,45 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
   const town2 = { q: 0, r: 0, buildings: [hut(0, 1), hut(1, 0), hut(1, 1)] };  // two centre-adjacent + one bridging
   ok("§11: a building with another path to the centre survives",
      Buildings.cascadeOrphans(town2, [HexMath.key(0, 1)]).orphans.length === 0);
+}
+
+// === DESIGN PASS (#2): wood bootstrap — construction delivery must not spend the
+// start wood on other sites while the town's only (unbuilt) Lumberjack still needs
+// it. Real placement + the full economy step (tools/player.js), a lone first city.
+// Before the fix the "huts first" order left the Lumberjack NEVER built (wood 0). ===
+{
+  const { build, step } = require(path.join(__dirname, "..", "tools", "player.js"));
+  const ljBuiltBy = (order, ticks) => {
+    const { C, state, placeBuilding } = build();
+    state.towns = [state.towns[0]];
+    const t = state.towns[0]; t.gold = 1000;
+    for (const id of order) placeBuilding(t, id);
+    for (let i = 1; i <= ticks; i++) {
+      step(C, state);
+      const lj = t.buildings.find(b => b.typeId === "lumberjack");
+      if (lj && lj.built !== false) return { tick: i, t };
+    }
+    return { tick: null, t };
+  };
+  const TWO_MIN = 2 * 120;   // 120 ticks = 1 game-minute
+  const hf = ljBuiltBy(["hut", "hut", "hut", "potato_farm", "sawmill", "lumberjack"], TWO_MIN);
+  ok("bootstrap: huts-first order builds the Lumberjack within 2 game-min", hf.tick !== null);
+  ok("bootstrap: five-huts order builds the Lumberjack within 2 game-min",
+    ljBuiltBy(["hut", "hut", "hut", "hut", "hut", "potato_farm", "lumberjack"], TWO_MIN).tick !== null);
+  ok("bootstrap: tutorial order still builds the Lumberjack within 2 game-min",
+    ljBuiltBy(["lumberjack", "potato_farm", "hut", "hut"], TWO_MIN).tick !== null);
+  // one tick in: the reserve holds the Lumberjack's wood even though the huts come first
+  {
+    const { C, state, placeBuilding } = build();
+    state.towns = [state.towns[0]];
+    const t = state.towns[0]; t.gold = 1000; t.stock.wood = 10;
+    for (const id of ["hut", "hut", "lumberjack"]) placeBuilding(t, id);
+    C.Sim.tick(state);
+    const lj = t.buildings.find(b => b.typeId === "lumberjack");
+    const huts = t.buildings.filter(b => b.typeId === "hut");
+    ok("bootstrap: with 10 wood the Lumberjack gets it, not the Huts placed before it",
+      (lj.delivered.wood || 0) > 0 && huts.every(h => !(h.delivered.wood > 0)));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
