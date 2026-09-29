@@ -1,7 +1,7 @@
 // CASTLE MARKET (buying side). A self-contained layer that runs AFTER
 // ResearchEconomy.tick in the accumulator, sharing the SAME castle-trader fleet
 // (kind:"castle") and cap (CONFIG.researchEconomy.maxTraders). It dispatches royal
-// buyers for the goods the player ENABLED in state.castleTrade, up to each good's
+// buyers for the goods the player marked "King buys" in state.castleTrade, up to each good's
 // `limit`, into state.castleStock (no tariff — same as research buying). Research
 // materials get FIRST pick because ResearchEconomy.tick fills the fleet first; the
 // market only sees whatever cap remains. Its carts are advanced + settled by
@@ -9,6 +9,18 @@
 // and movement stays in one place — a cart dispatched here first advances on the
 // NEXT tick (1-tick latency; harmless). Deterministic via state.castleMarketSeed.
 var CastleMarket = (function () {
+  // DESIGN PASS (king buys / king sells): castleTrade[gid] is { buy, sell, limit }.
+  // `buy` sends royal buyers up to `limit`; `sell` lets cities buy castle stock
+  // (only the part above `limit` while `buy` is on). A pre-split entry
+  // { enabled } maps to buy-only — the old flag silently made the castle a
+  // tax-free reseller (it became the potato middleman once a Provisioner stood).
+  function flagsOf(v) {
+    if (!v || typeof v !== "object") return { buy: false, sell: false };
+    if ("buy" in v || "sell" in v) return { buy: !!v.buy, sell: !!v.sell };
+    return { buy: !!v.enabled, sell: false };   // legacy { enabled } → buy only
+  }
+  function buys(state, gid) { return flagsOf(state && state.castleTrade && state.castleTrade[gid]).buy; }
+  function sells(state, gid) { return flagsOf(state && state.castleTrade && state.castleTrade[gid]).sell; }
   function normalize(raw) {
     const out = {};
     if (!raw || typeof raw !== "object") return out;
@@ -16,7 +28,8 @@ var CastleMarket = (function () {
       const v = raw[gid];
       if (!v || typeof v !== "object") continue;
       const limit = (typeof v.limit === "number" && isFinite(v.limit) && v.limit >= 0) ? v.limit : 0;
-      out[gid] = { enabled: !!v.enabled, limit: limit };
+      const f = flagsOf(v);
+      out[gid] = { buy: f.buy, sell: f.sell, limit: limit };
     }
     return out;
   }
@@ -30,13 +43,13 @@ var CastleMarket = (function () {
   // Units still worth buying toward a good's limit = limit − held − in-flight.
   function remaining(state, gid) {
     const ct = state.castleTrade && state.castleTrade[gid];
-    if (!ct || !ct.enabled) return 0;
+    if (!ct || !flagsOf(ct).buy) return 0;
     const held = (state.castleStock && state.castleStock[gid]) || 0;
     return (ct.limit || 0) - held - inFlightCastle(state, gid);
   }
   function enabledSellStock(state) {
     const out = {}; const ct = (state && state.castleTrade) || {};
-    for (const gid in ct) if (ct[gid] && ct[gid].enabled) out[gid] = (state.castleStock && state.castleStock[gid]) || 0;
+    for (const gid in ct) if (flagsOf(ct[gid]).sell) out[gid] = (state.castleStock && state.castleStock[gid]) || 0;
     return out;
   }
   function tick(state) {
@@ -55,8 +68,12 @@ var CastleMarket = (function () {
     const rng = mulberry32(state.castleMarketSeed | 0);
     state.castleMarketSeed = (Math.imul(state.castleMarketSeed | 0, 1664525) + 1013904223) | 0;
 
+    // DESIGN PASS: the castle buys only what a town would EXPORT anyway — stock above
+    // Trade.sellHoldback (minStock floor, structural-consumer hold, post-build grace) —
+    // so royal buyers stop draining importers down to crumbs at scarcity prices.
     const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
-    const needOf = (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
+    const holdOf = (typeof Trade !== "undefined" && Trade.sellHoldback) ? Trade.sellHoldback
+      : (t, gid) => ((t.demand && t.demand[gid]) || 0) * buffer;
     const reservedOf = (t, gid) => (t && t.reserved && t.reserved[gid]) || 0;
     const reserve = (t, gid, n) => { if (!t.reserved) t.reserved = {}; t.reserved[gid] = (t.reserved[gid] || 0) + n; };
     const priceOf = (town, gid) => {
@@ -74,7 +91,7 @@ var CastleMarket = (function () {
       // (a) enabled goods still under their limit (respecting held + in-flight).
       const gaps = [];
       for (const gid in ct) {
-        if (!ct[gid] || !ct[gid].enabled) continue;
+        if (!flagsOf(ct[gid]).buy) continue;
         const rem = remaining(state, gid);
         if (rem > C.buyThreshold && rem > 0) gaps.push({ gid, rem });
       }
@@ -87,7 +104,7 @@ var CastleMarket = (function () {
       const offers = [];
       for (const seller of towns) {
         if (!seller || !seller.stock) continue;
-        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - needOf(seller, want.gid);
+        const surplus = (seller.stock[want.gid] || 0) - reservedOf(seller, want.gid) - holdOf(seller, want.gid);
         if (surplus <= 0) continue;
         const route = Pathing.route(state, fromKey, townKey(seller));
         if (!route) continue;
@@ -116,6 +133,6 @@ var CastleMarket = (function () {
     }
     return state;
   }
-  return { tick, normalize, enabledSellStock, remaining, inFlightCastle };
+  return { tick, normalize, flagsOf, buys, sells, enabledSellStock, remaining, inFlightCastle };
 })();
 // === /PP-A ===
