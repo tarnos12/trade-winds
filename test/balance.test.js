@@ -362,6 +362,11 @@ ok("capital lower tier not regressed: peasant th >= 70", (ath.peasants || 0) >= 
    "peasant th=" + (ath.peasants || 0).toFixed(1));
 ok("capital lower tier active: worker th >= 60", (ath.workers || 0) >= 60,   // v0.51: labour-bound fish/coal loop (see block F note)
    "worker th=" + (ath.workers || 0).toFixed(1));
+// DESIGN PASS #3: blocked producers (full store / upgrading) are staffed LAST, so the
+// capital's idle crews move to the coal/fish chain — worker happiness ~68 → ~95. Lock the
+// gain in (the >= 60 floor above stays as the loose regression net).
+ok("capital workers thrive under blocked-last staffing: worker th >= 85", (ath.workers || 0) >= 85,
+   "worker th=" + (ath.workers || 0).toFixed(1));
 // Aristocrats bootstrap from ZERO to a present population (the growth path has no deadlock).
 ok("capital grew aristocrats from 0 to a present population (>=2)",
    (capital.pop.aristocrats || 0) >= 2, "aristocrats=" + (capital.pop.aristocrats || 0).toFixed(2));
@@ -378,14 +383,32 @@ ok("aristocrat tierHappiness >= 12 (basics partially met single-town; full 99.5 
 ok("aristocrat-specific basic 'iron_armor' has a producer building present (armory)",
    hasProducerBuilding(capital, "iron_armor"));
 // Per-capita tax must strictly increase peasant < worker < burgher < aristocrat.
+// DESIGN PASS #3 RE-BASELINE: blocked-last staffing moves idle crews onto the capital's
+// coal/fish chain, so its workers go from ~68 to ~96 happiness and their happiness
+// multiplier (1 + (h − 70) × 0.02 ≈ 1.52) lifts realized worker tax to ~0.229/capita —
+// above the still-unhappy burghers' ~0.220 (h ≤ 70, ×1.0). That flip is a HAPPINESS
+// effect, not a rate regression, so the chain is now asserted on the happiness-
+// NORMALIZED per-capita tax (tierIncome / (pop × happiness multiplier)), strictly
+// peasant < worker < burgher < aristocrat — no tolerance added. The REALIZED checks
+// keep their original strictness where the design promises them: aristocrats strictly
+// top of every tier, peasants strictly bottom.
 const inc = capital.tierIncome || {};
-const pc = {};
+const PT = CONFIG.needs.peopleTax;
+const pc = {}, pcn = {};
 for (const k of ["peasants", "workers", "burghers", "aristocrats"]) {
   const n = capital.pop[k] || 0; pc[k] = n > 0 ? inc[k] / n : 0;
+  const hk = (capital.tierHappiness && capital.tierHappiness[k] != null) ? capital.tierHappiness[k] : capital.happiness;
+  pcn[k] = pc[k] / (1 + Math.max(0, hk - PT.happyBase) * PT.bonusPerPoint);
 }
 ok("aristocrats pay the TOP per-capita tax (strictly > every lower tier)",
-   pc.aristocrats > pc.burghers && pc.burghers > pc.workers && pc.workers > pc.peasants,
+   pc.aristocrats > pc.burghers && pc.aristocrats > pc.workers && pc.aristocrats > pc.peasants,
    `perCap peas=${pc.peasants.toFixed(3)} work=${pc.workers.toFixed(3)} burg=${pc.burghers.toFixed(3)} aris=${pc.aristocrats.toFixed(3)}`);
+ok("peasants pay the LOWEST realized per-capita tax (strictly < every higher tier)",
+   pc.peasants < pc.workers && pc.peasants < pc.burghers,
+   `perCap peas=${pc.peasants.toFixed(3)} work=${pc.workers.toFixed(3)} burg=${pc.burghers.toFixed(3)}`);
+ok("happiness-normalized per-capita tax strictly increases peasant < worker < burgher < aristocrat",
+   pcn.peasants < pcn.workers && pcn.workers < pcn.burghers && pcn.burghers < pcn.aristocrats,
+   `norm peas=${pcn.peasants.toFixed(4)} work=${pcn.workers.toFixed(4)} burg=${pcn.burghers.toFixed(4)} aris=${pcn.aristocrats.toFixed(4)}`);
 const RPT = CONFIG.needs.peopleTax.ratePerTier;
 ok("aristocrat base tax rate is the config maximum (mutation guard)",
    RPT.aristocrats > RPT.burghers && RPT.burghers > RPT.workers && RPT.workers > RPT.peasants,

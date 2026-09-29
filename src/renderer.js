@@ -695,6 +695,7 @@
   // (Anno's "insufficient workforce" icon). Closed slots don't count as missing.
   function drawStaffBadge(b, def, p, rad) {
     if (!def || def.kind === "house" || !def.workerTier || !(def.workerSlots > 0)) return;
+    if (b.blockedReason) return;   // DESIGN PASS #3: full/upgrading — its crew was moved on purpose, not missing
     const slotPlus = (typeof Buildings !== "undefined" && Buildings.upgradeEffect) ? (Buildings.upgradeEffect(b).slotPlus || 0) : 0;
     const open = Math.max(0, def.workerSlots + slotPlus - (b.closedSlots || 0));
     if (open <= 0) return;

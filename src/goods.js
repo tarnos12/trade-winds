@@ -392,6 +392,13 @@ Object.assign(CONFIG.econ, {
   bufferTarget: 2.0,   // "comfortable" stock = bufferTarget × demand (GDD §6.1)
   priceSmoothing: 0.10, // lerp factor toward the target price each tick
   minDemand: 0.5,      // demand floor so priceFor never divides by ~0
+  // DESIGN PASS #3 (Sim.staffTown): a producer of its own staffing tier's BASIC need
+  // (Potato Farm, Lumberjack, Coal Mine) is staffed ahead of ☆ while the city holds less
+  // than this many game-seconds of that good (0 = off). Blocked producers (store full /
+  // upgrading) are staffed LAST when staffBlockedLast is on.
+  selfFeedCoverSec: 120,
+  selfFeedReleaseMult: 2,   // …and stays staffed first until the cover is back to 2× that (anti-flicker)
+  staffBlockedLast: true,
 });
 
 // Sim — pure, deterministic economy namespace. THIS SLICE OWNS ONLY priceFor;

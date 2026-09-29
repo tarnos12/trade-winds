@@ -1441,13 +1441,70 @@
     iron_deposit: "⛏️", gold_deposit: "🪙", coal_deposit: "⛏️", fish: "🐟", water: "💧" };
   // Playtest: workers are auto-assigned, so "assign a worker below" misled players
   // into clicking the slots (which CLOSE them). Say why it's idle and what fixes it.
-  function bpIdleReason(b, def) {
+  // DESIGN PASS #3: honest advice — Huts are the fix for "no free peasants" (☆ only
+  // moves the crew you already have), and the staffing flags Sim.staffTown writes
+  // (blockedReason / selfFeedGood) explain an idle building that is idle on purpose.
+  const STAFF_HOME = { peasant: ["peasants", "Hut"], worker: ["workers", "Cottage"], burgher: ["citizens", "Manor"] };
+  function bpIdleReason(b, def, town) {
     if (b && b.built === false) return "Under construction.";
+    if (b && b.blockedReason === "upgrading") return "Upgrading — its workers help elsewhere until the upgrade is done.";
     const slots = (def && def.workerSlots) || 0;
     if (slots > 0 && ((b && b.closedSlots) || 0) >= slots) return "Idle — all worker slots are closed. Click a slot below to reopen it.";
-    const HOME = { peasant: ["peasants", "Huts"], worker: ["workers", "Cottages"], burgher: ["citizens", "Manors"] };
-    const h = HOME[def && def.workerTier] || ["workers", "houses"];
-    return "Idle — no free " + h[0] + ". Build more " + h[1] + ", or turn on ☆ Priority to staff this first.";
+    if (b && b.blockedReason === "full") return "Idle — store full. Its workers help other buildings until a porter empties it.";
+    const tier = def && def.workerTier;
+    const feeder = bpSelfFeeder(town, tier);
+    if (feeder) {
+      const fdef = CONFIG.buildings[feeder.typeId] || {};
+      return "Waiting — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + (fdef.name || feeder.typeId) + " is staffed first.";
+    }
+    const h = STAFF_HOME[tier] || ["workers", "house"];
+    return "Idle — no free " + h[0] + ". Build a " + h[1] + " in this city.";
+  }
+  // The staffed self-feed producer (Potato Farm / Lumberjack / Coal Mine) of `tier`, if any.
+  function bpSelfFeeder(town, tier) {
+    if (!town || !tier) return null;
+    for (const o of (town.buildings || [])) {
+      if (!o || !o.selfFeedGood || !(o.workers > 0)) continue;
+      const od = CONFIG.buildings[o.typeId];
+      if (od && od.workerTier === tier) return o;
+    }
+    return null;
+  }
+  // ☆ toggled ON: dry-run the staffing with and without the star and say who pays for
+  // it — "☆ Sawmill will take 2 peasants from Potato Farm". Pure preview: Sim.staffTown
+  // with dry=true mutates nothing; b.priority is flipped back before returning.
+  function bpPriorityPreview(town, b) {
+    if (!town || !b || !window.Sim || typeof Sim.staffTown !== "function") return null;
+    const def = CONFIG.buildings[b.typeId] || {};
+    if (!def.workerTier || !(def.workerSlots > 0) || b.built === false) return null;
+    const i = town.buildings.indexOf(b);
+    if (i < 0) return null;
+    b.priority = false; const before = Sim.staffTown(town, true);
+    b.priority = true;  const after = Sim.staffTown(town, true);
+    const word = (STAFF_HOME[def.workerTier] || ["workers"])[0];
+    const one = word.replace(/s$/, "");
+    const name = def.name || b.typeId;
+    const parts = [];
+    for (let k = 0; k < town.buildings.length; k++) {
+      const lost = Math.round((before[k] || 0) - (after[k] || 0));   // pop is fractional; speak in whole people
+      if (k === i || lost <= 0) continue;
+      const o = town.buildings[k], od = CONFIG.buildings[o.typeId] || {};
+      let only = "";
+      if (od.output) {
+        let makers = 0;
+        for (const x of town.buildings) { const xd = x && CONFIG.buildings[x.typeId]; if (xd && xd.output && xd.output.goodId === od.output.goodId) makers++; }
+        if (makers === 1) only = " (your only " + goodIcon(od.output.goodId) + ")";
+      }
+      parts.push(lost + " " + (lost === 1 ? one : word) + " from " + (od.name || o.typeId) + only);
+    }
+    if (parts.length) return "☆ " + name + " will take " + parts.join(", ") + ".";
+    if ((after[i] || 0) <= (before[i] || 0)) {
+      const feeder = bpSelfFeeder(town, def.workerTier);
+      const fd = feeder && CONFIG.buildings[feeder.typeId];
+      if (feeder && feeder !== b) return "☆ " + name + " — this city is low on " + goodIcon(feeder.selfFeedGood) + ", the " + ((fd && fd.name) || feeder.typeId) + " is staffed first.";
+      if (!(after[i] > 0)) return "☆ " + name + " — no free " + word + " to take. Build a " + (STAFF_HOME[def.workerTier] || ["", "house"])[1] + " in this city.";
+    }
+    return null;
   }
   function renderProducerChain(town, b, def) {
     const out = def.output.goodId, oc = goodColor(out);
@@ -1503,7 +1560,7 @@
       <div class="tp-hint2">${workers > 0
         ? (stock >= cap ? "Store full — waiting for a porter to collect."
           : (pr && pr.starved ? "Waiting on inputs." : "Producing — a batch every " + cycleSec + "s."))
-        : bpIdleReason(b, def)}</div>`;
+        : bpIdleReason(b, def, town)}</div>`;
   }
 
   // Building level shown in the header banner badge (upgrade level, min 1).
@@ -1534,7 +1591,7 @@
     let btns = "";
     if (!isHouse) {
       const pri = !!b.priority;
-      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first">${pri ? "⭐" : "☆"}</button>`;
+      btns += `<button class="bp-act ${pri ? "on" : ""}" data-priority title="Priority — staffed &amp; supplied first (after basic food when the city runs low; full or upgrading buildings go last)">${pri ? "⭐" : "☆"}</button>`;
     }
     // v0.51: NOT the disabled attribute (a disabled button swallows hover, hiding the
     // tooltip) — a dimmed class + a click gated by startUpgrade. data-tip="upgrade"
@@ -1635,7 +1692,7 @@
 
     // --- priority star footer (bottom of the panel) ---
     const pri = !!b.priority;
-    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
+    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first — after basic food when the city runs low; a full or upgrading building goes last">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
 
     bpBodyEl.innerHTML = html;
   }
@@ -1868,7 +1925,16 @@
       renderBuildingPanel();
       return;
     }
-    if (e.target.closest("[data-priority]")) { b.priority = !b.priority; renderBuildingPanel(); return; }
+    if (e.target.closest("[data-priority]")) {
+      // DESIGN PASS #3: turning ☆ on previews who loses workers for it.
+      if (b.priority) b.priority = false;
+      else {
+        const msg = bpPriorityPreview(bpTown, b);
+        b.priority = true;
+        if (msg && typeof showToast === "function") showToast(msg);
+      }
+      renderBuildingPanel(); return;
+    }
     // Demolish: enter the existing destroy-building mode and close this panel; the
     // player then clicks the building (input.js confirms before removing it).
     const demo = e.target.closest("[data-demolish]");
