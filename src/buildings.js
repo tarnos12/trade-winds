@@ -143,8 +143,9 @@ Object.assign(CONFIG, {
   upgrades: {
     // === RT-A: each ladder entry gated by its OWN per-level unlock node ===
     // v0.51: peasant house ladder — L2/L3 add a housing slot (+1 resident), L4 cuts
-    // basic consumption −30%, L5 cuts luxury consumption −30%. Material-only costs
-    // (delivered from the city's stock / bought via traders), escalating in tier.
+    // basic consumption −30%, L5 cuts luxury consumption −30%. Upgrades cost city gold +
+    // materials (gold from town.gold; materials delivered from the city's stock /
+    // bought via traders), escalating in tier.
     hut: [
       { level: 2, name: "Sturdy Hut",  unlockedBy: "upg_hut_l2", cost: { gold: 100, wood: 30, planks: 10 },                    effect: { capacityPlus: 1 } },
       { level: 3, name: "Fine Hut",    unlockedBy: "upg_hut_l3", cost: { gold: 250, stone: 30, planks: 20, stone_tools: 5 },   effect: { capacityPlus: 1 } },

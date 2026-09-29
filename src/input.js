@@ -329,19 +329,60 @@
       if (typeof updateTreasuryHud === "function") updateTreasuryHud();
       SFX.playThrottled("place", 90);
     } else {
-      placeRoadPath(roadAnchor, { q, r });
-      if (shift) roadAnchor = { q, r };          // chain: B is the next A
-      else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+      finishRoadAt(q, r, shift);
     }
+    roadAnchorChanged();
     scheduleSave();
   }
-  function cancelRoadAnchor() { roadAnchor = null; }
+  // Lay A→B and apply the Shift-chain rule (B becomes the next A) or deselect.
+  function finishRoadAt(q, r, shift) {
+    placeRoadPath(roadAnchor, { q, r });
+    if (shift) roadAnchor = { q, r };          // chain: B is the next A
+    else { roadAnchor = null; if (typeof setMode === "function") setMode("pan"); }  // deselect after B
+  }
+  function cancelRoadAnchor() { if (roadAnchor) { roadAnchor = null; roadAnchorChanged(); } }
+  // DESIGN PASS: the anchor is exposed read-only so the renderer can draw a dashed
+  // A→hover preview and the build bar can switch its hint. The preview route is a
+  // BFS, so it is cached per (anchor, hovered hex, road count) — not re-run per frame.
+  let roadPrevKey = null, roadPrev = null;
+  function roadPreview(q, r) {
+    if (!roadAnchor) return null;
+    const key = roadAnchor.q + "," + roadAnchor.r + ">" + q + "," + r + "#" + state.roads.size;
+    if (key === roadPrevKey) return roadPrev;
+    roadPrevKey = key;
+    let route = roadRouteAB(roadAnchor, { q, r }), straight = false;
+    if (!route) {                         // mirrors placeRoadPath's straight-line fallback
+      straight = true; route = [];
+      const N = HexMath.dist(roadAnchor.q, roadAnchor.r, q, r);
+      for (let i = 0; i <= N; i++) {
+        const t = N === 0 ? 0 : i / N;
+        route.push(HexMath.hexRound(roadAnchor.q + (q - roadAnchor.q) * t, roadAnchor.r + (r - roadAnchor.r) * t));
+      }
+    }
+    let newHexes = 0;
+    for (const h of route) {
+      const k = HexMath.key(h.q, h.r);
+      if (!state.roads.has(k) && roadEligible(h.q, h.r)) newHexes++;
+    }
+    roadPrev = { route, straight, newHexes, cost: newHexes * Buildings.roadCost() };
+    return roadPrev;
+  }
+  function roadAnchorChanged() {
+    const api = window.InputRoad;
+    if (api && typeof api.onChange === "function") api.onChange();
+  }
+  window.InputRoad = {
+    get anchor() { return roadAnchor; },
+    preview: roadPreview,
+    onChange: null,            // set by the build bar (town-ui.js) to refresh its hint
+  };
 
   // ---------------------------------------------------------------
   // Input: pan (drag / WASD), zoom (wheel), build (click / paint)
   // ---------------------------------------------------------------
   const keys = new Set();
   let dragging = false, dragPanned = false, panButton = false;
+  let roadGesture = null;   // DESIGN PASS: {x,y} of a road-mode left press (drag-to-B)
   let last = { x: 0, y: 0 };
   let lastPaintKey = null;
 
@@ -445,10 +486,14 @@
         return;
       }
     }
+    roadGesture = null;
     if (!panButton && e.button === 0) {
       const h = hexAtScreen(e.clientX, e.clientY);
       lastPaintKey = HexMath.key(h.q, h.r);
-      if (state.mode === "road") handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+      if (state.mode === "road") {
+        handleRoadClick(h.q, h.r, e.shiftKey);   // N: A→B road tool
+        roadGesture = { x: e.clientX, y: e.clientY };   // DESIGN PASS: a drag may end at B on mouseup
+      }
       else place(h.q, h.r);
     }
     if (panButton) canvas.classList.add("panning");
@@ -478,7 +523,21 @@
     }
   });
 
-  window.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", (e) => {
+    // DESIGN PASS: press on A, drag, release on B lays A→B (a drag used to lay only
+    // the anchor hex and leave it armed for a surprise route on the next click).
+    // Thresholds (CONFIG.town.roadDrag*) keep click jitter from completing a route.
+    const g = roadGesture; roadGesture = null;
+    if (g && roadAnchor && state.mode === "road" && e.button === 0 && e.target === canvas) {
+      const h = hexAtScreen(e.clientX, e.clientY);
+      const T = CONFIG.town || {};
+      const steps = HexMath.dist(roadAnchor.q, roadAnchor.r, h.q, h.r);
+      const px = Math.abs(e.clientX - g.x) + Math.abs(e.clientY - g.y);
+      if (steps >= (T.roadDragMinSteps || 1) && px >= (T.roadDragMinPx || 8)) {
+        finishRoadAt(h.q, h.r, e.shiftKey);
+        roadAnchorChanged();
+      }
+    }
     dragging = false; panButton = false; lastPaintKey = null;
     canvas.classList.remove("panning");
     scheduleSave();
@@ -553,7 +612,7 @@
   const toolButtons = Array.from(document.querySelectorAll("button.tool"));
   function setMode(mode) {
     state.mode = mode;
-    if (mode !== "road") roadAnchor = null;   // N: leaving road mode drops a pending A→B anchor
+    if (mode !== "road" && roadAnchor) { roadAnchor = null; roadAnchorChanged(); }   // N: leaving road mode drops a pending A→B anchor
     toolButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
     canvas.classList.toggle("building", mode !== "pan");
   }

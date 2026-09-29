@@ -16,8 +16,9 @@ Object.assign(CONFIG, {
     // is a worker LUXURY but a citizen+aristocrat BASIC). Each tier declares its own
     // basic[] / extra[] lists + perCapita rates. Author's DEFINITIVE NEEDS MATRIX. ===
     //   BASIC needs floor happiness at ~basicHappy (70) when met; missing drops below.
-    //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100) AND gate that
-    //   tier's population GROWTH (all luxuries must be available to grow).
+    //   EXTRA (luxury) needs add the remaining extraHappy (+30 ⇒ ~100). They do NOT
+    //   gate growth (removed in CC→BAL2): population follows housing × happiness,
+    //   so luxuries only lift happiness above 70 (bonus tax, work speed).
     tiers: {
       // v0.51 balance rework — per-capita consumption expressed in GAME-MINUTES / 120
       // (2 ticks = 1 game-second). Peasant anchor: 1.3 potato/min + 0.9 wood/min.
@@ -47,7 +48,7 @@ Object.assign(CONFIG, {
     // gets just enough intermittent labour to bootstrap food/wood, not a free crew.
     // A cycle is `cycleTicks` (16 ticks ≈ 8 game-seconds ≈ one extractor batch).
     emptyHouseFrac: 0.10, emptyHouseCycleTicks: 16, emptyHouseOnCycles: 1, emptyHouseOffCycles: 3,
-    growthThreshold: 0.9999, // extra-need availability at/above this => a tier may grow
+    growthThreshold: 0.9999, // LEGACY, unread: the luxury growth gate it drove was removed (CC→BAL2)
     declineThreshold: 0.5,   // sustained satisfaction below this => decline
     declineAfterTicks: 3,    // consecutive low ticks before a tier declines
     growthRate: 0.0095,      // v0.51: fraction of the gap-to-target a tier gains per tick — paced so a fresh cluster of cities takes ~3 game-minutes to grow into a happy, self-sustaining 2-per-hut population (was 0.03; nudged from 0.008 to absorb the distribute-porter fill latency)
@@ -893,11 +894,10 @@ Sim.tick = function (State) {
     // === /PP-A ===
 
     // --- 4. Population from housing scales with happiness --------------
-    // Effective target per tier = round(capacity × happiness/100). A tier grows
-    // toward its target while its EXTRA-need goods are AVAILABLE (beer for workers,
-    // beer+clothes for burghers) — basics aren't a growth gate (they drive
-    // happiness, which already scales the target). Over target, or with an extra
-    // need missing, the tier declines after a sustained low streak.
+    // Effective target per tier = round(capacity × min(1, happiness/capacityFullAt)).
+    // A tier grows toward its target; neither basics nor luxuries gate growth
+    // directly — both feed happiness, which scales the target. Over target, the
+    // tier declines after a sustained low streak.
     const housing = (typeof Buildings !== "undefined" && Buildings.housingCapacity)
       ? Buildings.housingCapacity(town, State)   // P5-A: pass State so housingBonus research applies
       : { peasants: 0, workers: 0, burghers: 0, aristocrats: 0 };   // === CC ===

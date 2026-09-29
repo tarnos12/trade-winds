@@ -94,7 +94,8 @@
   let activeTab = "overview";
   const trendPrev = {};          // key "townId:goodId" -> last displayed price (trend arrows)
 
-  const GOOD_LABEL = id => id.charAt(0).toUpperCase() + id.slice(1);
+  // DESIGN PASS: ids like "iron_tool" read "Iron tool" (was the raw "Iron_tool").
+  const GOOD_LABEL = id => (id.charAt(0).toUpperCase() + id.slice(1)).replace(/_/g, " ");
   const fmt = n => (Math.round(n * 10) / 10).toLocaleString();
 
   // === F: shared per-tick -> per-second display helper (2 ticks = 1 game-second).
@@ -298,8 +299,9 @@
       upBtn = `<button disabled title="Level ${t.level} — maximum">⬆ Max</button>`;
     } else {
       const res = Town.canUpgrade(t);
+      // DESIGN PASS: city levels are gold-only (progress.js "Z") — no pop gate promised.
       const tip = `Upgrade to Level ${t.level + 1} (+build slots, +traders/transporters): needs ` +
-        `${req.pop} pop (have ${Math.round(Town.popTotal(t))}) and ${req.gold}🪙 city gold (have ${Math.floor(t.gold || 0)})` +
+        `${req.gold}🪙 city gold (have ${Math.floor(t.gold || 0)})` +
         (res.ok ? "" : " — " + res.reason);
       // v0.51: dimmed (not disabled) so the styled cost tooltip still shows when the
       // city can't yet afford it; Town.upgrade gates the click.
@@ -715,6 +717,22 @@
   const buildBarHintEl = document.getElementById("buildBarHint");
   const buildBarCancelEl = document.getElementById("buildBarCancel");
   const BB_DEFAULT_HINT = "";   // idle: no instruction text — the footer hides when empty (see #buildBarFoot CSS)
+  // DESIGN PASS: the road tool is click A → click B (or press A, drag, release B).
+  // The hint follows the pending anchor exposed by input.js (window.InputRoad).
+  const ROAD_HINT_START = "Click where the road starts.";
+  const ROAD_HINT_END = "Now click where the road should end — Esc cancels.";
+  function setRoadHint() {
+    const armed = !!(window.InputRoad && window.InputRoad.anchor);
+    const txt = armed ? ROAD_HINT_END : ROAD_HINT_START;
+    if (buildBarHintEl.textContent !== txt) { buildBarHintEl.textContent = txt; buildBarHintEl.className = ""; }
+  }
+  if (window.InputRoad) window.InputRoad.onChange = () => {
+    if (placing || placingResearchCenter) return;
+    if (state.mode === "road") setRoadHint();
+    else if (buildBarHintEl.textContent === ROAD_HINT_START || buildBarHintEl.textContent === ROAD_HINT_END) {
+      buildBarHintEl.className = ""; buildBarHintEl.textContent = BB_DEFAULT_HINT;   // route done → back to idle
+    }
+  };
 
   function bbCostStr(cost) {
     const parts = [];
@@ -820,13 +838,15 @@
       const cityCap = (Buildings.cityCap ? Buildings.cityCap(state) : 4);
       const cityHave = Array.isArray(state.towns) ? state.towns.length : 0;
       const cityFull = cityHave >= cityCap;
+      // DESIGN PASS: the City and Road entries state their cost like the building items do.
+      const foundCostStr = Buildings.foundCost().toLocaleString("en-US") + "🪙";
       const items = [
-        { action: "town", name: "City", sub: `Found a city · ${cityHave}/${cityCap}`, disabled: cityFull,
+        { action: "town", name: "City", sub: `Found a city · ${foundCostStr} · ${cityHave}/${cityCap}`, disabled: cityFull,
           tip: cityFull ? `City limit reached (${cityHave}/${cityCap}) — research Township Grants / Provincial Rule / Imperial Domain to raise it.`
                         : "Enter town mode — click a valid site to found a city." },
-        { action: "road", name: "Road", sub: "Lay a road (drag)", tip: "Enter road mode — drag across land to lay roads." },
+        { action: "road", name: "Road", sub: `Lay a road · ${Buildings.roadCost()}🪙/hex`, tip: "Click a start hex, then an end hex (Shift chains)" },
         { action: "eraseRoad", name: "Destroy road", sub: "Remove a road", tip: "Enter destroy-road mode — click or drag over a road to remove it. No confirmation." },
-        { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; frees the slot, no refund." },
+        { action: "eraseBuilding", name: "Destroy building", sub: "Remove a building", tip: "Enter destroy-building mode — click a building to remove it. Asks for confirmation; refunds the gold spent (not resources)." },
       ];
       // v0.46: Advanced Provisioner now lives in the ⭐ Special category flyout
       // (see the cat.kind === "castle" branch below) — no longer here in Build.
@@ -1017,7 +1037,7 @@
     if (typeof updateTreasuryHud === "function") updateTreasuryHud();
     scheduleSave();
     SFX.play("place");
-    buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in Town #" + owner.id;
+    buildBarHintEl.textContent = "✓ Built " + (def.name || placing.typeId) + " in City #" + owner.id;
     buildBarHintEl.className = "ok";
     // v0.51 (K): placement is ONE-SHOT — drop the building and deselect the tool, so a
     // stray click can't keep dropping buildings. Hold SHIFT to stay armed and place
@@ -1101,7 +1121,7 @@
       buildBarHintEl.className = "";
       buildBarHintEl.textContent =
         action === "town" ? "Click a valid site to found a city."
-        : action === "road" ? "Drag across land to lay roads."
+        : action === "road" ? ROAD_HINT_START
         : action === "eraseRoad" ? "Click or drag over a road to remove it — no confirmation."
         : action === "advProvisioner" ? "Click a hex next to the castle to build the Advanced Provisioner."
         : action === "provisioner" ? "Click a hex next to the castle to build the Provisioner."
@@ -1165,7 +1185,7 @@
     } else if (placing) {
       const res = Buildings.canPlaceBuilding(state, placing.typeId, h.q, h.r);
       buildBarHintEl.textContent = res.ok
-        ? "✓ valid — click to build in Town #" + res.town.id
+        ? "✓ valid — click to build in City #" + res.town.id
         : "✗ " + res.reason;
       buildBarHintEl.className = res.ok ? "ok" : "bad";
     } else if (state.mode === "town") {
@@ -1177,8 +1197,10 @@
       const k = HexMath.key(h.q, h.r);
       const fogged = !isVisible(k);
       const res = fogged ? { ok: false, reason: "Unexplored — reveal this area first" } : Buildings.canPlaceTown(state, h.q, h.r);
-      buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city" : "✗ " + res.reason;
+      buildBarHintEl.textContent = res.ok ? "✓ valid town site — click to found a city · " + Buildings.foundCost().toLocaleString("en-US") + "🪙" : "✗ " + res.reason;
       buildBarHintEl.className = res.ok ? "ok" : "bad";
+    } else if (state.mode === "road") {
+      setRoadHint();
     } else if (state.mode === "eraseRoad") {
       // === J === live hint for the road-destroy mode (no confirmation on click).
       const ok = state.roads.has(HexMath.key(h.q, h.r));
@@ -1312,18 +1334,18 @@
       (rows || "<div style='opacity:.7'>none</div>") +
       (up && !up.ok && up.reason ? `<div style="margin-top:6px;color:#e0b34c">${esc(up.reason)}</div>` : `<div style="margin-top:6px;opacity:.7">Click to start — materials are delivered from the city.</div>`);
   }
-  // v0.51: styled tooltip for the CITY upgrade button — requirements (pop, gold),
+  // v0.51: styled tooltip for the CITY upgrade button — requirements (gold),
   // have/need, and what the level grants.
   function cityUpgradeTipHtml(t) {
     if (!t || typeof Town === "undefined" || !Town.upgradeReq) return "Upgrade the city";
     const req = Town.upgradeReq(t);
     if (!req) return "City is at maximum level.";
     const res = (Town.canUpgrade ? Town.canUpgrade(t) : { ok: false });
-    const havePop = Math.round(Town.popTotal ? Town.popTotal(t) : 0), haveGold = Math.floor(t.gold || 0);
+    const haveGold = Math.floor(t.gold || 0);
     const row = (label, valHtml) => `<div style="display:flex;justify-content:space-between;gap:14px"><span>${label}</span><span style="font-variant-numeric:tabular-nums">${valHtml}</span></div>`;
     const col = (ok) => ok ? "#a6e0a8" : "#e0844a";
     let rows = "";
-    if (req.pop)  rows += row("👥 Population", `<span style="color:${col(havePop >= req.pop)}">${havePop}/${req.pop}</span>`);
+    // DESIGN PASS: no population row — Town.canUpgrade no longer gates on pop ("Z").
     if (req.gold) rows += row("🪙 City gold", `<span style="color:${col(haveGold >= req.gold)}">${haveGold}/${req.gold}</span>`);
     for (const gid in req) {
       if (gid === "pop" || gid === "gold" || typeof req[gid] !== "number") continue;
@@ -1668,7 +1690,10 @@
 
     // --- priority star footer (bottom of the panel) ---
     const pri = !!b.priority;
-    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="Priority buildings are staffed and supplied first">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
+    // DESIGN PASS: houses take no workers, but priority still orders upgrade-material
+    // delivery (sim.js construction queue) — say that instead of "staffed".
+    const priTip = isHouse ? "Priority: materials delivered here first for upgrades" : "Priority buildings are staffed and supplied first";
+    html += `<div class="bp-footer"><button class="bp-star bp-footstar ${pri ? "on" : ""}" data-priority title="${priTip}">${pri ? "★" : "☆"} Priority ${pri ? "on" : "off"}</button></div>`;
 
     bpBodyEl.innerHTML = html;
   }

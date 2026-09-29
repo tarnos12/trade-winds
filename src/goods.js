@@ -305,7 +305,7 @@ Object.assign(CONFIG, {
       // BAL: basic house shelters 2 at full happiness (pop = round(cap × happy%)).
       terrain: null, houseTier: "peasant", houseCapacity: 2,
       // v0.51: 10 wood (delivered from the city's stock) + 300 gold (from the treasury
-      // at placement). Upgrades L2–L5 cost materials only (see CONFIG.upgrades.hut).
+      // at placement). Upgrades L2–L5 cost city gold + materials (see CONFIG.upgrades.hut).
       startUnlocked: true,
       cost: { wood: 10, gold: 300 },
     },
@@ -377,6 +377,11 @@ Object.assign(CONFIG, {
                                 // from research raises it (Township Grants +3 → 7,
                                 // Provincial Rule +3 → 10, Imperial Domain +2 → 12).
     roadCost: 5,                // treasury gold per road hex
+    // DESIGN PASS: a road-tool press-drag-release ends the route on the release hex
+    // only if it is at least roadDragMinSteps hexes from the anchor AND the pointer
+    // travelled roadDragMinPx screen px — click jitter across a hex edge never lays a route.
+    roadDragMinSteps: 1,
+    roadDragMinPx: 8,
     bridgeCost: { gold: 25, stone: 10 }, // road over water (GDD §6.4) — not yet
                                 // placeable (water is not roadable), kept for wiring.
     // CB-A: construction logistics — a town moves at most this many units of

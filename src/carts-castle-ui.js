@@ -500,7 +500,7 @@
     const treas = state.treasury || 0;
     const town = nearestTownToCastle();
     cwTreasuryEl.textContent = Math.round(treas).toLocaleString() + " g";
-    cwMarketEl.textContent = town ? ("Town #" + town.id) : "base prices";
+    cwMarketEl.textContent = town ? ("City #" + town.id) : "base prices";
     cwCapTextEl.textContent = Math.round(used) + " / " + cap;
     cwCapBarEl.style.width = Math.max(0, Math.min(100, used / cap * 100)) + "%";
 

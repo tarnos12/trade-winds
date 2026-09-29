@@ -1135,6 +1135,56 @@
     ctx.lineWidth = 2;
     ctx.strokeStyle = ok ? "#f0d590" : "#e0503c";
     ctx.stroke();
+    if (state.mode === "road") drawRoadPreview();
+  }
+
+  // DESIGN PASS: road tool preview — a dashed line from the pending anchor (A) to the
+  // hovered hex along the route the click would lay, plus "N hexes · N×5🪙". The
+  // route comes from InputRoad.preview (BFS cached per hovered hex in input.js).
+  const ROAD_PREVIEW_DASH = [6, 5];
+  const ROAD_PREVIEW_NODASH = [];
+  function drawRoadPreview() {
+    const api = window.InputRoad;
+    const a = api && api.anchor;
+    if (!a || !hoverHex) return;
+    const pv = api.preview(hoverHex.q, hoverHex.r);
+    if (!pv || !pv.route.length) return;
+    const route = pv.route;
+    const inv = 1 / (state.zoom || 1);
+    ctx.save();
+    // anchor ring
+    const pa = HexMath.hexToPixel(a.q, a.r, SIZE);
+    ctx.lineWidth = 2.5 * inv;
+    ctx.strokeStyle = "#f0d590";
+    ctx.beginPath(); ctx.arc(pa.x, pa.y, SIZE * 0.42, 0, Math.PI * 2); ctx.stroke();
+    if (route.length > 1) {
+      ctx.setLineDash(ROAD_PREVIEW_DASH);
+      ctx.lineWidth = 3 * inv;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = pv.straight ? "rgba(224,80,60,0.9)" : "rgba(255,236,180,0.95)";
+      ctx.beginPath();
+      for (let i = 0; i < route.length; i++) {
+        const p = HexMath.hexToPixel(route[i].q, route[i].r, SIZE);
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash(ROAD_PREVIEW_NODASH);
+    }
+    // cost label above the hovered hex (screen-constant size)
+    const n = pv.newHexes, per = Buildings.roadCost();
+    const short = (state.treasury || 0) < pv.cost;
+    const label = n + (n === 1 ? " hex" : " hexes") + " · " + n + "×" + per + "🪙" +
+      (pv.straight ? " · no land route" : short ? " · treasury short" : "");
+    const ph = HexMath.hexToPixel(hoverHex.q, hoverHex.r, SIZE);
+    ctx.font = "600 " + (12 * inv) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = ctx.measureText(label).width + 12 * inv, hgt = 18 * inv;
+    const ly = ph.y - SIZE * 0.95;
+    ctx.fillStyle = "rgba(34,26,14,0.85)";
+    ctx.fillRect(ph.x - w / 2, ly - hgt / 2, w, hgt);
+    ctx.fillStyle = (pv.straight || short) ? "#f08a70" : "#f4ecdd";
+    ctx.fillText(label, ph.x, ly + 0.5 * inv);
+    ctx.restore();
   }
 
   // === C: TILE HOVER TOOLTIP ==============================================
