@@ -316,6 +316,47 @@ if (!engineAvailable) {
      D.findIndex(m => m.objectives.some(o => o.type === "upgrade")) > 2);
   ok("normalize keeps a mission's tip line",
      E.normalize({ version: 1, missions: [{ id: "x", tip: "hello", objectives: [] }] }).missions[0].tip === "hello");
+
+  // DESIGN PASS #4: the DEFAULT chain teaches SPECIALISATION from minute one — a Timber
+  // town (m1) and a Farm town (m2) that must trade. Pin the exact objectives.
+  const objs = (mm) => JSON.stringify(mm.objectives);
+  ok("m1 = found 1 city + build 2 Lumberjacks + 2 Huts (a Timber town)", objs(D[0]) === JSON.stringify([
+    { type: "found_city", count: 1 }, { type: "construct", building: "lumberjack", count: 2 }, { type: "construct", building: "hut", count: 2 }]));
+  ok("m1 tip names the Timber town and no Potato Farm", /Timber town/.test(D[0].tip) && !/Potato Farm/.test(D[0].tip));
+  ok("m2 = found 2 cities + build 2 Potato Farms + 10 tariff", objs(D[1]) === JSON.stringify([
+    { type: "found_city", count: 2 }, { type: "construct", building: "potato_farm", count: 2 }, { type: "earn_tax", amount: 10 }]));
+  ok("m2 tip: a Farm town with no Lumberjack", /Farm town/.test(D[1].tip) && /no Lumberjack/.test(D[1].tip));
+  ok("m3 tip points at the Scout when no stone is in sight", /Scout/.test(D[2].tip));
+  ok("m4 keeps sawmill 1 + upgrade any 1", objs(D[3]) === JSON.stringify([
+    { type: "construct", building: "sawmill", count: 1 }, { type: "upgrade", building: "any", count: 1 }]));
+  ok("m4 tip: 3rd Hut before the Sawmill; ⬆ is on the building panel",
+     /3rd Hut/.test(D[3].tip) && /building's panel/.test(D[3].tip));
+  ok("m5 tip no longer claims roads double speed; still teaches speciality",
+     !/twice as fast/.test(D[4].tip) && /speciality/.test(D[4].tip));
+  ok("m6 tip leads with the 👷 badge (reachable lesson), then Take", D[5].tip.indexOf("👷") === 0 && /Take 1k/.test(D[5].tip));
+  ok("default chain stays strictly serial (teaching order)",
+     D.every((mm, i) => JSON.stringify(mm.prereqs) === JSON.stringify(i ? [D[i - 1].id] : [])));
+
+  // 'Next up' preview helpers
+  ok("firstSentence cuts at the first terminator", E.firstSentence(D[1].tip) === "Found a Farm town on fertile land: two Potato Farms and two Huts, no Lumberjack.");
+  ok("firstSentence keeps a one-sentence tip whole", E.firstSentence(D[0].tip) === D[0].tip);
+  ok("firstSentence of a tip without a terminator is the whole tip", E.firstSentence("  no stop here ") === "no stop here");
+  ok("firstSentence of a missing tip is ''", E.firstSentence(undefined) === "");
+  const ev0 = E.evaluate(E.DEFAULT, st0());
+  ok("nextMission after m1 (fresh game) is m2", (E.nextMission(E.DEFAULT, ev0, "m1") || {}).id === "m2");
+  ok("nextMission after the last mission is null", E.nextMission(E.DEFAULT, ev0, "m7") === null);
+  ok("nextMission skips a follow-up that is already complete",
+     E.nextMission({ missions: [{ id: "a", prereqs: [] }, { id: "b", prereqs: ["a"] }, { id: "c", prereqs: ["a"] }] },
+                   { byId: { b: { complete: true } } }, "a").id === "c");
+  function st0() { return { constructed: { total: 0, byType: {} }, upgraded: { total: 0, byType: {} }, traded: { byGood: {} }, taxEarned: 0, founded: 0, researched: 0 }; }
+
+  // The standalone mission editor mirrors the DEFAULT chain (tools/mission-editor.html).
+  const edHtml = fs.readFileSync(path.join(__dirname, "..", "tools", "mission-editor.html"), "utf8");
+  const edM = edHtml.match(/const DEFAULT_MISSIONS = (\[[\s\S]*?\n\]);/);
+  let edSet = null;
+  try { edSet = edM ? vm.runInNewContext("(" + edM[1] + ")") : null; } catch (e) { edSet = null; }
+  ok("mission editor's DEFAULT_MISSIONS mirrors MissionEngine.DEFAULT",
+     edSet && JSON.stringify(edSet) === JSON.stringify(D));
 }
 // Old saves (no founded/researched counters) seed them from live state.
 {

@@ -307,6 +307,33 @@ MissionEngine.evaluate = function (missionSet, statsOrState, opts) {
   };
 };
 
+// DESIGN PASS: 'Next up' preview. The mission that follows `id` in prereq order: the
+// first mission (set order) that lists `id` as a prereq and is neither active nor
+// complete in `ev` (an evaluate() result). Falls back to null. Pure; used by
+// Tutorial.render to show a greyed "Next: …" line under the primary mission so the
+// player can prepare (e.g. build the Research Center during the m2 tariff wait).
+MissionEngine.nextMission = function (missionSet, ev, id) {
+  const set = (missionSet && Array.isArray(missionSet.missions)) ? missionSet : null;
+  if (!set || !id) return null;
+  const byId = (ev && ev.byId) || {};
+  for (const m of set.missions) {
+    if (!m || !Array.isArray(m.prereqs) || m.prereqs.indexOf(id) < 0) continue;
+    const r = byId[m.id];
+    if (r && (r.active || r.complete)) continue;
+    return m;
+  }
+  return null;
+};
+
+// First sentence of a tip (up to and including the first '.', '!' or '?' that is
+// followed by whitespace or the end). A tip with no terminator is returned whole.
+MissionEngine.firstSentence = function (tip) {
+  if (typeof tip !== "string") return "";
+  const s = tip.trim();
+  const m = /^[\s\S]*?[.!?](?=\s|$)/.exec(s);
+  return m ? m[0] : s;
+};
+
 // The bundled DEFAULT mission set — the original 5-mission onboarding arc ported to
 // typed objectives (construct/upgrade/trade_good/earn_tax). Steps that don't map to
 // a counter (found town, lay road, unlock tech, victory) use the CLOSEST objective.
@@ -320,38 +347,47 @@ MissionEngine.DEFAULT = {
   // research-locked) → then grow, trade, and reach the win. Each mission carries a
   // one-line `tip` rendered under its objectives.
   missions: [
+    // DESIGN PASS: specialisation is taught from minute one. The old m1 recipe (Lumberjack
+    // + Potato Farm + 2 Huts) built a self-sufficient city that exports nothing (0 g/min
+    // tariff); a Timber town + a Farm town with the SAME building count earn ~9 g/min
+    // (test/opening.test.js). CONFIG.town.startStock.potato 40 feeds the Timber town's
+    // 4 peasants for ~7.7 min until the Farm town exports.
     { id: "m1", name: "Found Your Realm", icon: "🏰", pos: { col: 0, row: 0 }, retroactive: true, prereqs: [],
-      tip: "🏗 Build → City, then 🌾 Peasant: a Lumberjack, a Potato Farm and two Huts beside it.",
+      tip: "🏗 Build → City beside a forest, then 🌾 Peasant: two Lumberjacks and two Huts — your Timber town.",
       objectives: [
-        { type: "found_city", count: 1 },                   // found your first city
-        { type: "construct", building: "any", count: 3 },   // a small settlement (resource + house + more)
+        { type: "found_city", count: 1 },                             // found your first city
+        { type: "construct", building: "lumberjack", count: 2 },      // its speciality: wood
+        { type: "construct", building: "hut",        count: 2 },      // peasants to staff it
       ] },
     { id: "m2", name: "Trade Winds", icon: "🪙", pos: { col: 1, row: 0 }, retroactive: true, prereqs: ["m1"],
-      tip: "The King earns a tariff whenever your cities trade — found a second city that makes what the first lacks. Watch 👑 +g/min beside your gold.",
+      tip: "Found a Farm town on fertile land: two Potato Farms and two Huts, no Lumberjack. Each city buys the other's surplus and the King taxes every sale — watch 👑 +g/min beside your gold.",
       objectives: [
-        { type: "found_city", count: 2 },                   // a trading partner
-        { type: "earn_tax",   amount: 10 },                 // your first tariffs (early trade is small — just see it arrive)
+        { type: "found_city", count: 2 },                             // a trading partner
+        { type: "construct", building: "potato_farm", count: 2 },     // its speciality: food
+        { type: "earn_tax",   amount: 10 },                           // your first tariffs (early trade is small — just see it arrive)
       ] },
     { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
-      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — most research needs stone. ⚠ marks research no city can supply yet.",
+      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — most research needs stone. ⚠ marks research no city can supply yet. No stone in sight? Send your Scout (top-left) to explore.",
       objectives: [
         { type: "construct", building: "research_center", count: 1 },
         { type: "research",  count: 1 },
       ] },
     { id: "m4", name: "A Growing Town", icon: "🌾", pos: { col: 3, row: 0 }, retroactive: true, prereqs: ["m3"],
-      tip: "A Sawmill turns wood into planks. Upgrade a building from its panel (⬆) once its upgrade is researched.",
+      // DESIGN PASS: a Sawmill eats 5 wood/min and its 2 peasants starve the wood export
+      // unless the Timber town grows a 3rd Hut first; ⬆ lives on the BUILDING panel.
+      tip: "A Sawmill needs 2 free peasants — build a 3rd Hut in your Timber town first (a Sawmill eats 5 wood/min). Research a ⬆II in 🔬, then press ⬆ in that building's panel (not the city's). A building pauses while it upgrades.",
       objectives: [
         { type: "construct", building: "sawmill", count: 1 }, // build a workshop (processor)
         { type: "upgrade",   building: "any",     count: 1 }, // raise a building a level
       ] },
     { id: "m5", name: "Trade Routes", icon: "🛣", pos: { col: 4, row: 0 }, retroactive: true, prereqs: ["m4"],
-      tip: "Roads let traders travel twice as fast. A city that makes everything it needs exports nothing and earns no tariff — give each city a speciality.",
+      tip: "Roads speed traders on long routes. A city that makes everything it needs exports nothing — give each new city a speciality.",
       objectives: [
         { type: "trade_good", good: "potato", count: 20 },  // goods flow between towns
         { type: "earn_tax",   amount: 150 },                // lifetime tariff — ~12 g/min with 3 trading cities (customs valuation)
       ] },
     { id: "m6", name: "The King's Works", icon: "🏗", pos: { col: 5, row: 0 }, retroactive: true, prereqs: ["m5"],
-      tip: "Short of gold? Take 1k from a city's panel (its people are unhappy for a minute). 👷 badges mark buildings short of workers — build Huts or ☆ Priority them.",
+      tip: "👷 badges mark buildings short of workers — build a Hut in that city. Short of gold? Take 1k from a city's panel (its people are unhappy for a minute).",
       objectives: [
         { type: "construct", building: "any", count: 8 },   // a productive realm to fund the King's works
         { type: "upgrade",   building: "any", count: 3 },   // advance your buildings

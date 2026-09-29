@@ -137,6 +137,16 @@
       }
     }
 
+    // DESIGN PASS: greyed "Next: <icon> <name> — <first sentence of its tip>" under the
+    // primary mission, so the player can prepare the next step while waiting (missions
+    // are retroactive, so work done early counts). Empty when nothing follows.
+    function nextLine(set, ev, primary) {
+      const nx = MissionEngine.nextMission ? MissionEngine.nextMission(set, ev, primary.id) : null;
+      if (!nx) return "";
+      const first = MissionEngine.firstSentence ? MissionEngine.firstSentence(nx.tip) : "";
+      return '<div class="tut-next">Next: ' + esc(nx.icon + " " + nx.name) + (first ? " — " + esc(first) : "") + "</div>";
+    }
+
     // ---- render --------------------------------------------------------------
     function render(state, ev, set) {
       if (!elRoot) return;
@@ -174,7 +184,8 @@
         ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
       elStep.innerHTML = nameLine +
         '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>" +
-        (primary.tip ? '<div class="tut-hint">💡 ' + esc(primary.tip) + "</div>" : "");
+        (primary.tip ? '<div class="tut-hint">💡 ' + esc(primary.tip) + "</div>" : "") +
+        nextLine(set, ev, primary);
 
       let html = "";
       for (const m of activeMissions) {

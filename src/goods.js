@@ -349,10 +349,13 @@ Object.assign(CONFIG, {
     // EV3: per-city storage cap — a city holds at most this many of EACH good.
     // Enforced wherever stock increases (Sim production, trade delivery).
     storageCap: 80,
-    // v0.50: a new city starts with 60 wood + 20 potato — enough to raise its first
+    // v0.50: a new city starts with 60 wood + 40 potato — enough to raise its first
     // buildings (hut/lumberjack/potato farm 10 each, sawmill 20; delivered from this
     // stock as they construct) and feed early residents until the potato farm runs.
-    startStock: { wood: 60, potato: 20 },
+    // DESIGN PASS: potato 20 → 40. Onboarding m1 now builds a Timber town with NO farm;
+    // 40 potato feeds its 4 peasants (~5.2/min) for ~7.7 game-min until the m2 Farm
+    // town exports (test/opening.test.js).
+    startStock: { wood: 60, potato: 40 },
     // EC-A money model: the Kingdom treasury pays the GOLD to found a city and
     // to lay roads/bridges (city resources pay building RESOURCE costs).
     foundCost: 1000,            // treasury gold to found a new city center
