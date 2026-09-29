@@ -1814,11 +1814,14 @@
     return totalCap > 0 ? pop * (thisCap / totalCap) : 0;
   }
 
-  // Per-good satisfaction 0..1 — APPROXIMATION: per-good satisfaction (Sim's
-  // `gsat`) is a tick-local and isn't persisted per town, so the ring shows
-  // stock COVERAGE: town stock vs ~10 ticks of this tier's demand. A tier with
-  // no demand (empty house) reads pure availability (stocked shelf = full ring).
+  // Per-good satisfaction 0..1. DESIGN PASS: reads the SAME smoothed per-good
+  // satisfaction that drives happiness (town.satEMA, persisted on the town since the
+  // sawtooth fix), so a ring only fills as happiness recovers — not the moment one
+  // unit lands. An empty tier (no demand → no satEMA sample) falls back to stock
+  // coverage: town stock vs ~10 ticks of demand, or availability when no one lives there.
   function ppdCoverage(town, gid, ratePerTick, tierPop) {
+    const ema = town.satEMA && town.satEMA[gid];
+    if (tierPop > 0 && typeof ema === "number") return Math.max(0, Math.min(1, ema));
     const stock = (town.stock && town.stock[gid]) || 0;
     const need = ratePerTick * tierPop * 10;
     if (need <= 0) return stock > 0 ? 1 : 0;
@@ -1835,7 +1838,7 @@
       const cov = ppdCoverage(town, gid, r, tierPop);
       const deg = Math.round(cov * 360);
       const c = goodColor(gid);
-      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perMin(r))} / resident / min">
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% satisfaction · ${fmt(perMin(r))} / resident / min">
         <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
           <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
         </div>
@@ -1899,6 +1902,11 @@
         </div>
         <span class="ppd-face">🙂</span>
       </div>`;
+    // DESIGN PASS: the aristocrat home states the win condition where it is earned.
+    if (key === "aristocrats") {
+      const won = !!(typeof state !== "undefined" && state && state.victory);
+      out += `<div class="tp-hint2" data-ppd-victory>👑 100% happiness = Victory${won ? " — achieved!" : " (Give/Take bonuses don’t count — every good must flow)"}</div>`;
+    }
     return out;
   }
   // === /PP-D ===

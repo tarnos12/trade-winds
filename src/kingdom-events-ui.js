@@ -145,9 +145,31 @@
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // DESIGN PASS: a persistent Goal card on top of the overview — the win condition
+  // plus a Peasants → Workers → Citizens → Aristocrats ladder, each step lit once
+  // any city has a built house of that tier (peasants also by living peasants),
+  // and the win tracker line once an Aristocrats Home exists.
+  const KW_LADDER = [["peasant", "Peasants"], ["worker", "Workers"], ["burgher", "Citizens"], ["aristocrat", "Aristocrats"]];
+  function kwGoalHTML() {
+    const lit = { peasant: false, worker: false, burgher: false, aristocrat: false };
+    for (const t of (state.towns || [])) {
+      if (!t) continue;
+      if (t.pop && t.pop.peasants > 0) lit.peasant = true;
+      for (const b of (t.buildings || [])) {
+        const d = b && CONFIG.buildings[b.typeId];
+        if (d && d.kind === "house" && b.built !== false && d.houseTier in lit) lit[d.houseTier] = true;
+      }
+    }
+    const steps = KW_LADDER.map(([k, lbl]) =>
+      `<span class="kw-step${lit[k] ? " lit" : ""}">${esc(lbl)}${lit[k] ? " ✓" : ""}</span>`).join('<span class="kw-arrow">→</span>');
+    const track = (window.Tutorial && window.Tutorial.goalHtml) ? window.Tutorial.goalHtml(state) : "";
+    return `<div class="kw-goal"><div class="kw-goal-t">👑 Goal: an Aristocrat's House at 100% happiness${state.victory ? " — achieved!" : ""}</div>` +
+      `<div class="kw-ladder">${steps}</div>${track}</div>`;
+  }
+
   function renderKingdom() {
     if (!kingdomOpen) return;
-    const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
+    const researchHtml = kwGoalHTML() + kwResearchBlockHTML();   // RESEARCH CENTER (Slice C) + DESIGN PASS goal card
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
     rows.sort((a, b) => {
@@ -286,6 +308,7 @@
       }
       // (castle upgrades removed v0.44 — no castle-level log)
       if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
+      else if (!state.victory) wonSeen = false;   // DESIGN PASS: "New realm" can be won again
     }, 1200);
   })();
 

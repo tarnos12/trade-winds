@@ -124,6 +124,8 @@ Sim.ensureStats = function (state) {
   if (!st.traded || typeof st.traded !== "object") st.traded = { byGood: {} };
   if (!st.traded.byGood || typeof st.traded.byGood !== "object") st.traded.byGood = {};
   if (typeof st.taxEarned !== "number") st.taxEarned = 0;
+  // DESIGN PASS: peak kingdom population (victory recap). Old saves seed it from now.
+  if (typeof st.peakPop !== "number") st.peakPop = Sim.kingdomPop(state);
   // v0.51: cities founded + research completed (onboarding missions). Old saves seed
   // them from the live state so a returning player's progress still counts.
   if (typeof st.founded !== "number") st.founded = Array.isArray(state.towns) ? state.towns.length : 0;
@@ -131,6 +133,15 @@ Sim.ensureStats = function (state) {
     st.researched = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked.length : 0;
   state.stats = st;
   return st;
+};
+// Total population across every town (all four tiers). Pure, allocation-free.
+Sim.kingdomPop = function (state) {
+  let n = 0;
+  for (const t of ((state && state.towns) || [])) {
+    const p = t && t.pop; if (!p) continue;
+    n += (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);
+  }
+  return n;
 };
 // Increment the "building constructed" counter (built false→true). typeId optional.
 Sim.statConstructed = function (state, typeId) {
@@ -935,23 +946,33 @@ Sim.tick = function (State) {
     // and the weighted average over one tier == that tier's eased value.
     const prevAgg = (typeof town.happiness === "number") ? town.happiness : null;
     if (!town.tierHappiness || typeof town.tierHappiness !== "object") town.tierHappiness = {};
+    // DESIGN PASS: tierNeedHappiness = the same eased per-tier value WITHOUT tempMod
+    // (Give/Take). Victory reads min(tierHappiness, tierNeedHappiness), so a Give can
+    // no longer bridge a missing luxury while a Take still delays the win. Derived
+    // state: seeded from tierHappiness when absent, so no save migration.
+    if (!town.tierNeedHappiness || typeof town.tierNeedHappiness !== "object") town.tierNeedHappiness = {};
     if (totalPop > 0) {
       let wsum = 0, hsum = 0;
       for (const tk of ["peasants", "workers", "burghers", "aristocrats"]) {   // === CC: 4 tiers ===
         const n = pop[tk] || 0;
-        if (n <= 0) { town.tierHappiness[tk] = null; continue; }
+        if (n <= 0) { town.tierHappiness[tk] = null; town.tierNeedHappiness[tk] = null; continue; }
         let bs = classSatTier(tk, N.tiers[tk].basic); if (bs === null) bs = 1;   // === CC: per-tier basic list ===
         let es = classSatTier(tk, N.tiers[tk].extra); if (es === null) es = 1;   // === CC: per-tier extra list ===
-        const ht = Math.max(0, Math.min(100, N.basicHappy * bs + N.extraHappy * es + tempMod));
+        const hNeed = N.basicHappy * bs + N.extraHappy * es;
+        const ht = Math.max(0, Math.min(100, hNeed + tempMod));
         const prevT = (typeof town.tierHappiness[tk] === "number") ? town.tierHappiness[tk]
                     : (prevAgg != null ? prevAgg : ht);
         const eased = prevT + (ht - prevT) * N.happyEase;
+        const htN = Math.max(0, Math.min(100, hNeed));
+        const prevN = (typeof town.tierNeedHappiness[tk] === "number") ? town.tierNeedHappiness[tk] : prevT;
+        town.tierNeedHappiness[tk] = prevN + (htN - prevN) * N.happyEase;
         town.tierHappiness[tk] = eased;
         wsum += n; hsum += n * eased;
       }
       town.happiness = wsum > 0 ? hsum / wsum : (prevAgg != null ? prevAgg : 0);
     } else {
       town.tierHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };  // === CC ===
+      town.tierNeedHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };
       const hTarget = Math.max(0, Math.min(100,
         N.basicHappy * basicSat + N.extraHappy * extraSat + tempMod));
       const hPrev = (prevAgg != null) ? prevAgg : hTarget;
@@ -1063,6 +1084,9 @@ Sim.tick = function (State) {
       else if (stock[gid] > capG) stock[gid] = capG;
     }
   }
+  // DESIGN PASS: track the kingdom's peak population for the victory recap.
+  const popNow = Sim.kingdomPop(State);
+  if (popNow > State.stats.peakPop) State.stats.peakPop = popNow;
   return State;
 };
 

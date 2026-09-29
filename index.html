@@ -850,6 +850,11 @@
   .wn-stats span { white-space: nowrap; }
   .wn-stats b { font-variant-numeric: tabular-nums; }
   #wnClose { padding: 8px 18px; font-weight: bold; background: var(--accent); color: #201607; border-color: #e0a860; }
+  /* DESIGN PASS: recap record line + two-button row (Keep ruling / New realm). */
+  .wn-record { font-size: 12.5px; margin: -8px 0 14px; opacity: 0.9; min-height: 1em; }
+  .wn-record .new { color: #6fbf73; font-weight: bold; }
+  .wn-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  #wnNew { padding: 8px 18px; font-weight: bold; }
   @keyframes wn-crown-bob {
     0%, 100% { transform: translateY(0) rotate(-2deg); }
     50% { transform: translateY(-5px) rotate(2deg); }
@@ -895,6 +900,14 @@
   table.kw-tbl tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
   .kw-good.up { color: #a6e0a8; } .kw-good.down { color: #f0a48c; }
   .kw-empty { opacity: 0.65; padding: 22px; text-align: center; }
+  /* DESIGN PASS: Kingdom Overview goal card + tier ladder. */
+  .kw-goal { border: 1px solid var(--accent); background: rgba(224,168,96,0.10); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+  .kw-goal-t { font-weight: bold; color: var(--accent); font-size: 13px; }
+  .kw-ladder { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px; }
+  .kw-step { padding: 2px 8px; border-radius: 10px; border: 1px solid var(--panel-edge); opacity: 0.5; }
+  .kw-step.lit { opacity: 1; border-color: #6fbf73; color: #a6e0a8; }
+  .kw-arrow { opacity: 0.5; }
+  .kw-goal .tut-goal { font-size: 12px; margin-top: 6px; opacity: 0.9; }
 
   #toasts { position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; gap: 6px; z-index: 40; pointer-events: none; align-items: center; }
@@ -1029,6 +1042,8 @@
   #tutStep .tut-tip { opacity: 0.82; font-size: 11.5px; margin-top: 3px; }
   #tutStep .tut-hint { font-size: 11.5px; line-height: 1.45; margin-top: 6px; padding: 5px 7px; border-radius: 6px;
     background: rgba(201,138,60,0.10); border-left: 2px solid var(--accent); color: var(--paper); opacity: 0.92; }
+  #tutStep .tut-goal { font-size: 11.5px; line-height: 1.45; margin-bottom: 6px; padding: 5px 7px; border-radius: 6px;
+    border: 1px solid var(--accent); background: rgba(224,168,96,0.10); color: var(--paper); }
   #tutStep .tut-next { font-size: 11px; line-height: 1.4; margin-top: 5px; opacity: 0.55; font-style: italic; }
   #tutStep .tut-cheer { color: #6fbf73; font-weight: bold; font-size: 13px; }
   #tutList { list-style: none; margin: 0; padding: 0; }
@@ -1150,6 +1165,15 @@
     </div>
   </div>
 
+  <!-- DESIGN PASS: missions can always be brought back (Skip is a per-game hide now). -->
+  <div class="hm-sec">
+    <div class="hm-lbl">🎯 Missions</div>
+    <div class="hm-row">
+      <button id="btnMissionsToggle" title="Show or hide the missions panel for this game">🙈 Hide</button>
+      <button id="btnMissionsRestart" title="Run the missions again from the start (and stop hiding them on new games). Lifetime progress still counts.">↺ Restart tutorial</button>
+    </div>
+  </div>
+
   <div class="hm-sec">
     <div class="hm-lbl">Map</div>
     <div class="hm-row">
@@ -1246,7 +1270,7 @@
 
 <!-- === TUTORIAL HTML START === (P5D-C / slot #4 — onboarding coach) -->
 <div id="tutorial" class="hidden" aria-live="polite" aria-hidden="true">
-  <div class="tut-head"><b>👑 Getting started</b><button id="tutSkip" title="Dismiss the tutorial">Skip</button></div>
+  <div class="tut-head"><b>👑 Getting started</b><button id="tutSkip" title="Hide the missions for this game — bring them back from ☰ → 🎯 Missions">Hide</button></div>
   <div id="tutStep"></div>
   <ul id="tutList"></ul>
 </div>
@@ -1354,7 +1378,11 @@
     <div class="wn-title">Victory!</div>
     <div class="wn-text">An Aristocrat's House in your realm has reached 100% happiness. Every luxury flows, and the good life reigns.</div>
     <div class="wn-stats" id="wnStats"></div>
-    <button id="wnClose">Continue playing</button>
+    <div class="wn-record" id="wnRecord"></div>
+    <div class="wn-btns">
+      <button id="wnClose" title="Close this card and keep playing this realm">Keep ruling</button>
+      <button id="wnNew" title="Start a fresh map of the same type with a new seed">New realm</button>
+    </div>
   </div>
 </div>
 <!-- === /POLISH === -->
@@ -3133,6 +3161,8 @@ Sim.ensureStats = function (state) {
   if (!st.traded || typeof st.traded !== "object") st.traded = { byGood: {} };
   if (!st.traded.byGood || typeof st.traded.byGood !== "object") st.traded.byGood = {};
   if (typeof st.taxEarned !== "number") st.taxEarned = 0;
+  // DESIGN PASS: peak kingdom population (victory recap). Old saves seed it from now.
+  if (typeof st.peakPop !== "number") st.peakPop = Sim.kingdomPop(state);
   // v0.51: cities founded + research completed (onboarding missions). Old saves seed
   // them from the live state so a returning player's progress still counts.
   if (typeof st.founded !== "number") st.founded = Array.isArray(state.towns) ? state.towns.length : 0;
@@ -3140,6 +3170,15 @@ Sim.ensureStats = function (state) {
     st.researched = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked.length : 0;
   state.stats = st;
   return st;
+};
+// Total population across every town (all four tiers). Pure, allocation-free.
+Sim.kingdomPop = function (state) {
+  let n = 0;
+  for (const t of ((state && state.towns) || [])) {
+    const p = t && t.pop; if (!p) continue;
+    n += (p.peasants || 0) + (p.workers || 0) + (p.burghers || 0) + (p.aristocrats || 0);
+  }
+  return n;
 };
 // Increment the "building constructed" counter (built false→true). typeId optional.
 Sim.statConstructed = function (state, typeId) {
@@ -3944,23 +3983,33 @@ Sim.tick = function (State) {
     // and the weighted average over one tier == that tier's eased value.
     const prevAgg = (typeof town.happiness === "number") ? town.happiness : null;
     if (!town.tierHappiness || typeof town.tierHappiness !== "object") town.tierHappiness = {};
+    // DESIGN PASS: tierNeedHappiness = the same eased per-tier value WITHOUT tempMod
+    // (Give/Take). Victory reads min(tierHappiness, tierNeedHappiness), so a Give can
+    // no longer bridge a missing luxury while a Take still delays the win. Derived
+    // state: seeded from tierHappiness when absent, so no save migration.
+    if (!town.tierNeedHappiness || typeof town.tierNeedHappiness !== "object") town.tierNeedHappiness = {};
     if (totalPop > 0) {
       let wsum = 0, hsum = 0;
       for (const tk of ["peasants", "workers", "burghers", "aristocrats"]) {   // === CC: 4 tiers ===
         const n = pop[tk] || 0;
-        if (n <= 0) { town.tierHappiness[tk] = null; continue; }
+        if (n <= 0) { town.tierHappiness[tk] = null; town.tierNeedHappiness[tk] = null; continue; }
         let bs = classSatTier(tk, N.tiers[tk].basic); if (bs === null) bs = 1;   // === CC: per-tier basic list ===
         let es = classSatTier(tk, N.tiers[tk].extra); if (es === null) es = 1;   // === CC: per-tier extra list ===
-        const ht = Math.max(0, Math.min(100, N.basicHappy * bs + N.extraHappy * es + tempMod));
+        const hNeed = N.basicHappy * bs + N.extraHappy * es;
+        const ht = Math.max(0, Math.min(100, hNeed + tempMod));
         const prevT = (typeof town.tierHappiness[tk] === "number") ? town.tierHappiness[tk]
                     : (prevAgg != null ? prevAgg : ht);
         const eased = prevT + (ht - prevT) * N.happyEase;
+        const htN = Math.max(0, Math.min(100, hNeed));
+        const prevN = (typeof town.tierNeedHappiness[tk] === "number") ? town.tierNeedHappiness[tk] : prevT;
+        town.tierNeedHappiness[tk] = prevN + (htN - prevN) * N.happyEase;
         town.tierHappiness[tk] = eased;
         wsum += n; hsum += n * eased;
       }
       town.happiness = wsum > 0 ? hsum / wsum : (prevAgg != null ? prevAgg : 0);
     } else {
       town.tierHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };  // === CC ===
+      town.tierNeedHappiness = { peasants: null, workers: null, burghers: null, aristocrats: null };
       const hTarget = Math.max(0, Math.min(100,
         N.basicHappy * basicSat + N.extraHappy * extraSat + tempMod));
       const hPrev = (prevAgg != null) ? prevAgg : hTarget;
@@ -4072,6 +4121,9 @@ Sim.tick = function (State) {
       else if (stock[gid] > capG) stock[gid] = capG;
     }
   }
+  // DESIGN PASS: track the kingdom's peak population for the victory recap.
+  const popNow = Sim.kingdomPop(State);
+  if (popNow > State.stats.peakPop) State.stats.peakPop = popNow;
   return State;
 };
 
@@ -7209,7 +7261,9 @@ Object.assign(CONFIG.town, {
 // BUILT aristocrat_home whose aristocrat-tier happiness has reached ~100% (see
 // Victory.check below). This supersedes the old castle-L5 victory (Castle.upgrade no
 // longer flips state.victory). Threshold lives here so QA tests + UI read one source. ===
-Object.assign(CONFIG, { victory: { aristocratHappiness: 99.5 } });
+// DESIGN PASS: goodMet = the smoothed per-good satisfaction (town.satEMA) at which the
+// win tracker counts an aristocrat good as flowing (e.g. "7/8 goods").
+Object.assign(CONFIG, { victory: { aristocratHappiness: 99.5, goodMet: 0.99 } });
 
 // Castle levels 1→5 (GDD §3.3, §7.4). levels[N] = requirement to REACH level N
 // from N-1; both prestige and treasury are consumed. Level 5 = victory.
@@ -7275,20 +7329,68 @@ var Castle = (typeof Castle !== "undefined" && Castle) || {};
 // (Sim sets it null when pop.aristocrats<=0), so an empty home can never false-win.
 // Wired into the fixed timestep right after Quests.tick(state).
 var Victory = (typeof Victory !== "undefined" && Victory) || {};
+// DESIGN PASS: the happiness the win reads — min(tierHappiness, tierNeedHappiness)
+// for aristocrats. tierNeedHappiness excludes Give/Take (tempMod), so a Give can't
+// bridge a missing luxury but a Take still delays the win. A town the Sim hasn't
+// ticked yet (no tierNeedHappiness) falls back to tierHappiness. null = no aristocrats.
+Victory.estateHappiness = function (t) {
+  const th = t && t.tierHappiness && t.tierHappiness.aristocrats;
+  if (typeof th !== "number") return null;
+  const nh = t.tierNeedHappiness && t.tierNeedHappiness.aristocrats;
+  return (typeof nh === "number" && nh < th) ? nh : th;
+};
 Victory.check = function (state) {
   if (!state || state.victory) return state;                 // latch
   const need = (CONFIG.victory && CONFIG.victory.aristocratHappiness) || 99.5;
   for (const t of (state.towns || [])) {
     if (!t) continue;
-    const th = t.tierHappiness && t.tierHappiness.aristocrats;
-    if (typeof th !== "number" || th < need) continue;       // null/absent → no win
+    const th = Victory.estateHappiness(t);
+    if (th === null || th < need) continue;                  // null/absent → no win
     const homes = Array.isArray(t.buildings) ? t.buildings : [];
     if (homes.some(b => b && b.typeId === "aristocrat_home" && b.built !== false)) {
       state.victory = true;
+      // DESIGN PASS: remember WHEN the realm was won (recap time-to-win). Old saves
+      // won before this field existed simply have none (recap shows "—").
+      state.victoryTick = (typeof state.tick === "number") ? state.tick : null;
       break;
     }
   }
   return state;
+};
+
+// DESIGN PASS: the estate the win tracker follows. Among towns holding any
+// aristocrat_home (built or still a scaffold), pick the highest win-happiness
+// (Victory.estateHappiness; a town with no residents ranks below any populated one,
+// first-listed wins ties). null when no town has a home. Per aristocrat good
+// (basic + extra), a good is "met" when its smoothed satisfaction town.satEMA[gid]
+// ≥ CONFIG.victory.goodMet; a town without residents (no demand, no satEMA) reads
+// stock > 0 instead. Pure, deterministic; allocates a small result (UI cadence only).
+Victory.estate = function (state) {
+  let best = null, bestH = -1;
+  for (const t of ((state && state.towns) || [])) {
+    if (!t || !Array.isArray(t.buildings)) continue;
+    let has = false;
+    for (const b of t.buildings) if (b && b.typeId === "aristocrat_home") { has = true; break; }
+    if (!has) continue;
+    const h = Victory.estateHappiness(t);
+    const rank = (h === null) ? -0.5 : h;
+    if (rank > bestH) { best = t; bestH = rank; }
+  }
+  if (!best) return null;
+  const tiers = (CONFIG.needs && CONFIG.needs.tiers && CONFIG.needs.tiers.aristocrats) || { basic: [], extra: [] };
+  const goods = (tiers.basic || []).concat(tiers.extra || []);
+  const metAt = (CONFIG.victory && CONFIG.victory.goodMet) || 0.99;
+  const populated = ((best.pop && best.pop.aristocrats) || 0) > 0;
+  const ema = best.satEMA || {};
+  const missing = [];
+  for (const gid of goods) {
+    const sat = (populated && typeof ema[gid] === "number") ? ema[gid]
+              : (((best.stock && best.stock[gid]) || 0) > 0 ? 1 : 0);
+    if (sat < metAt) missing.push(gid);
+  }
+  const built = best.buildings.some(b => b && b.typeId === "aristocrat_home" && b.built !== false);
+  return { town: best, built, happiness: Victory.estateHappiness(best),
+           have: goods.length - missing.length, total: goods.length, missing };
 };
 
 // === PROGRESS-CORE END ===
@@ -9041,7 +9143,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // only reliable gate. Non-blocking — runs `onConfirm` only when the user
   // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
   // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
-  function uiConfirm(message, onConfirm) {
+  // DESIGN PASS: optional opts {okLabel, danger:false, checkbox:"label"} — the
+  // checkbox state is passed to onConfirm(checked) (used by the missions Hide).
+  function uiConfirm(message, onConfirm, opts) {
+    opts = opts || {};
     const prev = document.getElementById("uiConfirm");
     if (prev) prev.remove();
     const overlay = document.createElement("div");
@@ -9058,7 +9163,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
     const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
-    const confirmNow = () => { close(); onConfirm(); };
+    let cb = null, cbRow = null;
+    if (opts.checkbox) {
+      const lbl = cbRow = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;gap:6px;margin:-4px 0 14px;opacity:.85;cursor:pointer;";
+      cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "uiConfirmCheck";
+      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(opts.checkbox));
+    }
+    const confirmNow = () => { const checked = !!(cb && cb.checked); close(); onConfirm(checked); };
     function onKey(e) {
       if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
       else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
@@ -9067,10 +9180,13 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
     cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     const ok = document.createElement("button");
-    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
-    ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
+    ok.id = "uiConfirmOk"; ok.textContent = opts.okLabel || "Demolish"; ok.onclick = confirmNow;
+    ok.style.cssText = (opts.danger === false ? "background:#c98a3c;color:#201607;" : "background:#a33;color:#fff;") +
+      "border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     row.appendChild(cancel); row.appendChild(ok);
-    box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
+    box.appendChild(msg);
+    if (cbRow) box.appendChild(cbRow);
+    box.appendChild(row); overlay.appendChild(box);
     overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
     document.body.appendChild(overlay);
     document.addEventListener("keydown", onKey, true);
@@ -9696,6 +9812,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.castleLevel = 1;
     state.mode = "pan";          // v0.47: always start a fresh game in pan mode — never with the City (or any) tool armed (fixes "city is preselected")
     state.victory = false;
+    state.victoryTick = null;    // DESIGN PASS: tick the realm was won (recap time-to-win)
+    // DESIGN PASS: lifetime stats + mission progress belong to ONE realm — a new map
+    // starts them fresh (Sim.ensureStats / Tutorial rebuild them); loadGame restores.
+    state.stats = null;
+    state.missions = null;
     state.revealed = new Set();
     state.cam = { x: 0, y: 0 };
     state.zoom = 1;
@@ -9751,6 +9872,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         castleLevel: state.castleLevel,    // P4-B
         quest: state.quest,                // P4-B
         victory: state.victory,            // P4-B
+        victoryTick: state.victoryTick,    // DESIGN PASS: recap time-to-win (null = unknown)
         _questSeq: state._questSeq,        // P4-B: quest rotation cursor
         muted: (typeof SFX !== "undefined") ? SFX.isMuted() : !!state.muted, // P5-C: audio mute
         gameSpeed: state.gameSpeed,        // === SPEED-UI === (P5D-A) chosen speed 0/1/2/4
@@ -9898,6 +10020,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     state.prestige = typeof data.prestige === "number" ? data.prestige : 0;   // P4-B
     state.castleLevel = typeof data.castleLevel === "number" ? data.castleLevel : 1;
     state.victory = !!data.victory;
+    state.victoryTick = (typeof data.victoryTick === "number") ? data.victoryTick : null;   // DESIGN PASS: absent on old saves
+    // DESIGN PASS: restore the saved lifetime stats (recap + missions) and this game's
+    // mission progress (incl. the per-game "hidden"). They were saved but never loaded.
+    state.stats = (data.stats && typeof data.stats === "object") ? data.stats : null;
+    if (typeof Sim !== "undefined" && Sim.ensureStats) Sim.ensureStats(state);   // migrate/seed missing counters
+    state.missions = (data.missions && typeof data.missions === "object") ? data.missions : null;
     state.revealAll = !!data.revealAll;
     // === SPEED-UI === (P5D-A) restore chosen speed; a saved 0 (paused) loads as
     // 1x so a game never restores frozen. Buttons are synced by setSpeed() at boot.
@@ -11938,11 +12066,14 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     return totalCap > 0 ? pop * (thisCap / totalCap) : 0;
   }
 
-  // Per-good satisfaction 0..1 — APPROXIMATION: per-good satisfaction (Sim's
-  // `gsat`) is a tick-local and isn't persisted per town, so the ring shows
-  // stock COVERAGE: town stock vs ~10 ticks of this tier's demand. A tier with
-  // no demand (empty house) reads pure availability (stocked shelf = full ring).
+  // Per-good satisfaction 0..1. DESIGN PASS: reads the SAME smoothed per-good
+  // satisfaction that drives happiness (town.satEMA, persisted on the town since the
+  // sawtooth fix), so a ring only fills as happiness recovers — not the moment one
+  // unit lands. An empty tier (no demand → no satEMA sample) falls back to stock
+  // coverage: town stock vs ~10 ticks of demand, or availability when no one lives there.
   function ppdCoverage(town, gid, ratePerTick, tierPop) {
+    const ema = town.satEMA && town.satEMA[gid];
+    if (tierPop > 0 && typeof ema === "number") return Math.max(0, Math.min(1, ema));
     const stock = (town.stock && town.stock[gid]) || 0;
     const need = ratePerTick * tierPop * 10;
     if (need <= 0) return stock > 0 ? 1 : 0;
@@ -11959,7 +12090,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const cov = ppdCoverage(town, gid, r, tierPop);
       const deg = Math.round(cov * 360);
       const c = goodColor(gid);
-      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% covered · ${fmt(perMin(r))} / resident / min">
+      cells += `<div class="ppd-need" data-ppd-ring="${esc(gid)}" title="${esc(GOOD_LABEL(gid))} — ${Math.round(cov * 100)}% satisfaction · ${fmt(perMin(r))} / resident / min">
         <div class="ppd-ring" style="background:conic-gradient(#6fbf73 ${deg}deg, #33291d ${deg}deg)">
           <div class="ppd-ring-core" style="border-color:${c}">${goodIcon(gid)}</div>
         </div>
@@ -12023,6 +12154,11 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         </div>
         <span class="ppd-face">🙂</span>
       </div>`;
+    // DESIGN PASS: the aristocrat home states the win condition where it is earned.
+    if (key === "aristocrats") {
+      const won = !!(typeof state !== "undefined" && state && state.victory);
+      out += `<div class="tp-hint2" data-ppd-victory>👑 100% happiness = Victory${won ? " — achieved!" : " (Give/Take bonuses don’t count — every good must flow)"}</div>`;
+    }
     return out;
   }
   // === /PP-D ===
@@ -13892,16 +14028,12 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   // === PROGRESS-UI START === (P4-B / slot #3 — prestige HUD, quest banner, victory)
   // Reflects the pure PROGRESS-CORE (Quests.tick / Castle / Town) into the DOM.
   // Owns only its own elements; reads state written by the accumulator each tick.
-  // CP: prestige + castle level moved out of #hud into the castle click panel
-  // (rendered by renderCastlePanel's up-box). These getElementByIds are null now;
-  // updateProgressHud null-guards them and refreshes the panel when it's open.
-  const prestigeValEl = document.getElementById("prestigeVal");
+  // DESIGN PASS: the always-0 prestige readout (#prestigeVal) is gone — prestige is
+  // never earned since King's Quests were retired (state.prestige stays for saves).
   const winNoticeEl = document.getElementById("winNotice");
 
   function updateProgressHud() {
-    if (prestigeValEl) prestigeValEl.textContent = Math.floor(state.prestige || 0).toLocaleString();
     // castle level removed (v0.44) — castle is fixed capacity now.
-    // CP: prestige is shown in the castle panel — refresh it if open.
     if (window.CastleUI && window.CastleUI.isOpen) window.CastleUI.refresh();
   }
   // King's-Quest banner retired — no renderQuestBanner (quests removed entirely).
@@ -13930,17 +14062,64 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     }
     wnConfettiEl.appendChild(frag);
   }
+  // DESIGN PASS: the recap reads lifetime stats (tariff, goods traded, peak population),
+  // cities, game-minutes to win and the seed/preset. The best time-to-win per map
+  // preset lives in localStorage (per-viewer convenience; try/catch — may be blocked).
+  const wnRecordEl = document.getElementById("wnRecord");
+  const WN_BEST_KEY = "tradewinds.bestWin";
+  function winMinutes() {
+    const t = (typeof state.victoryTick === "number") ? state.victoryTick : null;
+    return t === null ? null : t / 120;          // 2 ticks = 1 game-second
+  }
+  function presetLabel() {
+    const id = state.mapPreset || "";
+    const pr = (CONFIG.mapPresets && CONFIG.mapPresets[id]) || null;
+    return (pr && pr.label) || (id === "custom" ? "Custom" : id);
+  }
+  // Compare + store the best time-to-win for this preset. Returns {best, isNew}.
+  // Recorded once per won game (keyed by seed+victoryTick) so reopening doesn't re-flag.
+  function recordBest(mins) {
+    const out = { best: null, isNew: false };
+    if (mins === null) return out;
+    try {
+      const all = JSON.parse(localStorage.getItem(WN_BEST_KEY) || "{}") || {};
+      const key = state.mapPreset || "default";
+      const cur = all[key];
+      const runId = String(state.seedInput || "") + "@" + state.victoryTick;
+      if (cur && cur.run === runId) return { best: cur.mins, isNew: !!cur.isNew, first: !cur.isNew };
+      if (!cur || typeof cur.mins !== "number" || mins < cur.mins) {
+        all[key] = { mins, seed: state.seedInput || "", run: runId, isNew: !!cur };
+        localStorage.setItem(WN_BEST_KEY, JSON.stringify(all));
+        return { best: mins, isNew: !!cur, first: !cur };   // first win on a preset sets the bar
+      }
+      return { best: cur.mins, isNew: false };
+    } catch (e) { return out; }
+  }
   function renderWinStats() {
     if (!wnStatsEl) return;
+    const st = (typeof Sim !== "undefined" && Sim.ensureStats) ? Sim.ensureStats(state) : (state.stats || {});
     const towns = (state.towns || []).length;
-    const gold = Math.round(state.treasury || 0).toLocaleString();
-    const prestige = Math.floor(state.prestige || 0);
-    const days = Math.floor((state.tick || 0) * 0.5 / 60);   // 500ms/tick -> minutes of game time
+    const tariff = Math.round(st.taxEarned || 0).toLocaleString();
+    let traded = 0;
+    const by = (st.traded && st.traded.byGood) || {};
+    for (const g in by) traded += by[g] || 0;
+    const peak = Math.round(st.peakPop || 0).toLocaleString();
+    const mins = winMinutes();
+    const minsS = mins === null ? "—" : Math.round(mins).toLocaleString();
     wnStatsEl.innerHTML =
-      `<span>🏙 <b>${towns}</b> town${towns === 1 ? "" : "s"}</span>` +
-      `<span>👑 <b>${gold}</b> g treasury</span>` +
-      `<span>✨ <b>${prestige}</b> prestige</span>` +
-      `<span>⏱ <b>${days}</b> min reign</span>`;
+      `<span>👑 <b>${tariff}</b> g lifetime tariff</span>` +
+      `<span>📦 <b>${Math.round(traded).toLocaleString()}</b> goods traded</span>` +
+      `<span>🧑‍🌾 <b>${peak}</b> peak population</span>` +
+      `<span>🏙 <b>${towns}</b> cit${towns === 1 ? "y" : "ies"}</span>` +
+      `<span>⏱ <b>${minsS}</b> game-min to win</span>` +
+      `<span>🗺 ${esc(presetLabel())} · <b>${esc(state.seedInput || "")}</b></span>`;
+    if (wnRecordEl) {
+      const r = recordBest(mins);
+      wnRecordEl.innerHTML = r.isNew
+        ? `<span class="new">🏆 New record!</span> Fastest ${esc(presetLabel())} win: ${Math.round(r.best)} game-min`
+        : r.first ? `First ${esc(presetLabel())} win — ${Math.round(r.best)} game-min is the time to beat`
+        : (r.best !== null ? `Best ${esc(presetLabel())} win: ${Math.round(r.best)} game-min` : "");
+    }
   }
   let winShown = false;
   function showVictory() {
@@ -13953,10 +14132,19 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     requestAnimationFrame(() => winNoticeEl.classList.add("in"));
     if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "victory"); } catch (e) {} }
   }
-  document.getElementById("wnClose").addEventListener("click", () => {
+  function closeVictory() {
     winNoticeEl.classList.remove("in");
     winNoticeEl.classList.add("hidden");
     winNoticeEl.setAttribute("aria-hidden", "true");
+  }
+  document.getElementById("wnClose").addEventListener("click", closeVictory);   // "Keep ruling"
+  // DESIGN PASS: "New realm" — a fresh seed on the same map type (custom keeps its tiers).
+  const wnNewBtn = document.getElementById("wnNew");
+  if (wnNewBtn) wnNewBtn.addEventListener("click", () => {
+    closeVictory();
+    const preset = state.mapPreset || CONFIG.mapPresetDefault || "fertile";
+    const tiers = (preset === "custom" && state.mapTiers) ? JSON.parse(JSON.stringify(state.mapTiers)) : undefined;
+    if (window.StartScreen) window.StartScreen.startNew(randomSeed(), preset, tiers);
   });
 
   // Live refresh (500ms, same cadence as the other panels). Also catches a
@@ -13966,6 +14154,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   setInterval(() => {
     updateProgressHud();
     if (state.victory) showVictory();
+    else if (winShown) winShown = false;   // DESIGN PASS: a new realm can be won again
   }, 500);
 
   window.ProgressUI = { updateProgressHud, showVictory, Town, Castle };
@@ -14119,9 +14308,31 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
   }
   // === /RESEARCH CENTER (Slice C) ===
 
+  // DESIGN PASS: a persistent Goal card on top of the overview — the win condition
+  // plus a Peasants → Workers → Citizens → Aristocrats ladder, each step lit once
+  // any city has a built house of that tier (peasants also by living peasants),
+  // and the win tracker line once an Aristocrats Home exists.
+  const KW_LADDER = [["peasant", "Peasants"], ["worker", "Workers"], ["burgher", "Citizens"], ["aristocrat", "Aristocrats"]];
+  function kwGoalHTML() {
+    const lit = { peasant: false, worker: false, burgher: false, aristocrat: false };
+    for (const t of (state.towns || [])) {
+      if (!t) continue;
+      if (t.pop && t.pop.peasants > 0) lit.peasant = true;
+      for (const b of (t.buildings || [])) {
+        const d = b && CONFIG.buildings[b.typeId];
+        if (d && d.kind === "house" && b.built !== false && d.houseTier in lit) lit[d.houseTier] = true;
+      }
+    }
+    const steps = KW_LADDER.map(([k, lbl]) =>
+      `<span class="kw-step${lit[k] ? " lit" : ""}">${esc(lbl)}${lit[k] ? " ✓" : ""}</span>`).join('<span class="kw-arrow">→</span>');
+    const track = (window.Tutorial && window.Tutorial.goalHtml) ? window.Tutorial.goalHtml(state) : "";
+    return `<div class="kw-goal"><div class="kw-goal-t">👑 Goal: an Aristocrat's House at 100% happiness${state.victory ? " — achieved!" : ""}</div>` +
+      `<div class="kw-ladder">${steps}</div>${track}</div>`;
+  }
+
   function renderKingdom() {
     if (!kingdomOpen) return;
-    const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
+    const researchHtml = kwGoalHTML() + kwResearchBlockHTML();   // RESEARCH CENTER (Slice C) + DESIGN PASS goal card
     const rows = (state.towns || []).map(townMetrics);
     const k = kwSort.key, dir = kwSort.dir;
     rows.sort((a, b) => {
@@ -14260,6 +14471,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       }
       // (castle upgrades removed v0.44 — no castle-level log)
       if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
+      else if (!state.victory) wonSeen = false;   // DESIGN PASS: "New realm" can be won again
     }, 1200);
   })();
 
@@ -16353,7 +16565,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
     // ---- progress state ------------------------------------------------------
     // Authoritative live progress is state.missions; a light gate is mirrored to LS.
-    function freshProg() { return { done: false, skipped: false, activated: {}, baselines: {}, completed: {} }; }
+    // DESIGN PASS: `hidden` = the player hid the panel for THIS game (per-save, never
+    // mirrored to LS). The LS `skipped` gate is the global "also hide on new games".
+    function freshProg() { return { done: false, skipped: false, hidden: false, activated: {}, baselines: {}, completed: {} }; }
     function migrateProg(j) {
       // old tutorial shape: {done, mission, step} / {done, step}. New: full prog obj.
       if (!j || typeof j !== "object") return freshProg();
@@ -16375,14 +16589,15 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (!p.activated || typeof p.activated !== "object") p.activated = {};
       if (!p.baselines || typeof p.baselines !== "object") p.baselines = {};
       if (!p.completed || typeof p.completed !== "object") p.completed = {};
-      p.done = !!p.done; p.skipped = !!p.skipped;
+      if (p.hidden === undefined) p.hidden = !!p.skipped;   // old saves: an old Skip stays hidden
+      p.done = !!p.done; p.skipped = !!p.skipped; p.hidden = !!p.hidden;
       return p;
     }
     function persist(state) {
       const p = state && state.missions ? state.missions : freshProg();
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
-          done: !!p.done, skipped: !!p.skipped,
+          done: !!(p.done || p.skipped), skipped: !!p.skipped,   // skipped = global "hide on new games"
           activated: p.activated, baselines: p.baselines, completed: p.completed,
         }));
       } catch (e) { /* private mode / quota — ignore */ }
@@ -16465,12 +16680,47 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       return '<div class="tut-next">Next: ' + esc(nx.icon + " " + nx.name) + (first ? " — " + esc(first) : "") + "</div>";
     }
 
+    // DESIGN PASS: the win tracker. Once any Aristocrats Home exists, a line on top of
+    // the panel follows the estate (Victory.estate — highest need-happiness):
+    // "👑 Estate (City #n): 7/8 goods · 90% — 100% wins · missing: Luxury Clothes (Luxury Tailor)".
+    function goodNm(gid) { return String(gid).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+    function producerName(gid) {
+      const B = (typeof CONFIG !== "undefined" && CONFIG.buildings) || {};
+      for (const id in B) { const d = B[id]; if (d && d.output && d.output.goodId === gid) return d.name || id; }
+      return "";
+    }
+    function goalHtml(state) {
+      const es = (typeof Victory !== "undefined" && Victory.estate) ? Victory.estate(state) : null;
+      if (!es) return "";
+      const t = es.town;
+      const need = (CONFIG.victory && CONFIG.victory.aristocratHappiness) || 99.5;
+      const name = (t.name || ("City #" + t.id)) + (es.built ? "" : ", under construction");
+      const h = es.happiness;
+      const pct = (h === null) ? "no residents yet" : ((h >= need) ? 100 : Math.min(99, Math.floor(h))) + "%";   // 99.5 reads 100 only when it wins
+      let miss = "";
+      if (es.missing.length) {
+        const shown = es.missing.slice(0, 3).map(g => { const pn = producerName(g); return goodNm(g) + (pn ? " (" + pn + ")" : ""); });
+        miss = " · missing: " + shown.join(", ") + (es.missing.length > 3 ? " +" + (es.missing.length - 3) + " more" : "");
+      }
+      return '<div class="tut-goal" title="Victory: an Aristocrats Home whose residents reach 100% happiness. Give/Take bonuses don’t count — every aristocrat good must flow.">👑 Estate (' +
+        esc(name) + "): " + es.have + "/" + es.total + " goods · " + esc(pct) +
+        (state.victory ? " — Victory! 👑" : " — 100% wins" + esc(miss)) + "</div>";
+    }
+    // Show/hide the panel: hidden-for-this-game wins; otherwise visible while missions
+    // run or the win tracker has something to say.
+    function place(state, hasMissions, goal) {
+      const p = state && state.missions;
+      if ((p && p.hidden) || (!hasMissions && !goal)) { hide(); return false; }
+      show(); return true;
+    }
+
     // ---- render --------------------------------------------------------------
-    function render(state, ev, set) {
+    function render(state, ev, set, goal) {
       if (!elRoot) return;
+      goal = goal || "";
       if (celebrating) {
         if (elHead) elHead.textContent = "👑 Getting Started";
-        elStep.innerHTML = '<div class="tut-cheer">🎉 Every mission complete!</div>' +
+        elStep.innerHTML = goal + '<div class="tut-cheer">🎉 Every mission complete!</div>' +
           '<div class="tut-tip">The winds are yours to shape.</div>';
         elList.innerHTML = "";
         return;
@@ -16485,9 +16735,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
 
       if (!activeMissions.length) {
         const done = ev.allComplete || (state.missions && state.missions.done);
-        elStep.innerHTML = done
+        elStep.innerHTML = goal + (done
           ? '<div class="tut-now">▶ All missions complete</div><div class="tut-tip">Nothing left on the board — keep building your realm.</div>'
-          : '<div class="tut-now">▶ No missions available</div><div class="tut-tip">Complete a mission’s prerequisites to unlock the next.</div>';
+          : '<div class="tut-now">▶ No missions available</div><div class="tut-tip">Complete a mission’s prerequisites to unlock the next.</div>');
         elList.innerHTML = "";
         return;
       }
@@ -16500,7 +16750,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       // several active, name the primary one so the count is unambiguous.
       const nameLine = activeMissions.length === 1
         ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
-      elStep.innerHTML = nameLine +
+      elStep.innerHTML = goal + nameLine +
         '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>" +
         (primary.tip ? '<div class="tut-hint">💡 ' + esc(primary.tip) + "</div>" : "") +
         nextLine(set, ev, primary);
@@ -16530,6 +16780,18 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       const stats = stateStats(state);
       const set = currentSet();
       const p = ensureProg(state);
+      const goal = goalHtml(state);
+      // DESIGN PASS: finished/globally-dismissed missions no longer end the poll — the
+      // panel lingers only for the win tracker (or stays hidden when there is none).
+      if (p.done) {
+        if (celebrating) return;
+        if (place(state, false, goal)) {
+          if (elHead) elHead.textContent = "👑 Your Goal";
+          elStep.innerHTML = goal + '<div class="tut-tip">Missions are done — bring the estate to 100% happiness to win.</div>';
+          elList.innerHTML = "";
+        }
+        return;
+      }
 
       let ev = MissionEngine.evaluate(set, stats, { baselines: clampBaselines(set, stats, p.baselines) });
 
@@ -16552,30 +16814,74 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
         if (!p.completed[id]) { p.completed[id] = true; missionUp = true; }
       }
 
-      if (ev.allComplete && !p.done) { persist(state); celebrate(state); return; }
+      if (ev.allComplete && !p.done) { persist(state); celebrate(state, goal); return; }
 
-      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
       persist(state);
-      render(state, ev, set);
+      if (!place(state, true, goal)) return;     // hidden for this game: keep bookkeeping, no sfx/render
+      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
+      render(state, ev, set, goal);
     }
 
-    function celebrate(state) {
+    function celebrate(state, goal) {
       const p = ensureProg(state);
       p.done = true;
       persist(state);
-      celebrating = true; active = false;
+      celebrating = true;
       if (elRoot) elRoot.classList.add("celebrate");
-      render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet());
-      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
-      setTimeout(() => { celebrating = false; hide(); }, 5200);
+      if (p.hidden) hide();
+      else { show(); render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet(), goal); }
+      if (!p.hidden && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
+      setTimeout(() => {
+        celebrating = false;
+        if (elRoot) elRoot.classList.remove("celebrate");
+        const st = liveState(null);
+        if (st) refresh(st); else hide();       // the win tracker may keep the panel up
+      }, 5200);
     }
 
-    function onSkip() {
-      const state = (typeof window !== "undefined" && window.state) || (typeof globalThis !== "undefined" && globalThis.state) || null;
-      if (state) { const p = ensureProg(state); p.done = true; p.skipped = true; persist(state); }
+    // DESIGN PASS: Skip → a confirmed per-game Hide. Only the "Also hide on new
+    // games" checkbox writes the old global LS gate ({done, skipped}); otherwise the
+    // missions come back on the next new game. ☰ → 🎯 Missions brings them back.
+    function writeGlobalHide() {
+      const st = liveState(null);
+      if (st) { ensureProg(st).skipped = true; persist(st); }   // persist writes {done:true, skipped:true}
       else { try { localStorage.setItem(LS_KEY, JSON.stringify({ done: true, skipped: true, activated: {}, baselines: {}, completed: {} })); } catch (e) {} }
-      active = false; celebrating = false;
-      hide();
+    }
+    function setHidden(on) {
+      const st = liveState(null);
+      if (st) { ensureProg(st).hidden = !!on; if (typeof scheduleSave === "function") { try { scheduleSave(); } catch (e) {} } }
+      if (on) hide(); else if (st) refresh(st);
+      syncMenu();
+    }
+    function onSkip() {
+      const msg = "Hide missions for this game? Bring them back any time from ☰ → 🎯 Missions.";
+      const doHide = (alsoNew) => { if (alsoNew) writeGlobalHide(); setHidden(true); };
+      if (typeof uiConfirm === "function") uiConfirm(msg, doHide, { okLabel: "Hide", danger: false, checkbox: "Also hide on new games" });
+      else doHide(false);
+    }
+    // ☰ → 🎯 Missions row: Show/Hide toggle + Restart tutorial.
+    function isHidden() {
+      const st = liveState(null);
+      return !!(st && st.missions && st.missions.hidden);
+    }
+    function syncMenu() {
+      const b = document.getElementById("btnMissionsToggle");
+      if (b) b.textContent = isHidden() ? "👁 Show" : "🙈 Hide";
+    }
+    function toggleHidden() { setHidden(!isHidden()); }
+    function restart() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(freshProg())); } catch (e) {}   // clear the global gate …
+      startFresh();                           // … and run the missions from the roots (lifetime stats still count)
+      syncMenu();
+    }
+    function bindMenu() {
+      const tg = document.getElementById("btnMissionsToggle");
+      if (tg && !tg._bound) { tg._bound = true; tg.addEventListener("click", toggleHidden); }
+      const rs = document.getElementById("btnMissionsRestart");
+      if (rs && !rs._bound) { rs._bound = true; rs.addEventListener("click", restart); }
+      const menuBtn = document.getElementById("hudMenuBtn");
+      if (menuBtn && !menuBtn._tutSync) { menuBtn._tutSync = true; menuBtn.addEventListener("click", syncMenu); }
+      syncMenu();
     }
 
     // Resolve the live game state for the poll (browser shell global).
@@ -16583,6 +16889,9 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       if (s) return s;
       if (typeof window !== "undefined" && window.state) return window.state;
       if (typeof globalThis !== "undefined" && globalThis.state) return globalThis.state;
+      // DESIGN PASS: the shell's `state` is a lexical const (never on window) — without
+      // this, startFresh/Skip never reached the game state (missions leaked across games).
+      if (typeof state !== "undefined" && state) return state;
       return null;
     }
 
@@ -16590,18 +16899,23 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     // Fresh game: reset this playthrough's mission progress unless the player has
     // already finished/skipped the missions (LS gate), then run from the roots.
     function startFresh() {
-      ensureEls();
+      ensureEls(); bindMenu();
       reloadSet();
       const gate = loadProgFromLS();
       if (gate.done) {
         const st = liveState(null);
-        if (st) { st.missions = freshProg(); st.missions.done = true; }
-        active = false; celebrating = false; hide(); return;
+        // DESIGN PASS: a finished tutorial stays done; a global "hide on new games"
+        // also hides the panel (the win tracker then waits for ☰ → 🎯 Missions → Show).
+        if (st) { st.missions = freshProg(); st.missions.done = true; st.missions.skipped = st.missions.hidden = !!gate.skipped; }
+        active = true; celebrating = false; hide(); syncMenu();
+        if (st) refresh(st);
+        return;
       }
       const st = liveState(null);
       if (st) st.missions = freshProg();     // new playthrough → clear baselines/activation
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
+      syncMenu();
       if (st) refresh(st); else show();
     }
 
@@ -16611,10 +16925,10 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       reloadSet();
       const st = liveState(null);
       const p = st ? ensureProg(st) : loadProgFromLS();
-      if (p.done) { active = false; celebrating = false; hide(); return; }
-      celebrating = false; active = true;
+      bindMenu();
+      celebrating = false; active = true;     // DESIGN PASS: keep polling for the win tracker even when done
       if (elRoot) elRoot.classList.remove("celebrate");
-      if (st) { show(); refresh(st); } else show();
+      if (st) refresh(st); else if (!p.done) show(); else hide();
     }
 
     // Poll tick — advance/redraw when active. Called by mainloop (with state) and by
@@ -16622,8 +16936,6 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
     function tick(s) {
       const st = liveState(s);
       if (!active || !st) return;
-      const p = st.missions;
-      if (p && p.done) { active = false; return; }
       refresh(st);
     }
 
@@ -16636,6 +16948,7 @@ const MISSION_EDITOR_HTML = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta 
       get MISSIONS() { return currentSet().missions; },
       // public API
       startFresh, resume, tick, startPolling, hide,
+      setHidden, toggleHidden, restart, isHidden, goalHtml,   // DESIGN PASS: ☰ → 🎯 Missions + win tracker
       isActive: () => active,
     };
   })();

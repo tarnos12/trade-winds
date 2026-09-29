@@ -102,6 +102,48 @@ function drive(goodsToStock) {
   ok("no false victory when any aristocrat good is missing", !anyFalseWin);
 })();
 
+// --- 2b. DESIGN PASS: Give (+10 happyMod) can't bridge a missing luxury ------------
+// 7/8 goods sit at 90% need-happiness. The Give effect (carts-castle-ui: {delta:+10,
+// 120 ticks}) used to lift tierHappiness to 100 and latch the win in ~29 ticks.
+// Victory now reads min(tierHappiness, tierNeedHappiness), which excludes tempMod.
+function driveWithGive(goodsToStock, checkEachTick) {
+  const t = mkTown();
+  const CAP = CONFIG.town.storageCap;
+  const state = { towns: [t], victory: false, tick: 0 };
+  let wonAt = -1, peakTh = 0;
+  for (let i = 0; i < HORIZON; i++) {
+    for (const g of goodsToStock) t.stock[g] = CAP;
+    if (i === 300) t.happyMods = [{ delta: +10, untilTick: state.tick + 120 }];   // Give, once settled
+    Sim.tick(state);
+    if (typeof t.tierHappiness.aristocrats === "number") peakTh = Math.max(peakTh, t.tierHappiness.aristocrats);
+    if (checkEachTick) { Victory.check(state); if (state.victory && wonAt < 0) wonAt = state.tick; }
+  }
+  return { t, state, wonAt, peakTh };
+}
+(function () {
+  for (const missing of A.extra) {
+    const r = driveWithGive(ALL.filter(g => g !== missing), true);
+    ok("Give lifts displayed happiness past the threshold with " + missing + " missing (tempMod still shows)", r.peakTh >= T);
+    ok("need-happiness stays at ~90 with " + missing + " missing", r.t.tierNeedHappiness.aristocrats < 90.5);
+    ok("7/8 goods (" + missing + " missing) + Give(+10 for 120 ticks) => NO victory", r.state.victory !== true);
+  }
+  const full = driveWithGive(ALL, true);
+  ok("8/8 goods (+Give) => victory", full.state.victory === true);
+  ok("victoryTick records the winning tick", full.state.victoryTick === full.wonAt && full.wonAt > 0);
+  // A Take (-30) still delays a win: full supply, but a live negative mod holds it back.
+  const t = mkTown(), CAP = CONFIG.town.storageCap, st = { towns: [t], victory: false, tick: 0 };
+  let wonDuringTake = false;
+  for (let i = 0; i < 500; i++) {
+    for (const g of ALL) t.stock[g] = CAP;
+    if (i === 250) t.happyMods = [{ delta: -30, untilTick: st.tick + 120 }];
+    Sim.tick(st);
+    if (i > 262 && i < 370) { Victory.check(st); if (st.victory) wonDuringTake = true; }
+  }
+  ok("Take (-30) still delays the win while it lasts", !wonDuringTake);
+  Victory.check(st);
+  ok("... and the win lands once the Take expires", st.victory === true);
+})();
+
 // --- 3. Determinism: same drive => identical final aristocrat happiness ----------
 (function () {
   const a = drive(ALL).tierHappiness.aristocrats;

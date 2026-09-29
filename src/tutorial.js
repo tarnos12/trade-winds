@@ -35,7 +35,9 @@
 
     // ---- progress state ------------------------------------------------------
     // Authoritative live progress is state.missions; a light gate is mirrored to LS.
-    function freshProg() { return { done: false, skipped: false, activated: {}, baselines: {}, completed: {} }; }
+    // DESIGN PASS: `hidden` = the player hid the panel for THIS game (per-save, never
+    // mirrored to LS). The LS `skipped` gate is the global "also hide on new games".
+    function freshProg() { return { done: false, skipped: false, hidden: false, activated: {}, baselines: {}, completed: {} }; }
     function migrateProg(j) {
       // old tutorial shape: {done, mission, step} / {done, step}. New: full prog obj.
       if (!j || typeof j !== "object") return freshProg();
@@ -57,14 +59,15 @@
       if (!p.activated || typeof p.activated !== "object") p.activated = {};
       if (!p.baselines || typeof p.baselines !== "object") p.baselines = {};
       if (!p.completed || typeof p.completed !== "object") p.completed = {};
-      p.done = !!p.done; p.skipped = !!p.skipped;
+      if (p.hidden === undefined) p.hidden = !!p.skipped;   // old saves: an old Skip stays hidden
+      p.done = !!p.done; p.skipped = !!p.skipped; p.hidden = !!p.hidden;
       return p;
     }
     function persist(state) {
       const p = state && state.missions ? state.missions : freshProg();
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
-          done: !!p.done, skipped: !!p.skipped,
+          done: !!(p.done || p.skipped), skipped: !!p.skipped,   // skipped = global "hide on new games"
           activated: p.activated, baselines: p.baselines, completed: p.completed,
         }));
       } catch (e) { /* private mode / quota — ignore */ }
@@ -147,12 +150,47 @@
       return '<div class="tut-next">Next: ' + esc(nx.icon + " " + nx.name) + (first ? " — " + esc(first) : "") + "</div>";
     }
 
+    // DESIGN PASS: the win tracker. Once any Aristocrats Home exists, a line on top of
+    // the panel follows the estate (Victory.estate — highest need-happiness):
+    // "👑 Estate (City #n): 7/8 goods · 90% — 100% wins · missing: Luxury Clothes (Luxury Tailor)".
+    function goodNm(gid) { return String(gid).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+    function producerName(gid) {
+      const B = (typeof CONFIG !== "undefined" && CONFIG.buildings) || {};
+      for (const id in B) { const d = B[id]; if (d && d.output && d.output.goodId === gid) return d.name || id; }
+      return "";
+    }
+    function goalHtml(state) {
+      const es = (typeof Victory !== "undefined" && Victory.estate) ? Victory.estate(state) : null;
+      if (!es) return "";
+      const t = es.town;
+      const need = (CONFIG.victory && CONFIG.victory.aristocratHappiness) || 99.5;
+      const name = (t.name || ("City #" + t.id)) + (es.built ? "" : ", under construction");
+      const h = es.happiness;
+      const pct = (h === null) ? "no residents yet" : ((h >= need) ? 100 : Math.min(99, Math.floor(h))) + "%";   // 99.5 reads 100 only when it wins
+      let miss = "";
+      if (es.missing.length) {
+        const shown = es.missing.slice(0, 3).map(g => { const pn = producerName(g); return goodNm(g) + (pn ? " (" + pn + ")" : ""); });
+        miss = " · missing: " + shown.join(", ") + (es.missing.length > 3 ? " +" + (es.missing.length - 3) + " more" : "");
+      }
+      return '<div class="tut-goal" title="Victory: an Aristocrats Home whose residents reach 100% happiness. Give/Take bonuses don’t count — every aristocrat good must flow.">👑 Estate (' +
+        esc(name) + "): " + es.have + "/" + es.total + " goods · " + esc(pct) +
+        (state.victory ? " — Victory! 👑" : " — 100% wins" + esc(miss)) + "</div>";
+    }
+    // Show/hide the panel: hidden-for-this-game wins; otherwise visible while missions
+    // run or the win tracker has something to say.
+    function place(state, hasMissions, goal) {
+      const p = state && state.missions;
+      if ((p && p.hidden) || (!hasMissions && !goal)) { hide(); return false; }
+      show(); return true;
+    }
+
     // ---- render --------------------------------------------------------------
-    function render(state, ev, set) {
+    function render(state, ev, set, goal) {
       if (!elRoot) return;
+      goal = goal || "";
       if (celebrating) {
         if (elHead) elHead.textContent = "👑 Getting Started";
-        elStep.innerHTML = '<div class="tut-cheer">🎉 Every mission complete!</div>' +
+        elStep.innerHTML = goal + '<div class="tut-cheer">🎉 Every mission complete!</div>' +
           '<div class="tut-tip">The winds are yours to shape.</div>';
         elList.innerHTML = "";
         return;
@@ -167,9 +205,9 @@
 
       if (!activeMissions.length) {
         const done = ev.allComplete || (state.missions && state.missions.done);
-        elStep.innerHTML = done
+        elStep.innerHTML = goal + (done
           ? '<div class="tut-now">▶ All missions complete</div><div class="tut-tip">Nothing left on the board — keep building your realm.</div>'
-          : '<div class="tut-now">▶ No missions available</div><div class="tut-tip">Complete a mission’s prerequisites to unlock the next.</div>';
+          : '<div class="tut-now">▶ No missions available</div><div class="tut-tip">Complete a mission’s prerequisites to unlock the next.</div>');
         elList.innerHTML = "";
         return;
       }
@@ -182,7 +220,7 @@
       // several active, name the primary one so the count is unambiguous.
       const nameLine = activeMissions.length === 1
         ? "" : '<div class="tut-now">▶ ' + esc(primary.name) + "</div>";
-      elStep.innerHTML = nameLine +
+      elStep.innerHTML = goal + nameLine +
         '<div class="tut-tip">' + met + "/" + pr.objectives.length + " objectives complete</div>" +
         (primary.tip ? '<div class="tut-hint">💡 ' + esc(primary.tip) + "</div>" : "") +
         nextLine(set, ev, primary);
@@ -212,6 +250,18 @@
       const stats = stateStats(state);
       const set = currentSet();
       const p = ensureProg(state);
+      const goal = goalHtml(state);
+      // DESIGN PASS: finished/globally-dismissed missions no longer end the poll — the
+      // panel lingers only for the win tracker (or stays hidden when there is none).
+      if (p.done) {
+        if (celebrating) return;
+        if (place(state, false, goal)) {
+          if (elHead) elHead.textContent = "👑 Your Goal";
+          elStep.innerHTML = goal + '<div class="tut-tip">Missions are done — bring the estate to 100% happiness to win.</div>';
+          elList.innerHTML = "";
+        }
+        return;
+      }
 
       let ev = MissionEngine.evaluate(set, stats, { baselines: clampBaselines(set, stats, p.baselines) });
 
@@ -234,30 +284,74 @@
         if (!p.completed[id]) { p.completed[id] = true; missionUp = true; }
       }
 
-      if (ev.allComplete && !p.done) { persist(state); celebrate(state); return; }
+      if (ev.allComplete && !p.done) { persist(state); celebrate(state, goal); return; }
 
-      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
       persist(state);
-      render(state, ev, set);
+      if (!place(state, true, goal)) return;     // hidden for this game: keep bookkeeping, no sfx/render
+      if (missionUp && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("levelup", "mission done"); } catch (e) {} }
+      render(state, ev, set, goal);
     }
 
-    function celebrate(state) {
+    function celebrate(state, goal) {
       const p = ensureProg(state);
       p.done = true;
       persist(state);
-      celebrating = true; active = false;
+      celebrating = true;
       if (elRoot) elRoot.classList.add("celebrate");
-      render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet());
-      if (typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
-      setTimeout(() => { celebrating = false; hide(); }, 5200);
+      if (p.hidden) hide();
+      else { show(); render(state, { byId: {}, missions: [], activeIds: [], completeIds: [], allComplete: true }, currentSet(), goal); }
+      if (!p.hidden && typeof SFX !== "undefined" && SFX.play) { try { SFX.play("quest", "all missions ✓"); } catch (e) {} }
+      setTimeout(() => {
+        celebrating = false;
+        if (elRoot) elRoot.classList.remove("celebrate");
+        const st = liveState(null);
+        if (st) refresh(st); else hide();       // the win tracker may keep the panel up
+      }, 5200);
     }
 
-    function onSkip() {
-      const state = (typeof window !== "undefined" && window.state) || (typeof globalThis !== "undefined" && globalThis.state) || null;
-      if (state) { const p = ensureProg(state); p.done = true; p.skipped = true; persist(state); }
+    // DESIGN PASS: Skip → a confirmed per-game Hide. Only the "Also hide on new
+    // games" checkbox writes the old global LS gate ({done, skipped}); otherwise the
+    // missions come back on the next new game. ☰ → 🎯 Missions brings them back.
+    function writeGlobalHide() {
+      const st = liveState(null);
+      if (st) { ensureProg(st).skipped = true; persist(st); }   // persist writes {done:true, skipped:true}
       else { try { localStorage.setItem(LS_KEY, JSON.stringify({ done: true, skipped: true, activated: {}, baselines: {}, completed: {} })); } catch (e) {} }
-      active = false; celebrating = false;
-      hide();
+    }
+    function setHidden(on) {
+      const st = liveState(null);
+      if (st) { ensureProg(st).hidden = !!on; if (typeof scheduleSave === "function") { try { scheduleSave(); } catch (e) {} } }
+      if (on) hide(); else if (st) refresh(st);
+      syncMenu();
+    }
+    function onSkip() {
+      const msg = "Hide missions for this game? Bring them back any time from ☰ → 🎯 Missions.";
+      const doHide = (alsoNew) => { if (alsoNew) writeGlobalHide(); setHidden(true); };
+      if (typeof uiConfirm === "function") uiConfirm(msg, doHide, { okLabel: "Hide", danger: false, checkbox: "Also hide on new games" });
+      else doHide(false);
+    }
+    // ☰ → 🎯 Missions row: Show/Hide toggle + Restart tutorial.
+    function isHidden() {
+      const st = liveState(null);
+      return !!(st && st.missions && st.missions.hidden);
+    }
+    function syncMenu() {
+      const b = document.getElementById("btnMissionsToggle");
+      if (b) b.textContent = isHidden() ? "👁 Show" : "🙈 Hide";
+    }
+    function toggleHidden() { setHidden(!isHidden()); }
+    function restart() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(freshProg())); } catch (e) {}   // clear the global gate …
+      startFresh();                           // … and run the missions from the roots (lifetime stats still count)
+      syncMenu();
+    }
+    function bindMenu() {
+      const tg = document.getElementById("btnMissionsToggle");
+      if (tg && !tg._bound) { tg._bound = true; tg.addEventListener("click", toggleHidden); }
+      const rs = document.getElementById("btnMissionsRestart");
+      if (rs && !rs._bound) { rs._bound = true; rs.addEventListener("click", restart); }
+      const menuBtn = document.getElementById("hudMenuBtn");
+      if (menuBtn && !menuBtn._tutSync) { menuBtn._tutSync = true; menuBtn.addEventListener("click", syncMenu); }
+      syncMenu();
     }
 
     // Resolve the live game state for the poll (browser shell global).
@@ -265,6 +359,9 @@
       if (s) return s;
       if (typeof window !== "undefined" && window.state) return window.state;
       if (typeof globalThis !== "undefined" && globalThis.state) return globalThis.state;
+      // DESIGN PASS: the shell's `state` is a lexical const (never on window) — without
+      // this, startFresh/Skip never reached the game state (missions leaked across games).
+      if (typeof state !== "undefined" && state) return state;
       return null;
     }
 
@@ -272,18 +369,23 @@
     // Fresh game: reset this playthrough's mission progress unless the player has
     // already finished/skipped the missions (LS gate), then run from the roots.
     function startFresh() {
-      ensureEls();
+      ensureEls(); bindMenu();
       reloadSet();
       const gate = loadProgFromLS();
       if (gate.done) {
         const st = liveState(null);
-        if (st) { st.missions = freshProg(); st.missions.done = true; }
-        active = false; celebrating = false; hide(); return;
+        // DESIGN PASS: a finished tutorial stays done; a global "hide on new games"
+        // also hides the panel (the win tracker then waits for ☰ → 🎯 Missions → Show).
+        if (st) { st.missions = freshProg(); st.missions.done = true; st.missions.skipped = st.missions.hidden = !!gate.skipped; }
+        active = true; celebrating = false; hide(); syncMenu();
+        if (st) refresh(st);
+        return;
       }
       const st = liveState(null);
       if (st) st.missions = freshProg();     // new playthrough → clear baselines/activation
       celebrating = false; active = true;
       if (elRoot) elRoot.classList.remove("celebrate");
+      syncMenu();
       if (st) refresh(st); else show();
     }
 
@@ -293,10 +395,10 @@
       reloadSet();
       const st = liveState(null);
       const p = st ? ensureProg(st) : loadProgFromLS();
-      if (p.done) { active = false; celebrating = false; hide(); return; }
-      celebrating = false; active = true;
+      bindMenu();
+      celebrating = false; active = true;     // DESIGN PASS: keep polling for the win tracker even when done
       if (elRoot) elRoot.classList.remove("celebrate");
-      if (st) { show(); refresh(st); } else show();
+      if (st) refresh(st); else if (!p.done) show(); else hide();
     }
 
     // Poll tick — advance/redraw when active. Called by mainloop (with state) and by
@@ -304,8 +406,6 @@
     function tick(s) {
       const st = liveState(s);
       if (!active || !st) return;
-      const p = st.missions;
-      if (p && p.done) { active = false; return; }
       refresh(st);
     }
 
@@ -318,6 +418,7 @@
       get MISSIONS() { return currentSet().missions; },
       // public API
       startFresh, resume, tick, startPolling, hide,
+      setHidden, toggleHidden, restart, isHidden, goalHtml,   // DESIGN PASS: ☰ → 🎯 Missions + win tracker
       isActive: () => active,
     };
   })();

@@ -4,7 +4,10 @@
   // only reliable gate. Non-blocking — runs `onConfirm` only when the user
   // accepts. Stable ids (#uiConfirm / #uiConfirmOk / #uiConfirmCancel) let
   // headless/browser tests drive it. Esc / backdrop-click = cancel, Enter = OK.
-  function uiConfirm(message, onConfirm) {
+  // DESIGN PASS: optional opts {okLabel, danger:false, checkbox:"label"} — the
+  // checkbox state is passed to onConfirm(checked) (used by the missions Hide).
+  function uiConfirm(message, onConfirm, opts) {
+    opts = opts || {};
     const prev = document.getElementById("uiConfirm");
     if (prev) prev.remove();
     const overlay = document.createElement("div");
@@ -21,7 +24,15 @@
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
     const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey, true); };
-    const confirmNow = () => { close(); onConfirm(); };
+    let cb = null, cbRow = null;
+    if (opts.checkbox) {
+      const lbl = cbRow = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;gap:6px;margin:-4px 0 14px;opacity:.85;cursor:pointer;";
+      cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "uiConfirmCheck";
+      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(opts.checkbox));
+    }
+    const confirmNow = () => { const checked = !!(cb && cb.checked); close(); onConfirm(checked); };
     function onKey(e) {
       if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
       else if (e.key === "Enter") { e.stopPropagation(); e.preventDefault(); confirmNow(); }
@@ -30,10 +41,13 @@
     cancel.id = "uiConfirmCancel"; cancel.textContent = "Cancel"; cancel.onclick = close;
     cancel.style.cssText = "background:#443b2e;color:#f4ecdd;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     const ok = document.createElement("button");
-    ok.id = "uiConfirmOk"; ok.textContent = "Demolish"; ok.onclick = confirmNow;
-    ok.style.cssText = "background:#a33;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
+    ok.id = "uiConfirmOk"; ok.textContent = opts.okLabel || "Demolish"; ok.onclick = confirmNow;
+    ok.style.cssText = (opts.danger === false ? "background:#c98a3c;color:#201607;" : "background:#a33;color:#fff;") +
+      "border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font:inherit;";
     row.appendChild(cancel); row.appendChild(ok);
-    box.appendChild(msg); box.appendChild(row); overlay.appendChild(box);
+    box.appendChild(msg);
+    if (cbRow) box.appendChild(cbRow);
+    box.appendChild(row); overlay.appendChild(box);
     overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
     document.body.appendChild(overlay);
     document.addEventListener("keydown", onKey, true);
