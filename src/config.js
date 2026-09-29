@@ -221,6 +221,16 @@ const CONFIG = {
   // with everything delivered instantly, a building still takes `buildTime` seconds.
   // buildTime = baseSec[tier] + (upgradeLevel-1)×perUpgradeSec, capped at maxSec.
   build: { baseSec: { peasant: 6, worker: 10, burgher: 14, aristocrat: 18 }, defaultSec: 8, perUpgradeSec: 2, maxSec: 20 },
+  // DESIGN PASS: shortage + idle alerts (Sim.needCoverage / Sim.shortageAlerts feed the
+  // map icons and the Event Log). Cover = (warehouse + home buffers) / per-minute use.
+  // Raise/clear use hysteresis so the 8–12 s production batches can't make it flicker.
+  alerts: {
+    raiseCoverMin: 2,      // a present tier's BASIC need alerts under this many game-minutes of cover (no carts inbound)…
+    clearCoverMin: 4,      // …and the alert clears only once cover is back above this
+    satOk: 0.9,            // a STAFFED local producer holds the early alert back until satEMA dips below this
+    idleAfterSec: 30,      // Event Log: a producer with 0 workers for this many game-seconds is reported…
+    idleRepeatSec: 300,    // …at most once per building per this many game-seconds (5 game-min)
+  },
   // === TV2 terrain set ===
   // buildable = a generic processor/house/road/town-center may sit here.
   // road      = a road segment may cross this hex (traders/pathing).

@@ -57,4 +57,4 @@ Fenced `=== X CSS START/END ===` and `=== X HTML START/END ===` blocks per panel
 ## Tests (`test/*.test.js`)
 Each standalone: reads `index.html`, regex-extracts PURE_CORE, `vm`-evals it,
 asserts. board · buildings · sim · trade · research · research_effects ·
-prices · market · balance · migration · progress · ledger · pathing · tariff · crown.
+prices · market · balance · migration · progress · ledger · pathing · tariff · crown · alerts.

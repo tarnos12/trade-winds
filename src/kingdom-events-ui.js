@@ -13,25 +13,30 @@
   // ---- town alerts (canvas icons over a town in a bad state) --------------
   // Cheap: a couple of sums per town, derived from state each frame. Icons scale
   // with the world transform (so they shrink when zoomed out) and fade far out.
+  // DESIGN PASS: basic-need shortages are no longer a potato-only 🍽 guessed per frame.
+  // The Event Log poll (every 1.2 s, below) runs Sim.needCoverage + Sim.shortageAlerts
+  // (with hysteresis: raise < 2 min of cover, clear > 4 min) and caches the flags here;
+  // the per-frame draw only reads them and shows the MISSING GOOD's own icon.
+  const shortFlags = new Map();   // townId -> { gid: true } live basic-need alerts
+  // A producer that is built, has open worker slots and nobody working (not a
+  // scaffold, not a building whose slots the player closed on purpose).
+  function isIdleProducer(b, def) {
+    if (!b || !def || !def.output || !(def.workerSlots > 0) || b.built === false) return false;
+    if ((b.closedSlots || 0) >= def.workerSlots) return false;
+    return !(b.workers > 0);
+  }
   function townAlertIcons(t, N) {
     const out = [];
     if (!t || !t.pop) return out;
     const pop = t.pop;
     const total = (pop.peasants || 0) + (pop.workers || 0) + (pop.burghers || 0) + (pop.aristocrats || 0);  // === CC ===
-    const stock = t.stock || {};
-    // 1. food shortage — less than ~4 ticks of the peasant staple (potato) buffer.
-    // === CC: peasant per-capita lives under N.tiers.peasants.perCapita now. ===
-    const peaRates = N && N.tiers && N.tiers.peasants && N.tiers.peasants.perCapita;
-    if (total > 0 && peaRates) {
-      const potato = stock.potato || 0;
-      const perTick = (peaRates.potato || 0) * total;
-      if (perTick > 0 && potato < perTick * 4) out.push("🍽");
-    }
-    // 2. idle producer — a building with worker slots but no assigned labour
+    // 1. basic-need shortage of a present tier — the missing good's icon (🪵, 🥔, 🐟 …)
+    const fl = shortFlags.get(t.id);
+    if (fl) for (const gid in fl) out.push(goodIcon(gid));
+    // 2. idle producer — a building with worker slots but no assigned labour (💤)
     if (Array.isArray(t.buildings)) {
       for (const b of t.buildings) {
-        const def = CONFIG.buildings[b.typeId];
-        if (def && def.output && def.workerSlots > 0 && !(b.workers > 0)) { out.push("🚧"); break; }
+        if (isIdleProducer(b, b && CONFIG.buildings[b.typeId])) { out.push("💤"); break; }
       }
     }
     // 3. near-starve / very unhappy town
@@ -72,35 +77,43 @@
   // ---- kingdom screen (all-towns table) ----------------------------------
   // Biggest surplus / shortage good, by stock-vs-demand ratio (same model as the
   // price engine): high ratio = surplus, low ratio (with real demand) = shortage.
-  function biggestExtremes(t) {
+  // DESIGN PASS: stock includes the houses' porter buffers, and "Top shortage" only
+  // names a good the kingdom can actually produce (research-locked luxuries aren't a
+  // shortage you can fix) and only when it is really short (below its buffer) — else "—".
+  function biggestExtremes(t, producible) {
     const stock = t.stock || {}, demand = t.demand || {};
     const buffer = CONFIG.econ.bufferTarget, floor = CONFIG.econ.minDemand;
-    let surplus = null, surRatio = -Infinity, shortage = null, shoRatio = Infinity;
+    const home = {};
+    for (const b of t.buildings || []) {
+      const def = b && b.inbuf && b.built !== false && CONFIG.buildings[b.typeId];
+      if (def && def.kind === "house") for (const g in b.inbuf) home[g] = (home[g] || 0) + (b.inbuf[g] || 0);
+    }
+    let surplus = null, surRatio = -Infinity, shortage = null, shoRatio = 1;
     for (const gid in CONFIG.goods) {
-      const s = stock[gid] || 0;
+      const s = (stock[gid] || 0) + (home[gid] || 0);
       const d = Math.max(floor, demand[gid] || 0);
       const ratio = s / (d * buffer);
       if (s > 0 && ratio > surRatio) { surRatio = ratio; surplus = gid; }
-      if ((demand[gid] || 0) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
+      if ((demand[gid] || 0) > 0 && (!producible || producible[gid]) && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
     }
     return { surplus, shortage };
   }
 
-  function townMetrics(t) {
+  function townMetrics(t, producible) {
     const pop = t.pop || {};
     const peasants = Math.round(pop.peasants || 0);
     const workers = Math.round(pop.workers || 0);
     const burghers = Math.round(pop.burghers || 0);
     const aristocrats = Math.round(pop.aristocrats || 0);   // === CC ===
-    const ex = biggestExtremes(t);
-    return { name: "Town #" + t.id, id: t.id, level: t.level || 1,
+    const ex = biggestExtremes(t, producible);
+    return { name: "City #" + t.id, id: t.id, level: t.level || 1,
       peasants, workers, burghers, aristocrats, total: peasants + workers + burghers + aristocrats,
       happiness: Math.round(t.happiness || 0), gold: Math.round(t.gold || 0),
       surplus: ex.surplus, shortage: ex.shortage };
   }
 
   const KW_COLS = [
-    ["name", "Town"], ["level", "Lv"], ["peasants", "Peas."], ["workers", "Work."],
+    ["name", "City"], ["level", "Lv"], ["peasants", "Peas."], ["workers", "Work."],
     ["burghers", "Citiz."], ["aristocrats", "Arist."], ["total", "Pop"], ["happiness", "Happy"], ["gold", "Gold"],
     ["surplus", "Top surplus"], ["shortage", "Top shortage"],
   ];
@@ -148,7 +161,8 @@
   function renderKingdom() {
     if (!kingdomOpen) return;
     const researchHtml = kwResearchBlockHTML();   // RESEARCH CENTER (Slice C)
-    const rows = (state.towns || []).map(townMetrics);
+    const producible = (typeof Market !== "undefined" && Market.producible) ? Market.producible(state) : null;
+    const rows = (state.towns || []).map((t) => townMetrics(t, producible));
     const k = kwSort.key, dir = kwSort.dir;
     rows.sort((a, b) => {
       const av = a[k], bv = b[k];
@@ -156,7 +170,7 @@
         return dir * String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv));
       return dir * ((av || 0) - (bv || 0));
     });
-    if (!rows.length) { kwBodyEl.innerHTML = researchHtml + '<div class="kw-empty">No towns yet — place a town to see it here.</div>'; return; }
+    if (!rows.length) { kwBodyEl.innerHTML = researchHtml + '<div class="kw-empty">No cities yet — found a city to see it here.</div>'; return; }
     const head = KW_COLS.map(c =>
       `<th data-sort="${c[0]}">${c[1]}${kwSort.key === c[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
     const trs = rows.map(r => `<tr>
@@ -221,72 +235,195 @@
   setInterval(() => { if (kingdomOpen) renderKingdom(); }, 500);
 
   // === EVENT LOG === Let-Them-Trade-style bottom-right feed. One collapsible
-  // panel funnels notable happenings (kingdom events, research completed, town/
-  // castle level-ups, victory) instead of scattering toasts/debug. Self-contained:
-  // builds its own DOM, reads state READ-ONLY, exposes window.EventLog.push.
+  // panel funnels notable happenings (cities founded/completed, missions, research,
+  // level-ups, shortages, idle buildings, victory) instead of scattering toasts/debug.
+  // Self-contained: builds its own DOM, reads state READ-ONLY, exposes window.EventLog.
+  // DESIGN PASS: entries are stamped with GAME time (state.tick, 2 ticks = 1 s) instead
+  // of wall-clock, name cities "City #N" (towns have no name field), click to center
+  // the camera on their city, and the collapsed bar counts unread entries — pulsing
+  // when a warning (shortage / idle building) is among them. The log is not saved; it
+  // is cleared on New Game / Continue (EventLog.reset from save.js).
+  let feedReset = null;          // set by the feed poll below; EventLog.reset() calls it
   const EventLog = (function () {
     const MAX = 40;
     const wrap = document.createElement("div");
     wrap.id = "eventLog"; wrap.className = "collapsed";
     wrap.innerHTML =
-      '<div class="el-head"><span class="el-title">📜 Event Log</span>' +
+      '<div class="el-head"><span class="el-title">📜 Event Log <span class="el-badge" hidden></span></span>' +
       '<button class="el-toggle" title="Show / hide" aria-label="Toggle event log">▲</button></div>' +
       '<ul class="el-list"></ul>';
     document.body.appendChild(wrap);
     const listEl = wrap.querySelector(".el-list");
     const toggleBtn = wrap.querySelector(".el-toggle");
     const headEl = wrap.querySelector(".el-head");
+    const badgeEl = wrap.querySelector(".el-badge");
     const entries = [];
-    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-    function relTime(t) {
-      const s = Math.max(0, ((typeof performance !== "undefined" ? performance.now() : Date.now()) - t) / 1000);
-      if (s < 60) return "now";
-      const m = Math.floor(s / 60); return m + " min";
+    let unread = 0, unreadWarn = 0;
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    // Game clock at the moment of the entry (m:ss, or h:mm:ss past the first hour).
+    function gameTime(tick) {
+      const sec = Math.max(0, Math.floor((tick || 0) / 2));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), ss = String(sec % 60).padStart(2, "0");
+      return h > 0 ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
     }
     function render() {
-      if (!entries.length) { listEl.innerHTML = '<li class="el-empty">Nothing yet — found a town to begin.</li>'; return; }
+      if (!entries.length) { listEl.innerHTML = '<li class="el-empty">Nothing yet — found a city to begin.</li>'; return; }
       let html = "";
-      for (const e of entries) html += '<li><span class="el-ic">' + e.icon + '</span><span class="el-tx">' +
-        esc(e.text) + '</span><span class="el-tm">' + relTime(e.t) + '</span></li>';
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        const go = e.townId != null;
+        html += '<li data-i="' + i + '" class="' + (go ? "el-go" : "") + (e.warn ? " el-warn" : "") + '"' +
+          (go ? ' title="Center the map on City #' + esc(e.townId) + '"' : "") + '>' +
+          '<span class="el-ic">' + e.icon + '</span><span class="el-tx">' + esc(e.text) +
+          (e.action === "research" ? ' <button class="el-act" data-act="research">pick next →</button>' : "") +
+          '</span><span class="el-tm">' + gameTime(e.tick) + '</span></li>';
+      }
       listEl.innerHTML = html;
     }
-    function push(icon, text) {
-      entries.unshift({ icon: icon || "•", text: String(text), t: (typeof performance !== "undefined" ? performance.now() : Date.now()) });
+    function updateBadge() {
+      badgeEl.hidden = !(unread > 0);
+      badgeEl.textContent = unread > 99 ? "99+" : String(unread);
+      wrap.classList.toggle("el-alarm", unreadWarn > 0);
+    }
+    // push(icon, text[, { townId, warn, action }]) — two-arg calls keep working.
+    function push(icon, text, opts) {
+      const o = opts || {};
+      entries.unshift({ icon: icon || "•", text: String(text), tick: (state && state.tick) || 0,
+        townId: o.townId != null ? o.townId : null, warn: !!o.warn, action: o.action || null });
       if (entries.length > MAX) entries.length = MAX;
+      if (wrap.classList.contains("collapsed")) { unread++; if (o.warn) unreadWarn++; updateBadge(); }
       render();
     }
-    function setCollapsed(v) { wrap.classList.toggle("collapsed", v); toggleBtn.textContent = v ? "▲" : "▼"; }
+    function setCollapsed(v) {
+      wrap.classList.toggle("collapsed", v); toggleBtn.textContent = v ? "▲" : "▼";
+      if (!v) { unread = 0; unreadWarn = 0; updateBadge(); }
+    }
+    function reset() {
+      entries.length = 0; unread = 0; unreadWarn = 0;
+      if (feedReset) feedReset();
+      updateBadge(); render();
+    }
     headEl.addEventListener("click", () => setCollapsed(!wrap.classList.contains("collapsed")));
-    setInterval(render, 15000);   // refresh the "x min" labels
+    listEl.addEventListener("click", (ev) => {
+      if (ev.target.closest(".el-act")) {           // "pick next →" opens the 🔬 tree
+        if (typeof openTechTree === "function") openTechTree();
+        return;
+      }
+      const li = ev.target.closest("li[data-i]");
+      const e = li && entries[+li.dataset.i];
+      if (!e || e.townId == null) return;
+      const t = (state.towns || []).find((x) => x && x.id === e.townId);
+      if (!t) return;                               // city was destroyed since
+      const p = HexMath.hexToPixel(t.q, t.r, SIZE);
+      state.cam.x = p.x; state.cam.y = p.y;         // input.js resyncs its glide target
+    });
     render();
-    return { push: push, setCollapsed: setCollapsed };
+    return { push: push, setCollapsed: setCollapsed, reset: reset,
+             get entries() { return entries.slice(); }, get unread() { return unread; } };
   })();
   window.EventLog = EventLog;
 
-  // Feed the log from state deltas (read-only poll): research completions,
-  // town level-ups, castle upgrades, and victory.
+  // Feed the log from state deltas (read-only 1.2 s poll): research completions,
+  // cities founded/completed, missions, town level-ups, basic-need shortages (onset +
+  // resolved, via Sim.shortageAlerts), idle producers, and victory.
   (function () {
-    let rSeen = null, lvls = {}, wonSeen = false;
+    let primed = false, rSeen = null, lvls = {}, wonSeen = false;
+    let townSeen = new Map();      // townId -> was built last poll
+    let missSeen = new Set();
+    let idleRec = new WeakMap();   // building -> { since, last } (game ticks)
+    const A = () => CONFIG.alerts || {};
+    const TPS = 1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500);   // ticks per game-second
     function nameOf(id) {
-      const list = (CONFIG.research && (CONFIG.research.nodes || CONFIG.research)) || [];
-      if (Array.isArray(list)) for (const n of list) if (n && n.id === id) return n.name || n.title || id;
+      const n = (typeof Research !== "undefined" && Research.get) ? Research.get(id) : null;
+      return (n && n.name) || id;
+    }
+    function missionName(id) {
+      try {
+        const set = window.Tutorial && window.Tutorial.currentSet && window.Tutorial.currentSet();
+        const m = set && set.missions && set.missions.find((x) => x && x.id === id);
+        if (m) return m.name || m.title || id;
+      } catch (e) { /* authored set unreadable — fall back to the id */ }
       return id;
     }
-    setInterval(function () {
+    function coverText(e) {
+      if (e.have < 0.5) return "out of " + goodIcon(e.gid) + " " + GOOD_LABEL(e.gid);
+      return goodIcon(e.gid) + " " + GOOD_LABEL(e.gid) + " runs out in ~" + Math.max(1, Math.round(e.coverMin)) + " min";
+    }
+    function causeText(e) {
+      if (!e.hasLocalProducer) return " — no producer here: build one or trade for it";
+      if (!e.staffed) return " — its producer has no workers";
+      return " — production can't keep up";
+    }
+    feedReset = function () {
+      primed = false; rSeen = null; lvls = {}; wonSeen = false;
+      townSeen = new Map(); missSeen = new Set(); idleRec = new WeakMap();
+      shortFlags.clear();
+    };
+    function poll() {
       if (typeof state !== "object" || !state) return;
-      const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : null;
-      if (done) {
-        if (rSeen === null) rSeen = new Set(done);
-        else for (const id of done) if (!rSeen.has(id)) { rSeen.add(id); EventLog.push("🔬", "Researched " + nameOf(id)); }
+      const tick = state.tick || 0;
+      const towns = state.towns || [];
+      const done = (state.research && Array.isArray(state.research.unlocked)) ? state.research.unlocked : [];
+      const comp = (state.missions && state.missions.completed) || {};
+      if (!primed) {                                // baseline after boot / New Game / Continue
+        primed = true;
+        rSeen = new Set(done);
+        for (const t of towns) if (t) { townSeen.set(t.id, t.built !== false); lvls[t.id] = t.level || 1; }
+        for (const id in comp) if (comp[id]) missSeen.add(id);
+        wonSeen = !!state.victory;
       }
-      for (const t of (state.towns || [])) {
-        const prev = (t.id in lvls) ? lvls[t.id] : (t.level || 1);
-        if ((t.level || 1) > prev) EventLog.push("⬆", (t.name || "A town") + " reached level " + t.level);
+      for (const id of done) if (!rSeen.has(id)) {
+        rSeen.add(id);
+        EventLog.push("🔬", "Researched " + nameOf(id), { action: "research" });
+      }
+      for (const id in comp) if (comp[id] && !missSeen.has(id)) {
+        missSeen.add(id);
+        EventLog.push("✅", "Mission complete: " + missionName(id));
+      }
+      const live = new Set();
+      const idleAfter = (A().idleAfterSec || 30) * TPS, idleRepeat = (A().idleRepeatSec || 300) * TPS;
+      for (const t of towns) {
+        if (!t || t.id == null) continue;
+        live.add(t.id);
+        const name = "City #" + t.id;
+        const built = t.built !== false;
+        if (!townSeen.has(t.id)) EventLog.push("🏘", name + " founded", { townId: t.id });
+        else if (built && !townSeen.get(t.id)) EventLog.push("🏗", name + " is complete — settlers can move in", { townId: t.id });
+        townSeen.set(t.id, built);
+        const prevLvl = (t.id in lvls) ? lvls[t.id] : (t.level || 1);
+        if ((t.level || 1) > prevLvl) EventLog.push("⬆", name + " reached level " + t.level, { townId: t.id });
         lvls[t.id] = t.level || 1;
+        // basic-need shortages (hysteresis lives in Sim.shortageAlerts)
+        const cov = Sim.needCoverage(state, t);
+        const prev = shortFlags.get(t.id) || null;
+        const next = Sim.shortageAlerts(state, t, prev, cov);
+        for (const e of cov)
+          if (next[e.gid] && !(prev && prev[e.gid]))
+            EventLog.push(goodIcon(e.gid), name + ": " + coverText(e) + causeText(e), { townId: t.id, warn: true });
+        if (prev) for (const gid in prev) if (!next[gid])
+          EventLog.push("✔", name + ": " + goodIcon(gid) + " " + GOOD_LABEL(gid) + " supply restored", { townId: t.id });
+        if (Object.keys(next).length) shortFlags.set(t.id, next); else shortFlags.delete(t.id);
+        // idle producers: 0 workers for > idleAfterSec game-s, at most once per idleRepeatSec
+        if (!built) continue;
+        for (const b of (t.buildings || [])) {
+          if (!b) continue;
+          const def = CONFIG.buildings[b.typeId];
+          let rec = idleRec.get(b);
+          if (!isIdleProducer(b, def)) { if (rec) rec.since = -1; continue; }
+          if (!rec) { rec = { since: tick, last: -Infinity }; idleRec.set(b, rec); }
+          else if (rec.since < 0) rec.since = tick;
+          if (tick - rec.since >= idleAfter && tick - rec.last >= idleRepeat) {
+            rec.last = tick;
+            const HOME = { peasant: "peasants — build Huts", worker: "workers — build Cottages", burgher: "citizens — build Manors" };
+            EventLog.push("💤", name + ": " + (def.name || b.typeId) + " is idle — no free " +
+              (HOME[def.workerTier] || "workers"), { townId: t.id, warn: true });
+          }
+        }
       }
-      // (castle upgrades removed v0.44 — no castle-level log)
+      for (const id of shortFlags.keys()) if (!live.has(id)) shortFlags.delete(id);
       if (state.victory && !wonSeen) { wonSeen = true; EventLog.push("👑", "Victory — a fully-happy Aristocrat estate!"); }
-    }, 1200);
+    }
+    setInterval(poll, 1200);
   })();
 
   // Expose for the headless smoke test / console debugging.

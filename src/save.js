@@ -86,6 +86,8 @@
     terrainDirty = true;
     // DESIGN PASS: state.towns was replaced — drop city cards bound to the old game.
     if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     if (!noSave) scheduleSave();                 // preview (noSave) never touches the stored save
   }
 
@@ -323,6 +325,8 @@
     Sim.CC_migrateGoods(state);
     // DESIGN PASS: rebuild the city cards against the freshly loaded town objects.
     if (window.CityCards && window.CityCards.reset) window.CityCards.reset();
+    // DESIGN PASS: the Event Log is game-time stamped and not saved — start it clean.
+    if (window.EventLog && window.EventLog.reset) window.EventLog.reset();
     terrainDirty = true;
     return true;
     } catch (err) {
