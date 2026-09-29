@@ -518,7 +518,8 @@
       const col = sells ? "#6fc24b" : (buys ? (cg.latent ? "#e0a63c" : "#e0563f") : "#b8b2a6");
       const net = Math.round(Math.abs(cg.net) || 0);
       const left = arrow + (net > 0 ? " " + net + "/m" : "");
-      const right = "  🏬" + Math.round(cg.stock) + "  🪙" + (cg.price ? cg.price.toFixed(1) : "0");
+      const right = "  🏬" + Math.round(cg.stock) + "  🪙" +
+        (Sim.hasMarket(t, gid) ? (cg.price ? cg.price.toFixed(1) : "0") : "—");   // DESIGN PASS #6: no market ⇒ "—"
       const fontPx = Math.max(9, Math.round(SIZE * 0.2));
       ctx.font = "bold " + fontPx + "px system-ui, sans-serif";
       ctx.textAlign = "left"; ctx.textBaseline = "middle";

@@ -389,9 +389,19 @@ Object.assign(CONFIG, {
 // bufferTarget lives under econ (existing key) — merge in place so we don't
 // clobber baseTickMs or anything a sibling slice added.
 Object.assign(CONFIG.econ, {
-  bufferTarget: 2.0,   // "comfortable" stock = bufferTarget × demand (GDD §6.1)
+  bufferTarget: 2.0,   // trade/castle buy target = bufferTarget × per-tick demand (NOT the price model any more)
   priceSmoothing: 0.10, // lerp factor toward the target price each tick
-  minDemand: 0.5,      // demand floor so priceFor never divides by ~0
+  minDemand: 0.5,      // legacy per-tick floor (kept for old readers; priceFor uses minDemandPerMin)
+  // DESIGN PASS #6: unit-correct price model. Prices compare stock against MINUTES of
+  // CONSUMPTION (residents + processor inputs; construction bills / research share are
+  // excluded — they are a lump, not a rate): ratio = stock / (max(minDemandPerMin,
+  // consDemand×ticksPerMin) × coverMin); target = base × clamp(priceCeilMult − ratio,
+  // priceFloorMult, priceCeilMult). ratio 0.9 ⇒ base; ≥1.5 ⇒ 0.4×; empty shelf ⇒ 1.9×.
+  ticksPerMin: 120,     // 2 ticks = 1 game-second
+  minDemandPerMin: 0.5, // demand floor (units/min) so a tiny demand can't blow the ratio up
+  coverMin: 2,          // a "comfortable" stock = this many minutes of consumption
+  priceCeilMult: 1.9,   // price at an empty shelf (and the clamp ceiling), × basePrice
+  priceFloorMult: 0.4,  // surplus floor, × basePrice
   // DESIGN PASS #3 (Sim.staffTown): a producer of its own staffing tier's BASIC need
   // (Potato Farm, Lumberjack, Coal Mine) is staffed ahead of ☆ while the city holds less
   // than this many game-seconds of that good (0 = off). Blocked producers (store full /
@@ -412,31 +422,55 @@ var Sim = (typeof Sim !== "undefined" && Sim) || {};
 // terrains are gone. Forest/fish extractors are deliberately excluded. ===
 const MINE_TERRAINS = { stone_deposit: 1, iron_deposit: 1, gold_deposit: 1, coal_deposit: 1, clay_deposit: 1 };
 
-// Local price of one good in one town from stock vs demand (GDD §6.1):
-//   ratio = stock / (demand * bufferTarget)
-//   target = clamp(basePrice * (1.6 - 0.8*ratio), basePrice*0.4, basePrice*3.0)
-// then lerp the town's stored price 10%/tick toward the target (anti-jitter).
-// Demand is read from town.demand[goodId] when the sim provides it (T4), else a
-// small floor keeps this well-defined. First read (no stored price) snaps to the
-// target; later reads move gradually. Mutates town.prices[goodId] and returns it.
+// DESIGN PASS #6 — consumption demand per tick for one good: town.consDemand (residents +
+// processor inputs, published by Sim.tick). Falls back to town.demand for a town that has
+// not been ticked yet (fresh makeTown, hand-built test towns, pre-#6 saves).
+Sim.consDemandOf = function (town, goodId) {
+  const cd = town && (town.consDemand || town.demand);
+  return (cd && cd[goodId]) || 0;
+};
+
+// Shared cover ratio (GDD §7): warehouse stock vs coverMin minutes of consumption.
+// 1 = exactly a comfortable stock; <1 short; >1 surplus. The one copy of this maths —
+// the price engine, the kingdom surplus/shortage columns and the "wanted" chatter row
+// all read it, so what the player sees agrees with what the price does.
+Sim.coverRatio = function (town, goodId) {
+  const E = CONFIG.econ;
+  const stock = (town && town.stock && town.stock[goodId]) || 0;
+  const perMin = Sim.consDemandOf(town, goodId) * E.ticksPerMin;
+  return stock / (Math.max(E.minDemandPerMin, perMin) * E.coverMin);
+};
+
+// True when a good has a local market at all (something stocked or consumed here).
+// With neither, priceFor returns basePrice and the UI shows "—".
+Sim.hasMarket = function (town, goodId) {
+  return ((town && town.stock && town.stock[goodId]) || 0) > 0 || Sim.consDemandOf(town, goodId) > 0;
+};
+
+// Local price of one good in one town (GDD §7, DESIGN PASS #6 unit-correct model):
+//   ratio  = Sim.coverRatio(town, good)
+//   target = basePrice × clamp(priceCeilMult − ratio, priceFloorMult, priceCeilMult)
+// then lerp the town's stored price priceSmoothing/tick toward the target (anti-jitter).
+// No stock AND no consumption ⇒ target = basePrice (no market). First read (no stored
+// price) snaps to the target. Mutates town.prices[goodId] and returns it.
 Sim.priceFor = function (town, goodId) {
   const good = CONFIG.goods[goodId];
   if (!good) return 0;
   const base = good.basePrice;
-  const buffer = CONFIG.econ.bufferTarget;
+  const E = CONFIG.econ;
 
-  const stock = (town.stock && town.stock[goodId]) || 0;
-  const rawDemand = (town.demand && town.demand[goodId]);
-  const demand = Math.max(CONFIG.econ.minDemand, rawDemand || 0);
-
-  const ratio = stock / (demand * buffer);
-  const target = Math.min(base * 3.0, Math.max(base * 0.4, base * (1.6 - 0.8 * ratio)));
+  let target;
+  if (!Sim.hasMarket(town, goodId)) target = base;   // DESIGN PASS #6: no market ⇒ base, shown as "—"
+  else {
+    const ratio = Sim.coverRatio(town, goodId);
+    target = base * Math.min(E.priceCeilMult, Math.max(E.priceFloorMult, E.priceCeilMult - ratio));
+  }
 
   if (!town.prices) town.prices = {};
   const prev = town.prices[goodId];
   const next = (prev === undefined || prev === null)
     ? target                                        // first read: snap to target
-    : prev + (target - prev) * CONFIG.econ.priceSmoothing; // else: 10%/tick lerp
+    : prev + (target - prev) * E.priceSmoothing;    // else: 10%/tick lerp
   town.prices[goodId] = next;
   return next;
 };

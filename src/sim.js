@@ -569,6 +569,11 @@ Sim.tick = function (State) {
     const buildings = Array.isArray(town.buildings) ? town.buildings : [];
     const demand = {};                 // rebuilt every tick (drives Sim.priceFor)
     const addDemand = (g, amt) => { if (amt > 0) demand[g] = (demand[g] || 0) + amt; };
+    // DESIGN PASS #6: CONSUMPTION demand (residents + processor inputs) is also tallied
+    // on its own — Sim.priceFor prices against this rate only; construction bills and the
+    // research share stay in `demand` (trade buy targets) but no longer pin prices.
+    const consDemand = {};
+    const addConsDemand = (g, amt) => { if (amt > 0) { consDemand[g] = (consDemand[g] || 0) + amt; addDemand(g, amt); } };
 
     // Work efficiency from the PREVIOUS tick's happiness (default 100 => 1.2x).
     const h = (typeof town.happiness === "number") ? town.happiness : 100;
@@ -694,7 +699,7 @@ Sim.tick = function (State) {
             // thin mid-transit. Real gating is at the TOWN level (buffer + warehouse both
             // empty ⇒ genuine shortage), not a per-building logistics cliff.
             if (qty > 0) effW = Math.min(effW, ((b.inbuf[gid] || 0) + (stock[gid] || 0) - (b._inAcc[gid] || 0)) / qty);
-            addDemand(gid, qty * w);
+            addConsDemand(gid, qty * w);
           }
         }
         if (effW < 0) effW = 0;
@@ -860,7 +865,7 @@ Sim.tick = function (State) {
     const gsatRaw = {};                  // per-good INSTANTANEOUS satisfaction (0..1) this tick
     for (const gid in required) {
       const req = required[gid];
-      addDemand(gid, req);
+      addConsDemand(gid, req);
       const have = (houseAvail[gid] || 0) + (stock[gid] || 0);  // v0.51 §2: house buffers (porter-delivered) + the town warehouse as reserve
       gsatRaw[gid] = req > 0 ? Math.min(have, req) / req : 1;   // real fractional demand vs shelf
       const cc = (town._consCarry[gid] || 0) + (consume[gid] || 0);   // §6: accrue only GATED (physically-eaten) demand
@@ -1083,6 +1088,7 @@ Sim.tick = function (State) {
 
     // --- 5. Publish demand, then reprice every good (Sim.priceFor) -----
     town.demand = demand;
+    town.consDemand = consDemand;   // DESIGN PASS #6 (rebuilt every tick; old saves self-heal)
     if (!town.prices) town.prices = {};
     for (const gid in CONFIG.goods) Sim.priceFor(town, gid);
 
@@ -1389,7 +1395,7 @@ Sim.ccRenameGoodMap = function (obj, map) {
 Sim.CC_migrateGoods = function (state) {
   if (!state || typeof state !== "object") return state;
   const GM = Sim.CC_GOOD_RENAMES, BM = Sim.CC_BUILDING_RENAMES;
-  const GOODMAPS = ["stock", "prices", "demand", "reserved", "produced", "consumed", "delivered", "need"];
+  const GOODMAPS = ["stock", "prices", "demand", "consDemand", "reserved", "produced", "consumed", "delivered", "need"];
   for (const t of (state.towns || [])) {
     if (!t) continue;
     for (const key of GOODMAPS) Sim.ccRenameGoodMap(t[key], GM);

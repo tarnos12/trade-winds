@@ -70,18 +70,17 @@
   }
 
   // ---- kingdom screen (all-towns table) ----------------------------------
-  // Biggest surplus / shortage good, by stock-vs-demand ratio (same model as the
-  // price engine): high ratio = surplus, low ratio (with real demand) = shortage.
+  // Biggest surplus / shortage good, by the price engine's own cover ratio
+  // (DESIGN PASS #6: Sim.coverRatio — stock vs minutes of consumption): high ratio =
+  // surplus, low ratio (with real consumption) = shortage.
   function biggestExtremes(t) {
-    const stock = t.stock || {}, demand = t.demand || {};
-    const buffer = CONFIG.econ.bufferTarget, floor = CONFIG.econ.minDemand;
+    const stock = t.stock || {};
     let surplus = null, surRatio = -Infinity, shortage = null, shoRatio = Infinity;
     for (const gid in CONFIG.goods) {
       const s = stock[gid] || 0;
-      const d = Math.max(floor, demand[gid] || 0);
-      const ratio = s / (d * buffer);
+      const ratio = Sim.coverRatio(t, gid);
       if (s > 0 && ratio > surRatio) { surRatio = ratio; surplus = gid; }
-      if ((demand[gid] || 0) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
+      if (Sim.consDemandOf(t, gid) > 0 && ratio < shoRatio) { shoRatio = ratio; shortage = gid; }
     }
     return { surplus, shortage };
   }

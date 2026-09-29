@@ -50,20 +50,23 @@
       if (tick === wantedTick) return;
       wantedTick = tick;
       wantedComputes++;
-      const buffer = (CONFIG.econ && CONFIG.econ.bufferTarget) || 1;
       const live = new Set();
       for (const t of state.towns || []) {
         if (!t || t.id == null) continue;
         live.add(t.id);
-        // wanted row: goods whose stock doesn't cover demand×buffer, biggest gap
-        // first; acute (yellow ring) when the shelf is essentially empty.
+        // wanted row: goods short of cover, most short first; acute (yellow ring) when
+        // the shelf is essentially empty. DESIGN PASS #6: consumed goods use the price
+        // engine's Sim.coverRatio (stock vs minutes of use); a construction bill / research
+        // share (a lump, not a rate) counts as covered once the stock holds it.
         const d = t.demand || {}, s = t.stock || {};
         const entries = [];
         for (const gid in d) {
           const want = d[gid] || 0;
           if (!(want > 0)) continue;
-          const gap = want * buffer - (s[gid] || 0);
-          if (gap > 0) entries.push([gid, gap, (s[gid] || 0) < 0.5]);
+          const have = s[gid] || 0, cons = Sim.consDemandOf(t, gid), lump = want - cons;
+          let ratio = cons > 0 ? Sim.coverRatio(t, gid) : Infinity;
+          if (lump > 1e-9) ratio = Math.min(ratio, have / lump);
+          if (ratio < 1) entries.push([gid, 1 - ratio, have < 0.5]);
         }
         entries.sort((a, b) => b[1] - a[1]);
         let row = wantedRows.get(t.id);

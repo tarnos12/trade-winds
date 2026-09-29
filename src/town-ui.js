@@ -538,7 +538,8 @@
         <span class="nm">${ppWhArrow(gid)} ${goodIcon(gid)} ${esc(GOOD_LABEL(gid))}</span>
         <span class="num">${fmt(stock)}<span class="pp-cap"><span style="width:${Math.min(100, Math.round(stock / cap * 100))}%"></span></span></span>
         ${rateCell}${inCell}
-        <span class="num">${fmt1(price)}🪙 ${arrow}</span></div>`;
+        ${Sim.hasMarket(t, gid) ? `<span class="num">${fmt1(price)}🪙 ${arrow}</span>`
+          : `<span class="num dim" title="No local market — nothing stocked or consumed here">—</span>`}</div>`;
     }
     return html;
   }
