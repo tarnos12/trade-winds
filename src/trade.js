@@ -136,7 +136,11 @@ var Trade = (typeof Trade !== "undefined" && Trade) || {};
     if (!ct) return 0;
     const f = castleFlags(ct);
     if (!f.sell) return 0;
-    const keep = f.buy ? (ct.limit || 0) : 0;   // DESIGN PASS: don't sell below the buy limit
+    let keep = f.buy ? (ct.limit || 0) : 0;   // DESIGN PASS: don't sell below the buy limit
+    // DESIGN PASS (integration #9 × #12): never sell what the active research still has
+    // to draw from castleStock (the royal buyers bought it for the scholars).
+    if (typeof ResearchEconomy !== "undefined" && ResearchEconomy.heldForResearch)
+      keep = Math.max(keep, ResearchEconomy.heldForResearch(state, gid));
     return Math.max(0, ((state.castleStock && state.castleStock[gid]) || 0) - castleReservedOf(state, gid) - keep);
   }
   // { buy, sell } of a castleTrade entry (legacy { enabled } → buy only).

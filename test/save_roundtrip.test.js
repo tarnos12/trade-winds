@@ -52,6 +52,10 @@ async function makeThreeCitySave(page) {
     const stats = Sim.ensureStats(st);
     stats.taxEarned = 162.9;
     stats.constructed.total = 14;
+    // Design pass #4 (integration): m1/m2 are now per-type (2 Lumberjacks + 2 Huts, then
+    // 2 Potato Farms) and missions evaluate from lifetime stats — a save that completed
+    // them must carry those counters, or the restored coach rightly re-opens m1.
+    stats.constructed.byType = { lumberjack: 2, hut: 4, potato_farm: 2 };
     stats.founded = 3;
     stats.traded.byGood.wood = 67;
     st.missions = {

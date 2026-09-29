@@ -24,6 +24,9 @@
   function isIdleProducer(b, def) {
     if (!b || !def || !def.output || !(def.workerSlots > 0) || b.built === false) return false;
     if ((b.closedSlots || 0) >= def.workerSlots) return false;
+    // DESIGN PASS (integration #3 × #8): staffing deliberately unstaffs a full-store or
+    // upgrading producer (Sim.staffTown → b.blockedReason) — that is not "idle".
+    if (b.blockedReason || b.pendingUpgrade) return false;
     return !(b.workers > 0);
   }
   function townAlertIcons(t, N) {

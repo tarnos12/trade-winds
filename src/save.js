@@ -175,6 +175,9 @@
   // === TV2: rename ore→iron in a good-keyed map (in place), summing collisions. ===
   function TV2_renameGood(obj, from, to) {
     if (!obj || typeof obj !== "object" || !(from in obj)) return;
+    // DESIGN PASS (integration): castleTrade entries are objects, not counts — move
+    // the entry (keep an existing `to`) instead of string-concatenating it.
+    if (typeof obj[from] !== "number") { if (!(to in obj)) obj[to] = obj[from]; delete obj[from]; return; }
     obj[to] = (typeof obj[to] === "number" ? obj[to] : 0) + obj[from];
     delete obj[from];
   }

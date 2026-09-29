@@ -122,6 +122,22 @@ Pathing.invalidate();
 }
 Pathing.invalidate();
 {
+  // integration (#9 × #12): potato the ACTIVE research still needs is never sold
+  const mk = (stock) => ({ roads: new Set([K(1, 0)]), carts: [], treasury: 0, tradeSeed: 1,
+    towns: [mkTown({ id: 1, q: 2, r: 0, stock: { potato: 0 }, demand: { potato: 8 } })],
+    research: { unlocked: [], active: "tax_ledgers", consumed: { potato: 5 } },   // needs 20, 5 drawn → 15 held
+    castleStock: { potato: stock }, castleReserved: {}, castleTrade: { potato: { buy: false, sell: true, limit: 0 } } });
+  ok("heldForResearch = required − consumed", ResearchEconomy.heldForResearch(mk(15), "potato") === 15);
+  let st = mk(15);
+  for (let i = 0; i < 30; i++) Trade.tick(st);
+  ok("castle keeps potato held for the active research (no sale)", castleCarts(st) === 0 && st.castleStock.potato === 15);
+  st = mk(25);
+  Trade.tick(st);
+  const c = st.carts.find(x => x.sellerCastle);
+  ok("castle sells only the potato above the research hold (≤ 25 − 15)", !!c && c.qty <= 10);
+}
+Pathing.invalidate();
+{
   // a town seller that can fill the trip vs. a castle with a huge sell stock
   const mk = (sellerStock) => ({ roads: new Set([K(1, 0), K(-1, 0)]), carts: [], treasury: 0, tradeSeed: 5,
     towns: [mkTown({ id: 100, q: -2, r: 0, stock: { grain: sellerStock }, prices: { grain: 50 }, demand: {} }),
