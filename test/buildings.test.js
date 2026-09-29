@@ -576,6 +576,13 @@ ok("every non-startUnlocked building has an unlockedBy that exists in CONFIG.res
     ok("self-output gate: startUpgrade refused below the gate", Buildings.startUpgrade(st, { gold: 10000, stock: { wood: 4 } }, lj()) === false);
     ok("self-output gate: a Farm L2 (wood cost, grain output) is NOT gated by wood",
       Buildings.canStartUpgrade(stWith(["upg_farm_l2"]), { gold: 10000, stock: { wood: 0 } }, { typeId: "farm", upgradeLevel: 1, pendingUpgrade: null }).ok === true);
+    // REVIEW FIX: cost.gold is city GOLD, not the Gold Mine's "gold" good — a (temporary,
+    // test-only) Gold Mine ladder must not be gated on gold-ore stock.
+    const hadLadder = CONFIG.upgrades.gold_mine;
+    CONFIG.upgrades.gold_mine = [{ level: 2, name: "test", cost: { gold: 200, wood: 5 }, effect: {} }];
+    ok("self-output gate: Gold Mine upgrade gold price is not read as gold-ore stock",
+      Buildings.canStartUpgrade(stWith([]), { gold: 10000, stock: { wood: 10 } }, { typeId: "gold_mine", upgradeLevel: 1, pendingUpgrade: null, built: true }).ok === true);
+    if (hadLadder === undefined) delete CONFIG.upgrades.gold_mine; else CONFIG.upgrades.gold_mine = hadLadder;
   }
 
   // -- DESIGN PASS (#2): cancelUpgrade refunds city gold + returns delivered goods (clamped) --

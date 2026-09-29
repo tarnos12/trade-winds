@@ -982,15 +982,25 @@
     if (dshCache.key === key && dshCache.map === state.map) return dshCache.text;   // same world (a New Game swaps state.map)
     const gid = (def.output && def.output.goodId) || def.terrain;
     const noun = String(GOOD_LABEL(gid) || gid).toLowerCase();
-    let seen = false, valid = false;
+    // REVIEW FIX: only GEOGRAPHY picks the hint. A vein a city already borders but that
+    // is blocked by treasury gold / building slots / a two-city join / a castle building
+    // counts as "reachable" (""), so the precise canPlaceBuilding reason shows instead —
+    // before, a short treasury read "No city borders the stone" (and stayed cached).
+    let seen = false, free = false, valid = false;
     for (const [k, hx] of state.map.hexes) {
       if (hx.terrain !== def.terrain || !isVisible(k)) continue;
       if (Buildings.touchesCastle(state, hx.q, hx.r)) continue;   // castle-adjacent veins can never host a city building
       seen = true;
-      if (Buildings.canPlaceBuilding(state, typeId, hx.q, hx.r).ok) { valid = true; break; }
+      const res = Buildings.canPlaceBuilding(state, typeId, hx.q, hx.r);
+      if (res.ok) { valid = true; break; }
+      if (res.reason === "A building is already here" || res.reason === "A town center is here") continue;   // occupied
+      free = true;
+      if (res.reason !== "Must touch a city") { valid = true; break; }
     }
     const text = valid ? "" : (!seen
       ? "No " + noun + " in sight — send your Scout (top-left) to explore"
+      : !free
+      ? "Every " + noun + " vein in sight is taken — send your Scout (top-left) to find more"
       : "No city borders the " + noun + " in sight — found a city beside it first");
     dshCache = { key, map: state.map, text };
     return text;

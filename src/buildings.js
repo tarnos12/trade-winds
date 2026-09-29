@@ -218,7 +218,9 @@ Buildings.canStartUpgrade = function (state, town, b) {
   // fed by it — starting it below that stock froze the city's only source. Gate it.
   const def = CONFIG.buildings[b.typeId];
   const own = def && def.output && def.output.goodId;
-  const ownNeed = own && nxt.cost ? (nxt.cost[own] || 0) : 0;
+  // REVIEW FIX: cost.gold is the CITY-GOLD price, not the gold good (Gold Mine output) —
+  // same exclusion as upgradeResourceCost, so a Gold Mine ladder can't gate on ore stock.
+  const ownNeed = own && own !== "gold" && nxt.cost ? (nxt.cost[own] || 0) : 0;
   if (ownNeed > 0 && ((town && town.stock && town.stock[own]) || 0) < ownNeed) {
     const label = own.charAt(0).toUpperCase() + own.slice(1).replace(/_/g, " ");
     return { ok: false, selfGood: own, reason: "Stock " + ownNeed + " " + label + " first — this " + (def.name || b.typeId) + " stops producing while it upgrades" };
