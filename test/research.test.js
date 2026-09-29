@@ -34,6 +34,16 @@ function fillMats(st, id) {
   const mats = (Research.get(id) || {}).materials || {};
   for (const gid in mats) st.castleStock[gid] = (st.castleStock[gid] || 0) + mats[gid];
 }
+// DESIGN PASS: every material of node `id` is gone from castleStock / still all
+// there (material-agnostic, so a materials retune never silently passes a check).
+function drained(st, id) {
+  const mats = (Research.get(id) || {}).materials || {};
+  return Object.keys(mats).every(g => ((st.castleStock && st.castleStock[g]) || 0) === 0);
+}
+function untouched(st, id) {
+  const mats = (Research.get(id) || {}).materials || {};
+  return Object.keys(mats).every(g => ((st.castleStock && st.castleStock[g]) || 0) === mats[g]);
+}
 // Slice A: sim ticks per game-second (2 at base 500ms), mirrors index.html.
 const TPS = Math.max(1, Math.round(1000 / ((CONFIG.econ && CONFIG.econ.baseTickMs) || 500)));
 // Slice A: install a BUILT Research Center at `level` (its speed drives research).
@@ -211,7 +221,7 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   ok("consumed reset on completion", Object.keys(st.research.consumed).length === 0);
   ok("unlocked contains node", st.research.unlocked.indexOf("crop_rotation") >= 0);
   ok("has() true after completion", Research.has(st, "crop_rotation"));
-  ok("materials fully drained from castleStock", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  ok("materials fully drained from castleStock", drained(st, "crop_rotation"));
   ok("treasury untouched by research (materials, not gold)", st.treasury === 0);
   ok("prereq now unlocks the next node", Research.canStart(st, "deep_veins"));
 })();
@@ -240,14 +250,14 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 // accrual, nothing consumed). A placed-but-unbuilt center is also paused.
 // =========================================================================
 (() => {
-  const node = Research.get("crop_rotation");   // needs { wood, stone }
+  const node = Research.get("crop_rotation");   // needs { wood, potato } (DESIGN PASS: was wood+stone)
   const st = mkState();
   fillMats(st, "crop_rotation");                 // materials on hand
   Research.start(st, "crop_rotation");
   runSecs(st, 20);                               // no center → paused indefinitely
   ok("no center → stays active (paused)", st.research.active === "crop_rotation");
   ok("no center → completedSec stays 0 even with full stock", st.research.completedSec === 0);
-  ok("no center → nothing consumed", (st.castleStock.wood || 0) === node.materials.wood && (st.castleStock.stone || 0) === node.materials.stone);
+  ok("no center → nothing consumed", untouched(st, "crop_rotation"));
   // placed but under construction (built:false) is still speed 0 → paused.
   st.researchCenter = { q: 1, r: 0, built: false, delivered: {}, level: 1, pendingUpgrade: null };
   runSecs(st, 20);
@@ -257,20 +267,20 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   const T = Research.consumptionPlan(node.materials, Research.centerSpeed(st)).T;
   runSecs(st, T);
   ok("built center → node completes", Research.has(st, "crop_rotation"));
-  ok("materials consumed once built", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  ok("materials consumed once built", drained(st, "crop_rotation"));
 })();
 
 // Partial materials do NOT complete the node (every required good must be met).
 (() => {
   const node = Research.get("crop_rotation");
-  const st = mkState({ castleStock: { wood: node.materials.wood } }); // stone missing
+  const st = mkState({ castleStock: { wood: node.materials.wood } }); // potato missing (DESIGN PASS: was stone)
   giveCenter(st);
   Research.start(st, "crop_rotation");
   runSecs(st, 30);
   ok("partial materials keep the node active (not unlocked)", !Research.has(st, "crop_rotation") && st.research.active === "crop_rotation");
-  // The per-second draw is ATOMIC (all-or-nothing): with stone missing, NOTHING is
+  // The per-second draw is ATOMIC (all-or-nothing): with potato missing, NOTHING is
   // consumed — not even the available wood.
-  ok("atomic gate: nothing consumed while stone is missing", (st.castleStock.wood || 0) === node.materials.wood && (st.research.completedSec || 0) === 0);
+  ok("atomic gate: nothing consumed while potato is missing", (st.castleStock.wood || 0) === node.materials.wood && (st.research.completedSec || 0) === 0);
 })();
 
 // =========================================================================
@@ -297,18 +307,18 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
 // one-second stock, then the node pauses until the rest of the materials arrive.
 (() => {
   // Use a synthetic node's numbers directly via the engine on crop_rotation but
-  // meter with a hand-built stock. crop_rotation = { wood:20, stone:10 }, S=2 →
-  // rate wood 2, stone 1; second-1 delta = (2,1).
-  const st = mkState({ castleStock: { wood: 2, stone: 1 } });
+  // meter with a hand-built stock. DESIGN PASS: crop_rotation = { wood:20, potato:15 }
+  // (was stone:10), S=2 → T=10, rate wood 2, potato 1.5; second-1 delta = (2, floor 1.5 = 1).
+  const st = mkState({ castleStock: { wood: 2, potato: 1 } });
   giveCenter(st);
   Research.start(st, "crop_rotation");
   runSecs(st, 1);
-  ok("one game-second drains exactly the second-1 delta", st.research.completedSec === 1 && (st.research.consumed.wood || 0) === 2 && (st.research.consumed.stone || 0) === 1);
-  ok("stock emptied by that one second", (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0);
+  ok("one game-second drains exactly the second-1 delta", st.research.completedSec === 1 && (st.research.consumed.wood || 0) === 2 && (st.research.consumed.potato || 0) === 1);
+  ok("stock emptied by that one second", (st.castleStock.wood || 0) === 0 && (st.castleStock.potato || 0) === 0);
   runSecs(st, 20);
   ok("pauses at 1 second until more materials arrive", st.research.completedSec === 1);
   // Top up the rest → completes.
-  st.castleStock.wood = 18; st.castleStock.stone = 9;
+  st.castleStock.wood = 18; st.castleStock.potato = 14;
   runSecs(st, 20);
   ok("resumes and completes once the rest is delivered", Research.has(st, "crop_rotation"));
 })();
@@ -321,7 +331,7 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
     const st = mkState(); fillMats(st, "crop_rotation"); giveCenter(st, level);
     Research.start(st, "crop_rotation");
     let s = 0; while (!Research.has(st, "crop_rotation") && s < 500) { runSecs(st, 1); s++; }
-    return { s, drained: (st.castleStock.wood || 0) === 0 && (st.castleStock.stone || 0) === 0 };
+    return { s, drained: drained(st, "crop_rotation") };
   }
   const l1 = secsToDone(1);   // speed 2 → 10s
   const l2 = secsToDone(2);   // speed 3 → ceil(20/3)=7s
@@ -391,11 +401,11 @@ ok("every ladder level has a matching upgrade node + chained prereqs", Object.en
   ok("normalize clears invalid active + its metering", cleaned.active === null && cleaned.completedSec === 0 && cleaned.subTick === 0 && Object.keys(cleaned.consumed).length === 0);
   ok("normalize drops the retired spent/progress fields", !("spent" in cleaned) && !("progress" in cleaned));
   // A valid active project keeps sanitized metering (clamped to the node's needs).
-  const active = Research.normalize({ unlocked: [], active: "crop_rotation", completedSec: 4, subTick: 99, consumed: { wood: 5, stone: 999, bogus: 3 } });
+  const active = Research.normalize({ unlocked: [], active: "crop_rotation", completedSec: 4, subTick: 99, consumed: { wood: 5, potato: 999, bogus: 3 } });
   ok("normalize keeps completedSec for a valid active project", active.completedSec === 4);
   ok("normalize clamps subTick into 0..TICKS_PER_SEC", active.subTick === TPS);
   ok("normalize keeps only real material gids, clamped to the requirement",
-    active.consumed.wood === 5 && active.consumed.stone === Research.get("crop_rotation").materials.stone && !("bogus" in active.consumed));
+    active.consumed.wood === 5 && active.consumed.potato === Research.get("crop_rotation").materials.potato && !("bogus" in active.consumed));
 })();
 
 // =========================================================================
@@ -408,8 +418,8 @@ function mkCity(over) {
     stock: {}, prices: {}, demand: {}, buildings: [], happiness: 100 }, over);
 }
 (() => {
-  const node = Research.get("crop_rotation");   // needs { wood:20, stone:10 }
-  const city = mkCity({ stock: { wood: 500, stone: 500 } });
+  const node = Research.get("crop_rotation");   // needs { wood:20, potato:15 } (DESIGN PASS)
+  const city = mkCity({ stock: { wood: 500, stone: 500, potato: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 1 });
   giveCenter(st);   // Slice A: a built center powers completion
   Research.start(st, "crop_rotation");
@@ -427,7 +437,7 @@ function mkCity(over) {
   ok("materials gathered and node completed", done);
   ok("selling city was paid (no tariff — got full value)", city.gold > 0);
   ok("castle materials consumed on completion (≈0 left)",
-    (st.castleStock.wood || 0) < node.materials.wood && (st.castleStock.stone || 0) < node.materials.stone);
+    (st.castleStock.wood || 0) < node.materials.wood && (st.castleStock.potato || 0) < node.materials.potato);
 })();
 
 // The 10-trader cap is respected even with many needed materials + big demand.
@@ -443,7 +453,7 @@ function mkCity(over) {
 // RT-A2: AUTONOMOUS buying — the panel gate is gone. Buyers dispatch and the node
 // completes with the `open` flag FALSE (proving no UI flag is involved).
 (() => {
-  const city = mkCity({ stock: { wood: 500, stone: 500 } });
+  const city = mkCity({ stock: { wood: 500, stone: 500, potato: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 3 });
   giveCenter(st);
   Research.start(st, "crop_rotation");
@@ -461,7 +471,7 @@ function mkCity(over) {
 
 // RT-A2: also autonomous when tick() is called with NO second argument at all.
 (() => {
-  const city = mkCity({ stock: { wood: 500, stone: 500 } });
+  const city = mkCity({ stock: { wood: 500, stone: 500, potato: 500 } });
   const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 5 });
   giveCenter(st);
   Research.start(st, "crop_rotation");
@@ -473,7 +483,7 @@ function mkCity(over) {
 // Determinism of the castle-trade scenario (seeded).
 (() => {
   function run() {
-    const city = mkCity({ stock: { wood: 500, stone: 500 } });
+    const city = mkCity({ stock: { wood: 500, stone: 500, potato: 500 } });
     const st = mkState({ treasury: 100000, towns: [city], roads: new Set(), carts: [], researchSeed: 42 });
     giveCenter(st);
     Research.start(st, "crop_rotation");
@@ -637,14 +647,23 @@ function mkCity(over) {
 (function () {
   // (a) starterStock exists and single-handedly covers ANY peasant-band root
   // unlock node's materials (first researches can never hard-stall).
-  const ss = (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {};
-  ok("starterStock defined with wood", (ss.wood || 0) >= 15);
+  // DESIGN PASS (research-3): measured AFTER building the Research Center, which
+  // is paid from the same castleStock (it used to eat all 20 starting stone and
+  // this test ignored that — it only passed because it skipped the Center).
+  const ss0 = (CONFIG.researchEconomy && CONFIG.researchEconomy.starterStock) || {};
+  const centerCost = (CONFIG.researchCenter && CONFIG.researchCenter.build && CONFIG.researchCenter.build.cost) || {};
+  const ss = {};
+  for (const g in ss0) ss[g] = ss0[g] - (centerCost[g] || 0);
+  ok("starterStock covers the Research Center's build cost",
+    Object.keys(centerCost).every(g => g === "gold" || (ss0[g] || 0) >= centerCost[g]));
+  ok("starterStock defined with wood (after the Center)", (ss.wood || 0) >= 15);
+  ok("starterStock keeps stone after the Center is built", (ss.stone || 0) >= 20);
   const roots = (CONFIG.research || []).filter(n =>
     n.band === "peasant" && n.kind === "unlock" && (n.prereqs || []).length === 0);
   ok("peasant root unlock nodes exist", roots.length >= 1);
   for (const n of roots) {
     const covered = Object.keys(n.materials || {}).every(g => (ss[g] || 0) >= n.materials[g]);
-    ok("starterStock covers root node " + n.id, covered);
+    ok("starterStock (minus the Center) covers root node " + n.id, covered);
   }
   // (b) active node's remaining materials feed town demand via ResearchEconomy.tick.
   const st = { towns: [{ id: 1, level: 1, q: 3, r: 0, pop: { peasants: 0, workers: 0, burghers: 0 },
@@ -671,6 +690,63 @@ function mkCity(over) {
   ok("root research completes from starterStock alone (no city surplus)", done);
 })();
 // === /RSF =====================================================================
+
+// === DESIGN PASS (research-2/3): research materials cities can actually spare ===
+(function () {
+  // Construction always takes a city's stone first, so royal buyers starved on it.
+  // The Peasant and Worker bands pay in wood/planks/potato instead — never stone.
+  const early = CONFIG.research.filter(n => n.band === "peasant" || n.band === "worker");
+  ok("peasant/worker nodes exist", early.length >= 20);
+  const withStone = early.filter(n => (n.materials || {}).stone > 0).map(n => n.id);
+  ok("no Peasant- or Worker-band node lists stone" + (withStone.length ? " (violators: " + withStone.join(", ") + ")" : ""),
+    withStone.length === 0);
+  // Every Kingdom-branch ROOT (no prereqs) must be payable from goods that
+  // start-unlocked buildings make — otherwise it shows ⚠ the moment the tree opens.
+  const startGoods = new Set(Object.values(CONFIG.buildings)
+    .filter(b => b.startUnlocked && b.output && b.output.goodId).map(b => b.output.goodId));
+  const kRoots = Research.nodesInBand("kingdom").filter(n => !(n.prereqs || []).length);
+  ok("3 Kingdom roots (one per branch)", kRoots.length === 3);
+  for (const n of kRoots) {
+    const bad = Object.keys(n.materials || {}).filter(g => !startGoods.has(g));
+    ok("Kingdom root " + n.id + " is sourceable from start-unlocked producers" + (bad.length ? " (needs " + bad.join(", ") + ")" : ""),
+      bad.length === 0 && Object.keys(n.materials || {}).length > 0);
+  }
+})();
+
+// DESIGN PASS: the Provisioner never eats potato the ACTIVE research node still needs.
+(function () {
+  const sb2 = {};
+  vm.createContext(sb2);
+  vm.runInContext(m[1] + "\nthis.CONFIG=CONFIG; this.Research=Research; this.Provisioner=Provisioner; this.ResearchEconomy=ResearchEconomy;", sb2);
+  const P = sb2.Provisioner, R2 = sb2.Research, RE2 = sb2.ResearchEconomy;
+  function mk(potato) {
+    const st = { castleStock: { potato }, research: R2.fresh(), provisions: 0,
+      provisionerBuilding: { built: true } };
+    return st;
+  }
+  // No research → the basic line (2 potato → 1) converts as before.
+  const a = mk(20);
+  for (let i = 0; i < 12; i++) P.tick(a);
+  ok("provisioner converts potato with no research active", a.provisions > 0 && a.castleStock.potato < 20);
+  // Active node needs 15 potato: with exactly 15 in stock, the provisioner waits.
+  const b = mk(15);
+  R2.start(b, "crop_rotation");
+  const need = R2.get("crop_rotation").materials.potato;
+  ok("crop_rotation needs potato (precondition)", need === 15);
+  ok("heldForResearch = required − consumed", RE2.heldForResearch(b, "potato") === 15);
+  for (let i = 0; i < 60; i++) P.tick(b);
+  ok("provisioner leaves the research potato alone", b.castleStock.potato === 15 && b.provisions === 0);
+  // Surplus above the hold is still usable (19 − 15 = 4 → two conversions).
+  const c = mk(19);
+  R2.start(c, "crop_rotation");
+  for (let i = 0; i < 60; i++) P.tick(c);
+  ok("provisioner uses only the potato above the research hold", c.castleStock.potato === 15 && c.provisions === 2);
+  // Consumed potato no longer counts: hold shrinks as the node draws.
+  c.research.consumed = { potato: 10 };
+  ok("hold shrinks as the node consumes", RE2.heldForResearch(c, "potato") === 5);
+  for (let i = 0; i < 60; i++) P.tick(c);
+  ok("released potato is converted once the hold shrinks", c.castleStock.potato === 5);
+})();
 
 // === TREELAYOUT: prereq-edge geometry (author fix — kill the long diagonals) ==
 // Node pos:{col,row} fully determines edge geometry in the RT-B tree. These guard

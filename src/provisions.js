@@ -53,6 +53,10 @@ var Provisioner = (typeof Provisioner !== "undefined" && Provisioner) || {};
   Provisioner.hasBasic = function (state) {
     return !!(state && state.provisionerBuilding && state.provisionerBuilding.built);
   };
+  function heldForResearch(state, g) {
+    return (typeof ResearchEconomy !== "undefined" && ResearchEconomy.heldForResearch)
+      ? ResearchEconomy.heldForResearch(state, g) : 0;
+  }
   // One provisioner line: count a per-line timer up to everyTicks, then (while
   // armed) attempt a conversion each tick — consume whole-unit inputs from
   // castleStock and add `output` provisions (clamped to cap), resetting the timer
@@ -66,7 +70,9 @@ var Provisioner = (typeof Provisioner !== "undefined" && Provisioner) || {};
       t = every;   // stay armed
       const stock = state.castleStock || (state.castleStock = {});
       let can = (state.provisions || 0) < cap;
-      for (const g in def.inputs) if ((stock[g] || 0) < def.inputs[g]) can = false;
+      // DESIGN PASS: research now pays in potato — never eat stock the ACTIVE
+      // research node still needs (royal buyers would have to re-buy it).
+      for (const g in def.inputs) if ((stock[g] || 0) - heldForResearch(state, g) < def.inputs[g]) can = false;
       if (can) {
         for (const g in def.inputs) stock[g] = (stock[g] || 0) - def.inputs[g];
         state.provisions = Math.min(cap, (state.provisions || 0) + (def.output || 1));

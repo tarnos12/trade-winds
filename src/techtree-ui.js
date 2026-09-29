@@ -95,22 +95,65 @@
     const stock = state.castleStock || {}, out = [];
     for (const gid of Object.keys(M)) {
       if ((consumed[gid] || 0) + (stock[gid] || 0) >= M[gid]) continue;
-      let ok = false;
-      for (const t of state.towns || []) {
-        if ((t.stock && t.stock[gid] || 0) >= 1) { ok = true; break; }
-        for (const b of t.buildings || []) {
-          const d = CONFIG.buildings[b.typeId];
-          if (d && d.output && d.output.goodId === gid && b.built !== false && (b.workers || 0) > 0) { ok = true; break; }
-        }
-        if (ok) break;
-      }
-      if (ok) continue;
+      if (ttGoodSourced(gid)) continue;
       let maker = null;
       for (const k in CONFIG.buildings) { const d = CONFIG.buildings[k]; if (d.output && d.output.goodId === gid) { maker = d.name; break; } }
       out.push({ gid, maker });
     }
     return out;
   }
+  // Does any city hold `gid` or run a built, staffed producer of it? (pure read)
+  function ttGoodSourced(gid) {
+    for (const t of state.towns || []) {
+      if ((t.stock && t.stock[gid] || 0) >= 1) return true;
+      for (const b of t.buildings || []) {
+        const d = CONFIG.buildings[b.typeId];
+        if (d && d.output && d.output.goodId === gid && b.built !== false && (b.workers || 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+  // DESIGN PASS (research-3): name the RESEARCH a material's producer is locked
+  // behind. Returns null when some producer is start-unlocked, already researched,
+  // or unlocked inside `nodeId`'s own prereq chain (open by the time the node is).
+  // Otherwise { node, chain } for the producer with the shortest missing chain —
+  // chain = unresearched node ids, prerequisites first, ending at the unlock node.
+  function ttPrereqClosure(id) {
+    const seen = new Set(), stack = [id];
+    while (stack.length) {
+      const n = Research.get(stack.pop()); if (!n) continue;
+      for (const p of n.prereqs || []) if (!seen.has(p)) { seen.add(p); stack.push(p); }
+    }
+    return seen;
+  }
+  function ttMissingChain(id, out, seen) {
+    out = out || []; seen = seen || new Set();
+    if (seen.has(id) || Research.has(state, id)) return out;
+    seen.add(id);
+    const n = Research.get(id);
+    for (const p of (n && n.prereqs) || []) ttMissingChain(p, out, seen);
+    out.push(id);
+    return out;
+  }
+  function ttResearchPathFor(gid, nodeId) {
+    const closure = nodeId ? ttPrereqClosure(nodeId) : null;
+    let best = null;
+    for (const k in CONFIG.buildings) {
+      const d = CONFIG.buildings[k];
+      if (!d.output || d.output.goodId !== gid) continue;
+      if (d.startUnlocked || !d.unlockedBy || Research.has(state, d.unlockedBy)) return null;
+      if (closure && closure.has(d.unlockedBy)) return null;
+      const chain = ttMissingChain(d.unlockedBy);
+      if (!best || chain.length < best.chain.length) best = { node: Research.get(d.unlockedBy), chain };
+    }
+    return best;
+  }
+  function ttPathText(p) {
+    const name = esc(p.node ? p.node.name : "?");
+    if (p.chain.length <= 1) return "needs " + name + " — research it first";
+    return "needs " + name + " — research " + p.chain.map(c => esc((Research.get(c) || {}).name || c)).join(" → ");
+  }
+  const ttLabel = gid => GOOD_LABEL(gid).replace(/_/g, " ");
   // === /RESEARCH CENTER (Slice C) ===
   function ttNodeState(id) {
     if (Research.has(state, id)) return "done";
@@ -288,7 +331,7 @@
           qWaiting ? (() => {
             const miss = ttUnsourcedMaterials(R.active);
             if (!miss.length) return `<div style="font-size:11px;color:#e0b34c;margin:3px 0">⏳ Waiting for materials — royal buyers are fetching them from your cities</div>`;
-            return `<div style="font-size:11px;color:#f08a7a;margin:3px 0">⚠ No city makes ` + miss.map(m => goodIcon(m.gid) + " " + esc(m.gid.replace(/_/g, " ")) + (m.maker ? " (build &amp; staff a " + esc(m.maker) + ")" : "")).join(", ") + ` — or Cancel and research something else.</div>`;
+            return `<div style="font-size:11px;color:#f08a7a;margin:3px 0">⚠ No city makes ` + miss.map(m => { const p = ttResearchPathFor(m.gid, R.active); return goodIcon(m.gid) + " " + esc(m.gid.replace(/_/g, " ")) + (p ? " (" + ttPathText(p) + ")" : m.maker ? " (build &amp; staff a " + esc(m.maker) + ")" : ""); }).join(", ") + ` — or Cancel and research something else.</div>`;
           })() : "") +
         `<div class="tt-qbar"><span style="width:${Math.round(frac * 100)}%"></span></div>` +
         `<div style="display:flex;align-items:center;gap:8px;margin-top:5px">` +
@@ -348,12 +391,39 @@
       const qtyTxt = active ? (Math.min(qty, Math.floor(consumed[gid] || 0)) + "/" + qty) : String(qty);
       html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(GOOD_LABEL(gid))} ${qtyTxt}</div>`;
     }
+    // DESIGN PASS (research-3): a material whose every producer is locked OUTSIDE
+    // this node's prereq chain names the research that opens it (any state but done).
+    const pathed = {};
+    if (s !== "done") for (const gid in mats) {
+      const p = ttResearchPathFor(gid, id);
+      if (!p) continue;
+      pathed[gid] = true;
+      html += `<div style="color:#f08a7a;margin-top:4px">⚠ ${goodIcon(gid)} ${esc(ttLabel(gid))} ${ttPathText(p)}</div>`;
+    }
     // DESIGN PASS: warn BEFORE the player starts a node that would stall.
     if (s === "available" || s === "queued") {
-      const miss = ttUnsourcedMaterials(id);
+      const miss = ttUnsourcedMaterials(id).filter(m => !pathed[m.gid]);
       if (miss.length) html += `<div style="color:#f08a7a;margin-top:4px">⚠ No city makes ` +
-        miss.map(m => esc(GOOD_LABEL(m.gid)) + (m.maker ? " (needs a staffed " + esc(m.maker) + ")" : "")).join(", ") +
+        miss.map(m => esc(ttLabel(m.gid)) + (m.maker ? " (needs a staffed " + esc(m.maker) + ")" : "")).join(", ") +
         ` yet — this research would wait until one does.</div>`;
+    }
+    // DESIGN PASS (research-3): an upgrade level has a SECOND gate — its own build
+    // cost, paid per building in the city. List it, with ⚠ on goods no city makes.
+    if (node.kind === "upgrade") {
+      const entry = (typeof Buildings.upgradeAt === "function") ? Buildings.upgradeAt(node.buildingId, node.level) : null;
+      const cost = (entry && entry.cost) || {};
+      if (Object.keys(cost).length) {
+        html += `<div style="margin-top:4px;opacity:.85">Then each upgrade costs (city pays):</div>`;
+        for (const gid in cost) {
+          if (gid === "gold") { html += `<div>🪙 ${cost[gid]} city gold</div>`; continue; }
+          let warn = "";
+          if (!ttGoodSourced(gid)) {
+            const p = ttResearchPathFor(gid, id);
+            warn = ` <span style="color:#f08a7a">⚠ ` + (p ? ttPathText(p) : "no city makes it yet") + `</span>`;
+          }
+          html += `<div><span class="tt-dot" style="background:${goodColor(gid)}"></span>${goodIcon(gid)} ${esc(ttLabel(gid))} ${cost[gid]}${warn}</div>`;
+        }
+      }
     }
     return html;
   }

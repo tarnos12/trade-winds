@@ -367,7 +367,7 @@ MissionEngine.DEFAULT = {
         { type: "earn_tax",   amount: 10 },                           // your first tariffs (early trade is small — just see it arrive)
       ] },
     { id: "m3", name: "The King's Scholars", icon: "🔬", pos: { col: 2, row: 0 }, retroactive: true, prereqs: ["m2"],
-      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — most research needs stone. ⚠ marks research no city can supply yet. No stone in sight? Send your Scout (top-left) to explore.",
+      tip: "⭐ Special → Research Center beside the castle, then open 🔬. Research Quarry first — city buildings and upgrades need stone. ⚠ marks research no city can supply yet; its tooltip names the research that fixes it. No stone in sight? Send your Scout (top-left) to explore.",
       objectives: [
         { type: "construct", building: "research_center", count: 1 },
         { type: "research",  count: 1 },
