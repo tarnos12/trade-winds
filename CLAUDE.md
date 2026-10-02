@@ -202,3 +202,19 @@ Standard **Test Author** (Sonnet) and **QA / Verification** (Opus) apply to game
 Whatever the current milestone requires, advanced to its **next exit criterion** and **verified by
 QA against the design authority** before it is called done. Define each milestone's exit criterion
 explicitly (a concrete, checkable outcome) so QA has a clear gate to sign off against.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues on `tarnos12/trade-winds` (via the `gh` CLI); `TASKS.md` remains the milestone board. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily). See `docs/agents/domain.md`.
