@@ -1,32 +1,30 @@
 # Trade Winds — GDD (Design Authority)
 
-**Status:** Stage 3 (1.0) in progress — Prototype/MVP/Demo criteria met; polishing toward feature-complete
+**Status:** Unity port — Milestone 1 (economy core) next. The web version (v0.52.1) is frozen in
+[`old-game-files/`](old-game-files/) as a behavioural reference.
 **Author:** Mariusz (GitHub `tarnos12`)
 
 > **Design authority — the source of truth for scope.** Keep it current: mark
 > items done, add new plans as scope evolves. The team-facing distillation of
 > this doc (goal, stack, constraints, module→ownership map, roster, milestone
 > exit criteria) plus the live project status lives in [PROJECT.md](PROJECT.md).
-> Team-running methodology is in [CLAUDE.md](CLAUDE.md); agent-teams mechanics in
-> [AGENT_TEAMS.md](AGENT_TEAMS.md).
-
-*(Regenerated from the original verbose GDD into the staged-roadmap shape; the
-detailed reference — goods tree, price formula, progression — is folded into
-§6–§8 so this file stands alone as the design authority.)*
+> Domain vocabulary is in [CONTEXT.md](CONTEXT.md); architectural decisions in
+> [docs/adr/](docs/adr/). Team-running methodology is in [CLAUDE.md](CLAUDE.md);
+> agent-teams mechanics in [AGENT_TEAMS.md](AGENT_TEAMS.md).
 
 ---
 
 ## 1. Vision & pillars
 
-**Elevator pitch:** A *Let Them Trade*–inspired economy game. You build a network
-of autonomous towns on a hexagonal board; towns produce, consume, and trade with
-each other on their own. You shape the conditions — where towns stand, what they
-produce, where the roads run — and earn a tariff on every transaction, spending it
-to upgrade the King's castle.
+**Elevator pitch:** A *Let Them Trade*–inspired economy game. You found a network
+of autonomous Towns on a hexagonal board; Towns produce, consume, and trade with
+each other on their own. You shape the conditions — where Towns stand, what they
+produce, where the roads run — and earn a Tariff on every trade between Towns,
+investing it to grow the Kingdom.
 
-**Stack / hard constraints:** single `index.html`, Canvas 2D, **zero external
-dependencies**, saves in `localStorage`. Single-file, offline-first, no build
-step, desktop-first.
+**Stack / hard constraints:** Unity 6 (6000.3), 2D URP, C#. Windows desktop first
+with Steam in mind; WebGL possible but not required; no mobile in v1. Author-supplied
+sprite art (placeholder sprites until then). See [ADR 0001](docs/adr/0001-unity-desktop-port.md).
 
 **Design pillars (the non-negotiables):**
 
@@ -34,193 +32,183 @@ step, desktop-first.
    You build the conditions; the economy plays itself. The joy is watching a
    system you designed come alive.
 2. **Economy as simulation, not script.** Prices emerge from real supply/demand
-   per town — no fixed price tables. Drowning in wood ⇒ wood gets cheap.
+   per Town — no fixed price tables. Drowning in wood ⇒ wood gets cheap.
 3. **Board-game feel.** Flat "wooden" tokens, warm paper/sepia palette,
-   micro-animated carts. Readability > realism.
-4. **Cozy, not stressful.** No fail state in sandbox — failure is stagnation, not
-   game-over. Pace controlled by a speed slider (pause / 1× / 2× / 4×).
-5. **Single-file, offline-first.** One file, open and play; hostable anywhere.
+   micro-animated Traders. Readability > realism.
+4. **Cozy, not stressful.** No fail state — failure is stagnation, not
+   game-over. Pace controlled by speed (pause / 1× / 2× / 4×).
 
-**Explicitly out of scope (v1.0):** 3D, combat (optional Phase 5 only), a map
-editor (seed generation suffices), multiplayer.
+**Explicitly out of scope (v1.0):** 3D, combat, a map editor (seed generation
+suffices), multiplayer, mobile, migrating web-version saves.
 
 ---
 
 ## 2. Core loop / primary flow
 
 ```
-OBSERVE the market (prices, shortages, surpluses across towns)
+OBSERVE the market (prices, shortages, surpluses across Towns)
    ↓
-BUILD / UPGRADE (a town, a production building, a road)
+BUILD / UPGRADE (a Town, a production building, a road)
    ↓
-TOWNS TRADE on their own (carts travel, prices equalize)
+TOWNS TRADE on their own (Traders travel, prices equalize)
    ↓
-YOU EARN a tariff on every transaction
+YOU EARN a Tariff on every trade
    ↓
-INVEST (research, castle upgrades, new towns)
+INVEST (research, new Towns, Mission goals)
    ↓
-NEW population needs → new production chains → back to top
+NEW Population Tier needs → new production chains → back to top
 ```
 
-The smallest complete experience is a **single town that grows or starves as its
-needs are met**, plus **two towns trading a good along a road**. Everything else
-(research, tiers, quests, castle) gives that loop texture — it does not replace it.
+The smallest complete experience is a **single Town that grows or starves as its
+needs are met**, plus **two Towns trading a Good along a road**. Everything else
+(research, tiers, Missions) gives that loop texture — it does not replace it.
 
 - **5-minute session:** check shortage alerts → place 1–2 buildings → leave on 2×.
-- **45-minute session:** plan a new production-chain branch, found a town, rework
+- **45-minute session:** plan a new production-chain branch, found a Town, rework
   the road network.
 
 ---
 
 ## 3. Architecture notes (build once, use in every stage)
 
-Decisions kept load-bearing from day one (see [CLAUDE.md](CLAUDE.md) for the live
-conventions the code holds):
-
-1. **One pure, deterministic `Sim` core.** The economy tick (production →
-   consumption → prices → cart decisions) is side-effect-free — no I/O, DOM, or
-   canvas. This is what makes it testable, tunable, and runnable at 4× / autoplay.
-2. **Two clocks, separated.** Render on `requestAnimationFrame`; economy on a
-   fixed 500 ms × gameSpeed timestep ("fix your timestep" accumulator). 2 ticks =
-   1 game-second.
-3. **`CONFIG` is the single source of balance truth** — one object, no magic
-   numbers scattered in logic.
-4. **UI in DOM, world in canvas.** Panels are HTML layered over the canvas.
-   Terrain is pre-rendered to an offscreen canvas (1 `drawImage`/frame), redrawn
-   only when fog reveals.
-5. **Persistence is versioned** (`saveVersion`) with a stepwise migration path;
-   autosave every 30 s + on `visibilitychange`; JSON export/import as a string.
-6. **Prefer additive, self-contained modules** over editing shared hot files —
-   fewer conflicts, especially with parallel subagents (fence each slice).
-
-Module map (single file): `CONFIG · HexMath · MapGen · Sim · Pathing · Trade ·
-Research · ResearchEconomy · Buildings · Quests · Events · Renderer · UI · Save`.
+1. **Pure C# simulation core** ([ADR 0002](docs/adr/0002-pure-csharp-sim-core.md)).
+   The economy (production → consumption → prices → happiness → population →
+   Trader decisions) lives in its own assembly with no `UnityEngine` reference:
+   plain classes, seeded RNG, deterministic. Edit Mode tests run it headless.
+2. **Two clocks, separated.** Rendering every frame; the economy on a fixed
+   500 ms × gameSpeed tick (2 ticks = 1 game-second). Visuals interpolate between
+   ticks. The game pauses when the window loses focus (setting, default on).
+3. **Balance data in ScriptableObjects** (Goods, buildings, Population Tiers,
+   Missions), converted into plain C# data the core reads. No magic numbers in logic.
+4. **Unity renders, the core decides.** MonoBehaviours feed player input in and
+   draw sim state; GameObjects never own sim state. Board = hexagonal (pointy-top)
+   Tilemap; UI = UI Toolkit.
+5. **Persistence is versioned** (save version starts at 1) with a stepwise
+   migration path for every later bump.
+6. **Prefer additive, self-contained modules** over editing shared hot files.
+7. **Headless balance runner** — an editor tool that runs the core for N ticks
+   and reports (successor to the web version's balance lab).
 
 ---
 
 ## 4. Staged roadmap
 
-The original 5-phase plan mapped onto the staged template. Each stage lists
-**goal / in / out / exit**. **Phases 1–4 and the bulk of Phase 5 content are
-shipped;** current work is the 1.0 polish/balance tail.
+The web version reached its Stage 3 tail (see `old-game-files/`). The Unity port
+restarts the stages; it is a **port-and-rethink**, not a parity rewrite — systems
+that weren't working (the peasant-tier stall, partly-wired research effects) are
+redesigned. Content grows **one Population Tier at a time**, each balanced before
+the next.
 
-### Stage 0 — Prototype ✅ DONE (Phase 1 — The Board)
-- **Goal:** a clickable hex world with a camera.
-- **In:** HexMath, seeded map gen + biomes + fog, camera pan/zoom, terrain
-  pre-render, build mode (roads + town markers).
-- **Exit (met):** generate a map from a seed, move the camera, place roads, 60 FPS.
+### Milestone 1 — Economy core 🔜 NEXT
+- **Goal:** the smallest complete experience, in Unity.
+- **In (step 1, headless):** pure C# core — hex math, seeded rectangular board,
+  Towns, Peasant tier needs, production/consumption, local prices, road graph +
+  pathing, Traders, Tariff; Edit Mode tests.
+- **In (step 2, on screen):** hex Tilemap board from a seed, camera pan/zoom,
+  placing roads and Towns, Traders animated along roads, minimal Town panel,
+  speed controls. Placeholder sprites.
+- **Content:** Peasant tier — Basic Needs Potato + Wood, Luxuries Fish + Wool.
+- **Exit:** a potato Town and a timber Town, each specialised by terrain, trade
+  Potato ↔ Wood unattended and the Crown earns Tariff; cutting the road causes a
+  visible price crisis; covered by tests.
 
-### Stage 1 — MVP ✅ DONE (Phases 2–3 — Towns & Trade)
-- **Goal:** the systems that make it a real thing, not a tech demo.
-- **In:** town centers + houses + production buildings + town panel; the economy
-  tick (production/consumption/happiness/population); the local price model; the
-  road graph + Dijkstra; autonomous cart agents; transactions + tariff + treasury;
-  the castle warehouse; versioned saves.
-- **Exit (met):** specialized towns reach a stable trade equilibrium without
-  intervention; cutting a road causes a visible price crisis; save/load correct.
+### Milestone 2 — The Kingdom
+- **In:** the Castle and Castle Stock, Castle market, Porters, fog + scouts,
+  versioned save/load, Worker tier (Basic Fish + Coal; Luxuries Clothes, Bread,
+  Mead), headless balance runner.
+- **Exit:** a two-tier Kingdom grows unattended without stalling; save/load correct.
 
-### Stage 2 — Demo ✅ DONE (Phase 4 — Progression)
-- **Goal:** a polished, shareable slice with a goal.
-- **In:** research tree, population tiers (peasant/worker/citizen/aristocrat),
-  King's requests + prestige, castle levels 1→5 (L5 = victory), the Kingdom
-  overview screen, town alerts, random events, victory overlay, onboarding hints.
-- **Exit (met):** a sandbox run from zero to castle-L5 victory is playable with a
-  real difficulty arc (deterministic test reaches victory).
+### Milestone 3 — Progression
+- **In:** resource-metered research + Research Center, Missions, Burgher and
+  Aristocrat tiers, start screen, tutorial.
+- **Exit:** a run from zero to Victory is playable with a real difficulty arc
+  (deterministic test reaches Victory).
 
-### Stage 3 — 1.0 🔜 IN PROGRESS (Phase 5 — Content & Polish)
-- **Goal:** complete, shippable.
-- **In:** full content breadth (12+ buildings, T3 goods, 4 population tiers —
-  done); **resource-metered research + placeable Research Center (done, v0.21.0)**;
-  balancing pass; audio (WebAudio); juice (chimney smoke, transaction particles);
-  full save export/import; campaign scenarios + start screen + tutorial.
-- **Out:** anything requiring a live backend.
+### Milestone 4 — 1.0
+- **In:** author art, balance pass, polish. Undecided: provisions, juice, audio,
+  ambient chatter.
 - **Exit:** feature-complete, balanced, no known blocking issues; a stranger can
-  finish scenario 1 without asking questions.
-- **Remaining:** campaign scenarios + start screen; tutorial-as-onboarding; audio;
-  juice; a balance pass on the 4-tier economy and the new Research Center
-  costs/speeds; wire more research effects into Sim/Trade.
+  reach Victory without asking questions.
 
-### Stage 4 — Next (optional / parking lot)
-- Bandits + guard posts (a "security tax") — only if Stage 3 balance is stable.
-- Harbors / water trade; knights/combat + Provisioner.
-- v2.0 parking lot: seasons, player-defined inter-town contracts, seed-of-the-day.
-  Anything needing a backend is out of scope for this document.
+### Parking lot
+- Kingdom festival as the final Mission; bandits + guard posts; harbors / water
+  trade; seasons; player-defined contracts; seed-of-the-day.
 
 ---
 
 ## 5. Open questions (resolve before committing scope; record decisions inline)
 
 Design:
-1. **Combat** — cut to optional Stage 4. *(Still deferred.)*
-2. **Tab-hidden behavior** — default: pause when not visible (no offline
-   progression). *(Assumed; a capped ~10-min catch-up is the alternative.)*
-3. **Tariff** — baseline 30%, slider 10–40% (10% floor closes the "0% tariff"
+1. **Combat** — out of scope for v1.0.
+2. **Tariff** — baseline 30%, slider 10–40% (10% floor closes the "0% tariff"
    exploit). *(Assumed range.)*
-4. **Goods count** — grew from the original 14 to the current content-chains-v2
-   set (T1–T3 across 4 tiers). *(Shipped; balance ongoing.)*
-5. **Win condition** — castle L5 + a 6-scenario campaign. *(Castle L5 shipped;
-   scenarios are Stage-3 remaining.)*
-6. **Title** — "Trade Winds" is still a working title.
-7. **Research model (RESOLVED 2026-07-11)** — research costs **resources only**
+3. **Win condition (RESOLVED)** — Victory = completing the Mission chain. The
+   final Mission is currently "an Aristocrat home at 100% happiness"; it will
+   later become something richer (e.g. a Kingdom festival supplied over time).
+   Castle levels and random events are cut.
+4. **Research model (RESOLVED 2026-07-11)** — research costs **Goods only**
    (no gold, no time-clock), metered over time by a **placeable Research Center**
-   next to the castle whose level sets the drain speed; research is paused until a
+   next to the Castle whose level sets the drain speed; research is paused until a
    center is built. Materials drain equally so a node's inputs finish together.
+5. **Undecided carry-overs** — provisions/Provisioner, juice, audio, ambient chatter.
+6. **Title** — "Trade Winds" is still a working title.
 
 Technical:
-8. Map radius ~14 (~600 hexes), pointy-top, axial coords. *(Shipped; terrain set
-   expanded in v0.16.)*
-9. Desktop-first, mouse-driven — no touch controls in v1.0. Flag if mobile should
-   move up (real audience if hosted on a games site).
-10. Aesthetic: flat 2D code-drawn shapes, warm paper/wood/sepia palette,
-    storybook serif. Art direction remains open.
+7. **Board (RESOLVED)** — a rectangle of pointy-top hex tiles, axial coords, three
+   size presets (web defaults 36×18 / 50×25 / 66×33). The Castle sits near the
+   board's origin.
+8. **Platform (RESOLVED)** — Windows desktop first, mouse-driven. See ADR 0001.
+9. **Aesthetic** — board-game look as sprites; author supplies art.
 
 ---
 
-## 6. Resources & production chains (reference)
+## 6. Goods, needs & production chains (reference)
 
-- **Tiered goods**, raw → processed → luxury. Core raws: wood, stone, iron, clay,
-  grain, potato, fish, wool. Processed: planks, flour, mead, bricks, coal,
-  iron_tool, stone_tools, oil, clothes. Luxury / T3: bread, pottery, lamp,
-  iron_armor, chairs, gold_ring, brandy, luxury_clothes.
-- **Food is a category** — a town consumes whatever food is available.
-- **Chain rule:** the building-slot limit means no town is self-sufficient at
-  higher center levels — **specialization forces trade**. The mining town needs
-  bread from the farming town, which needs tools from the mining town.
-- Terrain enum as built: `water, meadow, forest, hills, mountains, fertile,
-  wasteland` (the code is the source of truth). Extractors sit on their resource
-  hex; processors sit on any town hex.
+- **Tiered Goods**, raw → processed → luxury. Web-version catalogue (reference,
+  re-introduced tier by tier): raws wood, stone, iron, clay, grain, potato, fish,
+  wool, coal, gold; processed planks, flour, mead, bricks, iron_tool, stone_tools,
+  oil, clothes; T3 bread, pottery, lamp, iron_armor, chairs, gold_ring, brandy,
+  luxury_clothes.
+- **Needs matrix** (Basic Needs hold happiness at 70%; Luxuries lift it to 100%;
+  one Good can be a Luxury for one tier and a Basic Need for another):
+
+  | Tier | Basic Needs | Luxuries |
+  |---|---|---|
+  | Peasant | Potato, Wood | Fish, Wool |
+  | Worker | Fish, Coal | Clothes, Bread, Mead |
+  | Burgher | Lamp, Bread, Mead, Clothes | Chairs, Pottery, Gold Ring |
+  | Aristocrat | Lamp, Mead, Iron Armor, Chairs, Pottery | Brandy, Luxury Clothes, Gold Ring |
+
+- **Chain rule:** the building-slot limit means no Town is self-sufficient —
+  **specialization forces trade**.
+- Terrain: `water, meadow, forest, hills, mountains, fertile, wasteland`.
+  Extractors sit on their Deposit hex; processors sit on any Town hex.
 
 ## 7. Market & trade (reference)
 
-- **Price per town/good** from stock vs minutes of **consumption** (residents +
-  processor inputs; construction bills and the research share are lumps, not rates,
-  so they drive trade buying but not prices):
+- **Price per Town/Good** from Stock vs minutes of **consumption** (residents +
+  processor inputs; construction bills and research are lumps, not rates, so they
+  drive trade buying but not prices):
   `ratio = stock / (max(0.5, consumption per min) · coverMin)` (coverMin = 2 min);
   `price = basePrice · clamp(1.9 − ratio, 0.4, 1.9)`, smoothed per tick. Surplus
-  (≥ 1.5× a comfortable stock) → 40 % of base; a comfortable 2 min → 90 %;
-  empty shelf → 190 %. Nothing stocked and nothing consumed → no market (base
-  price, shown as "—"). Specialised cities therefore price their import
-  several times above their export.
-- **Carts** (towns at center L2+): pick profitable routes
+  → 40 % of base; a comfortable 2 min → 90 %; empty shelf → 190 %. Nothing
+  stocked and nothing consumed → no market.
+- **Traders** pick profitable routes
   (`profit = (priceThere − priceHere)·load − distanceCost`) with a small top-3
-  randomness so carts don't herd; a purposeful-dispatch floor (`minStock`) stops
-  small towns from wanting <1 unit and never trading. Trades are **gradual** —
-  carts park to load/unload over time; the purchase settles atomically on arrival.
-- **Tariff** = the player's income: a share of every inter-town transaction to the
-  treasury (adjustable slider). Roads: Dijkstra on the road-node graph; paved
-  roads are faster.
+  randomness so they don't herd; a purposeful-dispatch floor (`minStock`) stops
+  small Towns from never trading. Trades are **gradual** — Traders park to
+  load/unload over time; the purchase settles atomically on arrival.
+- **Tariff** = the player's main income: a share of every trade between Towns
+  (adjustable). **Tax** = income from residents by need satisfaction.
+- Roads: shortest path on the road-hex graph; paved roads are faster.
 
 ## 8. Progression (reference)
 
-- **Research** — resource-metered (see Q7). A **Research Center** next to the
-  castle (built from castle-stock materials, no workers, upgradable L1–4 with
-  speeds 2/3/4/6) sets the drain speed. Consumption is quantized to whole
-  game-seconds and gated atomically on castle-stock availability. Kingdom Overview
-  and the Keep tab show a live progress bar with per-material consumed/needed.
-- **Population tiers** peasant → worker → citizen (burgher) → aristocrat; each tier
-  has needs and pays higher local tax as it's satisfied. Growth scales with tier
-  happiness.
-- **King's requests** (data-driven quest templates) grant gold + prestige;
-  **castle levels 1→5** (L5 = victory). **Random events** are cozy market
-  opportunities (bumper harvest, demand craze, fair, collapsed bridge), never
-  destructive to progress.
+- **Research** — Goods-metered (see Q4). A **Research Center** in the Castle
+  Compound (built from Castle Stock, no workers, upgradable L1–4 with speeds
+  2/3/4/6) sets the drain speed.
+- **Population Tiers** Peasant → Worker → Burgher → Aristocrat; each has Basic
+  Needs and Luxuries and pays more Tax as it's satisfied. Population follows
+  housing × happiness.
+- **Missions** — a sequenced chain of Crown goals; completing the last one is
+  Victory.
