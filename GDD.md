@@ -60,7 +60,7 @@ NEW Population Tier needs → new production chains → back to top
 ```
 
 The smallest complete experience is a **single Town that grows or starves as its
-needs are met**, plus **two Towns trading a Good along a road**. Everything else
+needs are met**, plus **two Towns trading a Good**. Everything else
 (research, tiers, Missions) gives that loop texture — it does not replace it.
 
 - **5-minute session:** check shortage alerts → place 1–2 buildings → leave on 2×.
@@ -102,15 +102,16 @@ the next.
 ### Milestone 1 — Economy core 🔜 NEXT
 - **Goal:** the smallest complete experience, in Unity.
 - **In (step 1, headless):** pure C# core — hex math, seeded rectangular board,
-  Towns, Peasant tier needs, production/consumption, local prices, road graph +
+  Towns, Peasant tier needs, production/consumption, local prices, pathing (off-road + roads),
   pathing, Traders, Tariff; Edit Mode tests.
 - **In (step 2, on screen):** hex Tilemap board from a seed, camera pan/zoom,
-  placing roads and Towns, Traders animated along roads, minimal Town panel,
+  placing roads and Towns, Traders animated across the board, minimal Town panel,
   speed controls. Placeholder sprites.
 - **Content:** Peasant tier — Basic Needs Potato + Wood, Luxuries Fish + Wool.
 - **Exit:** a potato Town and a timber Town, each specialised by terrain, trade
-  Potato ↔ Wood unattended and the Crown earns Tariff; cutting the road causes a
-  visible price crisis; covered by tests.
+  Potato ↔ Wood unattended (no road needed) and the Crown earns Tariff; building a
+  road between them visibly speeds trade and narrows their price gap, removing it
+  widens the gap again; covered by tests.
 
 ### Milestone 2 — The Kingdom
 - **In:** the Castle and Castle Stock, Castle market, Porters, fog + scouts,
@@ -200,7 +201,10 @@ Technical:
   load/unload over time; the purchase settles atomically on arrival.
 - **Tariff** = the player's main income: a share of every trade between Towns
   (adjustable). **Tax** = income from residents by need satisfaction.
-- Roads: shortest path on the road-hex graph; paved roads are faster.
+- **Roads are optional.** Traders travel off-road on any passable hex (detouring
+  around water and mountains) at half speed; a road route is 2× faster, paved
+  roads faster still. Roads are an investment in speed, not a connection
+  requirement.
 
 ## 8. Progression (reference)
 
