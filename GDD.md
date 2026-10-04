@@ -137,7 +137,7 @@ Aristocrats Home (Aristocrat; cannot be upgraded).
 **Start-unlocked:** Hut, Lumberjack, Potato Farm, Sawmill. Everything else is unlocked by research.
 
 **Construction:** the gold part is paid from the treasury on placement; materials are then delivered
-from the Town's Stock over time. Build time by tier: 6 / 10 / 14 / 18 s (+2 s per upgrade level,
+from the Town's Stock by Porters over time. Build time by tier: 6 / 10 / 14 / 18 s (+2 s per upgrade level,
 max 20 s); progress = the lower of time elapsed and materials delivered. Delivery order: bootstrap
 producers first, then ☆ priority, then the rest. Construction always leaves ~1 game-minute of
 residents' Basic Needs in Stock.
@@ -182,8 +182,12 @@ much is stocked):
 
 ## 8. Movement: Porters and Traders
 
-- **Porters** are visible carriers inside a Town (carry 10, ~1 s per hex). They collect output from
-  producers into the Town's Stock first, then deliver inputs to houses and processors.
+- **Porters are real logistics** (decided 2026-10-04). They are visible carriers inside a Town (carry
+  10, ~1 s per hex) and the *only* way Goods move inside it: they collect output from producers into
+  the Town's Stock, deliver inputs to processors and needs to houses, and carry construction and
+  upgrade materials to building sites. Nothing is consumed or built from Stock at a distance — if
+  Porters can't keep up, houses go short and sites wait, and the UI says so. Porter count and speed
+  are therefore a real lever (Town level, research).
 - **Traders** travel between Towns, carry 10, and are owned by the buying Town (count by Town level,
   +research). **Roads are optional:** off-road, Traders walk around water and mountains at half speed;
   a road route is 2× faster, paved roads faster still. Roads cost 5 treasury gold per hex.
@@ -209,7 +213,11 @@ much is stocked):
   `old-game-files/src/goods.js` for the full table.
 - **Tariff:** 30% of each trade's customs value (max(price, base) × quantity), **minted into the
   treasury on top** — the seller keeps the full price. Slider 10–40% once researched.
-- **Money sources:** Tax (into Towns), Tariff (into the treasury). Treasury starts at **10,000**.
+- **Money sources:** Tax (into Towns), Tariff (into the treasury), Mission rewards (into the
+  treasury). Treasury starts at **10,000**.
+- **Tariff is the Crown's main income** (decided 2026-10-04). Balance so a trading Kingdom funds its
+  expansion through Tariff; Give/Take is an occasional tool, not the money engine. Tax stays in each
+  Town's purse to fund its imports, upgrades and level-ups.
 
 ---
 
@@ -253,7 +261,8 @@ Advanced Provisioner (fish + potato).
 7. The Good Life — Manor, Aristocrats Home, 1000 lifetime Tax.
 
 Objective types: construct, upgrade, trade Good, earn Tax, found Town, research. Missions count work
-done earlier. Missions are data (author-editable).
+done earlier. Missions are data (author-editable). **Each Mission rewards treasury gold** on
+completion (decided 2026-10-04; amounts set during balancing).
 
 **Victory = completing the Mission chain.** The final Mission is currently "an Aristocrats Home at
 100% happiness" (pure needs, not boosted by Give). It will later become something richer, e.g. a
@@ -297,12 +306,12 @@ there, Victory was the Aristocrats Home alone and Missions were separate.)*
 ## 13. Known problems to fix in the port
 
 - **Tariff is small next to Tax** (~4–20 gold/min vs 45–55 per Town), so the treasury is refilled
-  mainly by manual Take — the headline income isn't the real one.
+  mainly by manual Take. **Fix:** Tariff must become the main income (§9).
 - **Take's −30 happiness also halves population** (pop follows happiness), harsher than intended.
 - **Minted Tariff** is deliberate inflation; watch for runaway treasury after Victory.
 - **Worker happiness plateaus** (fish/coal at 35–75%); the late tiers needed big fixes to be reachable.
-- **Porter delivery is effectively optional** — consumption falls back to Stock directly; construction
-  uses an abstract budget instead of Porters. Decide whether Porters are real logistics.
+- **Porter delivery was effectively optional** — consumption fell back to Stock directly; construction
+  used an abstract budget. **Fix:** Porters are real logistics (§8).
 - **Buy target ≈ a flat floor of 6** for nearly every Good, independent of how fast it's used.
 - **Inputs aren't scaled by work speed** — a happy processor makes 1.2 outputs per input.
 - Research **cancel refunds nothing**; ETA reads ~1 s optimistic.
@@ -320,9 +329,9 @@ combat exists); unused legacy config.
 Content grows **one Population Tier at a time**, each balanced before the next.
 
 - **M1 — Economy core:** headless C# core + tests, then the hex board on screen. Peasant tier only
-  (Potato, Wood; Luxuries Fish, Wool). **Exit:** a potato Town and a timber Town trade Potato ↔ Wood
+  (Potato, Wood; Luxuries Fish, Wool), with Porters as real logistics from day one. **Exit:** a potato Town and a timber Town trade Potato ↔ Wood
   unattended and the Crown earns Tariff; a road visibly speeds trade and narrows their price gap.
-- **M2 — The Kingdom:** Castle + Castle market, Porters, fog + Scouts + provisions, save/load, Town
+- **M2 — The Kingdom:** Castle + Castle market, fog + Scouts + provisions, save/load, Town
   levels, Worker tier. **Exit:** a two-tier Kingdom grows unattended without stalling.
 - **M3 — Progression:** research + Research Center, Missions, Burgher and Aristocrat tiers, start
   screen, onboarding. **Exit:** a deterministic run completes the Mission chain (Victory).
@@ -334,11 +343,8 @@ seasons; player contracts between Towns; seed of the day.
 
 ## 16. Open questions
 
-1. **Burgher or Citizen on screen?** The web UI showed "Citizens" (an author decision); the glossary
-   now says Burgher everywhere.
-2. **Mission rewards?** Web Missions gave nothing; with Victory tied to the chain, should they reward
-   gold or unlocks?
-3. **Tariff vs Tax balance** (§13) — should Tariff become the main income as the pitch says?
-4. **Porters:** real logistics (deliveries can fail) or presentation only?
-5. **Juice, audio, ambient chatter** — carry over?
-6. **Tariff range** 10–40% (assumed). **Title** "Trade Winds" is a working title.
+1. **Juice, audio, ambient chatter** — carry over?
+2. **Tariff range** 10–40% (assumed). **Title** "Trade Winds" is a working title.
+
+Resolved 2026-10-04: "Burgher" on screen too (not "Citizen"); Missions reward gold; Tariff is the
+main income; Porters are real logistics.

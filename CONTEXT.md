@@ -45,7 +45,7 @@ An agent that buys Goods in one place and sells them in another, travelling by r
 _Avoid_: Cart, Caravan
 
 **Porter**:
-An agent that moves Goods between buildings inside one Town; never trades.
+An agent that moves Goods inside one Town — the only way Goods reach houses, processors and building sites; never trades.
 
 **Tariff**:
 The Crown's share of every trade between Towns; the player's main income.

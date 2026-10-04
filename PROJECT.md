@@ -68,10 +68,10 @@ PRs and merges them itself after tests pass.
 
 ## Milestone exit criteria (QA gates each against GDD.md §4)
 
-- **M1 — Economy core 🔜** a potato Town and a timber Town trade Potato ↔ Wood unattended, Tariff
+- **M1 — Economy core 🔜** (Peasant tier, Porters as real logistics) a potato Town and a timber Town trade Potato ↔ Wood unattended, Tariff
   accrues (no road needed); a road between them visibly speeds trade and narrows the price gap,
   removing it widens the gap again; Core covered by Edit Mode tests.
-- **M2 — The Kingdom** Castle + Castle market, Porters, fog/Scouts/provisions, save/load, Town levels, Worker tier;
+- **M2 — The Kingdom** Castle + Castle market, fog/Scouts/provisions, save/load, Town levels, Worker tier;
   a two-tier Kingdom grows unattended without stalling.
 - **M3 — Progression** research + Research Center, Missions, Burgher + Aristocrat tiers, start
   screen, tutorial; deterministic test reaches Victory.
