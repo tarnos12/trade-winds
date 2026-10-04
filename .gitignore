@@ -24,3 +24,26 @@ scratch/
 # Generated Artifact bundles (derived from tools/*.html for publishing) — not source
 *.artifact.html
 dist-desktop/
+
+# Unity (generated / per-machine)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+*.unityproj
+.vs/
+sysinfo.txt
+crashlytics-build.properties
+
+# Claude Code per-machine settings
+.claude/settings.local.json
