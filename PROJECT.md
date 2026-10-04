@@ -71,7 +71,7 @@ PRs and merges them itself after tests pass.
 - **M1 — Economy core 🔜** a potato Town and a timber Town trade Potato ↔ Wood unattended, Tariff
   accrues (no road needed); a road between them visibly speeds trade and narrows the price gap,
   removing it widens the gap again; Core covered by Edit Mode tests.
-- **M2 — The Kingdom** Castle + Castle Stock + market, Porters, fog/scouts, save/load, Worker tier;
+- **M2 — The Kingdom** Castle + Castle market, Porters, fog/Scouts/provisions, save/load, Town levels, Worker tier;
   a two-tier Kingdom grows unattended without stalling.
 - **M3 — Progression** research + Research Center, Missions, Burgher + Aristocrat tiers, start
   screen, tutorial; deterministic test reaches Victory.
@@ -88,5 +88,5 @@ PRs and merges them itself after tests pass.
 
 - **2026-10-04** — Web game archived to `old-game-files/`; empty Unity 2D URP project with MCP for
   Unity committed. Design grilled and recorded: `GDD.md` rewritten for the port, `CONTEXT.md`
-  glossary, ADR 0001 (Unity desktop port), ADR 0002 (pure C# sim core). **Next: Milestone 1 step 1
+  glossary, ADR 0001 (Unity desktop port), ADR 0002 (pure C# sim core). GDD then rebuilt from a full read of the web code + docs (§13 known problems, §14 cut list, §16 open questions). **Next: Milestone 1 step 1
   — headless `TradeWinds.Core` with tests.**
