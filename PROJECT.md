@@ -90,3 +90,8 @@ PRs and merges them itself after tests pass.
   Unity committed. Design grilled and recorded: `GDD.md` rewritten for the port, `CONTEXT.md`
   glossary, ADR 0001 (Unity desktop port), ADR 0002 (pure C# sim core). GDD then rebuilt from a full read of the web code + docs (§13 known problems, §14 cut list, §16 open questions). **Next: Milestone 1 step 1
   — headless `TradeWinds.Core` with tests.**
+- **2026-10-06** — M1 step 1 in progress: `TradeWinds.Core` (hex board, Towns, Peasant tier, real Porters,
+  production, needs/happiness/population, Tax, prices, Traders with optional roads, Tariff) + 19 tests green
+  headless (`dotnet test tools/CoreTests`). Two specialised Towns trade unattended and fill their houses.
+  Findings: road effect on price gap is small at this scale; Tariff ≈ 16/min vs Tax ≈ 140/min (GDD §13).
+  **Next: M1 step 2 — hex Tilemap board + Town/Trader view in the scene.**

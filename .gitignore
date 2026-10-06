@@ -47,3 +47,8 @@ crashlytics-build.properties
 
 # Claude Code per-machine settings
 .claude/settings.local.json
+
+# Headless core test runner build output
+tools/CoreTests/bin/
+tools/CoreTests/obj/
+!tools/CoreTests/CoreTests.csproj
