@@ -389,6 +389,7 @@ namespace TradeWinds.Core
             p.Good = good;
             p.Amount = amount;
             p.Arrived = false;
+            p.StartTick = world.Tick;
             if (job == PorterJob.Collect)
             {
                 // Walk out, load, walk back, unload into Stock.

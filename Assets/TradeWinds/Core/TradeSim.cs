@@ -202,6 +202,7 @@ namespace TradeWinds.Core
             trader.Good = good;
             trader.Amount = qty;
             trader.OnRoad = offer.route.AllRoad;
+            trader.Path = offer.route.Path;
             trader.LegTicks = Math.Max(b.MinLegTicks, (int)Math.Ceiling(offer.route.Cost / b.TraderHexesPerTick));
             trader.PhaseEndTick = world.Tick + trader.LegTicks;
             return true;

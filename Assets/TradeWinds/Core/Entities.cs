@@ -59,6 +59,7 @@ namespace TradeWinds.Core
     public sealed class Porter
     {
         public PorterJob Job;
+        public long StartTick;
         public Building Target;
         public int Good;
         public double Amount;
@@ -89,6 +90,8 @@ namespace TradeWinds.Core
         public int LegTicks;
         public long PhaseEndTick;
         public bool OnRoad;
+        /// <summary>Route from home to the seller (walked in reverse on the way back).</summary>
+        public Hex[] Path = System.Array.Empty<Hex>();
     }
 
     public sealed class Town

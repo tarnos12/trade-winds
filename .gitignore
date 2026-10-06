@@ -52,3 +52,7 @@ crashlytics-build.properties
 tools/CoreTests/bin/
 tools/CoreTests/obj/
 !tools/CoreTests/CoreTests.csproj
+
+# MCP / editor screenshots
+/[Aa]ssets/[Ss]creenshots/
+/[Aa]ssets/[Ss]creenshots.meta

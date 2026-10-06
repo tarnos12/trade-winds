@@ -9,13 +9,16 @@ namespace TradeWinds.Core
         public readonly double Cost;
         public readonly int Steps;
         public readonly bool AllRoad;
+        /// <summary>Hexes from start to end, inclusive (empty if not found).</summary>
+        public readonly Hex[] Path;
 
-        public Route(bool found, double cost, int steps, bool allRoad)
+        public Route(bool found, double cost, int steps, bool allRoad, Hex[] path = null)
         {
             Found = found;
             Cost = cost;
             Steps = steps;
             AllRoad = allRoad;
+            Path = path ?? System.Array.Empty<Hex>();
         }
     }
 
@@ -64,11 +67,12 @@ namespace TradeWinds.Core
         {
             var board = _world.Board;
             double offRoad = _world.Content.Balance.OffRoadCostMultiplier;
-            if (from == to) return new Route(true, 0, 0, true);
+            if (from == to) return new Route(true, 0, 0, true, new[] { from });
 
             var dist = new Dictionary<Hex, double> { [from] = 0 };
             var steps = new Dictionary<Hex, int> { [from] = 0 };
             var allRoad = new Dictionary<Hex, bool> { [from] = true };
+            var prev = new Dictionary<Hex, Hex>();
             var open = new MinHeap();
             open.Push(from, 0);
 
@@ -76,7 +80,7 @@ namespace TradeWinds.Core
             {
                 open.Pop(out var cur, out double d);
                 if (d > dist[cur] + 1e-9) continue;
-                if (cur == to) return new Route(true, d, steps[cur], allRoad[cur]);
+                if (cur == to) return new Route(true, d, steps[cur], allRoad[cur], Reconstruct(prev, from, to));
 
                 bool curRoad = IsRoadLike(cur);
                 for (int dir = 0; dir < 6; dir++)
@@ -89,11 +93,25 @@ namespace TradeWinds.Core
                     dist[next] = nd;
                     steps[next] = steps[cur] + 1;
                     allRoad[next] = allRoad[cur] && road;
+                    prev[next] = cur;
                     open.Push(next, nd);
                 }
             }
 
             return new Route(false, 0, 0, false);
+        }
+
+        static Hex[] Reconstruct(Dictionary<Hex, Hex> prev, Hex from, Hex to)
+        {
+            var list = new List<Hex> { to };
+            var cur = to;
+            while (cur != from)
+            {
+                cur = prev[cur];
+                list.Add(cur);
+            }
+            list.Reverse();
+            return list.ToArray();
         }
 
         sealed class MinHeap
