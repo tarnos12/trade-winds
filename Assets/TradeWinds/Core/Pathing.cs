@@ -40,6 +40,7 @@ namespace TradeWinds.Core
         bool IsRoadLike(Hex h)
         {
             if (_world.Roads.Contains(h)) return true;
+            if (_world.Castle != null && _world.Castle.Center == h) return true;
             foreach (var t in _world.Towns)
                 if (t.Center == h) return true;
             return false;

@@ -60,7 +60,11 @@ namespace TradeWinds.Core
             return col >= 0 && col < Width && row >= 0 && row < Height;
         }
 
-        int Index(Hex h)
+        public int Count => Width * Height;
+
+        public Hex HexAt(int index) => FromOffset(index % Width, index / Width);
+
+        public int Index(Hex h)
         {
             ToOffset(h, out int col, out int row);
             return row * Width + col;

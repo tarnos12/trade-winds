@@ -43,6 +43,7 @@ namespace TradeWinds.Core.Tests
             var hut = town.Buildings[0];
             Assert.That(hut.Built, "built with Porters");
 
+            world.Content.Balance.PortersByLevel = new[] { 0, 0, 0, 0 };
             town.Porters.Clear();
             Array.Clear(hut.Buffer, 0, hut.Buffer.Length);
             world.Run(10 * Minute);
@@ -57,6 +58,7 @@ namespace TradeWinds.Core.Tests
             var world = new World(PeasantContent.Create(), new Board(20, 10), 3);
             var c = Scenarios.At(8, 5);
             Assert.That(world.FoundTown(c, out var town).Ok);
+            world.Content.Balance.PortersByLevel = new[] { 0, 0, 0, 0 };
             town.Porters.Clear();
             Scenarios.Place(world, "hut", c.Neighbor(0));
             world.Run(2 * Minute);
