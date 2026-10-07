@@ -13,6 +13,7 @@ namespace TradeWinds.Core
         public int DesertClumps = 4;
         public int FishShoals = 7;
         public int StoneClusters = 5;
+        public int OreClusters = 4;
     }
 
     public sealed class GeneratedMap
@@ -75,8 +76,41 @@ namespace TradeWinds.Core
                 Blob(board, rng, c, 1 + rng.Range(3), Terrain.Stone, OnlyOn(Terrain.Barren, Terrain.Desert));
             }
 
+            // Ore deposits by distance band from the start (GDD §4): clay/coal mid, iron/gold far.
+            double far = 0;
+            ForEach(board, h => far = Math.Max(far, Hex.Distance(h, start)));
+            PlaceOre(board, rng, start, far, Terrain.Clay, s.OreClusters, 0.33, Terrain.Water);
+            PlaceOre(board, rng, start, far, Terrain.Coal, s.OreClusters, 0.33, Terrain.Mountains);
+            PlaceOre(board, rng, start, far, Terrain.Iron, s.OreClusters, 0.66, Terrain.Mountains);
+            PlaceOre(board, rng, start, far, Terrain.Gold, Math.Max(2, s.OreClusters - 1), 0.66, Terrain.Mountains);
+
             Guarantees(board, rng, start);
             return new GeneratedMap { Board = board, Start = start };
+        }
+
+        static void PlaceOre(Board board, Rng rng, Hex start, double far, Terrain ore, int clusters, double minBand, Terrain affinity)
+        {
+            var near = new List<Hex>();
+            var any = new List<Hex>();
+            ForEach(board, h =>
+            {
+                var t = board[h];
+                if (t != Terrain.Barren && t != Terrain.Desert) return;
+                if (Hex.Distance(h, start) < minBand * far) return;
+                any.Add(h);
+                for (int d = 0; d < 6; d++)
+                {
+                    var n = h.Neighbor(d);
+                    if (board.Contains(n) && board[n] == affinity) { near.Add(h); break; }
+                }
+            });
+            for (int i = 0; i < clusters; i++)
+            {
+                var pool = near.Count > 0 && rng.NextDouble() < 0.7 ? near : any;
+                if (pool.Count == 0) return;
+                var seed = pool[rng.Range(pool.Count)];
+                Blob(board, rng, seed, 1 + rng.Range(3), ore, OnlyOn(Terrain.Barren, Terrain.Desert));
+            }
         }
 
         static void Guarantees(Board board, Rng rng, Hex start)

@@ -46,6 +46,7 @@ namespace TradeWinds.EditorTools
             grid.cellSize = new Vector3(0.8660254f, 1f, 1f);
             var terrain = NewTilemap(gridGo, "Terrain", 0);
             var roads = NewTilemap(gridGo, "Roads", 1);
+            var fog = NewTilemap(gridGo, "Fog", 5);
 
             // Game root: controller, view, HUD.
             var gameGo = new GameObject("Game");
@@ -53,6 +54,7 @@ namespace TradeWinds.EditorTools
             view.Grid = grid;
             view.TerrainMap = terrain;
             view.RoadMap = roads;
+            view.FogMap = fog;
             var doc = gameGo.AddComponent<UIDocument>();
             doc.panelSettings = AssetDatabase.LoadAssetAtPath<PanelSettings>(PanelSettingsPath);
             if (doc.panelSettings == null) Debug.LogError("[TradeWinds] Panel Settings asset missing at " + PanelSettingsPath);

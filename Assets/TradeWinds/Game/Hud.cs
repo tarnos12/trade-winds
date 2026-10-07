@@ -1,5 +1,6 @@
+using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 using TradeWinds.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -7,20 +8,30 @@ using UnityEngine.UIElements;
 
 namespace TradeWinds.Game
 {
-    /// <summary>Placeholder HUD (UI Toolkit, built in code): treasury + Tariff, speed, goal, build bar,
-    /// hover hint, Town panel and toasts. "Only what's needed on screen" (GDD §12).</summary>
+    /// <summary>The game's UI Toolkit HUD, built in code: Crown bar, speeds, Missions, build bar by tier, hints,
+    /// Town/Castle panels, research tree, Event Log, toasts, confirm dialog, start screen and victory card.</summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class Hud : MonoBehaviour
     {
         GameController _game;
         VisualElement _root;
-        Label _treasury, _tariff, _towns, _clock, _hint, _toast, _goal;
+        Label _treasury, _tariff, _towns, _research, _clock, _hint, _toast;
+        VisualElement _missionCard, _logCard, _rightDock, _barTabs, _barItems, _confirm, _start, _victory;
         readonly Dictionary<int, Button> _speedButtons = new Dictionary<int, Button>();
-        readonly List<(Button button, ToolKind tool, BuildingDef def)> _toolButtons = new List<(Button, ToolKind, BuildingDef)>();
-        VisualElement _townPanel;
-        Label _townTitle, _townBody;
-        float _toastUntil;
-        float _nextRefresh;
+        TownPanel _townPanel;
+        CastlePanel _castlePanel;
+        ResearchPanel _researchPanel;
+        int _tab;
+        float _toastUntil, _nextRefresh;
+        bool _dirty = true;
+        string _hoverHint = "";
+        Action _confirmAction;
+        TextField _seedField;
+        MapSize _startSize = MapSize.Normal;
+
+        public bool ModalOpen => _confirm != null && _confirm.style.display == DisplayStyle.Flex;
+        public bool ResearchOpen => _researchPanel != null && _researchPanel.Root.parent != null;
+        public bool TextFieldFocused => _root?.panel?.focusController?.focusedElement is TextField || _root?.panel?.focusController?.focusedElement is TextElement te && te.parent is TextField;
 
         void OnEnable()
         {
@@ -29,14 +40,22 @@ namespace TradeWinds.Game
             _root.Clear();
             _root.pickingMode = PickingMode.Ignore;
             _root.style.flexGrow = 1;
+            _townPanel = new TownPanel(this);
+            _castlePanel = new CastlePanel(this);
+            _researchPanel = new ResearchPanel(this);
             Build();
         }
 
         public void OnNewGame(GameController game)
         {
             _game = game;
-            BuildToolButtons();
+            _tab = 0;
+            _dirty = true;
+            if (_researchPanel.Root.parent != null) _researchPanel.Root.RemoveFromHierarchy();
+            RebuildBar();
         }
+
+        // ------------------------------------------------------------------ public API
 
         public bool IsPointerOverUi()
         {
@@ -49,111 +68,118 @@ namespace TradeWinds.Game
 
         public void Toast(string message)
         {
-            if (_toast == null) return;
+            if (_toast == null || string.IsNullOrEmpty(message)) return;
             _toast.text = message;
             _toast.style.display = DisplayStyle.Flex;
             _toastUntil = Time.unscaledTime + 4.5f;
         }
 
+        public void Report(CommandResult r)
+        {
+            if (!r.Ok) Toast(r.Reason);
+        }
+
+        public void MarkDirty() => _dirty = true;
+
+        /// <summary>Show <paramref name="text"/> in the hint line while the pointer is over <paramref name="e"/>.</summary>
+        public void Hint(VisualElement e, string text)
+        {
+            e.RegisterCallback<PointerEnterEvent>(_ => _hoverHint = text);
+            e.RegisterCallback<PointerLeaveEvent>(_ => { if (_hoverHint == text) _hoverHint = ""; });
+        }
+
+        public void Confirm(string message, Action onYes)
+        {
+            _confirmAction = onYes;
+            _confirm.Q<Label>("ConfirmText").text = message;
+            _confirm.style.display = DisplayStyle.Flex;
+        }
+
+        public void ToggleResearch()
+        {
+            if (_researchPanel.Root.parent != null) _researchPanel.Root.RemoveFromHierarchy();
+            else
+            {
+                _root.Add(_researchPanel.Root);
+                _researchPanel.Root.SendToBack();
+                _researchPanel.Root.BringToFront();
+            }
+            _dirty = true;
+        }
+
+        /// <summary>Esc: close the topmost overlay. Returns true if something closed.</summary>
+        public bool CloseTopmost()
+        {
+            if (ModalOpen) { _confirm.style.display = DisplayStyle.None; return true; }
+            if (ResearchOpen) { ToggleResearch(); return true; }
+            return false;
+        }
+
         // ------------------------------------------------------------------ layout
-
-        static VisualElement Card()
-        {
-            var v = new VisualElement();
-            v.style.backgroundColor = Palette.Panel;
-            v.style.borderTopColor = v.style.borderBottomColor = v.style.borderLeftColor = v.style.borderRightColor = Palette.PanelEdge;
-            v.style.borderTopWidth = v.style.borderBottomWidth = v.style.borderLeftWidth = v.style.borderRightWidth = 1;
-            v.style.borderTopLeftRadius = v.style.borderTopRightRadius = v.style.borderBottomLeftRadius = v.style.borderBottomRightRadius = 6;
-            v.style.paddingTop = v.style.paddingBottom = 6;
-            v.style.paddingLeft = v.style.paddingRight = 10;
-            return v;
-        }
-
-        static Label Text(string s, int size = 15, bool bold = false)
-        {
-            var l = new Label(s);
-            l.style.color = Palette.Paper;
-            l.style.fontSize = size;
-            if (bold) l.style.unityFontStyleAndWeight = FontStyle.Bold;
-            l.style.whiteSpace = WhiteSpace.Normal;
-            return l;
-        }
-
-        static Button MakeButton(string text, System.Action onClick)
-        {
-            var b = new Button(onClick) { text = text };
-            b.style.backgroundColor = new Color(0.25f, 0.2f, 0.14f, 1f);
-            b.style.color = Palette.Paper;
-            b.style.fontSize = 14;
-            b.style.borderTopColor = b.style.borderBottomColor = b.style.borderLeftColor = b.style.borderRightColor = Palette.PanelEdge;
-            b.style.marginLeft = b.style.marginRight = 2;
-            b.style.paddingLeft = b.style.paddingRight = 8;
-            b.style.paddingTop = b.style.paddingBottom = 4;
-            return b;
-        }
-
-        static void Highlight(Button b, bool on) =>
-            b.style.backgroundColor = on ? Palette.Accent : new Color(0.25f, 0.2f, 0.14f, 1f);
 
         void Build()
         {
-            // Top-left: Crown status.
-            var top = Card();
+            // Top-left: the Crown.
+            var top = Ui.Card();
             top.style.position = Position.Absolute;
             top.style.left = 12;
             top.style.top = 12;
             top.style.flexDirection = FlexDirection.Row;
-            _treasury = Text("", 17, true);
-            _tariff = Text("", 15);
-            _towns = Text("", 15);
-            foreach (var l in new[] { _treasury, _tariff, _towns }) { l.style.marginRight = 18; top.Add(l); }
+            top.style.alignItems = Align.Center;
+            _treasury = Ui.Text("", 17, true, Palette.Castle);
+            _tariff = Ui.Text("", 14);
+            _towns = Ui.Text("", 14);
+            _research = Ui.Text("", 14);
+            foreach (var l in new[] { _treasury, _tariff, _towns, _research }) { l.style.marginRight = 16; top.Add(l); }
+            top.Add(Ui.Button("Castle (K)", () => _game.SelectCastle()));
+            top.Add(Ui.Button("Research (R)", ToggleResearch));
             _root.Add(top);
 
-            // Top-right: clock, speeds, new game.
-            var speeds = Card();
+            // Top-right: clock, speeds, menu.
+            var speeds = Ui.Card();
             speeds.style.position = Position.Absolute;
             speeds.style.right = 12;
             speeds.style.top = 12;
             speeds.style.flexDirection = FlexDirection.Row;
             speeds.style.alignItems = Align.Center;
-            _clock = Text("0:00", 15);
-            _clock.style.marginRight = 10;
+            _clock = Ui.Text("0:00", 14);
+            _clock.style.marginRight = 8;
             speeds.Add(_clock);
             foreach (var s in new[] { 0, 1, 2, 4 })
             {
                 int speed = s;
-                var b = MakeButton(s == 0 ? "||" : s + "x", () => _game.SetSpeed(speed));
+                var b = Ui.Button(s == 0 ? "||" : s + "x", () => _game.SetSpeed(speed));
                 _speedButtons[s] = b;
                 speeds.Add(b);
             }
-            var newGame = MakeButton("New realm", () => _game.NewGame((uint)System.Environment.TickCount));
-            newGame.style.marginLeft = 10;
-            speeds.Add(newGame);
+            var menu = Ui.Button("Menu", () => _game.OpenMenu());
+            menu.style.marginLeft = 8;
+            speeds.Add(menu);
             _root.Add(speeds);
 
-            // Left: goal card.
-            var goalCard = Card();
-            goalCard.style.position = Position.Absolute;
-            goalCard.style.left = 12;
-            goalCard.style.top = 64;
-            goalCard.style.width = 330;
-            goalCard.Add(Text("Goal", 16, true));
-            _goal = Text("", 14);
-            goalCard.Add(_goal);
-            _root.Add(goalCard);
+            // Left: Missions.
+            _missionCard = Ui.Card();
+            _missionCard.style.position = Position.Absolute;
+            _missionCard.style.left = 12;
+            _missionCard.style.top = 64;
+            _missionCard.style.width = 330;
+            _root.Add(_missionCard);
 
-            // Right: Town panel.
-            _townPanel = Card();
-            _townPanel.style.position = Position.Absolute;
-            _townPanel.style.right = 12;
-            _townPanel.style.top = 64;
-            _townPanel.style.width = 330;
-            _townTitle = Text("", 17, true);
-            _townBody = Text("", 14);
-            _townPanel.Add(_townTitle);
-            _townPanel.Add(_townBody);
-            _townPanel.style.display = DisplayStyle.None;
-            _root.Add(_townPanel);
+            // Right dock: Town or Castle panel.
+            _rightDock = new VisualElement();
+            _rightDock.style.position = Position.Absolute;
+            _rightDock.style.right = 12;
+            _rightDock.style.top = 64;
+            _rightDock.style.maxHeight = new Length(80, LengthUnit.Percent);
+            _root.Add(_rightDock);
+
+            // Bottom-left: Event Log.
+            _logCard = Ui.Card();
+            _logCard.style.position = Position.Absolute;
+            _logCard.style.left = 12;
+            _logCard.style.bottom = 110;
+            _logCard.style.width = 330;
+            _root.Add(_logCard);
 
             // Bottom: hint + build bar.
             var bottom = new VisualElement();
@@ -161,79 +187,279 @@ namespace TradeWinds.Game
             bottom.style.position = Position.Absolute;
             bottom.style.left = 0;
             bottom.style.right = 0;
-            bottom.style.bottom = 12;
+            bottom.style.bottom = 10;
             bottom.style.alignItems = Align.Center;
-            _hint = Text("", 14);
+            _hint = Ui.Text("", 13);
             _hint.pickingMode = PickingMode.Ignore;
             _hint.style.marginBottom = 6;
+            _hint.style.maxWidth = 900;
             _hint.style.backgroundColor = Palette.Panel;
             _hint.style.paddingLeft = _hint.style.paddingRight = 8;
             _hint.style.paddingTop = _hint.style.paddingBottom = 3;
             bottom.Add(_hint);
-            var bar = Card();
-            bar.name = "BuildBar";
-            bar.style.flexDirection = FlexDirection.Row;
+            var bar = Ui.Card();
+            bar.style.alignItems = Align.Center;
+            bar.style.maxWidth = new Length(96, LengthUnit.Percent);
+            _barTabs = Ui.Row();
+            _barItems = Ui.Row();
+            _barItems.style.justifyContent = Justify.Center;
+            bar.Add(_barTabs);
+            bar.Add(_barItems);
             bottom.Add(bar);
             _root.Add(bottom);
 
             // Toast.
-            _toast = Text("", 16, true);
+            _toast = Ui.Text("", 15, true);
             _toast.pickingMode = PickingMode.Ignore;
             _toast.style.position = Position.Absolute;
             _toast.style.top = 64;
             _toast.style.left = new Length(50, LengthUnit.Percent);
             _toast.style.translate = new Translate(new Length(-50, LengthUnit.Percent), 0);
-            _toast.style.maxWidth = 520;
+            _toast.style.maxWidth = 560;
             _toast.style.backgroundColor = Palette.Panel;
             _toast.style.paddingLeft = _toast.style.paddingRight = 12;
             _toast.style.paddingTop = _toast.style.paddingBottom = 6;
             _toast.style.unityTextAlign = TextAnchor.MiddleCenter;
             _toast.style.display = DisplayStyle.None;
             _root.Add(_toast);
+
+            BuildConfirm();
+            BuildStart();
+            BuildVictory();
         }
 
-        void BuildToolButtons()
+        VisualElement Overlay()
         {
-            var bar = _root.Q<VisualElement>("BuildBar");
-            bar.Clear();
-            _toolButtons.Clear();
-            var bal = _game.World.Content.Balance;
+            var o = new VisualElement();
+            o.style.position = Position.Absolute;
+            o.style.left = o.style.right = o.style.top = o.style.bottom = 0;
+            o.style.backgroundColor = new Color(0, 0, 0, 0.55f);
+            o.style.alignItems = Align.Center;
+            o.style.justifyContent = Justify.Center;
+            o.style.display = DisplayStyle.None;
+            return o;
+        }
 
-            AddTool(bar, $"Town ({bal.TownFoundCost:0}g)", ToolKind.Town, null);
-            foreach (var def in _game.World.Content.Buildings)
+        void BuildConfirm()
+        {
+            _confirm = Overlay();
+            var card = Ui.Card();
+            card.style.maxWidth = 520;
+            var text = Ui.Text("", 15);
+            text.name = "ConfirmText";
+            card.Add(text);
+            card.Add(Ui.Row(
+                Ui.Button("Yes", () => { _confirm.style.display = DisplayStyle.None; _confirmAction?.Invoke(); _dirty = true; }),
+                Ui.Button("Cancel", () => _confirm.style.display = DisplayStyle.None)));
+            _confirm.Add(card);
+            _root.Add(_confirm);
+        }
+
+        void BuildStart()
+        {
+            _start = Overlay();
+            _start.style.backgroundColor = new Color(0.05f, 0.04f, 0.03f, 0.7f);
+            var card = Ui.Card();
+            card.style.width = 560;
+            card.style.paddingTop = card.style.paddingBottom = 18;
+            card.style.paddingLeft = card.style.paddingRight = 24;
+            card.Add(Ui.Text("Trade Winds", 40, true, Palette.Castle));
+            card.Add(Ui.Text("Found Towns, let them trade, and the Crown takes its Tariff.", 16));
+            card.Add(Ui.Spacer(8));
+            card.Add(Ui.Text("Towns produce, consume and trade on their own. Specialise them so they need each other, " +
+                             "research new chains for higher classes, and complete the King's Missions. " +
+                             "The final Mission: an Aristocrats Home at 100% happiness.", 13, false, Palette.Muted));
+            card.Add(Ui.Spacer(10));
+            _seedField = new TextField("Seed") { value = NewSeedWord() };
+            _seedField.style.color = Palette.Ink;
+            _seedField.labelElement.style.color = Palette.Paper;
+            _seedField.style.minWidth = 300;
+            var dice = Ui.Button("Random", () => _seedField.value = NewSeedWord());
+            card.Add(Ui.Row(_seedField, dice));
+            var sizeRow = Ui.Row(Ui.Text("Map size", 13));
+            foreach (MapSize s in Enum.GetValues(typeof(MapSize)))
             {
-                string cost = def.GoldCost > 0 ? $"{def.GoldCost:0}g + " : "";
-                foreach (var m in def.MaterialCost) cost += $"{m.Amount:0} {_game.World.Content.Goods[m.Good].Name.ToLower()}";
-                AddTool(bar, $"{def.Name} ({cost})", ToolKind.Building, def);
+                var size = s;
+                var b = Ui.Button(s.ToString(), () => { _startSize = size; RefreshStart(); });
+                b.name = "size-" + s;
+                sizeRow.Add(b);
             }
-            AddTool(bar, $"Road ({bal.RoadCostPerHex:0}g/hex)", ToolKind.Road, null);
-            AddTool(bar, "Remove road", ToolKind.RemoveRoad, null);
+            card.Add(sizeRow);
+            card.Add(Ui.Spacer(10));
+            var buttons = Ui.Row(
+                Ui.Button("New realm", () => _game.NewGame(SeedFromText(_seedField.value), _startSize)),
+                Ui.Button("Continue", () => { if (!_game.Continue()) Toast("No saved realm to continue."); }));
+            buttons.name = "StartButtons";
+            card.Add(buttons);
+            card.Add(Ui.Spacer(10));
+            card.Add(Ui.Text("Controls: left-click build/select · right-drag or WASD pan · wheel zoom · Space pause · 1/2/4 speed · " +
+                             "R research · K Castle · Shift keeps a building tool · Esc cancel. The realm saves automatically.", 12, false, Palette.Muted));
+            _start.Add(card);
+            _root.Add(_start);
+            RefreshStart();
         }
 
-        void AddTool(VisualElement bar, string label, ToolKind tool, BuildingDef def)
+        void RefreshStart()
         {
-            var b = MakeButton(label, () =>
+            foreach (MapSize s in Enum.GetValues(typeof(MapSize)))
+            {
+                var b = _start.Q<Button>("size-" + s);
+                if (b != null) Ui.Highlight(b, s == _startSize);
+            }
+        }
+
+        static string NewSeedWord()
+        {
+            string[] words = { "amber", "harbor", "willow", "copper", "meadow", "falcon", "ember", "saffron", "thistle", "granite" };
+            var r = new System.Random();
+            return words[r.Next(words.Length)] + "-" + r.Next(100, 999);
+        }
+
+        static uint SeedFromText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return (uint)Environment.TickCount;
+            uint h = 2166136261;
+            foreach (char c in text.Trim().ToLowerInvariant()) h = (h ^ c) * 16777619;
+            return h;
+        }
+
+        void BuildVictory()
+        {
+            _victory = Overlay();
+            _root.Add(_victory);
+        }
+
+        void ShowVictory()
+        {
+            var w = _game.World;
+            _victory.Clear();
+            var card = Ui.Card();
+            card.style.width = 480;
+            card.style.paddingTop = card.style.paddingBottom = 18;
+            card.Add(Ui.Text("Victory!", 36, true, Palette.Castle));
+            card.Add(Ui.Text("Every Mission is complete — the Aristocrats live in perfect contentment.", 15));
+            long secs = w.VictoryTick / 2;
+            card.Add(Ui.Text($"Time: {secs / 3600}:{secs / 60 % 60:00}:{secs % 60:00}   ·   Towns: {w.Towns.Count}   ·   Peak population: {w.Stats.PeakPopulation:0}", 13));
+            card.Add(Ui.Text($"Lifetime Tariff: {w.LifetimeTariff:N0}   ·   Goods traded: {w.Stats.GoodsTraded.Sum():N0}   ·   Research: {w.ResearchDone.Count}", 13));
+            card.Add(Ui.Row(
+                Ui.Button("Keep ruling", () => { _victory.style.display = DisplayStyle.None; }),
+                Ui.Button("New realm", () => { _victory.style.display = DisplayStyle.None; _game.OpenMenu(); })));
+            _victory.Add(card);
+            _victory.style.display = DisplayStyle.Flex;
+        }
+
+        // ------------------------------------------------------------------ build bar
+
+        static readonly string[] Tabs = { "Build", "Peasant", "Worker", "Burgher", "Aristocrat", "Castle" };
+
+        void RebuildBar()
+        {
+            if (_game?.World == null) return;
+            _barTabs.Clear();
+            for (int i = 0; i < Tabs.Length; i++)
+            {
+                int tab = i;
+                if (!TabVisible(i)) continue;
+                var b = Ui.Button(Tabs[i], () => { _tab = tab; RebuildBar(); });
+                Ui.Highlight(b, _tab == i);
+                _barTabs.Add(b);
+            }
+
+            _barItems.Clear();
+            var w = _game.World;
+            var bal = w.Content.Balance;
+            if (_tab == 0)
+            {
+                AddTool($"Town ({bal.TownFoundCost:0}g)", ToolKind.Town, null, $"Found a Town on open ground (cap {w.TownCap}). It starts with 1000 gold, 60 wood and 40 potato.");
+                AddTool($"Road ({bal.RoadCostPerHex:0}g/hex)", ToolKind.Road, null, "Optional: Traders travel twice as fast on roads. Click or drag.");
+                AddTool("Remove road", ToolKind.RemoveRoad, null, "Click or drag over roads.");
+                AddTool("Demolish", ToolKind.Destroy, null, "Click a building (gold refunded) or a Town centre (abandon the Town).");
+                return;
+            }
+
+            foreach (var def in w.Content.Buildings)
+            {
+                bool castle = def.Kind == BuildingKind.Castle;
+                if (_tab == 5 ? !castle : castle || (int)def.Tier != _tab - 1) continue;
+                bool unlocked = w.IsUnlocked(def);
+                string cost = (def.GoldCost > 0 ? $"{def.GoldCost:0}g" : "") +
+                              string.Concat(def.MaterialCost.Select(m => $" {m.Amount:0} {w.Content.Goods[m.Good].Name.ToLower()}"));
+                string where = def.Kind == BuildingKind.Extractor ? $"On {GameController.TerrainName(def.Terrains[0])}." :
+                               def.Kind == BuildingKind.Castle ? "Next to the Castle." : "Next to a Town.";
+                string what = def.Kind == BuildingKind.House ? $"Home for {def.HouseCapacity} {def.Tier}s." :
+                              def.OutputGood >= 0 ? $"Makes {w.Content.Goods[def.OutputGood].Name}" +
+                                  (def.InputsPerOutput.Length > 0 ? " from " + string.Join(" + ", def.InputsPerOutput.Select(i => w.Content.Goods[i.Good].Name)) : "") + $" ({def.Tier}s work here)." : "";
+                string hint = unlocked ? $"{def.Name}: {what} {where} Cost {cost.Trim()}."
+                                       : $"{def.Name}: research {w.Content.ResearchNode(def.UnlockedBy)?.Name} first. {what}";
+                if (castle && w.Castle?.Find(def.Id) != null) hint = def.Name + " is already built.";
+                AddTool(def.Name, ToolKind.Building, def, hint, unlocked && !(castle && w.Castle?.Find(def.Id) != null));
+            }
+        }
+
+        bool TabVisible(int tab)
+        {
+            if (tab == 0 || tab == 5 || tab == 1) return true;
+            var w = _game.World;
+            foreach (var def in w.Content.Buildings)
+                if (def.Kind != BuildingKind.Castle && (int)def.Tier == tab - 1 && w.IsUnlocked(def)) return true;
+            return false;
+        }
+
+        void AddTool(string label, ToolKind tool, BuildingDef def, string hint, bool enabled = true)
+        {
+            var b = Ui.Button(label, () =>
             {
                 bool same = _game.Tool == tool && _game.ToolBuilding == def;
                 _game.SelectTool(same ? ToolKind.Inspect : tool, same ? null : def);
-            });
-            bar.Add(b);
-            _toolButtons.Add((b, tool, def));
+            }, enabled);
+            b.userData = new ToolTag { Tool = tool, Def = def, Enabled = enabled };
+            Hint(b, hint);
+            _barItems.Add(b);
+        }
+
+        sealed class ToolTag
+        {
+            public ToolKind Tool;
+            public BuildingDef Def;
+            public bool Enabled;
         }
 
         // ------------------------------------------------------------------ refresh
 
+        int _lastResearchCount = -1;
+
         void Update()
         {
             if (_game == null || _game.World == null) return;
+            var w = _game.World;
+
+            _start.style.display = _game.MenuOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            var cont = _start.Q<VisualElement>("StartButtons")?.ElementAt(1) as Button;
+            if (cont != null) cont.SetEnabled(GameController.HasSave);
+            if (_game.MenuOpen) return;
+
             if (_toast.style.display == DisplayStyle.Flex && Time.unscaledTime > _toastUntil) _toast.style.display = DisplayStyle.None;
             _hint.text = HintText();
             _hint.style.display = string.IsNullOrEmpty(_hint.text) ? DisplayStyle.None : DisplayStyle.Flex;
-            foreach (var (button, tool, def) in _toolButtons) Highlight(button, _game.Tool == tool && _game.ToolBuilding == def);
-            foreach (var kv in _speedButtons) Highlight(kv.Value, _game.Speed == kv.Key);
+            foreach (var child in _barItems.Children())
+                if (child is Button b && b.userData is ToolTag t && t.Enabled)
+                    Ui.Highlight(b, _game.Tool == t.Tool && _game.ToolBuilding == t.Def);
+            foreach (var kv in _speedButtons) Ui.Highlight(kv.Value, _game.Speed == kv.Key);
 
-            if (Time.unscaledTime < _nextRefresh) return;
-            _nextRefresh = Time.unscaledTime + 0.2f;
+            if (w.ResearchDone.Count != _lastResearchCount)
+            {
+                _lastResearchCount = w.ResearchDone.Count;
+                RebuildBar();
+            }
+
+            if (w.Victory && !_game.VictorySeen)
+            {
+                _game.VictorySeen = true;
+                ShowVictory();
+            }
+
+            if (!_dirty && Time.unscaledTime < _nextRefresh) return;
+            _nextRefresh = Time.unscaledTime + 0.4f;
             Refresh();
         }
 
@@ -241,94 +467,96 @@ namespace TradeWinds.Game
         {
             string tool = _game.Tool switch
             {
-                ToolKind.Town => "Placing: Town — click open ground (not touching another Town). Esc cancels.",
-                ToolKind.Building => $"Placing: {_game.ToolBuilding.Name} — click next to a Town. Shift keeps the tool. Esc cancels.",
+                ToolKind.Town => "Placing: Town — click open ground, not touching another Town or the Castle.",
+                ToolKind.Building => $"Placing: {_game.ToolBuilding.Name} — {(_game.ToolBuilding.Kind == BuildingKind.Castle ? "next to the Castle" : "next to a Town")}. Shift keeps the tool. Esc cancels.",
                 ToolKind.Road => "Placing: Road — click or drag. Roads double Trader speed; they're optional.",
                 ToolKind.RemoveRoad => "Removing roads — click or drag.",
+                ToolKind.Destroy => "Demolish — click a building or a Town centre.",
+                ToolKind.ScoutFlag => "Scout — click a discovered hex near the fog.",
                 _ => "",
             };
-            if (string.IsNullOrEmpty(_game.HoverHint)) return tool;
-            return string.IsNullOrEmpty(tool) ? _game.HoverHint : tool + "\n" + _game.HoverHint;
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(_hoverHint)) parts.Add(_hoverHint);
+            else
+            {
+                if (tool.Length > 0) parts.Add(tool);
+                if (!string.IsNullOrEmpty(_game.HoverHint)) parts.Add(_game.HoverHint);
+            }
+            return string.Join("\n", parts);
         }
 
         void Refresh()
         {
             var w = _game.World;
             _treasury.text = $"Treasury {w.Treasury:N0}";
-            _tariff.text = $"Tariff +{_game.TariffPerMinute():0.0}/min  (total {w.LifetimeTariff:0})";
-            _towns.text = $"Towns {w.Towns.Count}/{w.Content.Balance.TownCap}";
+            _tariff.text = $"Tariff +{_game.TariffPerMinute():0}/min";
+            _towns.text = $"Towns {w.Towns.Count}/{w.TownCap}";
+            _research.text = w.ActiveResearch != null
+                ? $"Researching {w.Content.ResearchNode(w.ActiveResearch).Name} {ResearchSim.Progress(w) * 100:0}%"
+                : ResearchSim.Speed(w) > 0 ? "Research idle" : "No Research Center";
             long seconds = w.Tick / 2;
             _clock.text = $"{seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}" + (_game.IsFocusPaused ? " (paused)" : "");
-            _goal.text = GoalText(w);
-            RefreshTown(w);
-        }
 
-        static string Check(bool done) => done ? "[x] " : "[ ] ";
+            RefreshMissions(w);
+            RefreshLog(w);
 
-        static string GoalText(World w)
-        {
-            int towns = 0, fullTowns = 0;
-            bool traded = false;
-            foreach (var t in w.Towns)
+            bool overDock = IsPointerOver(_rightDock);
+            bool overResearch = ResearchOpen && IsPointerOver(_researchPanel.Root);
+            if (_dirty || !overDock)
             {
-                if (t.Built) towns++;
-                double cap = 0;
-                foreach (var b in t.Buildings) if (b.Built && b.IsHouse) cap += b.Def.HouseCapacity;
-                if (cap > 0 && t.Population[0] >= cap - 0.05) fullTowns++;
-                if (t.GoodsSold > 0) traded = true;
+                _rightDock.Clear();
+                if (_game.SelectedTown != null && w.Towns.Contains(_game.SelectedTown))
+                {
+                    _townPanel.Rebuild(_game);
+                    _rightDock.Add(_townPanel.Root);
+                }
+                else if (_game.CastleSelected)
+                {
+                    _castlePanel.Rebuild(_game);
+                    _rightDock.Add(_castlePanel.Root);
+                }
             }
-            var sb = new StringBuilder();
-            sb.AppendLine("Grow a Kingdom that trades on its own.");
-            sb.AppendLine(Check(towns >= 2) + $"Found 2 Towns ({towns}/2)");
-            sb.AppendLine(Check(fullTowns >= 2) + $"Fill every house in 2 Towns ({fullTowns}/2)");
-            sb.AppendLine(Check(traded) + "Towns trade with each other");
-            sb.AppendLine(Check(w.LifetimeTariff >= 100) + $"Earn 100 Tariff ({w.LifetimeTariff:0}/100)");
-            sb.AppendLine();
-            sb.Append("Peasants need Potato + Wood (Fish + Wool make them happier). " +
-                      "Give one Town potato fields and another forest — they'll trade the rest. " +
-                      "Every Town needs Huts for workers.");
-            return sb.ToString();
+            if (ResearchOpen && (_dirty || !overResearch)) _researchPanel.Rebuild(_game);
+            _dirty = false;
         }
 
-        void RefreshTown(World w)
+        bool IsPointerOver(VisualElement e)
         {
-            var t = _game.SelectedTown;
-            if (t == null || !w.Towns.Contains(t))
+            if (e?.panel == null || Mouse.current == null) return false;
+            var screen = Mouse.current.position.ReadValue();
+            var p = RuntimePanelUtils.ScreenToPanel(e.panel, new Vector2(screen.x, Screen.height - screen.y));
+            return e.worldBound.Contains(p);
+        }
+
+        void RefreshMissions(World w)
+        {
+            _missionCard.Clear();
+            var m = MissionSim.Current(w);
+            if (m == null)
             {
-                _townPanel.style.display = DisplayStyle.None;
+                _missionCard.Add(Ui.Heading("Victory"));
+                _missionCard.Add(Ui.Text("Every Mission is complete. Keep ruling as long as you like.", 13));
                 return;
             }
-            _townPanel.style.display = DisplayStyle.Flex;
-            var c = w.Content;
-            _townTitle.text = t.Name + (t.Built ? "" : "  (founding…)");
-            var sb = new StringBuilder();
-            double cap = 0;
-            foreach (var b in t.Buildings) if (b.Built && b.IsHouse) cap += b.Def.HouseCapacity;
-            sb.AppendLine($"Gold {t.Gold:N0}   Peasants {t.Population[0]:0.0}/{cap:0}   Happiness {t.Happiness[0]:0}%");
-            sb.AppendLine($"Slots {w.SlotsUsed(t)}/{w.SlotCap(t)}   Tax earned {t.TaxEarned:0}   Tariff generated {t.TariffGenerated:0}");
-            sb.AppendLine();
-            sb.AppendLine("Good       Stock  Price   Use/min  Mood");
-            for (int g = 0; g < c.GoodCount; g++)
+            _missionCard.Add(Ui.Heading($"Mission {w.MissionIndex + 1}/{w.Content.Missions.Length}: {m.Name}"));
+            foreach (var o in m.Objectives)
             {
-                string mood = cap > 0 ? $"{t.Satisfaction[0][g] * 100:0}%" : "-";
-                sb.AppendLine($"{c.Goods[g].Name,-10} {t.Stock[g],5:0} {t.Price[g],6:0.0} {t.ConsumptionPerMin[g],8:0.0}  {mood}" +
-                              (t.Inbound[g] > 0 ? $"  (+{t.Inbound[g]:0} coming)" : ""));
+                double p = MissionSim.Progress(w, o);
+                bool done = p + 1e-9 >= o.Count;
+                string amount = o.Kind == ObjectiveKind.EstateHappiness ? $"{p:0}%" : $"{Math.Min(p, o.Count):0}/{o.Count:0}";
+                _missionCard.Add(Ui.Text((done ? "[x] " : "[ ] ") + o.Label + "  " + amount, 13, false, done ? Palette.Good : Palette.Paper));
             }
-            sb.AppendLine();
-            int tradersOut = 0, portersBusy = 0;
-            foreach (var tr in t.Traders) if (tr.State != TraderState.Idle) tradersOut++;
-            foreach (var p in t.Porters) if (p.Job != PorterJob.Idle) portersBusy++;
-            sb.AppendLine($"Traders out {tradersOut}/{t.Traders.Count}   Porters busy {portersBusy}/{t.Porters.Count}");
-            sb.AppendLine($"Bought {t.GoodsBought:0}  Sold {t.GoodsSold:0}");
-            sb.AppendLine();
-            foreach (var b in t.Buildings)
-            {
-                string state = !b.Built ? $"building {TownSim.ConstructionProgress(w, b) * 100:0}%"
-                    : b.IsHouse ? $"{b.Residents:0.0}/{b.Def.HouseCapacity} home"
-                    : b.Workers > 0.01 ? $"{b.Workers:0.0} workers" : "no workers";
-                sb.AppendLine($"• {b.Def.Name}: {state}");
-            }
-            _townBody.text = sb.ToString();
+            if (m.RewardGold > 0) _missionCard.Add(Ui.Text($"Reward: {m.RewardGold:0} gold", 12, false, Palette.Castle));
+            _missionCard.Add(Ui.Text(m.Tip, 12, false, Palette.Muted));
+        }
+
+        void RefreshLog(World w)
+        {
+            _logCard.Clear();
+            _logCard.Add(Ui.Text("Event Log", 13, true, Palette.Castle));
+            int start = Math.Max(0, w.Events.Count - 6);
+            for (int i = w.Events.Count - 1; i >= start; i--) _logCard.Add(Ui.Text(w.Events[i], 12, false, Palette.Muted));
+            _logCard.style.display = w.Events.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
     }
 }
