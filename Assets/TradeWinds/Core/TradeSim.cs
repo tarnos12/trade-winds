@@ -120,7 +120,7 @@ namespace TradeWinds.Core
             var b = world.Content.Balance;
             double target = ConstructionOutstanding(world, town, good);
             if (Consumes(world, town, good))
-                target += Math.Max(b.BuyFloor, b.PerTick(town.ConsumptionPerMin[good]) * 2);
+                target += Math.Max(b.BuyFloor, town.ConsumptionPerMin[good] * b.BuyCoverMin);
             return target;
         }
 
@@ -133,6 +133,17 @@ namespace TradeWinds.Core
             var b = world.Content.Balance;
             if (!town.Built || world.Tick - town.BuiltTick < b.Ticks(b.TownSellGraceSec)) return 0;
             return town.Stock[good] - BuyTarget(world, town, good);
+        }
+
+        /// <summary>What a Town will sell to the Crown: like <see cref="Surplus"/>, but the King outranks
+        /// Luxuries — only Basic Needs and construction materials are held back.</summary>
+        public static double CrownSurplus(World world, Town town, int good)
+        {
+            var b = world.Content.Balance;
+            if (!town.Built || world.Tick - town.BuiltTick < b.Ticks(b.TownSellGraceSec)) return 0;
+            double hold = ConstructionOutstanding(world, town, good);
+            if (TownUsesAsBasic(world, town, good)) hold += Math.Max(b.BuyFloor, town.ConsumptionPerMin[good] * b.BuyCoverMin);
+            return town.Stock[good] - hold;
         }
 
         /// <summary>What the Castle keeps of a Good: its buy limit plus what the active research still needs.</summary>
@@ -151,7 +162,7 @@ namespace TradeWinds.Core
         public static double CastleWant(World world, int good)
         {
             if (world.Castle == null) return 0;
-            return CastleKeep(world, good) - world.Castle.Stock[good] - world.Castle.Inbound[good];
+            return Math.Ceiling(CastleKeep(world, good) - 1e-6) - world.Castle.Stock[good] - world.Castle.Inbound[good];
         }
 
         public static double CastleSellPrice(World world, int good) =>
@@ -170,23 +181,26 @@ namespace TradeWinds.Core
 
         static void TryDispatch(World world, Town buyer)
         {
-            Trader free = null;
-            foreach (var t in buyer.Traders)
-                if (t.State == TraderState.Idle) { free = t; break; }
-            if (free == null) return;
-
             var content = world.Content;
             var b = content.Balance;
 
             // Priority layers: Basic Needs → construction materials → production inputs / Luxuries.
+            // Each layer may send one Trader per tick, so lower layers are never starved.
             for (int layer = 0; layer < 3; layer++)
             {
+                Trader free = null;
+                foreach (var t in buyer.Traders)
+                    if (t.State == TraderState.Idle) { free = t; break; }
+                if (free == null) return;
+
                 var candidates = new List<(int good, double gap)>();
                 for (int g = 0; g < content.GoodCount; g++)
                 {
                     if (LayerOf(world, buyer, g) != layer) continue;
                     double gap = Shortfall(world, buyer, g);
-                    if (gap <= b.MinShortfall) continue;
+                    // Construction must finish: chase even the last fraction of a material bill.
+                    double minGap = ConstructionOutstanding(world, buyer, g) > 0 ? 0.01 : b.MinShortfall;
+                    if (gap <= minGap) continue;
                     if (!HasSeller(world, buyer, g)) continue;
                     candidates.Add((g, gap));
                 }
@@ -194,7 +208,7 @@ namespace TradeWinds.Core
 
                 candidates.Sort((x, y) => y.gap.CompareTo(x.gap) != 0 ? y.gap.CompareTo(x.gap) : x.good.CompareTo(y.good));
                 var pick = candidates[world.Rng.Range(Math.Min(b.ChoiceSpread, candidates.Count))];
-                if (Buy(world, buyer, free, pick.good, pick.gap)) return;
+                Buy(world, buyer, free, pick.good, pick.gap);
             }
         }
 
@@ -263,7 +277,7 @@ namespace TradeWinds.Core
             });
             var offer = offers[world.Rng.Range(Math.Min(b.ChoiceSpread, offers.Count))];
 
-            double qty = Math.Min(Capacity(world, b), Math.Min(Math.Ceiling(gap), Math.Floor(offer.surplus)));
+            double qty = Math.Min(Capacity(world, b), Math.Min(Math.Max(1, Math.Ceiling(gap)), Math.Floor(offer.surplus)));
             if (offer.price > 0) qty = Math.Min(qty, Math.Floor(buyer.Gold / offer.price));
             if (qty < 1) return false;
 
@@ -322,10 +336,10 @@ namespace TradeWinds.Core
             for (int g = 0; g < content.GoodCount; g++)
             {
                 double want = CastleWant(world, g);
-                if (want < 1 || want <= bestWant) continue;
+                if (want <= 0.01 || want <= bestWant) continue;
                 bool anySeller = false;
                 foreach (var s in world.Towns)
-                    if (Surplus(world, s, g) >= 1) { anySeller = true; break; }
+                    if (CrownSurplus(world, s, g) >= 1) { anySeller = true; break; }
                 if (!anySeller) continue;
                 best = g;
                 bestWant = want;
@@ -335,7 +349,7 @@ namespace TradeWinds.Core
             var offers = new List<(Town seller, double surplus, double price, Route route)>();
             foreach (var s in world.Towns)
             {
-                double surplus = Surplus(world, s, best);
+                double surplus = CrownSurplus(world, s, best);
                 if (surplus < 1) continue;
                 var route = world.Pathing.Find(castle.Center, s.Center);
                 if (!route.Found) continue;
@@ -352,7 +366,7 @@ namespace TradeWinds.Core
             });
             var offer = offers[world.Rng.Range(Math.Min(b.ChoiceSpread, offers.Count))];
 
-            double qty = Math.Min(b.RoyalTraderCapacity, Math.Min(Math.Ceiling(bestWant), Math.Floor(offer.surplus)));
+            double qty = Math.Min(b.RoyalTraderCapacity, Math.Min(Math.Max(1, Math.Ceiling(bestWant)), Math.Floor(offer.surplus)));
             if (offer.price > 0) qty = Math.Min(qty, Math.Floor(world.Treasury / offer.price));
             if (qty < 1) return;
 

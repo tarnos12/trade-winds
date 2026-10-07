@@ -277,6 +277,8 @@ namespace TradeWinds.Core
         // Traders
         public double TraderCapacity = 10;
         public double BuyFloor = 6;
+        /// <summary>A Town keeps this many game-minutes of its own use on hand (buy target), at least <see cref="BuyFloor"/>.</summary>
+        public double BuyCoverMin = 1.5;
         public double MinShortfall = 1;
         public int ChoiceSpread = 3;
         /// <summary>Hexes per tick on a road; off-road travel costs twice as much per hex.</summary>
