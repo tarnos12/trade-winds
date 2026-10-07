@@ -1,6 +1,6 @@
 # Trade Winds — GDD (Design Authority)
 
-**Status:** Unity port — Milestone 1 (economy core) next. The web version (v0.52.1) is frozen in
+**Status:** Unity port — Milestones 1–3 done (playable to Victory); Milestone 4 (art, balance, polish) next. The web version (v0.52.1) is frozen in
 [`old-game-files/`](old-game-files/) as the behavioural reference; this document describes the game
 as that version actually plays (verified against its code, 2026-10-04), plus the decisions taken for
 the port.
@@ -191,14 +191,19 @@ much is stocked):
 - **Traders** travel between Towns, carry 10, and are owned by the buying Town (count by Town level,
   +research). **Roads are optional:** off-road, Traders walk around water and mountains at half speed;
   a road route is 2× faster, paved roads faster still. Roads cost 5 treasury gold per hex.
-- **What a Town buys:** it keeps each Good it consumes at roughly a small floor (~6) plus any lump
-  needed for construction, upgrades and research. Priority layers: Basic Needs → production inputs →
-  Luxuries → other. Starving for a Basic Need prefers the nearest seller.
+- **What a Town buys:** it keeps about 1.5 game-minutes of its own use of each Good it consumes (at
+  least 6), plus any lump needed for construction and upgrades (chased down to the last unit). Priority
+  layers: Basic Needs → construction materials → production inputs and Luxuries; each layer may send
+  one Trader per tick so lower layers never starve. Starving for a Basic Need prefers the nearest seller.
+  *(Port change: the web version's flat floor of 6 couldn't keep fast consumers supplied.)*
 - **Who sells:** a Town only sells real surplus — never while building or in grace, never a Good it
   structurally consumes, and always keeping its own floor. Sellers with the biggest surplus are
   preferred, then price, then distance, with a little randomness (top 3) so Traders don't herd.
-- **A trip:** the buyer pays up front; the Trader loads and unloads over time (2.5 items/s) and can
-  carry a back-haul of its home's surplus. Traders only travel with a real purpose.
+- **A trip:** the buyer pays up front; the Trader loads and unloads over time (2.5 items/s). Traders
+  only travel with a real purpose. *(Back-haul and sales pressure are not ported yet.)*
+- **The Crown outranks Luxuries:** royal Traders buying research materials may buy a Town's Luxury
+  stock, never its Basic Needs or construction materials — research can't be starved by Peasants'
+  wool. *(Port change, found by the balance runs.)*
 
 ---
 
@@ -306,14 +311,17 @@ there, Victory was the Aristocrats Home alone and Missions were separate.)*
 ## 13. Known problems to fix in the port
 
 - **Tariff is small next to Tax** (~4–20 gold/min vs 45–55 per Town), so the treasury is refilled
-  mainly by manual Take. **Fix:** Tariff must become the main income (§9).
-- **Take's −30 happiness also halves population** (pop follows happiness), harsher than intended.
+  mainly by manual Take. **Fixed:** with real trade volume Tariff is the Crown's main income (the
+  benchmark Kingdom earns ~120k Tariff vs ~6k Mission gold by Victory).
+- **Take's −30 happiness also halves population.** **Fixed:** Give/Take change mood and Tax only;
+  population follows needs-only happiness.
 - **Minted Tariff** is deliberate inflation; watch for runaway treasury after Victory.
 - **Worker happiness plateaus** (fish/coal at 35–75%); the late tiers needed big fixes to be reachable.
-- **Porter delivery was effectively optional** — consumption fell back to Stock directly; construction
-  used an abstract budget. **Fix:** Porters are real logistics (§8).
-- **Buy target ≈ a flat floor of 6** for nearly every Good, independent of how fast it's used.
-- **Inputs aren't scaled by work speed** — a happy processor makes 1.2 outputs per input.
+- **Porter delivery was effectively optional.** **Fixed:** Porters are real logistics (§8).
+- **Buy target ≈ a flat floor of 6.** **Fixed:** scales with use (§8).
+- **Inputs weren't scaled by work speed.** **Fixed:** inputs are consumed per unit of output.
+- **Exporting Towns hoard gold** (purses of 100k+ late game), which makes the 1000-gold Take a money
+  printer that rivals Tariff. Open — see §16.
 - Research **cancel refunds nothing**; ETA reads ~1 s optimistic.
 
 ## 14. Cut — do not port
@@ -328,14 +336,14 @@ combat exists); unused legacy config.
 
 Content grows **one Population Tier at a time**, each balanced before the next.
 
-- **M1 — Economy core:** headless C# core + tests, then the hex board on screen. Peasant tier only
+- **M1 — Economy core ✅:** headless C# core + tests, then the hex board on screen. Peasant tier only
   (Potato, Wood; Luxuries Fish, Wool), with Porters as real logistics from day one. **Exit:** a potato Town and a timber Town trade Potato ↔ Wood
   unattended and the Crown earns Tariff; a road visibly speeds trade and narrows their price gap.
-- **M2 — The Kingdom:** Castle + Castle market, fog + Scouts + provisions, save/load, Town
+- **M2 — The Kingdom ✅:** Castle + Castle market, fog + Scouts + provisions, save/load, Town
   levels, Worker tier. **Exit:** a two-tier Kingdom grows unattended without stalling.
-- **M3 — Progression:** research + Research Center, Missions, Burgher and Aristocrat tiers, start
+- **M3 — Progression ✅** (scripted benchmark Kingdom reaches Victory in ~220 game-minutes): research + Research Center, Missions, Burgher and Aristocrat tiers, start
   screen, onboarding. **Exit:** a deterministic run completes the Mission chain (Victory).
-- **M4 — 1.0:** author art, balance pass, juice/audio decision, polish. **Exit:** a stranger reaches
+- **M4 — 1.0 🔜:** author art, balance pass, juice/audio decision, polish. **Exit:** a stranger reaches
   Victory without asking questions.
 
 **Parking lot:** Kingdom festival as the final Mission; bandits + guard posts; harbors / water trade;
@@ -345,6 +353,9 @@ seasons; player contracts between Towns; seed of the day.
 
 1. **Juice, audio, ambient chatter** — carry over?
 2. **Tariff range** 10–40% (assumed). **Title** "Trade Winds" is a working title.
+3. **Rich exporters vs Take** — limit Take (a share of the purse, a longer cooldown), tax exports, or
+   lower Tax? Halving Tax alone only cut purses ~3× and slowed Victory ~15%.
+4. **Pacing** — the benchmark reaches Victory in ~3.7 game-hours with 7 Towns; what length is right?
 
 Resolved 2026-10-04: "Burgher" on screen too (not "Citizen"); Missions reward gold; Tariff is the
 main income; Porters are real logistics.

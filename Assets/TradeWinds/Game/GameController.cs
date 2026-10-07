@@ -30,6 +30,8 @@ namespace TradeWinds.Game
         public BoardView Board;
         public CameraRig CameraRig;
         public Hud Hud;
+        [Tooltip("Balance numbers for new and loaded realms (falls back to code defaults).")]
+        public BalanceAsset BalanceAsset;
         [Tooltip("Pause the economy when the window loses focus (GDD §3).")]
         public bool PauseOnFocusLoss = true;
         public float AutosaveSeconds = 30f;
@@ -78,7 +80,7 @@ namespace TradeWinds.Game
                 case MapSize.Large: settings.Width = 66; settings.Height = 33; settings.Patches = 56; settings.Lakes = 5; settings.MountainRanges = 8; settings.OreClusters = 6; break;
             }
             var map = MapGen.Generate(seed, settings);
-            Bind(new World(GameContent.Create(), map.Board, seed, map.Start));
+            Bind(new World(GameContent.Create(BalanceAsset != null ? BalanceAsset.CreateCopy() : null), map.Board, seed, map.Start));
             VictorySeen = false;
             MenuOpen = openMenu;
             if (!openMenu)
@@ -140,7 +142,7 @@ namespace TradeWinds.Game
             {
                 if (!HasSave) return false;
                 var data = JsonUtility.FromJson<SaveData>(File.ReadAllText(SavePath));
-                Bind(SaveGame.Restore(data, GameContent.Create()));
+                Bind(SaveGame.Restore(data, GameContent.Create(BalanceAsset != null ? BalanceAsset.CreateCopy() : null)));
                 CurrentSeed = World.Seed;
                 VictorySeen = World.Victory;
                 return true;

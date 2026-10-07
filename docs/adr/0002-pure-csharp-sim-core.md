@@ -6,3 +6,10 @@ The economy simulation lives in its own C# assembly with no `UnityEngine` refere
 
 - **State on MonoBehaviours/GameObjects** — the Unity default, but it ties the economy to scenes and frame timing and makes headless balance runs and determinism impractical.
 - **Single static C# config class** (a direct port of the old `CONFIG`) — simpler, but every tuning change becomes a code change.
+
+## Status note (2026-10-07)
+
+Balance numbers live in a ScriptableObject (`Assets/TradeWinds/Data/Balance.asset`, `BalanceAsset`),
+copied into the core per realm. The content catalogue (Goods, buildings, tiers, research, Missions) is
+still C# data in `GameContent.cs`; moving it to assets is open work for when the author edits content
+in the Inspector. The pure-core boundary itself is unchanged.

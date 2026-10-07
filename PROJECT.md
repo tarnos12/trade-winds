@@ -22,16 +22,17 @@ every trade. Cozy, no fail state; **Victory = completing the Mission chain**. Th
 - **Unity 6000.3.12f1**, 2D URP, C#, Input System, UI Toolkit. Target: Windows standalone.
 - **MCP for Unity** (`com.coplaydev.unity-mcp`) drives the open Editor; `.mcp.json` registers it.
   Several Unity projects share the MCP server — target instance `trade-winds@…` (`set_active_instance`).
-- Planned layout (create as each module lands):
+- Layout (as built):
 
 | Module | Path | Assembly | Owns |
 |---|---|---|---|
 | Sim core | `Assets/TradeWinds/Core/` | `TradeWinds.Core` (*no engine references*) | Hex math, map gen, Towns, needs, prices, pathing, Traders, Tariff, research, Missions, save model |
 | Core tests | `Assets/TradeWinds/Core.Tests/` | `TradeWinds.Core.Tests` (Edit Mode) | Headless deterministic tests |
-| Data | `Assets/TradeWinds/Data/` | `TradeWinds.Data` | ScriptableObject definitions (Goods, buildings, tiers, Missions) → plain core data |
-| Game view | `Assets/TradeWinds/Game/` | `TradeWinds.Game` | MonoBehaviours: tick driver, Tilemap board, camera, input, Trader visuals |
-| UI | `Assets/TradeWinds/UI/` | `TradeWinds.UI` | UI Toolkit panels/HUD (UXML/USS + controllers) |
-| Editor tools | `Assets/TradeWinds/Editor/` | `TradeWinds.Editor` | Headless balance runner, data tooling |
+| Content | `Assets/TradeWinds/Core/GameContent.cs` | `TradeWinds.Core` | Goods, buildings, tiers, research, Missions (C# data) |
+| Balance data | `Assets/TradeWinds/Data/Balance.asset` | `TradeWinds.Game` (`BalanceAsset`) | Inspector-editable tuning numbers → copied into the core per realm |
+| Game view | `Assets/TradeWinds/Game/` | `TradeWinds.Game` | Tick driver + saves (`GameController`), Tilemap board/fog/tokens (`BoardView`), camera, input |
+| UI | `Assets/TradeWinds/Game/Hud.cs`, `Game/UI/` | `TradeWinds.Game` | UI Toolkit HUD built in code (Town/Castle/research panels, start screen) |
+| Editor tools | `Assets/TradeWinds/Editor/` | `TradeWinds.Editor` | Scene builder, headless balance runner |
 | Art | `Assets/TradeWinds/Art/` | — | Placeholder sprites until author art arrives |
 
 ## Hard constraints
@@ -68,19 +69,24 @@ PRs and merges them itself after tests pass.
 
 ## Milestone exit criteria (QA gates each against GDD.md §4)
 
-- **M1 — Economy core 🔜** (Peasant tier, Porters as real logistics) a potato Town and a timber Town trade Potato ↔ Wood unattended, Tariff
+- **M1 — Economy core ✅** (Peasant tier, Porters as real logistics) a potato Town and a timber Town trade Potato ↔ Wood unattended, Tariff
   accrues (no road needed); a road between them visibly speeds trade and narrows the price gap,
   removing it widens the gap again; Core covered by Edit Mode tests.
-- **M2 — The Kingdom** Castle + Castle market, fog/Scouts/provisions, save/load, Town levels, Worker tier;
+- **M2 — The Kingdom ✅** Castle + Castle market, fog/Scouts/provisions, save/load, Town levels, Worker tier;
   a two-tier Kingdom grows unattended without stalling.
-- **M3 — Progression** research + Research Center, Missions, Burgher + Aristocrat tiers, start
+- **M3 — Progression ✅** research + Research Center, Missions, Burgher + Aristocrat tiers, start
   screen, tutorial; deterministic test reaches Victory.
-- **M4 — 1.0** author art, balance, polish; a stranger reaches Victory without questions.
+- **M4 — 1.0 🔜** author art, balance, polish; a stranger reaches Victory without questions.
 
 ## How to run / verify
 
 - Open the project in Unity 6000.3.12f1 (or drive the open Editor via MCP for Unity).
-- Tests: Unity Test Runner → Edit Mode (or MCP `run_tests`).
+- Play: open `Assets/TradeWinds/Scenes/Game.unity` → Play (start screen → New realm / Continue).
+  Rebuild the scene any time with **Trade Winds → Build Game Scene**.
+- Tests: Unity Test Runner → Edit Mode (or MCP `run_tests`), or headless `dotnet test tools/CoreTests`.
+- Balance: **Trade Winds → Run Balance Simulation** plays the benchmark Kingdom (`BenchmarkKingdom`)
+  with the current `Data/Balance.asset` and logs progress to the Console.
+- Saves: `%USERPROFILE%/AppData/LocalLow/Tarnos/Trade Winds/trade-winds-save.json` (autosave 30 s).
 
 ---
 
@@ -102,3 +108,11 @@ PRs and merges them itself after tests pass.
   menu **Trade Winds → Build Game Scene** (`GameSceneBuilder`). 23 Edit Mode tests green in Unity.
   Placeholder art is code-generated. **Next:** play-test M1 exit in the scene, then M2 (Castle,
   Castle market, fog/Scouts, save/load, Town levels, Worker tier).
+- **2026-10-07** — **M2 + M3 done: playable from start screen to Victory.** Full catalogue (26 Goods,
+  4 tiers, ~33 buildings, research tree, 9 Missions with gold rewards); Castle + Castle Stock + royal
+  market and Traders; fog of war, Scouts, provisions; Town levels; Give/Take; upgrades; destroy;
+  versioned save/load + autosave; ore deposits in MapGen; full HUD (start screen, Missions, Event Log,
+  tiered build bar, Town/Castle panels, research tree, victory card). Scripted benchmark Kingdom
+  reaches Victory in ~220 game-minutes (test + editor balance runner). Balance runs forced trade fixes
+  (GDD §8). 38 Edit Mode tests green in Unity and headless. **Next (M4):** author art, audio/juice
+  decision, balance answers (GDD §16 Q3–Q4), play-testing by a stranger.

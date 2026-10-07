@@ -15,6 +15,7 @@ namespace TradeWinds.EditorTools
         public const string ScenePath = "Assets/TradeWinds/Scenes/Game.unity";
         const string ThemePath = "Assets/TradeWinds/UI/TradeWindsTheme.tss";
         const string PanelSettingsPath = "Assets/TradeWinds/UI/GamePanelSettings.asset";
+        public const string BalancePath = "Assets/TradeWinds/Data/Balance.asset";
 
         [MenuItem("Trade Winds/Build Game Scene")]
         public static void Build()
@@ -22,6 +23,8 @@ namespace TradeWinds.EditorTools
             EnsureFolder("Assets/TradeWinds", "Scenes");
             EnsureFolder("Assets/TradeWinds", "UI");
             EnsurePanelSettings();
+            EnsureFolder("Assets/TradeWinds", "Data");
+            var balance = EnsureBalance();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -63,6 +66,7 @@ namespace TradeWinds.EditorTools
             controller.Board = view;
             controller.CameraRig = rig;
             controller.Hud = hud;
+            controller.BalanceAsset = AssetDatabase.LoadAssetAtPath<BalanceAsset>(BalancePath);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
 
@@ -112,6 +116,16 @@ namespace TradeWinds.EditorTools
             AssetDatabase.CreateAsset(ps, PanelSettingsPath);
             AssetDatabase.SaveAssets();
             return ps;
+        }
+
+        public static BalanceAsset EnsureBalance()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<BalanceAsset>(BalancePath);
+            if (existing != null) return existing;
+            var asset = ScriptableObject.CreateInstance<BalanceAsset>();
+            AssetDatabase.CreateAsset(asset, BalancePath);
+            AssetDatabase.SaveAssets();
+            return asset;
         }
 
         static void EnsureFolder(string parent, string name)

@@ -1,18 +1,18 @@
 using System.Collections.Generic;
 
-namespace TradeWinds.Core.Tests
+namespace TradeWinds.Core
 {
     /// <summary>
-    /// A hand-laid six-Town Kingdom on open ground that an <see cref="AutoPlayer"/> plays from the first Town
+    /// A hand-laid seven-Town Kingdom on open ground that an <see cref="AutoPlayer"/> plays from the first Town
     /// to Victory (Milestone 3 exit). Each Town's surroundings are painted with the terrain its plan needs.
     /// </summary>
-    public static class FullKingdom
+    public static class BenchmarkKingdom
     {
-        public static AutoPlayer Create(uint seed = 3)
+        public static AutoPlayer Create(uint seed = 3, Balance balance = null)
         {
             var board = new Board(64, 30);
             var castle = Board.FromOffset(32, 15);
-            var world = new World(GameContent.Create(), board, seed, castle);
+            var world = new World(GameContent.Create(balance), board, seed, castle);
             world.RevealAround(castle, 80);
 
             var plans = new List<TownPlan>

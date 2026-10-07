@@ -1,0 +1,100 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b75f14c93a56faa439f4355006f9c6c5, type: 3}
+  m_Name: Balance
+  m_EditorClassIdentifier: TradeWinds.Game::TradeWinds.Game.BalanceAsset
+  Balance:
+    TicksPerSecond: 2
+    StartTreasury: 10000
+    RoadCostPerHex: 5
+    TariffRate: 0.3
+    TariffMin: 0.1
+    TariffMax: 0.4
+    CrownTransfer: 1000
+    CrownCooldownSec: 120
+    GiveHappiness: 10
+    TakeHappiness: -30
+    CrownEffectSec: 60
+    TakeMinTownAgeSec: 300
+    TakeMinResidents: 2
+    CastleStartWood: 40
+    CastleStartStone: 40
+    CastleStartPotato: 10
+    RoyalTraders: 10
+    RoyalTraderCapacity: 10
+    CastleSellPriceMultiplier: 1
+    ProvisionsStart: 15
+    ProvisionsCap: 30
+    ProvisionerSec: 3
+    ProvisionerBuyLimit: 40
+    ResearchSpeedByLevel:
+    - 2
+    - 3
+    - 4
+    - 6
+    RevealRadiusSmall: 6
+    RevealRadiusNormal: 8
+    RevealRadiusLarge: 10
+    ScoutRevealRadius: 2
+    ScoutSearchRadius: 8
+    ScoutCarry: 10
+    ScoutHexesPerTick: 1
+    ScoutPauseTicks: 4
+    TownFoundCost: 1000
+    TownStartGold: 1000
+    TownCap: 4
+    TownBuildSec: 10
+    TownSellGraceSec: 30
+    StockCap: 80
+    SlotsByLevel: 080000000c0000001100000018000000
+    TradersByLevel: 02000000040000000600000008000000
+    PortersByLevel: 04000000050000000600000007000000
+    TownLevelCost:
+    - 150
+    - 400
+    - 900
+    BatchSec: 16
+    ProducerStoreCap: 30
+    UpgradeSec: 4
+    BasicHappy: 70
+    LuxuryHappy: 30
+    FullHousingAt: 70
+    StartHappiness: 50
+    SatisfactionSmoothing: 0.05
+    HappinessEase: 0.1
+    GrowthPerTick: 0.0095
+    DeclinePerTick: 0.05
+    DeclineDelayTicks: 3
+    TaxBonusPerHappyPoint: 0.02
+    WorkSpeedBase: 0.5
+    WorkSpeedPerHappy: 0.7
+    HouseBufferSec: 60
+    HouseBufferMin: 4
+    InputBufferSec: 60
+    BasicReserveSec: 60
+    EstateWinHappiness: 99.5
+    PorterCapacity: 10
+    PorterSecPerHex: 1
+    PriceCoverMin: 2
+    PriceMinConsumptionPerMin: 0.5
+    PriceCeiling: 1.9
+    PriceFloor: 0.4
+    PriceEase: 0.1
+    TraderCapacity: 10
+    BuyFloor: 6
+    BuyCoverMin: 1.5
+    MinShortfall: 1
+    ChoiceSpread: 3
+    TraderHexesPerTick: 2
+    MinLegTicks: 4
+    OffRoadCostMultiplier: 2
+    LoadItemsPerSec: 2.5

@@ -10,7 +10,7 @@ namespace TradeWinds.Core.Tests
         [Test]
         public void ScriptedKingdom_CompletesEveryMission_ForVictory()
         {
-            var bot = FullKingdom.Create();
+            var bot = BenchmarkKingdom.Create();
             for (int m = 0; m < 300 && !bot.World.Victory; m++) bot.Run(Minute);
             TestContext.WriteLine(bot.Report());
 
@@ -25,8 +25,8 @@ namespace TradeWinds.Core.Tests
         [Test]
         public void ScriptedKingdom_IsDeterministic()
         {
-            var a = FullKingdom.Create();
-            var b = FullKingdom.Create();
+            var a = BenchmarkKingdom.Create();
+            var b = BenchmarkKingdom.Create();
             a.Run(40 * Minute);
             b.Run(40 * Minute);
             Assert.That(KingdomTests.Fingerprint(b.World), Is.EqualTo(KingdomTests.Fingerprint(a.World)));
