@@ -287,16 +287,15 @@
         },
         {
           "title": "First-hour onboarding fixes",
-          "detail": "Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages.",
-          "status": "in-progress",
+          "detail": "Mission tips now say exactly what to do (Mission 6 asks for 2 Cottages and explains Quarry, Stone, Fish, Coal and Scouts); picking a research queues its missing steps first and says so; a greyed-out button says why when clicked; messages stay on top of the research tree; after founding a Town the build bar jumps to the Peasant tab; empty Towns and missing materials say how to fix them.",
+          "status": "done",
           "size": "M",
-          "owner": "Claude",
-          "now": "Onboarding designer + Writer (Claude): rewriting Mission tips and messages in a background copy"
+          "owner": "Claude"
         },
         {
           "title": "Words and terms pass",
-          "detail": "Make every player-facing text use the glossary words (Trader, Tariff, Basic Needs, Deposit) and say how to fix a refusal.",
-          "status": "todo",
+          "detail": "Refusals and labels use the glossary (Trader Packs, Extra Trader, Tariff earned for the Crown, Basic Needs, Luxuries, Deposit) and say how to fix the problem. Building tags on the map are now unique (Co, Ca, Mi, Ma...) until real icons arrive.",
+          "status": "done",
           "size": "S",
           "owner": "Claude"
         },

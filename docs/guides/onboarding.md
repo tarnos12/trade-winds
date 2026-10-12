@@ -3,6 +3,8 @@
 Read-only review by the UI/UX + Onboarding designer + Writer, walking the first hour as a new player.
 Task: "First-hour onboarding fixes" (blockers + quick wins) and "Words and terms pass" (texts).
 
+**Status 2026-10-13:** blockers 1–8 and the UI-flow/wording items are fixed, except: the Town panel's Demolish warning, the Castle "Buy */Sell *" labels, and the GDD §12 HUD parts (own task: Kingdom Overview and Goods strip).
+
 ## Blockers in the first hour (most harmful first)
 1. **Mission 6 "The Workers Arrive" hides its prerequisites.** It needs Quarry research → Cottages,
    20 Stone per Cottage (Quarry on a Stone Deposit), Fish and Coal (Coal Deposits usually in fog;

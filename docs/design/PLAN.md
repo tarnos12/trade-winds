@@ -2,18 +2,14 @@
 
 Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**29 of 37 tasks done**, 1 in progress, 3 to do, 2 blocked, 2 waiting.
-
-## Being worked on now
-
-- **M4** First-hour onboarding fixes: Onboarding designer + Writer (Claude): rewriting Mission tips and messages in a background copy
+**31 of 37 tasks done**, 0 in progress, 2 to do, 2 blocked, 2 waiting.
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 16 / 24 |
+| M4 | 1.0 |  | Blocked | 18 / 24 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -87,7 +83,7 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Done | Code health review | Findings in docs/guides/code-health.md: 9 bugs (mostly save/load), numbers that belong in Balance, duplicated trade code, test gaps. They became the tasks below. | Claude |
 | Done | UI and onboarding review | Findings in docs/guides/onboarding.md: Mission 6 hides its prerequisites, tips point at things the player can't do yet, toasts hidden behind the research panel, wording that breaks the glossary. They became the tasks below. | Claude |
 | Done | Fix save and determinism bugs | Fixed: routes refresh after a Town is founded or abandoned, saves survive content changes, unknown research is dropped on load, Goods are no longer lost when an upgrade is cancelled, royal Traders forget abandoned Towns, and the Balance asset now holds the purse limits and trade settings. | Claude |
-| In progress | First-hour onboarding fixes **(NOW)** | Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages. | Claude |
-| To do | Words and terms pass | Make every player-facing text use the glossary words (Trader, Tariff, Basic Needs, Deposit) and say how to fix a refusal. | Claude |
+| Done | First-hour onboarding fixes | Mission tips now say exactly what to do (Mission 6 asks for 2 Cottages and explains Quarry, Stone, Fish, Coal and Scouts); picking a research queues its missing steps first and says so; a greyed-out button says why when clicked; messages stay on top of the research tree; after founding a Town the build bar jumps to the Peasant tab; empty Towns and missing materials say how to fix them. | Claude |
+| Done | Words and terms pass | Refusals and labels use the glossary (Trader Packs, Extra Trader, Tariff earned for the Crown, Basic Needs, Luxuries, Deposit) and say how to fix the problem. Building tags on the map are now unique (Co, Ca, Mi, Ma...) until real icons arrive. | Claude |
 | To do | Kingdom Overview and Goods strip | The HUD parts from the design that are still missing: which Town makes and lacks what, at a glance, plus alert icons. | Claude |
 | To do | Code cleanup: numbers into Balance, shared trade code | Move hard-coded numbers into the Balance asset, merge the duplicated trade code, add the missing tests. | Claude |
