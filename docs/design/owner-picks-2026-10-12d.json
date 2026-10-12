@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-12",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim).",
+  "raw": "Answers\ntake_limit: Leave it: clicking every Town every 2 minutes is chore enough  | note: This is just in case player gets stuck with no gold, its a safety net to let them play the game. It's not something they should rely on.",
+  "answers": {
+    "take_limit": {
+      "pick": "leave",
+      "label": "Leave it: clicking every Town every 2 minutes is chore enough",
+      "note": "This is just in case player gets stuck with no gold, its a safety net to let them play the game. It's not something they should rely on.",
+      "outcome": "Take stays as is (1,000 gold, 2-minute cooldown). Design intent recorded: Take is a safety net for a player who runs out of gold, not an income source; the Tariff stays the main income."
+    }
+  }
+}

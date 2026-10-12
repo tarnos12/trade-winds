@@ -41,8 +41,9 @@ Levers tried and rejected (all available in `Balance` at neutral defaults):
 | Tariff from the seller's price (`TariffFromSeller`) | Moves Town gold to the Crown on every trade | Tariff income −20%; purses still grow without a limit |
 | Building upkeep (`UpkeepPerMinByTier`) | Sink proportional to Town size | Hits poor importers first; rich Towns still hoard |
 
-## Open
+## Take (owner, 2026-10-12)
 
-- **Take loophole:** even with purse limits, pressing Take on every rich Town every 2 minutes could pull ~2,300
-  gold/min versus ~1,150/min of Tariff, because Take skims each Town's ongoing Tax surplus. Only a limit on Take
-  closes it without starving importers. Question for the owner in the Hub (`take_limit`).
+Take stays as is (1,000 gold, 2-minute cooldown per Town). It is a **safety net** so a player who runs out of gold
+can keep playing, not an income to rely on. Pressing it on every rich Town every 2 minutes could still out-earn the
+Tariff (~2,300 vs ~1,150 gold/min late game), but that is a chore the owner accepts. Balance work keeps the Tariff
+as the income a normal player relies on; do not design progression that needs Take.

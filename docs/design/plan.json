@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 15:00",
+  "updated": "2026-10-12 15:30",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -171,12 +171,11 @@
           "owner": "Claude"
         },
         {
-          "title": "Limit how often Take can be used",
-          "detail": "Close the last loophole: pressing Take on every rich Town every 2 minutes still out-earns the Tariff.",
-          "status": "blocked",
+          "title": "Take stays a safety net",
+          "detail": "You chose to leave Take as it is (2026-10-12): it is there so a player who runs out of gold can keep playing, not as an income. The Tariff stays the main income.",
+          "status": "done",
           "size": "S",
-          "owner": "Claude",
-          "blockedBy": "Your answer: take_limit"
+          "owner": "Claude"
         },
         {
           "title": "Set the length of a full run",

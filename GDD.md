@@ -108,7 +108,8 @@ a new chain, found a Town, research the next tier.
 
 - **Crown Give / Take:** move 1000 gold between treasury and a Town (2-min cooldown per Town). Give:
   +10 happiness for 1 min. Take: −30 happiness for 1 min; needs a finished Town ≥5 min old with ≥2
-  residents. Manual Take is a legitimate money tool (the *Let Them Trade* model).
+  residents. Take is a **safety net** so a player who runs out of gold can keep playing, not something to rely on;
+  the Tariff is the income (owner, 2026-10-12).
 - **Destroying a Town** refunds founding + building gold minus gold the Crown has Taken; Stock and
   residents are lost.
 
@@ -324,8 +325,8 @@ there, Victory was the Aristocrats Home alone and Missions were separate.)*
 - **Porter delivery was effectively optional.** **Fixed:** Porters are real logistics (§8).
 - **Buy target ≈ a flat floor of 6.** **Fixed:** scales with use (§8).
 - **Inputs weren't scaled by work speed.** **Fixed:** inputs are consumed per unit of output.
-- **Exporting Towns hoarded gold** (100k+ late game). **Fixed:** purse limits by Town level (§9). The Take
-  loophole (pressing Take on every rich Town every 2 minutes) remains: owner question `take_limit`.
+- **Exporting Towns hoarded gold** (100k+ late game). **Fixed:** purse limits by Town level (§9). Take is left
+  as is on purpose: it is a **safety net** for a player who runs out of gold, not an income (owner, 2026-10-12).
 - Research **cancel refunds nothing**; ETA reads ~1 s optimistic.
 
 ## 14. Cut — do not port
@@ -356,7 +357,7 @@ seasons; player contracts between Towns; seed of the day.
 ## 16. Open questions
 
 Open owner questions live in the Hub's Questions tab (`docs/design/questions.json`); answers are kept in
-`docs/design/owner-picks-<date>.json`. Open now: whether to limit the Crown's Take on rich Towns.
+`docs/design/owner-picks-<date>.json`. No owner questions open.
 
 Resolved 2026-10-12 (owner-picks-2026-10-12.json): **title "Trade Winds" is final**; a full run should take
 **about 4 hours** (current pace kept); **Tariff is a stable 30% with no slider** (Tariff Office removed);

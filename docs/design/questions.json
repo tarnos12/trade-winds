@@ -1,13 +1,1 @@
-[
-  { "g": "Balance" },
-  {
-    "id": "take_limit",
-    "q": "Towns can no longer hoard: each purse now stops at 3,000 / 6,000 / 12,000 / 20,000 gold (by Town level). One loophole is left. A rich Town still earns about 300–500 gold a minute more than it spends, and Take can pull 1,000 every 2 minutes from each Town. Clicking Take on all 7 Towns every 2 minutes would bring about 2,300 gold a minute, double the Tariff (about 1,150 a minute late in a run). Limit how often Take can be used?",
-    "ctx": "Lowering Tax instead was tested: it leaves importing Towns broke and needing Gives 4–5 times as often.",
-    "o": [
-      ["10min", "Once every 10 minutes per Town (at most ~700 gold a minute from 7 Towns: below the Tariff)", true],
-      ["5min", "Once every 5 minutes per Town (at most ~1,400 a minute: still above the Tariff)"],
-      ["leave", "Leave it: clicking every Town every 2 minutes is chore enough"]
-    ]
-  }
-]
+[]
