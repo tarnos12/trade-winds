@@ -31,6 +31,8 @@ namespace TradeWinds.Core
         public readonly List<string> ResearchOrder;
         public int ThinkEveryTicks = 20;
         public double TreasuryReserve = 300;
+        /// <summary>Crown transfers the player made (for balance reports).</summary>
+        public int Gives, Takes;
 
         readonly Dictionary<TownPlan, Town> _towns = new Dictionary<TownPlan, Town>();
         readonly Dictionary<TownPlan, int> _placed = new Dictionary<TownPlan, int>();
@@ -135,14 +137,14 @@ namespace TradeWinds.Core
 
             // Crown Give: keep importing Towns solvent once the treasury can afford it.
             foreach (var t in w.Towns)
-                if (t.Gold < 1000 && w.Treasury > 5000 && w.CanGive(t).Ok) w.Give(t);
+                if (t.Gold < 1000 && w.Treasury > 5000 && w.CanGive(t).Ok && w.Give(t).Ok) Gives++;
 
             if (w.Treasury < 800)
             {
                 Town richest = null;
                 foreach (var t in w.Towns)
                     if (w.CanTake(t).Ok && t.Gold >= 2000 && (richest == null || t.Gold > richest.Gold)) richest = t;
-                if (richest != null) w.Take(richest);
+                if (richest != null && w.Take(richest).Ok) Takes++;
             }
         }
 

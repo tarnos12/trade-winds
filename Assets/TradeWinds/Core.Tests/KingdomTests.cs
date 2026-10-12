@@ -240,6 +240,22 @@ namespace TradeWinds.Core.Tests
             Assert.That(Fingerprint(copy), Is.EqualTo(Fingerprint(w)), "and continues identically");
         }
 
+        [Test]
+        public void TownPurses_StopAtTheirLevelLimit()
+        {
+            var w = NewKingdom(out _);
+            Assert.That(w.FoundTown(Scenarios.At(14, 8), out var town).Ok);
+            w.Run(Minute);
+            town.Gold = 50000;
+            w.Run(1);
+            Assert.That(town.Gold, Is.EqualTo(3000).Within(1e-6), "level 1 purse limit");
+            Assert.That(town.PurseOverflow, Is.GreaterThan(40000));
+            Assert.That(w.LevelUp(town).Ok);
+            town.Gold = 50000;
+            w.Run(1);
+            Assert.That(town.Gold, Is.EqualTo(6000).Within(1e-6), "level 2 purse limit");
+        }
+
         internal static string Fingerprint(World w)
         {
             var s = new System.Text.StringBuilder();

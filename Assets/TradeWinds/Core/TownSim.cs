@@ -30,6 +30,8 @@ namespace TradeWinds.Core
             ConsumeAndSatisfy(world, town);
             UpdatePopulation(world, town);
             CollectTax(world, town);
+            PayUpkeep(world, town);
+            CapPurse(world, town);
             AssignPorters(world, town);
             UpdatePrices(world, town);
         }
@@ -340,10 +342,37 @@ namespace TradeWinds.Core
                 double mood = town.EffectiveHappiness(tier, world.Tick);
                 double mult = 1 + b.TaxBonusPerHappyPoint * Math.Max(0, mood - b.FullHousingAt);
                 if (mood < b.FullHousingAt) mult *= mood / b.FullHousingAt;
-                double tax = pop * b.PerTick(content.Tiers[tier].TaxPerPersonPerMin) * mult;
+                double tax = pop * b.PerTick(content.Tiers[tier].TaxPerPersonPerMin) * mult * b.TaxScale;
                 town.Gold += tax;
                 town.TaxEarned += tax;
             }
+        }
+
+        public static double PurseCap(World world, Town town)
+        {
+            var caps = world.Content.Balance.PurseCapByLevel;
+            return caps[System.Math.Min(town.Level, caps.Length) - 1];
+        }
+
+        /// <summary>A full purse overflows: the residents spend whatever is above the Town's limit.</summary>
+        static void CapPurse(World world, Town town)
+        {
+            double cap = PurseCap(world, town);
+            if (cap <= 0 || town.Gold <= cap) return;
+            town.PurseOverflow += town.Gold - cap;
+            town.Gold = cap;
+        }
+
+        /// <summary>Workplaces cost their Town gold to run; a purse never goes below zero.</summary>
+        static void PayUpkeep(World world, Town town)
+        {
+            var b = world.Content.Balance;
+            double due = 0;
+            foreach (var bld in town.Buildings)
+                if (bld.Built && bld.IsWorkplace) due += b.PerTick(b.UpkeepPerMinByTier[(int)bld.Def.Tier]);
+            double paid = System.Math.Min(due, System.Math.Max(0, town.Gold));
+            town.Gold -= paid;
+            town.UpkeepPaid += paid;
         }
 
         // ------------------------------------------------------------------ porters

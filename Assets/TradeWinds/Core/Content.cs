@@ -190,6 +190,15 @@ namespace TradeWinds.Core
         public double StartTreasury = 10000;
         public double RoadCostPerHex = 5;
         public double TariffRate = 0.30;
+        /// <summary>true: the Tariff comes out of the seller's price (moves Town gold to the Crown); false: minted on top.</summary>
+        public bool TariffFromSeller = false;
+        /// <summary>Scales every tier's Tax (1 = the content's numbers).</summary>
+        public double TaxScale = 1;
+        /// <summary>Gold per game-minute each working building costs its Town, by staffing tier. Paid only from what the
+        /// purse holds: a poor Town pays what it can and nothing else happens.</summary>
+        public double[] UpkeepPerMinByTier = { 0, 0, 0, 0 };
+        /// <summary>Most gold a Town's purse holds, by Town level; above it the residents spend the rest (0 = no limit).</summary>
+        public double[] PurseCapByLevel = { 3000, 6000, 12000, 20000 };
         public double CrownTransfer = 1000;
         public double CrownCooldownSec = 120;
         public double GiveHappiness = 10;

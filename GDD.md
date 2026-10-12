@@ -220,6 +220,9 @@ much is stocked):
   treasury on top** — the seller keeps the full price. **Fixed at 30%, no slider** (owner, 2026-10-12).
 - **Money sources:** Tax (into Towns), Tariff (into the treasury), Mission rewards (into the
   treasury). Treasury starts at **10,000**.
+- **Purse limits** (owner asked for a rebalance, 2026-10-12): a Town's purse holds at most 3,000 / 6,000 /
+  12,000 / 20,000 gold at levels 1–4; above that its residents spend the rest. Towns no longer hoard
+  100k+. Details and the levers tried: `docs/guides/balance.md`.
 - **Tariff is the Crown's main income** (decided 2026-10-04). Balance so a trading Kingdom funds its
   expansion through Tariff; Give/Take is an occasional tool, not the money engine. Tax stays in each
   Town's purse to fund its imports, upgrades and level-ups.
@@ -321,8 +324,8 @@ there, Victory was the Aristocrats Home alone and Missions were separate.)*
 - **Porter delivery was effectively optional.** **Fixed:** Porters are real logistics (§8).
 - **Buy target ≈ a flat floor of 6.** **Fixed:** scales with use (§8).
 - **Inputs weren't scaled by work speed.** **Fixed:** inputs are consumed per unit of output.
-- **Exporting Towns hoard gold** (purses of 100k+ late game), which makes the 1000-gold Take a money
-  printer that rivals Tariff. Open — see §16.
+- **Exporting Towns hoarded gold** (100k+ late game). **Fixed:** purse limits by Town level (§9). The Take
+  loophole (pressing Take on every rich Town every 2 minutes) remains: owner question `take_limit`.
 - Research **cancel refunds nothing**; ETA reads ~1 s optimistic.
 
 ## 14. Cut — do not port

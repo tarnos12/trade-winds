@@ -54,6 +54,13 @@ Editor). Core is the hot module early on — serialize edits to it until its int
 and UI work can then run in parallel against those interfaces. The lead integrates into `main` via
 PRs and merges them itself after tests pass.
 
+## Agent team (owner's game-dev roster)
+
+The owner's designer roles and task specialists, mapped onto Trade Winds, with each designer's guide and the
+rules every agent follows (own plan task with a `now` line, Hub-only questions, background copies via
+`git worktree`, test gate before pushing): **`docs/guides/README.md`**. The table below is the older
+model-tier summary.
+
 ## Instantiated roster
 
 | Role | Model | Owns |

@@ -181,6 +181,9 @@ namespace TradeWinds.Core
 
         // Ledger (lifetime)
         public double TaxEarned;
+        public double UpkeepPaid;
+        /// <summary>Gold the residents spent because the purse was full.</summary>
+        public double PurseOverflow;
         public double SalesIncome;
         public double PurchaseSpend;
         public double TariffGenerated;

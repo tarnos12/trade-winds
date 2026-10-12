@@ -33,7 +33,9 @@ namespace TradeWinds.Game
                 return;
             }
 
-            Root.Add(Ui.Text($"Purse {t.Gold:N0} gold   ·   Slots {w.SlotsUsed(t)}/{w.SlotCap(t)}   ·   Tax {t.TaxEarned:N0}   ·   Tariff paid {t.TariffGenerated:N0}", 13));
+            double cap = TownSim.PurseCap(w, t);
+            Root.Add(Ui.Text($"Purse {t.Gold:N0}" + (cap > 0 ? $"/{cap:N0}" : "") + $" gold   ·   Slots {w.SlotsUsed(t)}/{w.SlotCap(t)}   ·   Tax {t.TaxEarned:N0}   ·   Tariff paid {t.TariffGenerated:N0}", 13));
+            if (cap > 0 && t.Gold >= cap - 0.5) Root.Add(Ui.Text("Purse full: the residents spend anything above the limit. Level the Town up for a bigger purse.", 12, false, Palette.Warn));
 
             var level = w.CanLevelUp(t);
             string levelText = t.Level < bal.SlotsByLevel.Length ? $"Level up ({bal.TownLevelCost[t.Level - 1]:0}g)" : "Max level";

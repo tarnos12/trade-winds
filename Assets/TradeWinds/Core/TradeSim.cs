@@ -296,11 +296,19 @@ namespace TradeWinds.Core
             else
             {
                 // Settle: the buyer pays the seller; the Crown mints its Tariff on top.
-                double tariff = world.EffectiveTariff * Math.Max(offer.price, content.Goods[good].BasePrice) * qty;
                 var seller = offer.seller;
+                double tariff;
+                double proceeds = cost;
+                if (b.TariffFromSeller)
+                {
+                    // The Crown takes its share out of the sale: Town gold flows to the treasury.
+                    tariff = world.EffectiveTariff * cost;
+                    proceeds = cost - tariff;
+                }
+                else tariff = world.EffectiveTariff * Math.Max(offer.price, content.Goods[good].BasePrice) * qty;
                 seller.Stock[good] -= qty;
-                seller.Gold += cost;
-                seller.SalesIncome += cost;
+                seller.Gold += proceeds;
+                seller.SalesIncome += proceeds;
                 seller.GoodsSold += qty;
                 seller.TariffGenerated += tariff;
                 world.Treasury += tariff;

@@ -20,6 +20,8 @@ namespace TradeWinds.Core.Tests
             Assert.That(MissionSim.EstateHappiness(w), Is.GreaterThanOrEqualTo(99.5));
             Assert.That(w.MissionGoldEarned, Is.GreaterThan(0));
             Assert.That(w.LifetimeTariff, Is.GreaterThan(w.MissionGoldEarned), "Tariff is the Crown's main income");
+            double cap = w.Content.Balance.PurseCapByLevel[w.Content.Balance.PurseCapByLevel.Length - 1];
+            foreach (var t in w.Towns) Assert.That(t.Gold, Is.LessThanOrEqualTo(cap + 1e-6), t.Name + " purse stays within its limit");
         }
 
         [Test]
