@@ -153,5 +153,40 @@ namespace TradeWinds.Core.Tests
             }
             return s.ToString();
         }
+
+        [Test]
+        public void Traders_CarryHomeSurplusOnTheWayOut()
+        {
+            var world = Scenarios.TwoSpecialisedTowns(11, out _, out _);
+            world.Run(30 * Minute);
+            TestContext.WriteLine($"back-hauls: {world.Stats.BackHauls}");
+            Assert.That(world.Stats.BackHauls, Is.GreaterThan(0), "outbound legs carry goods");
+
+            var off = Scenarios.TwoSpecialisedTowns(11, out _, out _);
+            off.Content.Balance.BackHaul = false;
+            off.Run(30 * Minute);
+            Assert.That(off.Stats.BackHauls, Is.EqualTo(0));
+            TestContext.WriteLine($"tariff: back-haul {world.LifetimeTariff:0}, without {off.LifetimeTariff:0}");
+        }
+
+        [Test]
+        public void SalesPressure_RaisesTheAskOfAGoodThatSells_WithinBounds()
+        {
+            var world = Scenarios.TwoSpecialisedTowns(11, out var potatoTown, out _);
+            var b = world.Content.Balance;
+            int potato = world.Content.GoodIndex("potato");
+            double peak = 0;
+            for (int i = 0; i < 30 * Minute; i++)
+            {
+                world.Step();
+                foreach (var t in world.Towns)
+                    foreach (var x in t.SalesAdj)
+                        Assert.That(x, Is.InRange(b.SalesPressureMin, b.SalesPressureMax));
+                peak = Math.Max(peak, potatoTown.SalesAdj[potato]);
+            }
+            Assert.That(peak, Is.GreaterThan(1), "potato sales push the potato Town's ask up");
+            Assert.That(TradeSim.SellPrice(potatoTown, potato),
+                Is.EqualTo(potatoTown.Price[potato] * potatoTown.SalesAdj[potato]).Within(1e-9));
+        }
     }
 }

@@ -201,7 +201,11 @@ much is stocked):
   structurally consumes, and always keeping its own floor. Sellers with the biggest surplus are
   preferred, then price, then distance, with a little randomness (top 3) so Traders don't herd.
 - **A trip:** the buyer pays up front; the Trader loads and unloads over time (2.5 items/s). Traders
-  only travel with a real purpose. *(Back-haul and sales pressure are not ported yet.)*
+  only travel with a real purpose.
+- **Back-haul:** a Trader heading out to buy also carries its home's surplus and sells it to the Town
+  it is visiting, if that Town uses the Good (up to one extra round of cover, paid by that Town, Tariff
+  minted as usual). The Goods arrive with the Trader. *(Port change: the destination tops up beyond
+  its own shortfall, because its own Traders usually already cover that.)*
 - **The Crown outranks Luxuries:** royal Traders buying research materials may buy a Town's Luxury
   stock, never its Basic Needs or construction materials — research can't be starved by Peasants'
   wool. *(Port change, found by the balance runs.)*
@@ -214,7 +218,8 @@ much is stocked):
   `price = base × clamp(1.9 − ratio, 0.4, 1.9)`, easing 10% per tick. Empty shelf ≈ 1.9× base; about
   2 minutes of cover ≈ 1×; surplus → 0.4×. Nothing stocked and nothing consumed → no market.
   Consumption = residents + processor inputs (construction and research lumps drive buying, not price).
-- **Sales pressure:** each sale nudges a seller's price up; unsold surplus slowly lowers it.
+- **Sales pressure:** a seller's asking price = its stock price × a sales multiplier. Each sale adds
+  +0.05 (up to 1.35×); after 20 s with no sale it falls 0.015 per tick (down to 0.75×).
 - **Base prices** range from 4 (grain, potato) through 10–28 (processed) to 22–240 (luxury); see
   `old-game-files/src/goods.js` for the full table.
 - **Tariff:** 30% of each trade's customs value (max(price, base) × quantity), **minted into the
