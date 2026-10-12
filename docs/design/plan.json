@@ -280,18 +280,18 @@
         },
         {
           "title": "Fix save and determinism bugs",
-          "detail": "Route cache after founding a Town, save migration, unknown research ids, Goods lost when an upgrade is cancelled, royal Traders and demolished Towns, out-of-date Balance asset.",
-          "status": "in-progress",
+          "detail": "Fixed: routes refresh after a Town is founded or abandoned, saves survive content changes, unknown research is dropped on load, Goods are no longer lost when an upgrade is cancelled, royal Traders forget abandoned Towns, and the Balance asset now holds the purse limits and trade settings.",
+          "status": "done",
           "size": "M",
-          "owner": "Claude",
-          "now": "Feature builder (Claude): fixing in a background copy"
+          "owner": "Claude"
         },
         {
           "title": "First-hour onboarding fixes",
           "detail": "Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages.",
-          "status": "todo",
+          "status": "in-progress",
           "size": "M",
-          "owner": "Claude"
+          "owner": "Claude",
+          "now": "Onboarding designer + Writer (Claude): rewriting Mission tips and messages in a background copy"
         },
         {
           "title": "Words and terms pass",

@@ -3,19 +3,19 @@
 Read-only review by the Code health reviewer. Core rules hold: no UnityEngine, `System.Random` or
 `DateTime` in Core; GameObjects own no sim state. Each finding below is a plan task or part of one.
 
-## Bugs (task: "Fix save and determinism bugs")
-1. **Route cache goes stale.** `Pathing` clears its cache only on `RoadVersion`, but Town centres
+## Bugs (task: "Fix save and determinism bugs") — all fixed 2026-10-13 (✅)
+1. ✅ **Route cache goes stale.** `Pathing` clears its cache only on `RoadVersion`, but Town centres
    count as road and `FoundTown`/`DestroyTown` don't bump it. A restored world starts fresh and drifts
    from the live one. Fix: bump the version when Towns appear or vanish.
 2. ~~Upkeep and purse-overflow ledgers not saved~~ — fixed with back-haul (2026-10-13).
-3. **No save migration.** Restore throws on any version mismatch and `Array.Copy(..., n)` throws if
+3. ✅ **No save migration.** Restore throws on any version mismatch and `Array.Copy(..., n)` throws if
    the Good count changes. Fix: copy `Math.Min` lengths everywhere; add a migrate step per version.
-4. **Unknown research ids on load** (active/queue) → null refs in research UI. Fix: drop them.
-5. **Cancel upgrade loses Goods** that Porters are still carrying. Fix: return late arrivals to Stock.
-6. **Royal Traders keep a demolished seller.** `DestroyTown` clears only Town Traders.
-7. **Disk check every frame** (`File.Exists` from the start menu code). Fix: only when the menu opens.
-8. **Stale selected Scout after load**; "Demolished." toast even when demolish fails.
-9. **`Balance.asset` out of date** (old Tariff keys, missing purse/upkeep fields). The game reads the
+4. ✅ **Unknown research ids on load** (active/queue) → null refs in research UI. Fix: drop them.
+5. ✅ **Cancel upgrade loses Goods** that Porters are still carrying. Fix: return late arrivals to Stock.
+6. ✅ **Royal Traders keep a demolished seller.** `DestroyTown` clears only Town Traders.
+7. ✅ **Disk check every frame** (`File.Exists` from the start menu code). Fix: only when the menu opens.
+8. ✅ **Stale selected Scout after load**; "Demolished." toast even when demolish fails.
+9. ✅ **`Balance.asset` out of date** (old Tariff keys, missing purse/upkeep fields). The game reads the
    asset, tests read code defaults. Fix: re-save it and add an editor check.
 
 ## Rule drift: numbers that belong in Balance

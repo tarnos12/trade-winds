@@ -17,8 +17,18 @@ MonoBehaviour:
     StartTreasury: 10000
     RoadCostPerHex: 5
     TariffRate: 0.3
-    TariffMin: 0.1
-    TariffMax: 0.4
+    TariffFromSeller: 0
+    TaxScale: 1
+    UpkeepPerMinByTier:
+    - 0
+    - 0
+    - 0
+    - 0
+    PurseCapByLevel:
+    - 3000
+    - 6000
+    - 12000
+    - 20000
     CrownTransfer: 1000
     CrownCooldownSec: 120
     GiveHappiness: 10
@@ -97,4 +107,10 @@ MonoBehaviour:
     TraderHexesPerTick: 2
     MinLegTicks: 4
     OffRoadCostMultiplier: 2
+    BackHaul: 1
+    SalesPressureUp: 0.05
+    SalesPressureDown: 0.015
+    SalesPressureMin: 0.75
+    SalesPressureMax: 1.35
+    SalesPressureGraceSec: 20
     LoadItemsPerSec: 2.5

@@ -2,18 +2,18 @@
 
 Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**28 of 37 tasks done**, 1 in progress, 4 to do, 2 blocked, 2 waiting.
+**29 of 37 tasks done**, 1 in progress, 3 to do, 2 blocked, 2 waiting.
 
 ## Being worked on now
 
-- **M4** Fix save and determinism bugs: Feature builder (Claude): fixing in a background copy
+- **M4** First-hour onboarding fixes: Onboarding designer + Writer (Claude): rewriting Mission tips and messages in a background copy
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 15 / 24 |
+| M4 | 1.0 |  | Blocked | 16 / 24 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -86,8 +86,8 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Done | Windows build you can play | Built: D:WORKUnity	rade-winds-buildsTradeWinds-latestTrade Winds.exe (about 100 MB). Rebuild any time with the menu Trade Winds → Build Windows Player. | Claude |
 | Done | Code health review | Findings in docs/guides/code-health.md: 9 bugs (mostly save/load), numbers that belong in Balance, duplicated trade code, test gaps. They became the tasks below. | Claude |
 | Done | UI and onboarding review | Findings in docs/guides/onboarding.md: Mission 6 hides its prerequisites, tips point at things the player can't do yet, toasts hidden behind the research panel, wording that breaks the glossary. They became the tasks below. | Claude |
-| In progress | Fix save and determinism bugs **(NOW)** | Route cache after founding a Town, save migration, unknown research ids, Goods lost when an upgrade is cancelled, royal Traders and demolished Towns, out-of-date Balance asset. | Claude |
-| To do | First-hour onboarding fixes | Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages. | Claude |
+| Done | Fix save and determinism bugs | Fixed: routes refresh after a Town is founded or abandoned, saves survive content changes, unknown research is dropped on load, Goods are no longer lost when an upgrade is cancelled, royal Traders forget abandoned Towns, and the Balance asset now holds the purse limits and trade settings. | Claude |
+| In progress | First-hour onboarding fixes **(NOW)** | Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages. | Claude |
 | To do | Words and terms pass | Make every player-facing text use the glossary words (Trader, Tariff, Basic Needs, Deposit) and say how to fix a refusal. | Claude |
 | To do | Kingdom Overview and Goods strip | The HUD parts from the design that are still missing: which Town makes and lacks what, at a glance, plus alert icons. | Claude |
 | To do | Code cleanup: numbers into Balance, shared trade code | Move hard-coded numbers into the Balance asset, merge the duplicated trade code, add the missing tests. | Claude |
