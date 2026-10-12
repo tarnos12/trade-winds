@@ -282,7 +282,13 @@ namespace TradeWinds.Core
                 ConsumptionPerMin = new double[n],
                 Name = "Town #" + id,
             };
-            for (int g = 0; g < n; g++) town.Price[g] = Content.Goods[g].BasePrice;
+            town.SalesAdj = new double[n];
+            town.LastSoldTick = new long[n];
+            for (int g = 0; g < n; g++)
+            {
+                town.Price[g] = Content.Goods[g].BasePrice;
+                town.SalesAdj[g] = 1;
+            }
             for (int t = 0; t < 4; t++)
             {
                 town.Happiness[t] = B.StartHappiness;

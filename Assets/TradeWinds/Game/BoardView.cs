@@ -294,7 +294,7 @@ namespace TradeWinds.Game
             }
             var sr = Pooled(_traderPool, used++, "Trader", SpriteFactory.Square, color, OrderTrader, 0.26f);
             sr.transform.position = pos + new Vector3(0, 0.12f, 0);
-            bool loaded = t.State == TraderState.Inbound || t.State == TraderState.Unloading;
+            bool loaded = t.State == TraderState.Inbound || t.State == TraderState.Unloading || t.CarryGood >= 0;
             sr.color = loaded ? color : Color.Lerp(color, Color.white, 0.5f);
         }
 

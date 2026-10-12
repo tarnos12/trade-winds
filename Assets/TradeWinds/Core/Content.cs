@@ -290,6 +290,16 @@ namespace TradeWinds.Core
         public double TraderHexesPerTick = 2;
         public int MinLegTicks = 4;
         public double OffRoadCostMultiplier = 2;
+        /// <summary>Back-haul: a Trader carries its home's surplus to the seller on the way out (otherwise it rides empty).</summary>
+        public bool BackHaul = true;
+
+        // Sales pressure: each sale nudges the seller's price for that Good up; unsold Goods slowly get cheaper.
+        public double SalesPressureUp = 0.05;
+        public double SalesPressureDown = 0.015;
+        public double SalesPressureMin = 0.75;
+        public double SalesPressureMax = 1.35;
+        /// <summary>Seconds a Good must go unsold before its sales pressure starts to fall.</summary>
+        public double SalesPressureGraceSec = 20;
         public double LoadItemsPerSec = 2.5;
 
         public int Ticks(double seconds) => (int)Math.Round(seconds * TicksPerSecond);

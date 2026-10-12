@@ -355,7 +355,7 @@ namespace TradeWinds.Core
         }
 
         /// <summary>A full purse overflows: the residents spend whatever is above the Town's limit.</summary>
-        static void CapPurse(World world, Town town)
+        internal static void CapPurse(World world, Town town)
         {
             double cap = PurseCap(world, town);
             if (cap <= 0 || town.Gold <= cap) return;

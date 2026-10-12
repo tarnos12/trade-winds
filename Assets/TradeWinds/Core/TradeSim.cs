@@ -9,6 +9,7 @@ namespace TradeWinds.Core
         public static void Tick(World world)
         {
             foreach (var town in world.Towns) town.CacheTick = -1;
+            EaseSalesPressure(world);
             TickInner(world);
         }
 
@@ -36,6 +37,14 @@ namespace TradeWinds.Core
             switch (t.State)
             {
                 case TraderState.Outbound:
+                    if (t.CarryGood >= 0 && t.Seller != null)
+                    {
+                        // Back-haul arrives: the seller already paid at dispatch.
+                        t.Seller.Stock[t.CarryGood] = Math.Min(b.StockCap, t.Seller.Stock[t.CarryGood] + t.CarryAmount);
+                        t.Seller.Inbound[t.CarryGood] -= t.CarryAmount;
+                    }
+                    t.CarryGood = -1;
+                    t.CarryAmount = 0;
                     t.State = TraderState.Loading;
                     t.PhaseEndTick = world.Tick + LoadTicks(b, t.Amount);
                     break;
@@ -64,6 +73,32 @@ namespace TradeWinds.Core
                     t.Amount = 0;
                     break;
             }
+        }
+
+        // ------------------------------------------------------------------ sales pressure
+
+        /// <summary>The price a Town asks when selling: its stock-based price times its sales pressure.</summary>
+        public static double SellPrice(Town town, int good) => town.Price[good] * town.SalesAdj[good];
+
+        static void RecordSale(World world, Town seller, int good)
+        {
+            var b = world.Content.Balance;
+            seller.SalesAdj[good] = Math.Min(b.SalesPressureMax, Math.Max(1, seller.SalesAdj[good]) + b.SalesPressureUp);
+            seller.LastSoldTick[good] = world.Tick;
+        }
+
+        /// <summary>Goods that stop selling drift back down (and below 1 when left unsold for long).</summary>
+        static void EaseSalesPressure(World world)
+        {
+            var b = world.Content.Balance;
+            long grace = b.Ticks(b.SalesPressureGraceSec);
+            foreach (var town in world.Towns)
+                for (int g = 0; g < town.SalesAdj.Length; g++)
+                {
+                    if (world.Tick - town.LastSoldTick[g] < grace) continue;
+                    if (town.SalesAdj[g] > b.SalesPressureMin)
+                        town.SalesAdj[g] = Math.Max(b.SalesPressureMin, town.SalesAdj[g] - b.SalesPressureDown);
+                }
         }
 
         // ------------------------------------------------------------------ demand
@@ -250,7 +285,7 @@ namespace TradeWinds.Core
                 if (surplus < 1) continue;
                 var route = world.Pathing.Find(buyer.Center, s.Center);
                 if (!route.Found) continue;
-                offers.Add((s, surplus, s.Price[good], route));
+                offers.Add((s, surplus, SellPrice(s, good), route));
             }
 
             bool fromCastle = false;
@@ -314,7 +349,13 @@ namespace TradeWinds.Core
                 world.Treasury += tariff;
                 world.LifetimeTariff += tariff;
                 world.Stats.GoodsTraded[good] += qty;
+                RecordSale(world, seller, good);
+                TownSim.CapPurse(world, seller);
             }
+
+            trader.CarryGood = -1;
+            trader.CarryAmount = 0;
+            if (offer.seller != null && b.BackHaul) LoadBackHaul(world, buyer, offer.seller, trader, good);
 
             trader.State = TraderState.Outbound;
             trader.Seller = offer.seller;
@@ -325,6 +366,56 @@ namespace TradeWinds.Core
             trader.LegTicks = LegTicks(world, offer.route);
             trader.PhaseEndTick = world.Tick + trader.LegTicks;
             return true;
+        }
+
+        /// <summary>Fill the outbound leg: sell the home Town's surplus to the Town the Trader is heading to,
+        /// if that Town uses it (up to one extra round of cover). Settled now like any sale; the Goods arrive with the Trader.</summary>
+        static void LoadBackHaul(World world, Town home, Town dest, Trader trader, int bought)
+        {
+            var content = world.Content;
+            var b = content.Balance;
+            int best = -1;
+            double bestGap = b.MinShortfall;
+            for (int g = 0; g < content.GoodCount; g++)
+            {
+                if (g == bought) continue;
+                // A Town takes a back-haul up to one extra round of cover of what it uses (it pays for it).
+                double gap = Shortfall(world, dest, g);
+                if (Consumes(world, dest, g)) gap += Math.Max(b.BuyFloor, dest.ConsumptionPerMin[g] * b.BuyCoverMin);
+                gap = Math.Min(gap, b.StockCap - dest.Stock[g] - dest.Inbound[g]);
+                if (gap <= bestGap || Surplus(world, home, g) < 1) continue;
+                best = g;
+                bestGap = gap;
+            }
+            if (best < 0) return;
+
+            double price = SellPrice(home, best);
+            double qty = Math.Min(Capacity(world, b), Math.Min(Math.Ceiling(bestGap), Math.Floor(Surplus(world, home, best))));
+            if (price > 0) qty = Math.Min(qty, Math.Floor(dest.Gold / price));
+            if (qty < 1) return;
+
+            double cost = qty * price;
+            double tariff = world.EffectiveTariff * Math.Max(price, content.Goods[best].BasePrice) * qty;
+            double proceeds = cost;
+            if (b.TariffFromSeller) { tariff = world.EffectiveTariff * cost; proceeds = cost - tariff; }
+            dest.Gold -= cost;
+            dest.PurchaseSpend += cost;
+            dest.GoodsBought += qty;
+            dest.Inbound[best] += qty;
+            home.Stock[best] -= qty;
+            home.Gold += proceeds;
+            home.SalesIncome += proceeds;
+            home.GoodsSold += qty;
+            home.TariffGenerated += tariff;
+            world.Treasury += tariff;
+            world.LifetimeTariff += tariff;
+            world.Stats.GoodsTraded[best] += qty;
+            world.Stats.BackHauls += 1;
+            RecordSale(world, home, best);
+            TownSim.CapPurse(world, home);
+
+            trader.CarryGood = best;
+            trader.CarryAmount = qty;
         }
 
         // ------------------------------------------------------------------ royal dispatch
@@ -361,7 +452,7 @@ namespace TradeWinds.Core
                 if (surplus < 1) continue;
                 var route = world.Pathing.Find(castle.Center, s.Center);
                 if (!route.Found) continue;
-                offers.Add((s, surplus, s.Price[best], route));
+                offers.Add((s, surplus, SellPrice(s, best), route));
             }
             if (offers.Count == 0) return;
             offers.Sort((x, y) =>
@@ -384,6 +475,8 @@ namespace TradeWinds.Core
             offer.seller.Gold += cost;
             offer.seller.SalesIncome += cost;
             offer.seller.GoodsSold += qty;
+            RecordSale(world, offer.seller, best);
+            TownSim.CapPurse(world, offer.seller);
             castle.Inbound[best] += qty;
 
             free.State = TraderState.Outbound;

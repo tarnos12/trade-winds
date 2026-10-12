@@ -132,6 +132,9 @@ namespace TradeWinds.Core
         public bool OnRoad;
         /// <summary>Route from home to the seller (walked in reverse on the way back).</summary>
         public Hex[] Path = Array.Empty<Hex>();
+        /// <summary>Back-haul cargo sold to the seller and delivered on arrival there; -1 when riding out empty.</summary>
+        public int CarryGood = -1;
+        public double CarryAmount;
 
         public bool IsRoyal => Home == null;
     }
@@ -149,6 +152,10 @@ namespace TradeWinds.Core
         public double Gold;
         public double[] Stock;
         public double[] Price;
+        /// <summary>Per Good: sales-pressure multiplier on <see cref="Price"/> when selling (1 = none).</summary>
+        public double[] SalesAdj;
+        /// <summary>Per Good: tick of the last sale (sales pressure falls only after a quiet spell).</summary>
+        public long[] LastSoldTick;
         /// <summary>Goods bought and on their way here, per Good.</summary>
         public double[] Inbound;
         /// <summary>Residents' + processors' consumption per game-minute, per Good (last tick).</summary>
@@ -304,5 +311,6 @@ namespace TradeWinds.Core
         public int ResearchDone;
         public double[] GoodsTraded;
         public double PeakPopulation;
+        public int BackHauls;
     }
 }

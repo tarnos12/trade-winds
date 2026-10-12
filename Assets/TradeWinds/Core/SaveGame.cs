@@ -31,6 +31,7 @@ namespace TradeWinds.Core
     {
         public int state; public int sellerId; public int good; public double amount; public int legTicks;
         public long phaseEndTick; public bool onRoad; public List<HexDto> path = new List<HexDto>();
+        public bool carrying; public int carryGood; public double carryAmount;
     }
 
     [Serializable]
@@ -39,6 +40,8 @@ namespace TradeWinds.Core
         public int id; public string name; public HexDto center; public int level; public long foundedTick;
         public bool built; public long builtTick; public double gold;
         public double[] stock, price, inbound, population, happiness, satisfaction; public int[] ticksOverTarget;
+        public double[] salesAdj; public long[] lastSoldTick;
+        public double upkeepPaid, purseOverflow, goldSpentByCrown;
         public double crownModifier; public long crownModifierUntil, lastCrownTick; public double goldTaken;
         public double taxEarned, salesIncome, purchaseSpend, tariffGenerated, goodsSold, goodsBought;
         public List<BuildingDto> buildings = new List<BuildingDto>();
@@ -183,6 +186,8 @@ namespace TradeWinds.Core
                 id = t.Id, name = t.Name, center = H(t.Center), level = t.Level, foundedTick = t.FoundedTick,
                 built = t.Built, builtTick = t.BuiltTick, gold = t.Gold,
                 stock = Copy(t.Stock), price = Copy(t.Price), inbound = Copy(t.Inbound),
+                salesAdj = Copy(t.SalesAdj), lastSoldTick = (long[])t.LastSoldTick.Clone(),
+                upkeepPaid = t.UpkeepPaid, purseOverflow = t.PurseOverflow, goldSpentByCrown = t.GoldSpentByCrown,
                 population = Copy(t.Population), happiness = Copy(t.Happiness), ticksOverTarget = (int[])t.TicksOverTarget.Clone(),
                 satisfaction = new double[4 * n],
                 crownModifier = t.CrownModifier, crownModifierUntil = t.CrownModifierUntil, lastCrownTick = t.LastCrownTick,
@@ -216,6 +221,7 @@ namespace TradeWinds.Core
             {
                 state = (int)t.State, sellerId = t.Seller?.Id ?? 0, good = t.Good, amount = t.Amount,
                 legTicks = t.LegTicks, phaseEndTick = t.PhaseEndTick, onRoad = t.OnRoad,
+                carrying = t.CarryGood >= 0, carryGood = t.CarryGood, carryAmount = t.CarryAmount,
             };
             foreach (var h in t.Path) d.path.Add(H(h));
             return d;
@@ -326,6 +332,12 @@ namespace TradeWinds.Core
             Array.Copy(d.stock, t.Stock, n);
             Array.Copy(d.price, t.Price, n);
             Array.Copy(d.inbound, t.Inbound, n);
+            // Older saves have no sales pressure: start neutral.
+            if (d.salesAdj != null && d.salesAdj.Length == n) Array.Copy(d.salesAdj, t.SalesAdj, n);
+            if (d.lastSoldTick != null && d.lastSoldTick.Length == n) Array.Copy(d.lastSoldTick, t.LastSoldTick, n);
+            t.UpkeepPaid = d.upkeepPaid;
+            t.PurseOverflow = d.purseOverflow;
+            t.GoldSpentByCrown = d.goldSpentByCrown;
             Array.Copy(d.population, t.Population, 4);
             Array.Copy(d.happiness, t.Happiness, 4);
             Array.Copy(d.ticksOverTarget, t.TicksOverTarget, 4);
@@ -373,6 +385,7 @@ namespace TradeWinds.Core
             {
                 Home = home, State = (TraderState)d.state, Seller = seller, Good = d.good, Amount = d.amount,
                 LegTicks = d.legTicks, PhaseEndTick = d.phaseEndTick, OnRoad = d.onRoad,
+                CarryGood = d.carrying ? d.carryGood : -1, CarryAmount = d.carrying ? d.carryAmount : 0,
             };
             var path = new List<Hex>();
             foreach (var h in d.path) path.Add(H(h));
