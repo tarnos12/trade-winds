@@ -83,10 +83,19 @@ namespace TradeWinds.Game
         public void MarkDirty() => _dirty = true;
 
         /// <summary>Show <paramref name="text"/> in the hint line while the pointer is over <paramref name="e"/>.</summary>
+        /// <summary>Switch the build bar to a tab (0 = Towns & Roads, 1 = Peasant, ...).</summary>
+        public void ShowTab(int tab)
+        {
+            _tab = Mathf.Clamp(tab, 0, Tabs.Length - 1);
+            RebuildBar();
+        }
+
         public void Hint(VisualElement e, string text)
         {
             e.RegisterCallback<PointerEnterEvent>(_ => _hoverHint = text);
             e.RegisterCallback<PointerLeaveEvent>(_ => { if (_hoverHint == text) _hoverHint = ""; });
+            // A disabled button says why when clicked, not only on hover.
+            e.RegisterCallback<ClickEvent>(_ => { if (e.userData == Ui.DisabledMark && !string.IsNullOrEmpty(text)) Toast(text); });
         }
 
         public void Confirm(string message, Action onYes)
@@ -102,8 +111,9 @@ namespace TradeWinds.Game
             else
             {
                 _root.Add(_researchPanel.Root);
-                _researchPanel.Root.SendToBack();
-                _researchPanel.Root.BringToFront();
+                // Toasts and the confirm dialog stay on top of the research tree.
+                _toast.BringToFront();
+                _confirm.BringToFront();
             }
             _dirty = true;
         }
@@ -354,7 +364,7 @@ namespace TradeWinds.Game
 
         // ------------------------------------------------------------------ build bar
 
-        static readonly string[] Tabs = { "Build", "Peasant", "Worker", "Burgher", "Aristocrat", "Castle" };
+        static readonly string[] Tabs = { "Towns & Roads", "Peasant", "Worker", "Burgher", "Aristocrat", "Castle" };
 
         void RebuildBar()
         {
@@ -504,7 +514,7 @@ namespace TradeWinds.Game
             _towns.text = $"Towns {w.Towns.Count}/{w.TownCap}";
             _research.text = w.ActiveResearch != null
                 ? $"Researching {w.Content.ResearchNode(w.ActiveResearch).Name} {ResearchSim.Progress(w) * 100:0}%"
-                : ResearchSim.Speed(w) > 0 ? "Research idle" : "No Research Center";
+                : ResearchSim.Speed(w) > 0 ? "Research: choose one (R)" : "No Research Center";
             long seconds = w.Tick / 2;
             _clock.text = $"{seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}" + (_game.IsFocusPaused ? " (paused)" : "");
 

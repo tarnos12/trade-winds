@@ -238,14 +238,14 @@ namespace TradeWinds.Core
         public CommandResult CanFoundTown(Hex h)
         {
             if (!Board.Contains(h)) return CommandResult.Fail("Outside the board.");
-            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored — send a Scout first.");
+            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored: send a Scout (Castle panel).");
             if (!TerrainRules.IsBuildableGround(Board[h])) return CommandResult.Fail("A Town needs open ground.");
             if (IsOccupied(h)) return CommandResult.Fail("That hex is taken.");
             if (Roads.Contains(h)) return CommandResult.Fail("Can't found a Town on a road.");
             foreach (var t in Towns)
                 if (Touches(h, t.Occupies)) return CommandResult.Fail("Too close to another Town — leave a gap.");
             if (TouchesCastle(h)) return CommandResult.Fail("Too close to the Castle — leave a gap.");
-            if (Towns.Count >= TownCap) return CommandResult.Fail($"Town limit reached ({TownCap}). Research charters for more.");
+            if (Towns.Count >= TownCap) return CommandResult.Fail($"Town limit reached ({TownCap}). Research Township Grants for more.");
             if (Treasury < B.TownFoundCost) return CommandResult.Fail($"Needs {B.TownFoundCost:0} gold in the treasury.");
             return CommandResult.Success;
         }
@@ -353,7 +353,7 @@ namespace TradeWinds.Core
         {
             if (!town.Built) return CommandResult.Fail("The Town isn't finished yet.");
             if (Tick - town.LastCrownTick < B.Ticks(B.CrownCooldownSec)) return CommandResult.Fail("Wait for the Crown cooldown.");
-            if (Tick - town.BuiltTick < B.Ticks(B.TakeMinTownAgeSec)) return CommandResult.Fail("The Town is too young to be taxed by the Crown.");
+            if (Tick - town.BuiltTick < B.Ticks(B.TakeMinTownAgeSec)) return CommandResult.Fail($"The Crown can Take only from a Town at least {B.TakeMinTownAgeSec / 60:0} minutes old.");
             if (town.TotalPopulation < B.TakeMinResidents) return CommandResult.Fail("The Town needs residents first.");
             if (town.Gold < B.CrownTransfer) return CommandResult.Fail($"The Town has less than {B.CrownTransfer:0} gold.");
             return CommandResult.Success;
@@ -379,10 +379,10 @@ namespace TradeWinds.Core
             town = null;
             if (def.Kind == BuildingKind.Castle) return CanPlaceCastleBuilding(def, h);
             if (!Board.Contains(h)) return CommandResult.Fail("Outside the board.");
-            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored — send a Scout first.");
+            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored: send a Scout (Castle panel).");
             if (!IsUnlocked(def)) return CommandResult.Fail($"Research {Content.ResearchNode(def.UnlockedBy)?.Name ?? def.UnlockedBy} first.");
             if (IsOccupied(h)) return CommandResult.Fail("That hex is taken.");
-            if (!def.AllowsTerrain(Board[h])) return CommandResult.Fail($"{def.Name} can't stand on {Board[h]}.");
+            if (!def.AllowsTerrain(Board[h])) return CommandResult.Fail($"A {def.Name} must stand on {string.Join(" or ", def.Terrains)} ground.");
             if (TouchesCastle(h)) return CommandResult.Fail("Too close to the Castle — leave a gap.");
 
             Town touching = null;
@@ -394,7 +394,7 @@ namespace TradeWinds.Core
             }
 
             if (touching == null) return CommandResult.Fail("Must be placed next to a Town or its buildings.");
-            if (SlotsUsed(touching) >= SlotCap(touching)) return CommandResult.Fail($"{touching.Name} has no free building slots — level it up.");
+            if (SlotsUsed(touching) >= SlotCap(touching)) return CommandResult.Fail($"{touching.Name} has no free building slots: open its Town panel and press Level up.");
             if (Treasury < def.GoldCost) return CommandResult.Fail($"Needs {def.GoldCost:0} gold in the treasury.");
             town = touching;
             return CommandResult.Success;
@@ -443,7 +443,7 @@ namespace TradeWinds.Core
             if (b.IsWorkplace)
                 foreach (var m in next.MaterialCost)
                     if (m.Good == b.Def.OutputGood && b.Town.Stock[m.Good] < m.Amount)
-                        return CommandResult.Fail($"Stock {m.Amount:0} {Content.Goods[m.Good].Name} first (have {b.Town.Stock[m.Good]:0}) — it pauses while upgrading.");
+                        return CommandResult.Fail($"Needs {m.Amount:0} {Content.Goods[m.Good].Name} in Town Stock first (has {b.Town.Stock[m.Good]:0}). It stops while upgrading, so it can't make its own.");
             return CommandResult.Success;
         }
 
@@ -552,7 +552,7 @@ namespace TradeWinds.Core
         {
             if (Castle == null) return CommandResult.Fail("No Castle in this realm.");
             if (!Board.Contains(h)) return CommandResult.Fail("Outside the board.");
-            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored.");
+            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored: send a Scout (Castle panel).");
             if (!IsUnlocked(def)) return CommandResult.Fail($"Research {Content.ResearchNode(def.UnlockedBy)?.Name ?? def.UnlockedBy} first.");
             if (Castle.Find(def.Id) != null) return CommandResult.Fail($"The Castle already has a {def.Name}.");
             if (IsOccupied(h)) return CommandResult.Fail("That hex is taken.");
@@ -624,7 +624,7 @@ namespace TradeWinds.Core
         public CommandResult BuildRoad(Hex h)
         {
             if (!Board.Contains(h)) return CommandResult.Fail("Outside the board.");
-            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored.");
+            if (!IsRevealed(h)) return CommandResult.Fail("Unexplored: send a Scout (Castle panel).");
             if (!Board.IsPassable(h)) return CommandResult.Fail("Roads can't cross water or mountains.");
             if (Roads.Contains(h)) return CommandResult.Fail("Already a road.");
             if (Treasury < B.RoadCostPerHex) return CommandResult.Fail("Not enough gold in the treasury.");

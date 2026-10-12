@@ -63,12 +63,23 @@ namespace TradeWinds.Game
             return def.Kind == BuildingKind.House ? Color.Lerp(c, Paper, 0.45f) : c;
         }
 
-        /// <summary>Initials of the building name ("Potato Farm" → "PF").</summary>
+        static readonly System.Collections.Generic.Dictionary<string, string> Letters = new System.Collections.Generic.Dictionary<string, string>();
+
+        /// <summary>Short, unique tag for a building until real icons arrive: initials of a two-word name
+        /// ("Potato Farm" → "PF"), else the first two letters ("Cottage" → "Co"), else the first letter plus a later one.</summary>
         public static string Letter(BuildingDef def)
         {
+            if (Letters.TryGetValue(def.Id, out var tag)) return tag;
             var parts = def.Name.Split(' ');
-            if (parts.Length == 1) return def.Name.Substring(0, 1);
-            return parts[0].Substring(0, 1) + parts[1].Substring(0, 1);
+            var name = parts[0];
+            var options = new System.Collections.Generic.List<string>();
+            if (parts.Length > 1) options.Add(parts[0].Substring(0, 1) + parts[1].Substring(0, 1).ToUpperInvariant());
+            for (int i = 1; i < name.Length; i++) options.Add(name.Substring(0, 1) + name.Substring(i, 1).ToLowerInvariant());
+            tag = name.Substring(0, 1);
+            foreach (var o in options)
+                if (!Letters.ContainsValue(o)) { tag = o; break; }
+            Letters[def.Id] = tag;
+            return tag;
         }
 
         static readonly Color[] TownColors =

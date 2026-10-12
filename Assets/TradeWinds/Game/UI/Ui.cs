@@ -43,9 +43,13 @@ namespace TradeWinds.Game
 
         public static Label Heading(string s) => Text(s, 16, true, Palette.Castle);
 
+        /// <summary>Marks a button drawn as disabled: the HUD toasts its hint when it is clicked anyway.</summary>
+        public static readonly object DisabledMark = new object();
+
         public static Button Button(string text, Action onClick, bool enabled = true, string tooltip = null)
         {
             var b = new Button(() => { if (enabled) onClick?.Invoke(); }) { text = text };
+            if (!enabled) b.userData = DisabledMark;
             b.style.backgroundColor = enabled ? ButtonBg : ButtonDisabled;
             b.style.color = enabled ? Palette.Paper : Palette.Muted;
             b.style.fontSize = 13;

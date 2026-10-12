@@ -245,8 +245,8 @@ namespace TradeWinds.Core
             R("k_paved", "Paved Roads", ResearchBand.Kingdom, L(A("wood", 25), A("planks", 10)), null, Modifier.TraderSpeed, 1.5, "Traders travel ×1.5 faster.");
             R("k_scouts", "Scouting Party", ResearchBand.Kingdom, L(A("potato", 20), A("wood", 20)), null, Modifier.ExtraScouts, 1, "+1 Scout.");
             R("k_guilds", "Guild Halls", ResearchBand.Kingdom, L(A("planks", 20), A("stone", 25)), new[] { "k_crop" }, Modifier.ProcessorOutput, 1.2, "Processors produce ×1.2.");
-            R("k_carts", "Larger Carts", ResearchBand.Kingdom, L(A("planks", 25), A("wood", 20)), new[] { "k_paved" }, Modifier.TraderCapacity, 1.5, "Traders carry ×1.5.");
-            R("k_caravan", "Extra Caravan", ResearchBand.Kingdom, L(A("planks", 30), A("stone_tools", 10)), new[] { "k_paved" }, Modifier.ExtraTraders, 1, "+1 Trader per Town.");
+            R("k_carts", "Trader Packs", ResearchBand.Kingdom, L(A("planks", 25), A("wood", 20)), new[] { "k_paved" }, Modifier.TraderCapacity, 1.5, "Traders carry ×1.5.");
+            R("k_caravan", "Extra Trader", ResearchBand.Kingdom, L(A("planks", 30), A("stone_tools", 10)), new[] { "k_paved" }, Modifier.ExtraTraders, 1, "+1 Trader per Town.");
             R("k_charters", "Town Charters", ResearchBand.Kingdom, L(A("planks", 20), A("stone_tools", 15)), null, Modifier.TownSlots, 1, "+1 building slot per Town.");
             R("k_grants", "Township Grants", ResearchBand.Kingdom, L(A("planks", 30), A("stone", 30)), null, Modifier.TownCap, 3, "Town limit +3.");
             R("k_census", "Royal Census", ResearchBand.Kingdom, L(A("bread", 20), A("clothes", 20)), new[] { "k_grants" }, Modifier.HousingBonus, 1.15, "Houses hold ×1.15 residents.");
@@ -262,37 +262,37 @@ namespace TradeWinds.Core
                 {
                     Id = "m1", Name = "Found Your Realm", RewardGold = 300,
                     Objectives = new[] { O(ObjectiveKind.FoundTowns, 1, "Found a Town"), O(ObjectiveKind.Construct, 2, "Build 2 Lumberjacks", "lumberjack"), O(ObjectiveKind.Construct, 2, "Build 2 Huts", "hut") },
-                    Tip = "Found a Town on open ground beside a forest. Huts bring Peasants; Peasants work the Lumberjacks.",
+                    Tip = "Click Town (1000g) in the build bar, then open ground beside a forest. Huts bring Peasants; Peasants work the Lumberjacks. Leave the hexes beside the Castle free for its own buildings.",
                 },
                 new MissionDef
                 {
                     Id = "m2", Name = "Trade Winds", RewardGold = 500,
-                    Objectives = new[] { O(ObjectiveKind.FoundTowns, 2, "Found a second Town"), O(ObjectiveKind.Construct, 2, "Build 2 Potato Farms", "potato_farm"), O(ObjectiveKind.TariffEarned, 20, "Earn 20 Tariff") },
-                    Tip = "Give your second Town potato fields. Specialised Towns trade with each other, and every trade pays the Crown a Tariff.",
+                    Objectives = new[] { O(ObjectiveKind.FoundTowns, 2, "Found a second Town"), O(ObjectiveKind.Construct, 2, "Build 2 Potato Farms", "potato_farm"), O(ObjectiveKind.TariffEarned, 20, "Earn 20 gold in Tariff") },
+                    Tip = "Found the second Town by fertile fields and give it Potato Farms and Huts (Peasants work the farms). Specialised Towns trade with each other, and every trade pays the Crown a Tariff.",
                 },
                 new MissionDef
                 {
                     Id = "m3", Name = "The King's Scholars", RewardGold = 500,
-                    Objectives = new[] { O(ObjectiveKind.Construct, 1, "Build the Research Center", "research_center"), O(ObjectiveKind.ResearchDone, 1, "Finish a research") },
-                    Tip = "Place the Research Center next to the Castle. Research is paid in Goods from the Castle Stock — royal Traders buy them from your Towns.",
+                    Objectives = new[] { O(ObjectiveKind.Construct, 1, "Build the Research Center", "research_center"), O(ObjectiveKind.ResearchDone, 1, "Complete 1 research") },
+                    Tip = "Place the Research Center next to the Castle (Castle tab), then press R and pick Quarry: the Castle Stock already holds its wood. Research is paid in Goods from the Castle Stock; royal Traders buy more from your Towns.",
                 },
                 new MissionDef
                 {
                     Id = "m4", Name = "A Growing Town", RewardGold = 600,
                     Objectives = new[] { O(ObjectiveKind.Construct, 1, "Build a Sawmill", "sawmill"), O(ObjectiveKind.Upgrades, 1, "Upgrade a building") },
-                    Tip = "Research an upgrade (e.g. Sturdy Huts), then select a building in its Town panel and upgrade it.",
+                    Tip = "Research Lumber Tools (wood only). Then click a Lumberjack and press Upgrade in its Town panel; the Town needs 20 wood in Stock. A Sawmill turns wood into Planks.",
                 },
                 new MissionDef
                 {
                     Id = "m5", Name = "Trade Routes", RewardGold = 800,
-                    Objectives = new[] { O(ObjectiveKind.TradeGood, 60, "Trade 60 Potato between Towns", "potato"), O(ObjectiveKind.TariffEarned, 300, "Earn 300 Tariff in total") },
+                    Objectives = new[] { O(ObjectiveKind.TradeGood, 60, "Trade 60 Potato between Towns", "potato"), O(ObjectiveKind.TariffEarned, 300, "Earn 300 gold in Tariff in total") },
                     Tip = "Roads double Trader speed. More Towns trading means more Tariff.",
                 },
                 new MissionDef
                 {
                     Id = "m6", Name = "The Workers Arrive", RewardGold = 1000,
-                    Objectives = new[] { O(ObjectiveKind.Construct, 1, "Build a Cottage", "cottage"), O(ObjectiveKind.Residents, 4, "House 4 Workers", null, Tier.Worker) },
-                    Tip = "Workers need Fish and Coal. Research the Fishery and a Charcoal Burner or Coal Mine first.",
+                    Objectives = new[] { O(ObjectiveKind.Construct, 2, "Build 2 Cottages", "cottage"), O(ObjectiveKind.Residents, 4, "House 4 Workers", null, Tier.Worker) },
+                    Tip = "Research Quarry, then Cottages, and build a Quarry on a Stone Deposit (each Cottage needs 20 stone). Workers need Fish and Coal: research the Fishery and the Charcoal Burner. More Deposits lie in the fog; send a Scout from the Castle panel.",
                 },
                 new MissionDef
                 {

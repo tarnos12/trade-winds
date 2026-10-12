@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using TradeWinds.Core;
 using UnityEngine;
@@ -78,7 +79,16 @@ namespace TradeWinds.Game
             {
                 if (done) return;
                 if (active || queued >= 0) ResearchSim.Cancel(w, node.Id);
-                else _hud.Report(ResearchSim.Start(w, node.Id));
+                else
+                {
+                    var first = new List<string>();
+                    var res = ResearchSim.Plan(w, node.Id, first);
+                    if (!res.Ok) _hud.Report(res);
+                    else if (w.ActiveResearch != node.Id)
+                        _hud.Toast(first.Count > 0
+                            ? $"Queued {node.Name}, after {string.Join(", ", first)} (queued too)."
+                            : $"Queued {node.Name}: it starts when the current research is done.");
+                }
                 _hud.MarkDirty();
             });
             b.style.whiteSpace = WhiteSpace.Normal;
