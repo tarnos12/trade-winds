@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-12",
+  "source": "Owner instruction in chat (not via the Questions tab).",
+  "raw": "See what we can use from this [game-dev agent team roster] then rebalance the game to fix the issue with 100k towns this quickly.",
+  "answers": {
+    "rich_towns_take_v3": { "pick": "rebalance", "label": "Fix the cause: rebalance so Towns don't pile up 100k gold", "outcome": "Question withdrawn; Take itself is left as is and the economy is rebalanced instead." },
+    "agent_team": { "pick": "adopt", "label": "Use what fits from the game-dev agent team roster", "outcome": "Roster mapped onto Trade Winds in PROJECT.md; designer guides in docs/guides/." }
+  }
+}

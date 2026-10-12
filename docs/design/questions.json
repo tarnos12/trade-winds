@@ -1,12 +1,1 @@
-[
-  { "g": "Balance" },
-  {
-    "id": "rich_towns_take_v3",
-    "q": "Should the Crown's Take button be limited? (1) Your treasury is the Crown's money: it pays for Towns, buildings and roads, and it is filled by the Tariff (30% of every trade) and Mission rewards. (2) Each Town has its own purse: residents pay Tax into it and the Town spends it buying Goods. (3) Towns that sell a lot earn far more than they spend, so late in a run a busy exporter holds 100,000+ gold. (4) Take moves 1,000 gold from a Town's purse to your treasury, every 2 minutes, on every Town. (5) With 7 rich Towns that is up to 3,500 gold a minute, while the Tariff brings about 1,300. So the best late-game move would be clicking Take on every Town every 2 minutes, which goes against \"Tariff is the main income\" and \"don't micromanage\".",
-    "o": [
-      ["tax_since", "Limit it: Take only moves the Tax the Town earned since your last Take", true],
-      ["cooldown", "Limit it: keep 1,000 gold, but only once every 5 minutes per Town"],
-      ["leave", "Leave it: Take may be strong"]
-    ]
-  }
-]
+[]

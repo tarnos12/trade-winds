@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 13:30",
+  "updated": "2026-10-12 14:00",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -149,6 +149,14 @@
           "owner": "Claude"
         },
         {
+          "title": "Adopt the game-dev agent team",
+          "detail": "Map your agent roster onto Trade Winds: which designers and specialists apply, their guide documents, and the working rules (background copies, test gate, Hub questions).",
+          "status": "in-progress",
+          "size": "S",
+          "owner": "Claude",
+          "now": "Lead (Claude): roster and guides in PROJECT.md"
+        },
+        {
           "title": "Final art",
           "detail": "Replace the code-drawn placeholder hexes, tokens and icons with real art.",
           "status": "blocked",
@@ -157,12 +165,12 @@
           "blockedBy": "Waiting for art from Mariusz"
         },
         {
-          "title": "Fix rich exporting Towns",
-          "detail": "Late in a run rich Towns let the Crown's Take out-earn the Tariff. The question was unclear, so it is asked again in plainer words.",
-          "status": "blocked",
+          "title": "Rebalance: stop Towns hoarding 100k gold",
+          "detail": "Exporting Towns pile up 100,000+ gold, so the Crown's Take out-earns the Tariff. You asked for a rebalance (2026-10-12): find where the extra gold comes from, fix it, and check with simulated playthroughs that runs still last about 4 hours.",
+          "status": "in-progress",
           "size": "S",
           "owner": "Claude",
-          "blockedBy": "Your answer: rich_towns_take_v3 (explained step by step, 2026-10-12)"
+          "now": "Balance designer (Claude): experiments in a background copy"
         },
         {
           "title": "Set the length of a full run",
