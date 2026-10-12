@@ -1,0 +1,53 @@
+[
+  { "g": "Balance" },
+  {
+    "id": "rich_exporters",
+    "q": "Late in a run, exporting Towns hold 100,000+ gold. Take moves 1,000 gold to the treasury every 2 minutes per Town, so with 7 Towns it can out-earn the Tariff. How should we fix it?",
+    "ctx": "Halving resident Tax only cut purses to about a third and made Victory 15% slower.",
+    "o": [
+      ["tax_since", "Take is limited to the Tax the Town earned since the last Take", true],
+      ["cooldown", "Keep 1,000 gold, but a 5-minute cooldown"],
+      ["lower_tax", "Lower resident Tax across the board"],
+      ["leave", "Leave it: Take is meant to be strong"]
+    ]
+  },
+  {
+    "id": "run_length",
+    "q": "The scripted Kingdom reaches Victory in about 3 h 40 min of game time at 1× speed (7 Towns, played efficiently). How long should a full run take for a normal player?",
+    "o": [
+      ["2h", "About 2 hours"],
+      ["4h", "About 4 hours (keep roughly as is)", true],
+      ["6h", "6 hours or more"]
+    ]
+  },
+  {
+    "id": "tariff_range",
+    "q": "After the Tariff Office research, the player sets the Tariff with a slider. What range?",
+    "o": [
+      ["10_40", "10–40% (web version)", true],
+      ["5_50", "5–50%"],
+      ["fixed", "No slider: always 30% plus research bonuses"]
+    ]
+  },
+  { "g": "Presentation" },
+  {
+    "id": "extras",
+    "q": "Which extras from the web version should come back? Pick any.",
+    "multi": true,
+    "o": [
+      ["juice", "Juice: coin bursts on sales, chimney smoke, build-complete bursts", true],
+      ["audio", "Soft sounds and an ambient bed", true],
+      ["chatter", "Town speech bubbles (\"We don't have any Potato!\")"],
+      ["none", "None for now"]
+    ]
+  },
+  {
+    "id": "title",
+    "q": "\"Trade Winds\" is still a working title. Keep it?",
+    "o": [
+      ["keep", "Keep \"Trade Winds\"", true],
+      ["later", "Decide later"],
+      ["new", "Change it (write the name in the note)"]
+    ]
+  }
+]

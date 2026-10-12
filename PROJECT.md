@@ -88,6 +88,25 @@ PRs and merges them itself after tests pass.
   with the current `Data/Balance.asset` and logs progress to the Console.
 - Saves: `%USERPROFILE%/AppData/LocalLow/Tarnos/Trade Winds/trade-winds-save.json` (autosave 30 s).
 
+## Owner Hub (one page for data, plan and questions)
+
+**Hub:** https://claude.ai/artifact/3oxpq2bAAyppQz5AbYMEvs (pinned; always republish to this same URL).
+Tabs: Data (Buildings, Goods, Research, Missions), Charts, Plan, Questions. Generated, never hand-edited:
+
+- Content: `dotnet run --project tools/ContentExport` → `tools/hub/data/content.json` (rerun when GameContent changes).
+- Plan: `tools/hub/plan.json`; change status with `node tools/hub/set-task.cjs "<title regex>" <status> ["now"|"reason"]`.
+- Questions: `tools/hub/questions.json` (+ `tools/hub/question-images/`).
+- Build: `node tools/hub/build-hub.cjs` → `tools/hub/out/index.html` (syntax-checked) and `docs/PLAN.md`; then publish that file to the Hub URL.
+
+Rules for every agent:
+- Every owner request becomes a plan task at once; every running agent has its own `in-progress` task with a `now` line;
+  `blocked`/`waiting` tasks always say why. Write tasks for a designer, not a programmer.
+- Owner decisions go **only** in the Questions tab (recommended options are marked "my pick", never pre-selected).
+- When answers arrive: save them verbatim to `tools/hub/owner-picks-<date>.json`, remove the answered questions, turn
+  answers into tasks, rebuild and republish. Ambiguous answer → ask a follow-up question in the tab, don't guess.
+  Owner picks are commitments: read the picks files before planning; never drop a pick silently.
+- Rebuild + republish after any data, plan or question change, and **end every message to the owner with the Hub link**.
+
 ---
 
 ## Current status (update every commit)
@@ -116,3 +135,4 @@ PRs and merges them itself after tests pass.
   reaches Victory in ~220 game-minutes (test + editor balance runner). Balance runs forced trade fixes
   (GDD §8). 38 Edit Mode tests green in Unity and headless. **Next (M4):** author art, audio/juice
   decision, balance answers (GDD §16 Q3–Q4), play-testing by a stranger.
+- **2026-10-12** — Owner Hub added (pattern: tools/hub). Unity MCP verified connected. Open owner questions live in the Hub.

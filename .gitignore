@@ -56,3 +56,7 @@ tools/CoreTests/obj/
 # MCP / editor screenshots
 /[Aa]ssets/[Ss]creenshots/
 /[Aa]ssets/[Ss]creenshots.meta
+!tools/ContentExport/ContentExport.csproj
+tools/ContentExport/bin/
+tools/ContentExport/obj/
+tools/hub/out/

@@ -1,0 +1,3009 @@
+{
+  "generated": "2026-10-12 10:44",
+  "goods": [
+    {
+      "id": "potato",
+      "name": "Potato",
+      "basePrice": 4,
+      "producedBy": [
+        "potato_farm"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "wood",
+      "name": "Wood",
+      "basePrice": 5,
+      "producedBy": [
+        "lumberjack"
+      ],
+      "inputFor": [
+        "sawmill",
+        "charcoal_burner",
+        "forge"
+      ]
+    },
+    {
+      "id": "fish",
+      "name": "Fish",
+      "basePrice": 5,
+      "producedBy": [
+        "fishery"
+      ],
+      "inputFor": [
+        "oil_maker"
+      ]
+    },
+    {
+      "id": "wool",
+      "name": "Wool",
+      "basePrice": 7,
+      "producedBy": [
+        "sheep_farm"
+      ],
+      "inputFor": [
+        "tailoring"
+      ]
+    },
+    {
+      "id": "stone",
+      "name": "Stone",
+      "basePrice": 6,
+      "producedBy": [
+        "quarry"
+      ],
+      "inputFor": [
+        "stone_tools_maker"
+      ]
+    },
+    {
+      "id": "grain",
+      "name": "Grain",
+      "basePrice": 4,
+      "producedBy": [
+        "farm"
+      ],
+      "inputFor": [
+        "mill",
+        "brewery"
+      ]
+    },
+    {
+      "id": "clay",
+      "name": "Clay",
+      "basePrice": 6,
+      "producedBy": [
+        "clay_pit"
+      ],
+      "inputFor": [
+        "brickworks",
+        "pottery"
+      ]
+    },
+    {
+      "id": "coal",
+      "name": "Coal",
+      "basePrice": 10,
+      "producedBy": [
+        "charcoal_burner",
+        "coal_mine"
+      ],
+      "inputFor": [
+        "armory"
+      ]
+    },
+    {
+      "id": "iron",
+      "name": "Iron",
+      "basePrice": 8,
+      "producedBy": [
+        "iron_mine"
+      ],
+      "inputFor": [
+        "forge",
+        "armory"
+      ]
+    },
+    {
+      "id": "gold",
+      "name": "Gold",
+      "basePrice": 42,
+      "producedBy": [
+        "gold_mine"
+      ],
+      "inputFor": [
+        "goldsmith"
+      ]
+    },
+    {
+      "id": "planks",
+      "name": "Planks",
+      "basePrice": 14,
+      "producedBy": [
+        "sawmill"
+      ],
+      "inputFor": [
+        "stone_tools_maker",
+        "carpentry"
+      ]
+    },
+    {
+      "id": "flour",
+      "name": "Flour",
+      "basePrice": 12,
+      "producedBy": [
+        "mill"
+      ],
+      "inputFor": [
+        "bakery"
+      ]
+    },
+    {
+      "id": "mead",
+      "name": "Mead",
+      "basePrice": 14,
+      "producedBy": [
+        "brewery"
+      ],
+      "inputFor": [
+        "distillery"
+      ]
+    },
+    {
+      "id": "bricks",
+      "name": "Bricks",
+      "basePrice": 16,
+      "producedBy": [
+        "brickworks"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "clothes",
+      "name": "Clothes",
+      "basePrice": 22,
+      "producedBy": [
+        "tailoring"
+      ],
+      "inputFor": [
+        "luxury_tailor"
+      ]
+    },
+    {
+      "id": "stone_tools",
+      "name": "Stone Tools",
+      "basePrice": 28,
+      "producedBy": [
+        "stone_tools_maker"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "oil",
+      "name": "Oil",
+      "basePrice": 15,
+      "producedBy": [
+        "oil_maker"
+      ],
+      "inputFor": [
+        "lamp_maker",
+        "carpentry"
+      ]
+    },
+    {
+      "id": "iron_tool",
+      "name": "Iron Tools",
+      "basePrice": 22,
+      "producedBy": [
+        "forge"
+      ],
+      "inputFor": [
+        "goldsmith"
+      ]
+    },
+    {
+      "id": "bread",
+      "name": "Bread",
+      "basePrice": 30,
+      "producedBy": [
+        "bakery"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "pottery",
+      "name": "Pottery",
+      "basePrice": 22,
+      "producedBy": [
+        "pottery"
+      ],
+      "inputFor": [
+        "distillery"
+      ]
+    },
+    {
+      "id": "lamp",
+      "name": "Lamp",
+      "basePrice": 40,
+      "producedBy": [
+        "lamp_maker"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "chairs",
+      "name": "Chairs",
+      "basePrice": 64,
+      "producedBy": [
+        "carpentry"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "iron_armor",
+      "name": "Iron Armor",
+      "basePrice": 70,
+      "producedBy": [
+        "armory"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "brandy",
+      "name": "Brandy",
+      "basePrice": 72,
+      "producedBy": [
+        "distillery"
+      ],
+      "inputFor": []
+    },
+    {
+      "id": "gold_ring",
+      "name": "Gold Ring",
+      "basePrice": 120,
+      "producedBy": [
+        "goldsmith"
+      ],
+      "inputFor": [
+        "luxury_tailor"
+      ]
+    },
+    {
+      "id": "luxury_clothes",
+      "name": "Luxury Clothes",
+      "basePrice": 240,
+      "producedBy": [
+        "luxury_tailor"
+      ],
+      "inputFor": []
+    }
+  ],
+  "buildings": [
+    {
+      "id": "hut",
+      "name": "Hut",
+      "kind": "House",
+      "tier": "Peasant",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 2,
+      "goldCost": 300,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 10
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": [
+        {
+          "level": 2,
+          "gold": 100,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 30
+            },
+            {
+              "good": "planks",
+              "amount": 10
+            }
+          ],
+          "effect": "HouseCapacity",
+          "value": 1,
+          "extraSlots": 0,
+          "unlockedBy": "r_hut2"
+        },
+        {
+          "level": 3,
+          "gold": 250,
+          "materials": [
+            {
+              "good": "stone",
+              "amount": 30
+            },
+            {
+              "good": "planks",
+              "amount": 20
+            },
+            {
+              "good": "stone_tools",
+              "amount": 5
+            }
+          ],
+          "effect": "HouseCapacity",
+          "value": 1,
+          "extraSlots": 0,
+          "unlockedBy": "r_hut3"
+        },
+        {
+          "level": 4,
+          "gold": 500,
+          "materials": [
+            {
+              "good": "bricks",
+              "amount": 30
+            },
+            {
+              "good": "stone",
+              "amount": 20
+            },
+            {
+              "good": "stone_tools",
+              "amount": 10
+            }
+          ],
+          "effect": "BasicUse",
+          "value": 0.7,
+          "extraSlots": 0,
+          "unlockedBy": "r_hut4"
+        },
+        {
+          "level": 5,
+          "gold": 900,
+          "materials": [
+            {
+              "good": "bricks",
+              "amount": 60
+            },
+            {
+              "good": "iron",
+              "amount": 30
+            },
+            {
+              "good": "iron_tool",
+              "amount": 10
+            }
+          ],
+          "effect": "LuxuryUse",
+          "value": 0.7,
+          "extraSlots": 0,
+          "unlockedBy": "r_hut5"
+        }
+      ]
+    },
+    {
+      "id": "cottage",
+      "name": "Cottage",
+      "kind": "House",
+      "tier": "Worker",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 2,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_cottage",
+      "unlockName": "Cottages",
+      "upgrades": []
+    },
+    {
+      "id": "manor",
+      "name": "Manor",
+      "kind": "House",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 2,
+      "goldCost": 220,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 40
+        },
+        {
+          "good": "stone",
+          "amount": 30
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_manor",
+      "unlockName": "Manors",
+      "upgrades": []
+    },
+    {
+      "id": "aristocrat_home",
+      "name": "Aristocrats Home",
+      "kind": "House",
+      "tier": "Aristocrat",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 2,
+      "goldCost": 400,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 40
+        },
+        {
+          "good": "stone",
+          "amount": 30
+        },
+        {
+          "good": "bricks",
+          "amount": 20
+        }
+      ],
+      "buildSec": 18,
+      "unlockedBy": "r_aristocrat_home",
+      "unlockName": "Aristocrats Home",
+      "upgrades": []
+    },
+    {
+      "id": "lumberjack",
+      "name": "Lumberjack",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Forest",
+      "output": "wood",
+      "perWorkerPerMin": 7.5,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 10
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": [
+        {
+          "level": 2,
+          "gold": 200,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 20
+            }
+          ],
+          "effect": "Output",
+          "value": 1.25,
+          "extraSlots": 0,
+          "unlockedBy": "r_lumber2"
+        },
+        {
+          "level": 3,
+          "gold": 450,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 30
+            },
+            {
+              "good": "stone",
+              "amount": 15
+            }
+          ],
+          "effect": "Output",
+          "value": 1.5,
+          "extraSlots": 0,
+          "unlockedBy": "r_lumber3"
+        }
+      ]
+    },
+    {
+      "id": "potato_farm",
+      "name": "Potato Farm",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Fertile",
+      "output": "potato",
+      "perWorkerPerMin": 6,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 10
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": [
+        {
+          "level": 2,
+          "gold": 200,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 20
+            }
+          ],
+          "effect": "Output",
+          "value": 1.25,
+          "extraSlots": 0,
+          "unlockedBy": "r_potato2"
+        },
+        {
+          "level": 3,
+          "gold": 450,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 30
+            },
+            {
+              "good": "stone",
+              "amount": 15
+            }
+          ],
+          "effect": "Output",
+          "value": 1.5,
+          "extraSlots": 0,
+          "unlockedBy": "r_potato3"
+        }
+      ]
+    },
+    {
+      "id": "fishery",
+      "name": "Fishery",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Fish",
+      "output": "fish",
+      "perWorkerPerMin": 6,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 10
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": "r_fishery",
+      "unlockName": "Fishery",
+      "upgrades": []
+    },
+    {
+      "id": "sheep_farm",
+      "name": "Sheep Farm",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Fertile",
+      "output": "wool",
+      "perWorkerPerMin": 5,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 15
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": "r_sheep",
+      "unlockName": "Sheep Farm",
+      "upgrades": []
+    },
+    {
+      "id": "farm",
+      "name": "Grain Farm",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Fertile",
+      "output": "grain",
+      "perWorkerPerMin": 6,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 250,
+      "materials": [],
+      "buildSec": 6,
+      "unlockedBy": "r_farm",
+      "unlockName": "Grain Farm",
+      "upgrades": []
+    },
+    {
+      "id": "quarry",
+      "name": "Quarry",
+      "kind": "Extractor",
+      "tier": "Peasant",
+      "terrain": "Stone",
+      "output": "stone",
+      "perWorkerPerMin": 4,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 15
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": "r_quarry",
+      "unlockName": "Quarry",
+      "upgrades": []
+    },
+    {
+      "id": "sawmill",
+      "name": "Sawmill",
+      "kind": "Processor",
+      "tier": "Peasant",
+      "terrain": null,
+      "output": "planks",
+      "perWorkerPerMin": 2.5,
+      "inputs": [
+        {
+          "good": "wood",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 0,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": [
+        {
+          "level": 2,
+          "gold": 220,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 25
+            }
+          ],
+          "effect": "Output",
+          "value": 1.25,
+          "extraSlots": 0,
+          "unlockedBy": "r_sawmill2"
+        },
+        {
+          "level": 3,
+          "gold": 480,
+          "materials": [
+            {
+              "good": "wood",
+              "amount": 35
+            },
+            {
+              "good": "stone",
+              "amount": 15
+            },
+            {
+              "good": "stone_tools",
+              "amount": 5
+            }
+          ],
+          "effect": "Output",
+          "value": 1.5,
+          "extraSlots": 1,
+          "unlockedBy": "r_sawmill3"
+        }
+      ]
+    },
+    {
+      "id": "charcoal_burner",
+      "name": "Charcoal Burner",
+      "kind": "Processor",
+      "tier": "Peasant",
+      "terrain": null,
+      "output": "coal",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "wood",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 40,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 5
+        }
+      ],
+      "buildSec": 6,
+      "unlockedBy": "r_charcoal",
+      "unlockName": "Charcoal Burner",
+      "upgrades": []
+    },
+    {
+      "id": "coal_mine",
+      "name": "Coal Mine",
+      "kind": "Extractor",
+      "tier": "Worker",
+      "terrain": "Coal",
+      "output": "coal",
+      "perWorkerPerMin": 4,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 60,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_coal_mine",
+      "unlockName": "Coal Mine",
+      "upgrades": []
+    },
+    {
+      "id": "clay_pit",
+      "name": "Clay Pit",
+      "kind": "Extractor",
+      "tier": "Worker",
+      "terrain": "Clay",
+      "output": "clay",
+      "perWorkerPerMin": 4,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 60,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_clay_pit",
+      "unlockName": "Clay Pit",
+      "upgrades": []
+    },
+    {
+      "id": "iron_mine",
+      "name": "Iron Mine",
+      "kind": "Extractor",
+      "tier": "Worker",
+      "terrain": "Iron",
+      "output": "iron",
+      "perWorkerPerMin": 4,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 60,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_iron_mine",
+      "unlockName": "Iron Mine",
+      "upgrades": []
+    },
+    {
+      "id": "gold_mine",
+      "name": "Gold Mine",
+      "kind": "Extractor",
+      "tier": "Worker",
+      "terrain": "Gold",
+      "output": "gold",
+      "perWorkerPerMin": 4,
+      "inputs": [],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 120,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "stone",
+          "amount": 15
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_gold_mine",
+      "unlockName": "Gold Mine",
+      "upgrades": []
+    },
+    {
+      "id": "mill",
+      "name": "Mill",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "flour",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "grain",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_mill",
+      "unlockName": "Mill",
+      "upgrades": []
+    },
+    {
+      "id": "bakery",
+      "name": "Bakery",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "bread",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "flour",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_bakery",
+      "unlockName": "Bakery",
+      "upgrades": []
+    },
+    {
+      "id": "brewery",
+      "name": "Brewery",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "mead",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "grain",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_brewery",
+      "unlockName": "Brewery",
+      "upgrades": []
+    },
+    {
+      "id": "brickworks",
+      "name": "Brickworks",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "bricks",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "clay",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_brickworks",
+      "unlockName": "Brickworks",
+      "upgrades": []
+    },
+    {
+      "id": "tailoring",
+      "name": "Tailoring",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "clothes",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "wool",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_tailoring",
+      "unlockName": "Tailoring",
+      "upgrades": []
+    },
+    {
+      "id": "stone_tools_maker",
+      "name": "Stone Tools Maker",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "stone_tools",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "planks",
+          "amount": 1
+        },
+        {
+          "good": "stone",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_stone_tools",
+      "unlockName": "Stone Tools",
+      "upgrades": []
+    },
+    {
+      "id": "oil_maker",
+      "name": "Oil Maker",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "oil",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "fish",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_oil",
+      "unlockName": "Oil Maker",
+      "upgrades": []
+    },
+    {
+      "id": "pottery",
+      "name": "Pottery",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "pottery",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "clay",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_pottery",
+      "unlockName": "Pottery",
+      "upgrades": []
+    },
+    {
+      "id": "lamp_maker",
+      "name": "Lamp Maker",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "lamp",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "oil",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_lamp",
+      "unlockName": "Lamp Maker",
+      "upgrades": []
+    },
+    {
+      "id": "carpentry",
+      "name": "Carpentry",
+      "kind": "Processor",
+      "tier": "Worker",
+      "terrain": null,
+      "output": "chairs",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "planks",
+          "amount": 1
+        },
+        {
+          "good": "oil",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 90,
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "buildSec": 10,
+      "unlockedBy": "r_carpentry",
+      "unlockName": "Carpentry",
+      "upgrades": []
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "kind": "Processor",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": "iron_tool",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "wood",
+          "amount": 1
+        },
+        {
+          "good": "iron",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 180,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_forge",
+      "unlockName": "Forge",
+      "upgrades": []
+    },
+    {
+      "id": "armory",
+      "name": "Armory",
+      "kind": "Processor",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": "iron_armor",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "coal",
+          "amount": 1
+        },
+        {
+          "good": "iron",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 180,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_armory",
+      "unlockName": "Armory",
+      "upgrades": []
+    },
+    {
+      "id": "distillery",
+      "name": "Distillery",
+      "kind": "Processor",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": "brandy",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "mead",
+          "amount": 1
+        },
+        {
+          "good": "pottery",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 180,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_distillery",
+      "unlockName": "Distillery",
+      "upgrades": []
+    },
+    {
+      "id": "goldsmith",
+      "name": "Goldsmith",
+      "kind": "Processor",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": "gold_ring",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "gold",
+          "amount": 1
+        },
+        {
+          "good": "iron_tool",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 240,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_goldsmith",
+      "unlockName": "Goldsmith",
+      "upgrades": []
+    },
+    {
+      "id": "luxury_tailor",
+      "name": "Luxury Tailor",
+      "kind": "Processor",
+      "tier": "Burgher",
+      "terrain": null,
+      "output": "luxury_clothes",
+      "perWorkerPerMin": 4,
+      "inputs": [
+        {
+          "good": "clothes",
+          "amount": 1
+        },
+        {
+          "good": "gold_ring",
+          "amount": 1
+        }
+      ],
+      "workerSlots": 2,
+      "houseCapacity": 0,
+      "goldCost": 240,
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "bricks",
+          "amount": 10
+        },
+        {
+          "good": "stone",
+          "amount": 10
+        }
+      ],
+      "buildSec": 14,
+      "unlockedBy": "r_luxury_tailor",
+      "unlockName": "Luxury Tailor",
+      "upgrades": []
+    },
+    {
+      "id": "research_center",
+      "name": "Research Center",
+      "kind": "Castle",
+      "tier": "Castle",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 0,
+      "goldCost": 300,
+      "materials": [
+        {
+          "good": "stone",
+          "amount": 20
+        },
+        {
+          "good": "wood",
+          "amount": 10
+        }
+      ],
+      "buildSec": 0,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": [
+        {
+          "level": 2,
+          "gold": 400,
+          "materials": [
+            {
+              "good": "planks",
+              "amount": 20
+            },
+            {
+              "good": "stone",
+              "amount": 15
+            }
+          ],
+          "effect": "Output",
+          "value": 3,
+          "extraSlots": 0,
+          "unlockedBy": null
+        },
+        {
+          "level": 3,
+          "gold": 800,
+          "materials": [
+            {
+              "good": "planks",
+              "amount": 30
+            },
+            {
+              "good": "iron_tool",
+              "amount": 15
+            }
+          ],
+          "effect": "Output",
+          "value": 4,
+          "extraSlots": 0,
+          "unlockedBy": null
+        },
+        {
+          "level": 4,
+          "gold": 1500,
+          "materials": [
+            {
+              "good": "iron_tool",
+              "amount": 25
+            },
+            {
+              "good": "chairs",
+              "amount": 15
+            }
+          ],
+          "effect": "Output",
+          "value": 6,
+          "extraSlots": 0,
+          "unlockedBy": null
+        }
+      ]
+    },
+    {
+      "id": "provisioner",
+      "name": "Provisioner",
+      "kind": "Castle",
+      "tier": "Castle",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 0,
+      "goldCost": 200,
+      "materials": [],
+      "buildSec": 0,
+      "unlockedBy": null,
+      "unlockName": null,
+      "upgrades": []
+    },
+    {
+      "id": "advanced_provisioner",
+      "name": "Advanced Provisioner",
+      "kind": "Castle",
+      "tier": "Castle",
+      "terrain": null,
+      "output": null,
+      "perWorkerPerMin": 0,
+      "inputs": [],
+      "workerSlots": 0,
+      "houseCapacity": 0,
+      "goldCost": 400,
+      "materials": [],
+      "buildSec": 0,
+      "unlockedBy": "r_adv_provisioner",
+      "unlockName": "Advanced Provisioner",
+      "upgrades": []
+    }
+  ],
+  "tiers": [
+    {
+      "tier": "Peasant",
+      "taxPerPersonPerMin": 12
+    },
+    {
+      "tier": "Worker",
+      "taxPerPersonPerMin": 18
+    },
+    {
+      "tier": "Burgher",
+      "taxPerPersonPerMin": 26.4
+    },
+    {
+      "tier": "Aristocrat",
+      "taxPerPersonPerMin": 48
+    }
+  ],
+  "needs": [
+    {
+      "tier": "Peasant",
+      "good": "potato",
+      "kind": "basic",
+      "perPersonPerMin": 1.3
+    },
+    {
+      "tier": "Peasant",
+      "good": "wood",
+      "kind": "basic",
+      "perPersonPerMin": 0.9
+    },
+    {
+      "tier": "Peasant",
+      "good": "fish",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Peasant",
+      "good": "wool",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Worker",
+      "good": "fish",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Worker",
+      "good": "coal",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Worker",
+      "good": "clothes",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Worker",
+      "good": "bread",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Worker",
+      "good": "mead",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Burgher",
+      "good": "lamp",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Burgher",
+      "good": "bread",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Burgher",
+      "good": "mead",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Burgher",
+      "good": "clothes",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Burgher",
+      "good": "chairs",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Burgher",
+      "good": "pottery",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Burgher",
+      "good": "gold_ring",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "lamp",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "mead",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "iron_armor",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "chairs",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "pottery",
+      "kind": "basic",
+      "perPersonPerMin": 1.08
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "brandy",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "luxury_clothes",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    },
+    {
+      "tier": "Aristocrat",
+      "good": "gold_ring",
+      "kind": "luxury",
+      "perPersonPerMin": 0.6
+    }
+  ],
+  "research": [
+    {
+      "id": "r_fishery",
+      "name": "Fishery",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 15
+        },
+        {
+          "good": "potato",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Fishery (fish hex).",
+      "unlocks": [
+        "Fishery"
+      ]
+    },
+    {
+      "id": "r_sheep",
+      "name": "Sheep Farm",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "potato",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Sheep Farm (wool).",
+      "unlocks": [
+        "Sheep Farm"
+      ]
+    },
+    {
+      "id": "r_quarry",
+      "name": "Quarry",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 25
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Quarry (stone hex).",
+      "unlocks": [
+        "Quarry"
+      ]
+    },
+    {
+      "id": "r_farm",
+      "name": "Grain Farm",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Grain Farm.",
+      "unlocks": [
+        "Grain Farm"
+      ]
+    },
+    {
+      "id": "r_charcoal",
+      "name": "Charcoal Burner",
+      "band": "Peasant",
+      "requires": [
+        "r_quarry"
+      ],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        },
+        {
+          "good": "planks",
+          "amount": 5
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Wood \u2192 coal.",
+      "unlocks": [
+        "Charcoal Burner"
+      ]
+    },
+    {
+      "id": "r_hut2",
+      "name": "Sturdy Huts",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 25
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Hut level 2: \u002B1 resident.",
+      "unlocks": []
+    },
+    {
+      "id": "r_lumber2",
+      "name": "Lumber Tools",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Lumberjack level 2: \u00D71.25.",
+      "unlocks": []
+    },
+    {
+      "id": "r_potato2",
+      "name": "Better Plows",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "potato",
+          "amount": 20
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Potato Farm level 2: \u00D71.25.",
+      "unlocks": []
+    },
+    {
+      "id": "r_sawmill2",
+      "name": "Saw Blades",
+      "band": "Peasant",
+      "requires": [],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Sawmill level 2: \u00D71.25.",
+      "unlocks": []
+    },
+    {
+      "id": "r_cottage",
+      "name": "Cottages",
+      "band": "Worker",
+      "requires": [
+        "r_quarry"
+      ],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Cottage: Workers move in.",
+      "unlocks": [
+        "Cottage"
+      ]
+    },
+    {
+      "id": "r_coal_mine",
+      "name": "Coal Mine",
+      "band": "Worker",
+      "requires": [
+        "r_cottage"
+      ],
+      "materials": [
+        {
+          "good": "stone",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Coal Mine"
+      ]
+    },
+    {
+      "id": "r_clay_pit",
+      "name": "Clay Pit",
+      "band": "Worker",
+      "requires": [
+        "r_cottage"
+      ],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Clay Pit"
+      ]
+    },
+    {
+      "id": "r_tailoring",
+      "name": "Tailoring",
+      "band": "Worker",
+      "requires": [
+        "r_cottage",
+        "r_sheep"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "wool",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Tailoring"
+      ]
+    },
+    {
+      "id": "r_mill",
+      "name": "Mill",
+      "band": "Worker",
+      "requires": [
+        "r_cottage",
+        "r_farm"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "grain",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Mill"
+      ]
+    },
+    {
+      "id": "r_bakery",
+      "name": "Bakery",
+      "band": "Worker",
+      "requires": [
+        "r_mill"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "flour",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Bakery"
+      ]
+    },
+    {
+      "id": "r_brewery",
+      "name": "Brewery",
+      "band": "Worker",
+      "requires": [
+        "r_mill"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "grain",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Brewery"
+      ]
+    },
+    {
+      "id": "r_brickworks",
+      "name": "Brickworks",
+      "band": "Worker",
+      "requires": [
+        "r_clay_pit"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 15
+        },
+        {
+          "good": "clay",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Brickworks"
+      ]
+    },
+    {
+      "id": "r_stone_tools",
+      "name": "Stone Tools",
+      "band": "Worker",
+      "requires": [
+        "r_cottage"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 20
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Stone Tools Maker"
+      ]
+    },
+    {
+      "id": "r_oil",
+      "name": "Oil Maker",
+      "band": "Worker",
+      "requires": [
+        "r_cottage",
+        "r_fishery"
+      ],
+      "materials": [
+        {
+          "good": "fish",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Oil Maker"
+      ]
+    },
+    {
+      "id": "r_pottery",
+      "name": "Pottery",
+      "band": "Worker",
+      "requires": [
+        "r_clay_pit"
+      ],
+      "materials": [
+        {
+          "good": "clay",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Pottery"
+      ]
+    },
+    {
+      "id": "r_lamp",
+      "name": "Lamp Maker",
+      "band": "Worker",
+      "requires": [
+        "r_oil"
+      ],
+      "materials": [
+        {
+          "good": "oil",
+          "amount": 15
+        },
+        {
+          "good": "planks",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Lamp Maker"
+      ]
+    },
+    {
+      "id": "r_carpentry",
+      "name": "Carpentry",
+      "band": "Worker",
+      "requires": [
+        "r_oil"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 25
+        },
+        {
+          "good": "oil",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Carpentry"
+      ]
+    },
+    {
+      "id": "r_iron_mine",
+      "name": "Iron Mine",
+      "band": "Worker",
+      "requires": [
+        "r_stone_tools"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone_tools",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Iron Mine"
+      ]
+    },
+    {
+      "id": "r_hut3",
+      "name": "Stone Huts",
+      "band": "Worker",
+      "requires": [
+        "r_hut2",
+        "r_stone_tools"
+      ],
+      "materials": [
+        {
+          "good": "stone",
+          "amount": 30
+        },
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone_tools",
+          "amount": 5
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Hut level 3: \u002B1 resident.",
+      "unlocks": []
+    },
+    {
+      "id": "r_lumber3",
+      "name": "Felling Crews",
+      "band": "Worker",
+      "requires": [
+        "r_lumber2"
+      ],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Lumberjack level 3: \u00D71.5.",
+      "unlocks": []
+    },
+    {
+      "id": "r_potato3",
+      "name": "Irrigation",
+      "band": "Worker",
+      "requires": [
+        "r_potato2"
+      ],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Potato Farm level 3: \u00D71.5.",
+      "unlocks": []
+    },
+    {
+      "id": "r_sawmill3",
+      "name": "Water Wheel",
+      "band": "Worker",
+      "requires": [
+        "r_sawmill2",
+        "r_stone_tools"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone_tools",
+          "amount": 5
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Sawmill level 3: \u00D71.5, \u002B1 worker slot.",
+      "unlocks": []
+    },
+    {
+      "id": "r_manor",
+      "name": "Manors",
+      "band": "Burgher",
+      "requires": [
+        "r_brickworks"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 20
+        },
+        {
+          "good": "planks",
+          "amount": 20
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Manor: Burghers move in.",
+      "unlocks": [
+        "Manor"
+      ]
+    },
+    {
+      "id": "r_forge",
+      "name": "Forge",
+      "band": "Burgher",
+      "requires": [
+        "r_manor",
+        "r_iron_mine"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 15
+        },
+        {
+          "good": "iron",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Forge"
+      ]
+    },
+    {
+      "id": "r_armory",
+      "name": "Armory",
+      "band": "Burgher",
+      "requires": [
+        "r_forge",
+        "r_coal_mine"
+      ],
+      "materials": [
+        {
+          "good": "iron_tool",
+          "amount": 10
+        },
+        {
+          "good": "coal",
+          "amount": 20
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Armory"
+      ]
+    },
+    {
+      "id": "r_distillery",
+      "name": "Distillery",
+      "band": "Burgher",
+      "requires": [
+        "r_manor",
+        "r_brewery",
+        "r_pottery"
+      ],
+      "materials": [
+        {
+          "good": "pottery",
+          "amount": 15
+        },
+        {
+          "good": "mead",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Distillery"
+      ]
+    },
+    {
+      "id": "r_gold_mine",
+      "name": "Gold Mine",
+      "band": "Burgher",
+      "requires": [
+        "r_forge"
+      ],
+      "materials": [
+        {
+          "good": "iron_tool",
+          "amount": 10
+        },
+        {
+          "good": "bricks",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Gold Mine"
+      ]
+    },
+    {
+      "id": "r_goldsmith",
+      "name": "Goldsmith",
+      "band": "Burgher",
+      "requires": [
+        "r_gold_mine"
+      ],
+      "materials": [
+        {
+          "good": "gold",
+          "amount": 10
+        },
+        {
+          "good": "iron_tool",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Goldsmith"
+      ]
+    },
+    {
+      "id": "r_luxury_tailor",
+      "name": "Luxury Tailor",
+      "band": "Burgher",
+      "requires": [
+        "r_goldsmith",
+        "r_tailoring"
+      ],
+      "materials": [
+        {
+          "good": "clothes",
+          "amount": 20
+        },
+        {
+          "good": "gold_ring",
+          "amount": 5
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": null,
+      "unlocks": [
+        "Luxury Tailor"
+      ]
+    },
+    {
+      "id": "r_hut4",
+      "name": "Brick Huts",
+      "band": "Burgher",
+      "requires": [
+        "r_hut3",
+        "r_brickworks"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 20
+        },
+        {
+          "good": "stone_tools",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Hut level 4: \u221230% Basic Need use.",
+      "unlocks": []
+    },
+    {
+      "id": "r_hut5",
+      "name": "Fine Huts",
+      "band": "Burgher",
+      "requires": [
+        "r_hut4",
+        "r_forge"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 40
+        },
+        {
+          "good": "iron",
+          "amount": 20
+        },
+        {
+          "good": "iron_tool",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Hut level 5: \u221230% Luxury use.",
+      "unlocks": []
+    },
+    {
+      "id": "r_aristocrat_home",
+      "name": "Aristocrats Home",
+      "band": "Aristocrat",
+      "requires": [
+        "r_manor",
+        "r_luxury_tailor"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 30
+        },
+        {
+          "good": "planks",
+          "amount": 15
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Aristocrats Home.",
+      "unlocks": [
+        "Aristocrats Home"
+      ]
+    },
+    {
+      "id": "k_crop",
+      "name": "Crop Rotation",
+      "band": "Kingdom",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 20
+        },
+        {
+          "good": "potato",
+          "amount": 15
+        }
+      ],
+      "modifier": "ExtractorOutput",
+      "value": 1.2,
+      "description": "Extractors produce \u00D71.2.",
+      "unlocks": []
+    },
+    {
+      "id": "k_paved",
+      "name": "Paved Roads",
+      "band": "Kingdom",
+      "requires": [],
+      "materials": [
+        {
+          "good": "wood",
+          "amount": 25
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "TraderSpeed",
+      "value": 1.5,
+      "description": "Traders travel \u00D71.5 faster.",
+      "unlocks": []
+    },
+    {
+      "id": "k_tax",
+      "name": "Tax Ledgers",
+      "band": "Kingdom",
+      "requires": [],
+      "materials": [
+        {
+          "good": "potato",
+          "amount": 20
+        },
+        {
+          "good": "wood",
+          "amount": 15
+        }
+      ],
+      "modifier": "TariffBonus",
+      "value": 0.03,
+      "description": "Tariff \u002B3%.",
+      "unlocks": []
+    },
+    {
+      "id": "k_scouts",
+      "name": "Scouting Party",
+      "band": "Kingdom",
+      "requires": [],
+      "materials": [
+        {
+          "good": "potato",
+          "amount": 20
+        },
+        {
+          "good": "wood",
+          "amount": 20
+        }
+      ],
+      "modifier": "ExtraScouts",
+      "value": 1,
+      "description": "\u002B1 Scout.",
+      "unlocks": []
+    },
+    {
+      "id": "k_guilds",
+      "name": "Guild Halls",
+      "band": "Kingdom",
+      "requires": [
+        "k_crop"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone",
+          "amount": 25
+        }
+      ],
+      "modifier": "ProcessorOutput",
+      "value": 1.2,
+      "description": "Processors produce \u00D71.2.",
+      "unlocks": []
+    },
+    {
+      "id": "k_carts",
+      "name": "Larger Carts",
+      "band": "Kingdom",
+      "requires": [
+        "k_paved"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 25
+        },
+        {
+          "good": "wood",
+          "amount": 20
+        }
+      ],
+      "modifier": "TraderCapacity",
+      "value": 1.5,
+      "description": "Traders carry \u00D71.5.",
+      "unlocks": []
+    },
+    {
+      "id": "k_caravan",
+      "name": "Extra Caravan",
+      "band": "Kingdom",
+      "requires": [
+        "k_paved"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 30
+        },
+        {
+          "good": "stone_tools",
+          "amount": 10
+        }
+      ],
+      "modifier": "ExtraTraders",
+      "value": 1,
+      "description": "\u002B1 Trader per Town.",
+      "unlocks": []
+    },
+    {
+      "id": "k_tariff_office",
+      "name": "Tariff Office",
+      "band": "Kingdom",
+      "requires": [
+        "k_tax"
+      ],
+      "materials": [
+        {
+          "good": "clothes",
+          "amount": 15
+        },
+        {
+          "good": "planks",
+          "amount": 20
+        }
+      ],
+      "modifier": "TariffSlider",
+      "value": 1,
+      "description": "Set the Tariff between 10% and 40%.",
+      "unlocks": []
+    },
+    {
+      "id": "k_charters",
+      "name": "Town Charters",
+      "band": "Kingdom",
+      "requires": [
+        "k_tax"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 20
+        },
+        {
+          "good": "stone_tools",
+          "amount": 15
+        }
+      ],
+      "modifier": "TownSlots",
+      "value": 1,
+      "description": "\u002B1 building slot per Town.",
+      "unlocks": []
+    },
+    {
+      "id": "k_grants",
+      "name": "Township Grants",
+      "band": "Kingdom",
+      "requires": [
+        "k_tax"
+      ],
+      "materials": [
+        {
+          "good": "planks",
+          "amount": 30
+        },
+        {
+          "good": "stone",
+          "amount": 30
+        }
+      ],
+      "modifier": "TownCap",
+      "value": 3,
+      "description": "Town limit \u002B3.",
+      "unlocks": []
+    },
+    {
+      "id": "k_census",
+      "name": "Royal Census",
+      "band": "Kingdom",
+      "requires": [
+        "k_grants"
+      ],
+      "materials": [
+        {
+          "good": "bread",
+          "amount": 20
+        },
+        {
+          "good": "clothes",
+          "amount": 20
+        }
+      ],
+      "modifier": "HousingBonus",
+      "value": 1.15,
+      "description": "Houses hold \u00D71.15 residents.",
+      "unlocks": []
+    },
+    {
+      "id": "k_province",
+      "name": "Provincial Rule",
+      "band": "Kingdom",
+      "requires": [
+        "k_grants"
+      ],
+      "materials": [
+        {
+          "good": "bricks",
+          "amount": 30
+        },
+        {
+          "good": "iron_tool",
+          "amount": 15
+        }
+      ],
+      "modifier": "TownCap",
+      "value": 3,
+      "description": "Town limit \u002B3.",
+      "unlocks": []
+    },
+    {
+      "id": "k_bureaucracy",
+      "name": "Grand Bureaucracy",
+      "band": "Kingdom",
+      "requires": [
+        "k_tariff_office"
+      ],
+      "materials": [
+        {
+          "good": "gold_ring",
+          "amount": 15
+        },
+        {
+          "good": "chairs",
+          "amount": 25
+        }
+      ],
+      "modifier": "TariffBonus",
+      "value": 0.07,
+      "description": "Tariff \u002B7%.",
+      "unlocks": []
+    },
+    {
+      "id": "r_adv_provisioner",
+      "name": "Advanced Provisioner",
+      "band": "Kingdom",
+      "requires": [
+        "r_fishery"
+      ],
+      "materials": [
+        {
+          "good": "fish",
+          "amount": 15
+        },
+        {
+          "good": "planks",
+          "amount": 10
+        }
+      ],
+      "modifier": "None",
+      "value": 0,
+      "description": "Unlocks the Advanced Provisioner (fish \u002B potato \u2192 provisions).",
+      "unlocks": [
+        "Advanced Provisioner"
+      ]
+    }
+  ],
+  "missions": [
+    {
+      "id": "m1",
+      "name": "Found Your Realm",
+      "reward": 300,
+      "tip": "Found a Town on open ground beside a forest. Huts bring Peasants; Peasants work the Lumberjacks.",
+      "objectives": [
+        "Found a Town",
+        "Build 2 Lumberjacks",
+        "Build 2 Huts"
+      ]
+    },
+    {
+      "id": "m2",
+      "name": "Trade Winds",
+      "reward": 500,
+      "tip": "Give your second Town potato fields. Specialised Towns trade with each other, and every trade pays the Crown a Tariff.",
+      "objectives": [
+        "Found a second Town",
+        "Build 2 Potato Farms",
+        "Earn 20 Tariff"
+      ]
+    },
+    {
+      "id": "m3",
+      "name": "The King\u0027s Scholars",
+      "reward": 500,
+      "tip": "Place the Research Center next to the Castle. Research is paid in Goods from the Castle Stock \u2014 royal Traders buy them from your Towns.",
+      "objectives": [
+        "Build the Research Center",
+        "Finish a research"
+      ]
+    },
+    {
+      "id": "m4",
+      "name": "A Growing Town",
+      "reward": 600,
+      "tip": "Research an upgrade (e.g. Sturdy Huts), then select a building in its Town panel and upgrade it.",
+      "objectives": [
+        "Build a Sawmill",
+        "Upgrade a building"
+      ]
+    },
+    {
+      "id": "m5",
+      "name": "Trade Routes",
+      "reward": 800,
+      "tip": "Roads double Trader speed. More Towns trading means more Tariff.",
+      "objectives": [
+        "Trade 60 Potato between Towns",
+        "Earn 300 Tariff in total"
+      ]
+    },
+    {
+      "id": "m6",
+      "name": "The Workers Arrive",
+      "reward": 1000,
+      "tip": "Workers need Fish and Coal. Research the Fishery and a Charcoal Burner or Coal Mine first.",
+      "objectives": [
+        "Build a Cottage",
+        "House 4 Workers"
+      ]
+    },
+    {
+      "id": "m7",
+      "name": "The King\u0027s Works",
+      "reward": 1200,
+      "tip": "Level up your Towns (Town panel) for more building slots and Traders.",
+      "objectives": [
+        "Have 20 buildings",
+        "Make 3 upgrades"
+      ]
+    },
+    {
+      "id": "m8",
+      "name": "Burghers",
+      "reward": 1500,
+      "tip": "Burghers need Lamps, Bread, Mead and Clothes \u2014 a web of Worker-tier chains across your Towns.",
+      "objectives": [
+        "Build a Manor",
+        "House 4 Burghers"
+      ]
+    },
+    {
+      "id": "m9",
+      "name": "The Good Life",
+      "reward": 0,
+      "tip": "Aristocrats need Lamps, Mead, Iron Armor, Chairs and Pottery, plus Brandy, Luxury Clothes and Gold Rings. Make them perfectly happy to win.",
+      "objectives": [
+        "Build an Aristocrats Home",
+        "Aristocrats at 100% happiness"
+      ]
+    }
+  ]
+}

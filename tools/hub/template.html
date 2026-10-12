@@ -1,0 +1,541 @@
+<title>Trade Winds Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a ledger on parchment — header with tabs, one working surface per tab, tables and cards share edges. */
+:root {
+  --bg: #f4ecdb; --surface: #fbf6ea; --sunk: #efe5d0; --fg: #33281c; --muted: #75664f; --line: #dccdb0;
+  --accent: #9a5716; --accent-ink: #fff8ec; --s1: #b0691f; --s2: #2369b0;
+  --good: #3f7a2e; --warn: #9a6a00; --bad: #b0412b; --info: #2f5f8f;
+  --peasant: #5f8f2e; --worker: #b0651f; --burgher: #7a55b0; --aristocrat: #b03f7a; --castle: #8a6a10;
+  --font-display: "Alegreya", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #17120d; --surface: #1f1913; --sunk: #2a221a; --fg: #efe4cf; --muted: #a8977c; --line: #3d3226;
+  --accent: #d39b52; --accent-ink: #1b140c; --s1: #b8782e; --s2: #3a82cc;
+  --good: #8cc46b; --warn: #e0b04a; --bad: #e57a62; --info: #7fb0e0;
+  --peasant: #9cc86a; --worker: #e0954a; --burgher: #b79be6; --aristocrat: #e07fb3; --castle: #e2c15a;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #17120d; --surface: #1f1913; --sunk: #2a221a; --fg: #efe4cf; --muted: #a8977c; --line: #3d3226;
+  --accent: #d39b52; --accent-ink: #1b140c; --s1: #b8782e; --s2: #3a82cc;
+  --good: #8cc46b; --warn: #e0b04a; --bad: #e57a62; --info: #7fb0e0;
+  --peasant: #9cc86a; --worker: #e0954a; --burgher: #b79be6; --aristocrat: #e07fb3; --castle: #e2c15a;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.15rem; }
+.num, td.n, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.label { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+button, .chip { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 24px; padding-block: 14px 0; }
+.brand { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; }
+.brand h1 { font-size: 1.6rem; }
+.brand .muted { font-size: .8rem; }
+nav.tabs { display: flex; gap: 2px; flex-wrap: wrap; margin-left: auto; }
+nav.tabs button { background: none; border: 1px solid transparent; border-bottom: none; border-radius: var(--r) var(--r) 0 0; padding: 8px 14px; cursor: pointer; color: var(--muted); font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+nav.tabs button[aria-selected="true"] { background: var(--surface); border-color: var(--line); color: var(--fg); margin-bottom: -1px; }
+.badge { background: var(--bad); color: var(--surface); border-radius: 999px; font-size: .72rem; padding: 0 7px; line-height: 1.5; font-family: var(--font-mono); }
+
+main section { padding-top: 22px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { background: var(--surface); border: none; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: none; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+input[type="search"], textarea { background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px; font: inherit; }
+input[type="search"] { min-width: 0; flex: 1 1 200px; max-width: 320px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .82rem; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--sunk); font-weight: 600; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+
+.datagrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .datagrid { grid-template-columns: minmax(0, 1fr); } }
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { position: sticky; top: 0; background: var(--sunk); font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: .7em; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: .7em; }
+td.n, th.n { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--sunk); }
+tbody tr[aria-selected="true"] { background: var(--sunk); box-shadow: inset 3px 0 0 var(--accent); }
+.detail { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; position: sticky; top: 96px; align-self: start; display: grid; gap: 10px; min-width: 0; }
+.detail dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: .88rem; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; }
+.tierchip { display: inline-flex; align-items: center; font-size: .78rem; font-weight: 600; }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
+figure.chart { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+figure.chart figcaption { display: grid; gap: 2px; }
+figure.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.legend { display: flex; gap: 14px; font-size: .82rem; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+details.tbl summary { cursor: pointer; font-size: .82rem; color: var(--muted); }
+details.tbl table { margin-top: 6px; }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--fg); color: var(--bg); padding: 5px 9px; border-radius: 6px; font-size: .8rem; max-width: 260px; }
+
+.nowbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 18px; display: grid; gap: 6px; }
+.milestone { margin-bottom: 22px; }
+.mhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
+.progress { flex: 1 1 160px; max-width: 260px; height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; align-self: center; }
+.progress i { display: block; height: 100%; background: var(--good); border-radius: 4px; }
+.tasks { display: grid; gap: 8px; }
+.task { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
+.task .t { font-weight: 600; }
+.task .d { grid-column: 2; font-size: .88rem; }
+.task .m { grid-column: 2; font-size: .8rem; color: var(--muted); }
+.pill { font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; border: 1px solid currentColor; white-space: nowrap; align-self: start; }
+.pill.done { color: var(--good); }
+.pill.in-progress { color: var(--info); }
+.pill.blocked { color: var(--bad); }
+.pill.waiting { color: var(--warn); }
+.why { color: var(--fg); }
+.why::before { content: "Why: "; color: var(--muted); }
+
+.qgroup { margin: 22px 0 10px; }
+.q { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 12px; display: grid; gap: 10px; }
+.q .qid { font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
+.q p { margin: 0; max-width: 72ch; }
+.opts { display: grid; gap: 6px; }
+.opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--sunk); }
+.opt input { margin-top: 4px; accent-color: var(--accent); }
+.mypick { font-size: .72rem; font-weight: 600; color: var(--accent); border: 1px dashed var(--accent); border-radius: 999px; padding: 0 8px; margin-left: 6px; white-space: nowrap; }
+.imgs { display: flex; flex-wrap: wrap; gap: 10px; }
+.imgs a { display: grid; gap: 4px; max-width: 220px; font-size: .8rem; color: var(--muted); text-decoration: none; }
+.imgs img { border-radius: 6px; border: 1px solid var(--line); }
+.q textarea { width: 100%; min-height: 2.4em; resize: vertical; }
+.copybar { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); border-top: 1px solid var(--line); padding: 10px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: var(--r); padding: 8px 16px; font-weight: 600; cursor: pointer; }
+.btn.ghost { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+#copied { width: 100%; min-height: 6em; font-family: var(--font-mono); font-size: .82rem; }
+.empty { padding: 20px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .opt, nav.tabs button, .chip { transition: background .15s, border-color .15s; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Trade Winds Hub</h1>
+      <span class="muted" id="stamp"></span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Hub sections">
+      <button role="tab" id="tab-data" aria-controls="data" aria-selected="true">Data</button>
+      <button role="tab" id="tab-charts" aria-controls="charts" aria-selected="false">Charts</button>
+      <button role="tab" id="tab-plan" aria-controls="plan" aria-selected="false">Plan</button>
+      <button role="tab" id="tab-questions" aria-controls="questions" aria-selected="false">Questions <span class="badge" id="qbadge" hidden></span></button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="data" role="tabpanel" aria-labelledby="tab-data">
+    <div class="toolbar">
+      <div class="seg" id="dataview" role="group" aria-label="Catalogue">
+        <button data-v="buildings" aria-pressed="true">Buildings</button>
+        <button data-v="goods" aria-pressed="false">Goods</button>
+        <button data-v="research" aria-pressed="false">Research</button>
+        <button data-v="missions" aria-pressed="false">Missions</button>
+      </div>
+      <input type="search" id="filter" placeholder="Filter by name, Good or research" aria-label="Filter">
+      <div id="chips" class="toolbar" style="margin:0"></div>
+    </div>
+    <div class="datagrid">
+      <div class="tablebox"><table id="table"></table></div>
+      <aside class="detail" id="detail" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section id="charts" role="tabpanel" aria-labelledby="tab-charts" hidden>
+    <div class="charts" id="chartgrid"></div>
+  </section>
+
+  <section id="plan" role="tabpanel" aria-labelledby="tab-plan" hidden></section>
+
+  <section id="questions" role="tabpanel" aria-labelledby="tab-questions" hidden>
+    <div id="qlist"></div>
+    <div class="copybar">
+      <button class="btn" id="copy">Copy results</button>
+      <button class="btn ghost" id="clear">Clear my answers</button>
+      <span class="muted" id="copymsg">Pick answers, press Copy results, and paste the text into chat. Answers stay in this browser until then.</span>
+      <textarea id="copied" readonly hidden aria-label="Copied answers"></textarea>
+    </div>
+  </section>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+const DATA = /*DATA*/null;
+const PLAN = /*PLAN*/null;
+const QUESTIONS = /*QUESTIONS*/[];
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const goodName = id => (DATA.goods.find(g => g.id === id) || { name: id }).name;
+const bName = id => (DATA.buildings.find(b => b.id === id) || { name: id }).name;
+const amounts = list => list.map(a => `${a.amount} ${goodName(a.good).toLowerCase()}`).join(", ");
+const TIERS = ["Peasant", "Worker", "Burgher", "Aristocrat", "Castle"];
+const tierVar = t => `var(--${String(t).toLowerCase()})`;
+const tierChip = t => `<span class="tierchip"><span class="dot" style="background:${tierVar(t)}"></span>${esc(t)}</span>`;
+
+$("#stamp").textContent = `Content ${DATA.generated} · plan ${PLAN.updated}`;
+
+// ---------------------------------------------------------------- tabs
+const TABS = ["data", "charts", "plan", "questions"];
+function showTab(id) {
+  if (!TABS.includes(id)) id = "data";
+  for (const t of TABS) {
+    $("#" + t).hidden = t !== id;
+    $("#tab-" + t).setAttribute("aria-selected", t === id);
+  }
+  store.set("hub.tab", id);
+  if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
+}
+for (const t of TABS) $("#tab-" + t).addEventListener("click", () => showTab(t));
+
+// ---------------------------------------------------------------- data tab
+const VIEWS = {
+  buildings: {
+    rows: () => DATA.buildings,
+    cols: [
+      { k: "name", h: "Building" },
+      { k: "tier", h: "Tier", f: r => tierChip(r.tier), sort: r => TIERS.indexOf(r.tier) },
+      { k: "kind", h: "Kind" },
+      { k: "output", h: "Makes", f: r => r.output ? esc(goodName(r.output)) : (r.houseCapacity ? `Home for ${r.houseCapacity}` : "") },
+      { k: "inputs", h: "From", f: r => esc(r.inputs.map(i => goodName(i.good)).join(" + ") || (r.terrain ? r.terrain + " hex" : "")) },
+      { k: "rate", h: "Per worker/min", n: true, f: r => r.perWorkerPerMin ? r.perWorkerPerMin : "", sort: r => r.perWorkerPerMin },
+      { k: "goldCost", h: "Gold", n: true },
+      { k: "unlockName", h: "Research", f: r => esc(r.unlockName || "Start") }
+    ],
+    chips: TIERS,
+    chipOf: r => r.tier,
+    text: r => [r.name, r.tier, r.kind, r.output && goodName(r.output), r.unlockName, ...r.inputs.map(i => goodName(i.good))].join(" "),
+    detail: r => `
+      <div class="label">${esc(r.kind)} · ${esc(r.tier)}</div>
+      <h3>${esc(r.name)}</h3>
+      <dl>
+        ${r.output ? `<dt>Makes</dt><dd>${esc(goodName(r.output))}${r.inputs.length ? " from " + esc(r.inputs.map(i => `${i.amount} ${goodName(i.good)}`).join(" + ")) : ""}</dd>
+        <dt>Rate</dt><dd class="num">${r.perWorkerPerMin} per worker per minute · ${r.workerSlots} workers</dd>` : ""}
+        ${r.houseCapacity ? `<dt>Residents</dt><dd>${r.houseCapacity} ${esc(r.tier)}s</dd>` : ""}
+        <dt>Stands on</dt><dd>${esc(r.terrain ? r.terrain + " hex" : r.kind === "Castle" ? "Next to the Castle" : "Open ground next to a Town")}</dd>
+        <dt>Cost</dt><dd>${r.goldCost ? `<span class="num">${r.goldCost}</span> gold` : "No gold"}${r.materials.length ? " + " + esc(amounts(r.materials)) : ""}</dd>
+        ${r.buildSec ? `<dt>Build time</dt><dd class="num">${r.buildSec} s</dd>` : ""}
+        <dt>Unlocked by</dt><dd>${esc(r.unlockName || "Available from the start")}</dd>
+      </dl>
+      ${r.upgrades.length ? `<div class="label">Upgrades</div><dl>${r.upgrades.map(u => `<dt>Level ${u.level}</dt><dd>${esc(upgradeText(u))} · ${u.gold} gold + ${esc(amounts(u.materials))}</dd>`).join("")}</dl>` : ""}`
+  },
+  goods: {
+    rows: () => DATA.goods,
+    cols: [
+      { k: "name", h: "Good" },
+      { k: "basePrice", h: "Base price", n: true },
+      { k: "producedBy", h: "Made by", f: r => esc(r.producedBy.map(bName).join(", ")), sort: r => r.producedBy.length },
+      { k: "inputFor", h: "Input for", f: r => esc(r.inputFor.map(bName).join(", ")), sort: r => r.inputFor.length },
+      { k: "needed", h: "Needed by", f: r => needsOf(r.id).map(n => `${tierChip(n.tier)} <span class="muted">${n.kind}</span>`).join("<br>"), sort: r => needsOf(r.id).length }
+    ],
+    chips: ["Basic Need", "Luxury", "Not a need"],
+    chipOf: r => { const n = needsOf(r.id); return n.some(x => x.kind === "basic") ? "Basic Need" : n.length ? "Luxury" : "Not a need"; },
+    text: r => [r.name, ...r.producedBy.map(bName), ...r.inputFor.map(bName)].join(" "),
+    detail: r => `
+      <div class="label">Good</div><h3>${esc(r.name)}</h3>
+      <dl>
+        <dt>Base price</dt><dd class="num">${r.basePrice} gold</dd>
+        <dt>Made by</dt><dd>${esc(r.producedBy.map(bName).join(", ") || "Nothing yet")}</dd>
+        <dt>Input for</dt><dd>${esc(r.inputFor.map(bName).join(", ") || "Nothing")}</dd>
+        <dt>Needed by</dt><dd>${needsOf(r.id).map(n => `${tierChip(n.tier)} ${n.kind === "basic" ? "Basic Need" : "Luxury"} · <span class="num">${n.perPersonPerMin}</span>/person/min`).join("<br>") || "No one"}</dd>
+        <dt>Research uses</dt><dd>${esc(DATA.research.filter(x => x.materials.some(m => m.good === r.id)).map(x => x.name).join(", ") || "None")}</dd>
+      </dl>`
+  },
+  research: {
+    rows: () => DATA.research,
+    cols: [
+      { k: "name", h: "Research" },
+      { k: "band", h: "Band", f: r => r.band === "Kingdom" ? tierChip("Castle").replace(">Castle<", ">Kingdom<") : tierChip(r.band), sort: r => ["Peasant", "Worker", "Burgher", "Aristocrat", "Kingdom"].indexOf(r.band) },
+      { k: "materials", h: "Costs", f: r => esc(amounts(r.materials)), sort: r => r.materials.reduce((s, m) => s + m.amount, 0) },
+      { k: "effect", h: "Gives", f: r => esc(r.unlocks.length ? "Unlocks " + r.unlocks.join(", ") : (r.description || "")) },
+      { k: "requires", h: "Needs first", f: r => esc(r.requires.map(id => (DATA.research.find(x => x.id === id) || {}).name).join(", ")), sort: r => r.requires.length }
+    ],
+    chips: ["Peasant", "Worker", "Burgher", "Aristocrat", "Kingdom"],
+    chipOf: r => r.band,
+    text: r => [r.name, r.band, r.description, ...r.unlocks, ...r.materials.map(m => goodName(m.good))].join(" "),
+    detail: r => `
+      <div class="label">${esc(r.band)} research</div><h3>${esc(r.name)}</h3>
+      <dl>
+        <dt>Gives</dt><dd>${esc(r.unlocks.length ? "Unlocks " + r.unlocks.join(", ") + "." : r.description || "")}</dd>
+        <dt>Costs</dt><dd>${esc(amounts(r.materials))} from the Castle Stock</dd>
+        <dt>Needs first</dt><dd>${esc(r.requires.map(id => (DATA.research.find(x => x.id === id) || {}).name).join(", ") || "Nothing")}</dd>
+        <dt>Leads to</dt><dd>${esc(DATA.research.filter(x => x.requires.includes(r.id)).map(x => x.name).join(", ") || "Nothing")}</dd>
+      </dl>`
+  },
+  missions: {
+    rows: () => DATA.missions.map((m, i) => ({ ...m, order: i + 1 })),
+    cols: [
+      { k: "order", h: "#", n: true },
+      { k: "name", h: "Mission" },
+      { k: "objectives", h: "Goals", f: r => esc(r.objectives.join(" · ")), sort: r => r.objectives.length },
+      { k: "reward", h: "Reward", n: true, f: r => r.reward ? r.reward : "Victory" }
+    ],
+    chips: [],
+    chipOf: () => "",
+    text: r => [r.name, ...r.objectives, r.tip].join(" "),
+    detail: r => `
+      <div class="label">Mission ${r.order} of ${DATA.missions.length}</div><h3>${esc(r.name)}</h3>
+      <dl><dt>Goals</dt><dd>${r.objectives.map(esc).join("<br>")}</dd>
+      <dt>Reward</dt><dd>${r.reward ? `<span class="num">${r.reward}</span> gold` : "Victory"}</dd>
+      <dt>Tip</dt><dd>${esc(r.tip)}</dd></dl>`
+  }
+};
+
+function upgradeText(u) {
+  if (u.effect === "HouseCapacity") return `+${u.value} resident`;
+  if (u.effect === "BasicUse") return `Basic Needs use ×${u.value}`;
+  if (u.effect === "LuxuryUse") return `Luxury use ×${u.value}`;
+  if (u.unlockedBy == null && u.effect === "Output" && u.value >= 2) return `Research speed ${u.value}/s`;
+  return `Output ×${u.value}` + (u.extraSlots ? `, +${u.extraSlots} worker` : "");
+}
+function needsOf(good) { return DATA.needs.filter(n => n.good === good); }
+
+const dstate = Object.assign({ view: "buildings", sort: null, dir: 1, chip: null, selected: null }, store.get("hub.data", {}));
+function renderData() {
+  const v = VIEWS[dstate.view];
+  for (const b of $("#dataview").children) b.setAttribute("aria-pressed", b.dataset.v === dstate.view);
+  $("#chips").innerHTML = v.chips.map(c => `<button class="chip" aria-pressed="${dstate.chip === c}" data-c="${esc(c)}">${["Peasant","Worker","Burgher","Aristocrat","Castle"].includes(c) ? `<span class="dot" style="background:${tierVar(c)}"></span>` : ""}${esc(c)}</button>`).join("");
+  const q = $("#filter").value.trim().toLowerCase();
+  let rows = v.rows().filter(r => (!dstate.chip || v.chipOf(r) === dstate.chip) && (!q || v.text(r).toLowerCase().includes(q)));
+  const col = v.cols.find(c => c.k === dstate.sort);
+  if (col) {
+    const key = col.sort || (r => r[col.k]);
+    rows = rows.slice().sort((a, b) => { const x = key(a), y = key(b); return (typeof x === "number" && typeof y === "number" ? x - y : String(x ?? "").localeCompare(String(y ?? ""))) * dstate.dir; });
+  }
+  const head = `<thead><tr>${v.cols.map(c => `<th class="${c.n ? "n" : ""}" data-k="${c.k}" aria-sort="${dstate.sort === c.k ? (dstate.dir > 0 ? "ascending" : "descending") : "none"}">${esc(c.h)}</th>`).join("")}</tr></thead>`;
+  const body = rows.length ? rows.map(r => {
+    const id = r.id ?? r.order;
+    return `<tr data-id="${esc(id)}" aria-selected="${String(dstate.selected) === String(id)}" tabindex="0">${v.cols.map(c => `<td class="${c.n ? "n" : ""}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join("")}</tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${v.cols.length}">Nothing matches that filter.</td></tr>`;
+  $("#table").innerHTML = head + "<tbody>" + body + "</tbody>";
+  const sel = rows.find(r => String(r.id ?? r.order) === String(dstate.selected)) || rows[0];
+  $("#detail").innerHTML = sel ? v.detail(sel) : `<p class="muted">Pick a row to see its details.</p>`;
+  if (sel && dstate.selected == null) $("#table tbody tr")?.setAttribute("aria-selected", "true");
+  store.set("hub.data", { view: dstate.view, sort: dstate.sort, dir: dstate.dir, chip: dstate.chip });
+}
+$("#dataview").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; dstate.view = b.dataset.v; dstate.sort = null; dstate.chip = null; dstate.selected = null; renderData(); });
+$("#chips").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; dstate.chip = dstate.chip === b.dataset.c ? null : b.dataset.c; renderData(); });
+$("#filter").addEventListener("input", renderData);
+$("#table").addEventListener("click", e => {
+  const th = e.target.closest("th");
+  if (th) { dstate.dir = dstate.sort === th.dataset.k ? -dstate.dir : 1; dstate.sort = th.dataset.k; renderData(); return; }
+  const tr = e.target.closest("tbody tr[data-id]");
+  if (tr) { dstate.selected = tr.dataset.id; renderData(); }
+});
+$("#table").addEventListener("keydown", e => { if (e.key === "Enter") e.target.closest("tr[data-id]")?.click(); });
+
+// ---------------------------------------------------------------- charts
+const tip = $("#tip");
+document.addEventListener("pointermove", e => {
+  const m = e.target.closest?.("[data-tip]");
+  if (!m) { tip.hidden = true; return; }
+  tip.textContent = m.dataset.tip;
+  tip.hidden = false;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + "px";
+  tip.style.top = (e.clientY + 14) + "px";
+});
+
+function hbar(items, { color, unit = "", max } = {}) {
+  // Horizontal bars: label column, bars from a shared zero baseline, value at the bar end.
+  const W = 560, rowH = 20, gap = 4, labelW = 120, valueW = 46, plotW = W - labelW - valueW;
+  const H = items.length * (rowH + gap);
+  const top = max ?? Math.max(...items.map(i => i.v));
+  const ticks = niceTicks(top);
+  const sx = v => labelW + (v / ticks[ticks.length - 1]) * plotW;
+  let s = `<svg viewBox="0 0 ${W} ${H + 22}" role="img">`;
+  for (const t of ticks) s += `<line x1="${sx(t)}" x2="${sx(t)}" y1="0" y2="${H}" stroke="var(--line)" stroke-width="1"/><text x="${sx(t)}" y="${H + 15}" fill="var(--muted)" font-size="11" text-anchor="middle" font-family="var(--font-mono)">${t}</text>`;
+  items.forEach((it, i) => {
+    const y = i * (rowH + gap);
+    const w = Math.max(1, sx(it.v) - labelW);
+    s += `<text x="${labelW - 8}" y="${y + rowH * 0.7}" fill="var(--fg)" font-size="12" text-anchor="end">${esc(it.label)}</text>`;
+    s += `<g data-tip="${esc(it.tip || `${it.label}: ${it.v}${unit}`)}"><rect x="${labelW}" y="${y - 1}" width="${plotW}" height="${rowH + 2}" fill="transparent"/>`;
+    s += `<rect x="${labelW}" y="${y + 3}" width="${w}" height="${rowH - 6}" rx="4" fill="${it.color || color}"/></g>`;
+    s += `<text x="${labelW + w + 6}" y="${y + rowH * 0.7}" fill="var(--muted)" font-size="11" font-family="var(--font-mono)">${it.v}${unit}</text>`;
+  });
+  return s + "</svg>";
+}
+function niceTicks(max) {
+  const step = [1, 2, 2.5, 5, 10].map(m => m * Math.pow(10, Math.floor(Math.log10(Math.max(max, 1) / 4)))).find(s => max / s <= 5) || max;
+  const out = [];
+  for (let t = 0; t <= max + step * 0.999; t += step) out.push(+t.toFixed(2));
+  return out;
+}
+function tableHtml(head, rows) {
+  return `<details class="tbl"><summary>Show as table</summary><div class="tablebox"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${i ? "n" : ""}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`;
+}
+function chart(title, sub, svg, extra = "") {
+  return `<figure class="chart"><figcaption><h3>${esc(title)}</h3><span class="muted">${esc(sub)}</span></figcaption>${svg}${extra}</figure>`;
+}
+
+function renderCharts() {
+  const out = [];
+  // 1. Base price per Good
+  const goods = DATA.goods.slice().sort((a, b) => b.basePrice - a.basePrice);
+  out.push(chart("Base price of every Good", "Gold per unit before supply and demand move it (empty shelf ×1.9, surplus ×0.4).",
+    hbar(goods.map(g => ({ label: g.name, v: g.basePrice })), { color: "var(--s1)", unit: "g" }),
+    tableHtml(["Good", "Base price"], goods.map(g => [g.name, g.basePrice]))));
+
+  // 2. Buildings per tier
+  const tiers = ["Peasant", "Worker", "Burgher", "Aristocrat", "Castle"];
+  const per = tiers.map(t => ({ t, n: DATA.buildings.filter(b => b.tier === t).length }));
+  out.push(chart("Buildings per tier", "How much there is to build at each class of resident (houses included).",
+    hbar(per.map(p => ({ label: p.t, v: p.n, tip: `${p.t}: ${p.n} buildings` })), { color: "var(--s1)" }),
+    tableHtml(["Tier", "Buildings"], per.map(p => [p.t, p.n]))));
+
+  // 3. Research cost per band
+  const bands = ["Peasant", "Worker", "Burgher", "Aristocrat", "Kingdom"];
+  const cost = bands.map(b => { const nodes = DATA.research.filter(r => r.band === b); return { b, nodes: nodes.length, units: nodes.reduce((s, r) => s + r.materials.reduce((x, m) => x + m.amount, 0), 0) }; });
+  out.push(chart("Research cost per band", "Total Goods the Castle must stock to research every node in the band.",
+    hbar(cost.map(c => ({ label: c.b, v: c.units, tip: `${c.b}: ${c.units} Goods over ${c.nodes} nodes` })), { color: "var(--s1)" }),
+    tableHtml(["Band", "Nodes", "Goods needed"], cost.map(c => [c.b, c.nodes, c.units]))));
+
+  // 4. Needs per person by tier: Basic vs Luxury (two series, grouped)
+  const ptiers = ["Peasant", "Worker", "Burgher", "Aristocrat"];
+  const rows = ptiers.map(t => {
+    const n = DATA.needs.filter(x => x.tier === t);
+    const sum = k => +n.filter(x => x.kind === k).reduce((s, x) => s + x.perPersonPerMin, 0).toFixed(2);
+    return { t, basic: sum("basic"), lux: sum("luxury"), tax: (DATA.tiers.find(x => x.tier === t) || {}).taxPerPersonPerMin };
+  });
+  out.push(chart("What one resident uses per minute", "Goods per person per minute; Basic Needs hold happiness at 70%, Luxuries lift it to 100%.",
+    groupedBars(rows),
+    `<div class="legend"><span><i class="sw" style="background:var(--s1)"></i>Basic Needs</span><span><i class="sw" style="background:var(--s2)"></i>Luxuries</span></div>` +
+    tableHtml(["Tier", "Basic /min", "Luxury /min", "Tax /min"], rows.map(r => [r.t, r.basic, r.lux, r.tax]))));
+  $("#chartgrid").innerHTML = out.join("");
+}
+
+function groupedBars(rows) {
+  const W = 560, H = 210, left = 36, bottom = 24, top = 14;
+  const max = Math.max(...rows.flatMap(r => [r.basic, r.lux]));
+  const ticks = niceTicks(max);
+  const tmax = ticks[ticks.length - 1];
+  const sy = v => H - bottom - (v / tmax) * (H - bottom - top);
+  const band = (W - left) / rows.length, bw = Math.min(34, band / 3);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (const t of ticks) s += `<line x1="${left}" x2="${W}" y1="${sy(t)}" y2="${sy(t)}" stroke="var(--line)"/><text x="${left - 6}" y="${sy(t) + 4}" fill="var(--muted)" font-size="11" text-anchor="end" font-family="var(--font-mono)">${t}</text>`;
+  rows.forEach((r, i) => {
+    const cx = left + band * i + band / 2;
+    [["basic", "var(--s1)", "Basic Needs"], ["lux", "var(--s2)", "Luxuries"]].forEach(([k, c, name], j) => {
+      const x = cx - bw - 1 + j * (bw + 2), y = sy(r[k]);
+      s += `<g data-tip="${esc(`${r.t}s · ${name}: ${r[k]} per person per minute`)}"><rect x="${x - 3}" y="${top}" width="${bw + 6}" height="${H - bottom - top}" fill="transparent"/><path d="M${x},${H - bottom} V${y + 4} q0,-4 4,-4 h${bw - 8} q4,0 4,4 V${H - bottom} Z" fill="${c}"/></g>`;
+      s += `<text x="${x + bw / 2}" y="${y - 4}" fill="var(--muted)" font-size="10.5" text-anchor="middle" font-family="var(--font-mono)">${r[k]}</text>`;
+    });
+    s += `<text x="${cx}" y="${H - 6}" fill="var(--fg)" font-size="12" text-anchor="middle">${r.t}</text>`;
+  });
+  return s + `<line x1="${left}" x2="${W}" y1="${H - bottom}" y2="${H - bottom}" stroke="var(--muted)"/></svg>`;
+}
+
+// ---------------------------------------------------------------- plan
+function renderPlan() {
+  const all = PLAN.milestones.flatMap(m => m.tasks.map(t => ({ ...t, m: m.id })));
+  const now = all.filter(t => t.status === "in-progress");
+  const blocked = all.filter(t => t.status === "blocked");
+  let h = `<div class="nowbox"><div class="label">Being worked on now</div>`;
+  h += now.length ? now.map(t => `<div><strong>${esc(t.title)}</strong> <span class="muted">· ${esc(t.now || t.owner)}</span></div>`).join("")
+    : `<div>Nothing is in progress right now. ${blocked.length} task${blocked.length === 1 ? " is" : "s are"} waiting on you: answers in the Questions tab, art, or a play session.</div>`;
+  h += `</div>`;
+  for (const m of PLAN.milestones) {
+    const done = m.tasks.filter(t => t.status === "done").length;
+    h += `<div class="milestone"><div class="mhead"><h2>${esc(m.id)} · ${esc(m.title)}</h2><span class="muted num">${done}/${m.tasks.length} done</span><div class="progress" aria-hidden="true"><i style="width:${(done / m.tasks.length * 100).toFixed(0)}%"></i></div></div><div class="tasks">`;
+    for (const t of m.tasks) {
+      h += `<div class="task"><span class="pill ${esc(t.status)}">${esc(t.status.replace("-", " "))}</span><span class="t">${esc(t.title)}</span>
+        <span class="d">${esc(t.detail)}</span>
+        ${t.blockedBy ? `<span class="d why">${esc(t.blockedBy)}</span>` : ""}
+        <span class="m">${esc(t.owner)}${t.size ? " · size " + esc(t.size) : ""}${t.now ? " · now: " + esc(t.now) : ""}</span></div>`;
+    }
+    h += `</div></div>`;
+  }
+  $("#plan").innerHTML = h;
+}
+
+// ---------------------------------------------------------------- questions
+const answers = store.get("hub.answers", {});
+function renderQuestions() {
+  const qs = QUESTIONS.filter(q => q.id);
+  const badge = $("#qbadge");
+  badge.textContent = qs.length;
+  badge.hidden = qs.length === 0;
+  if (!qs.length) { $("#qlist").innerHTML = `<p class="empty">No open questions. New ones will appear here.</p>`; return; }
+  let h = "";
+  for (const q of QUESTIONS) {
+    if (q.g) { h += `<h2 class="qgroup">${esc(q.g)}</h2>`; continue; }
+    const a = answers[q.id] || {};
+    const picked = new Set(a.v || []);
+    h += `<div class="q" data-q="${esc(q.id)}"><span class="qid">${esc(q.id)}</span><p><strong>${esc(q.q)}</strong></p>${q.ctx ? `<p class="muted">${esc(q.ctx)}</p>` : ""}`;
+    if (q.imgs?.length) h += `<div class="imgs">${q.imgs.map(im => `<a href="${esc(im.file)}" target="_blank" rel="noopener"><img src="${esc(im.file)}" alt="${esc(im.cap)}" loading="lazy">${esc(im.cap)}</a>`).join("")}</div>`;
+    h += `<div class="opts">${q.o.map(([v, label, rec], i) => `<label class="opt"><input type="${q.multi ? "checkbox" : "radio"}" name="q-${esc(q.id)}" id="q-${esc(q.id)}-${i}" value="${esc(v)}" ${picked.has(v) ? "checked" : ""}><span>${esc(label)}${rec ? `<span class="mypick">my pick</span>` : ""}</span></label>`).join("")}</div>`;
+    h += `<textarea id="note-${esc(q.id)}" placeholder="Note (optional)" aria-label="Note for ${esc(q.id)}">${esc(a.note || "")}</textarea></div>`;
+  }
+  $("#qlist").innerHTML = h;
+}
+$("#qlist").addEventListener("input", e => {
+  const card = e.target.closest(".q");
+  if (!card) return;
+  const id = card.dataset.q;
+  const v = [...card.querySelectorAll("input:checked")].map(i => i.value);
+  const note = card.querySelector("textarea").value;
+  answers[id] = { v, note };
+  store.set("hub.answers", answers);
+});
+function resultsText() {
+  const lines = ["Answers"];
+  for (const q of QUESTIONS) {
+    if (!q.id) continue;
+    const a = answers[q.id];
+    if (!a || (!a.v?.length && !a.note)) continue;
+    const labels = (a.v || []).map(v => (q.o.find(o => o[0] === v) || [v, v])[1]);
+    lines.push(`${q.id}: ${labels.join(", ") || "(no pick)"}${a.note ? `  | note: ${a.note}` : ""}`);
+  }
+  return lines.length > 1 ? lines.join("\n") : "";
+}
+$("#copy").addEventListener("click", () => {
+  const text = resultsText();
+  const box = $("#copied");
+  if (!text) { $("#copymsg").textContent = "Pick at least one answer first."; return; }
+  box.value = text;
+  box.hidden = false;
+  navigator.clipboard?.writeText(text).then(
+    () => { $("#copymsg").textContent = "Copied. Paste it into chat."; },
+    () => { box.select(); $("#copymsg").textContent = "Copy is blocked here: the text is selected below, press Ctrl+C."; }
+  ) ?? (box.select(), $("#copymsg").textContent = "The text is selected below, press Ctrl+C.");
+});
+$("#clear").addEventListener("click", () => {
+  for (const k of Object.keys(answers)) delete answers[k];
+  store.set("hub.answers", answers);
+  $("#copied").hidden = true;
+  renderQuestions();
+});
+
+// ---------------------------------------------------------------- boot
+renderData();
+renderCharts();
+renderPlan();
+renderQuestions();
+const start = location.hash.slice(1) || store.get("hub.tab", "data");
+showTab(start);
+</script>
