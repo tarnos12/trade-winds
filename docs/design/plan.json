@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 09:42",
+  "updated": "2026-10-12 09:47",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -189,22 +189,21 @@
         {
           "title": "Juice: coin bursts, chimney smoke, build bursts",
           "detail": "A coin burst and a small +Tariff number when Towns trade, smoke from working chimneys, and a burst when a building or upgrade finishes (you picked this, 2026-10-12).",
-          "status": "in-progress",
+          "status": "done",
           "size": "M",
-          "owner": "Claude",
-          "now": "Claude: coin bursts, chimney smoke and build bursts"
+          "owner": "Claude"
         },
         {
           "title": "Soft sounds and an ambient bed",
           "detail": "Gentle sounds for placing, trading, finishing buildings and Missions, plus a quiet wind-and-drone background; with a mute switch (you picked this, 2026-10-12).",
-          "status": "todo",
+          "status": "done",
           "size": "M",
           "owner": "Claude"
         },
         {
           "title": "Town speech bubbles",
           "detail": "Towns say what they lack or dream of (\"We don't have any Potato!\", \"We dream of Fish\"), a few seconds at a time (you picked this, 2026-10-12).",
-          "status": "todo",
+          "status": "done",
           "size": "S",
           "owner": "Claude"
         },

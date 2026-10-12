@@ -16,6 +16,7 @@ namespace TradeWinds.Game
         GameController _game;
         VisualElement _root;
         Label _treasury, _tariff, _towns, _research, _clock, _hint, _toast;
+        Button _sound;
         VisualElement _missionCard, _logCard, _rightDock, _barTabs, _barItems, _confirm, _start, _victory;
         readonly Dictionary<int, Button> _speedButtons = new Dictionary<int, Button>();
         TownPanel _townPanel;
@@ -152,6 +153,9 @@ namespace TradeWinds.Game
                 _speedButtons[s] = b;
                 speeds.Add(b);
             }
+            _sound = Ui.Button("Sound on", () => _game.Sfx?.ToggleMute());
+            _sound.style.marginLeft = 8;
+            speeds.Add(_sound);
             var menu = Ui.Button("Menu", () => _game.OpenMenu());
             menu.style.marginLeft = 8;
             speeds.Add(menu);
@@ -293,7 +297,7 @@ namespace TradeWinds.Game
             card.Add(buttons);
             card.Add(Ui.Spacer(10));
             card.Add(Ui.Text("Controls: left-click build/select · right-drag or WASD pan · wheel zoom · Space pause · 1/2/4 speed · " +
-                             "R research · K Castle · Shift keeps a building tool · Esc cancel. The realm saves automatically.", 12, false, Palette.Muted));
+                             "R research · K Castle · M mute · Shift keeps a building tool · Esc cancel. The realm saves automatically.", 12, false, Palette.Muted));
             _start.Add(card);
             _root.Add(_start);
             RefreshStart();
@@ -445,6 +449,7 @@ namespace TradeWinds.Game
                 if (child is Button b && b.userData is ToolTag t && t.Enabled)
                     Ui.Highlight(b, _game.Tool == t.Tool && _game.ToolBuilding == t.Def);
             foreach (var kv in _speedButtons) Ui.Highlight(kv.Value, _game.Speed == kv.Key);
+            if (_game.Sfx != null) _sound.text = _game.Sfx.Muted ? "Sound off (M)" : "Sound on (M)";
 
             if (w.ResearchDone.Count != _lastResearchCount)
             {

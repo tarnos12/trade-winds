@@ -141,3 +141,4 @@ Rules for every agent:
   decision, balance answers (GDD §16 Q3–Q4), play-testing by a stranger.
 - **2026-10-12** — Owner Hub added (pattern: tools/hub). Unity MCP verified connected. Open owner questions live in the Hub.
 - **2026-10-12** — Hub moved to the hub-kit conventions: plan/questions in `docs/design/`, kit plan schema (goal/exit), `tools/plan/` build-plan (PLAN.md + PDF) and set-task; Plan/Questions tabs behave like the kit.
+- **2026-10-12** — Owner answers recorded (docs/design/owner-picks-2026-10-12.json): Tariff fixed at 30% (slider + Tariff Office removed), run length kept (~4 h), title final. Juice (coin bursts, +Tariff popups, chimney smoke, build bursts), procedural sound + ambient bed (M / Sound button mutes) and Town speech bubbles added in `Assets/TradeWinds/Game/Feedback/`. Open: rich Towns vs Take (asked again), Tariff research bonuses.

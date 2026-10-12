@@ -59,6 +59,18 @@ namespace TradeWinds.Game
         const float SecondsPerTick = 0.5f;
         const int MaxCatchUpTicks = 16;
 
+        /// <summary>Sound (also drives the ambient bed); added at start-up.</summary>
+        public Sfx Sfx { get; private set; }
+
+        void Awake()
+        {
+            // Feedback layers (GDD §12): juice, sound and Town speech bubbles. Display only; they read the World.
+            var juice = gameObject.AddComponent<Juice>();
+            Sfx = gameObject.AddComponent<Sfx>();
+            gameObject.AddComponent<Feedback>().Init(this, juice, Sfx);
+            gameObject.AddComponent<Chatter>().Init(this);
+        }
+
         public static string SavePath => Path.Combine(Application.persistentDataPath, "trade-winds-save.json");
         public static bool HasSave => File.Exists(SavePath);
 
@@ -270,6 +282,7 @@ namespace TradeWinds.Game
             if (kb.digit4Key.wasPressedThisFrame) SetSpeed(4);
             if (kb.rKey.wasPressedThisFrame) Hud?.ToggleResearch();
             if (kb.kKey.wasPressedThisFrame) SelectCastle();
+            if (kb.mKey.wasPressedThisFrame) Sfx?.ToggleMute();
             if (kb.escapeKey.wasPressedThisFrame)
             {
                 if (Hud != null && Hud.CloseTopmost()) return;
