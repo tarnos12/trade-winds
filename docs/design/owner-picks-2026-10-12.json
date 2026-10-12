@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-12",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim).",
+  "raw": "Answers\nrich_exporters: (no pick)  | note: I don't understand\nrun_length: About 4 hours (keep roughly as is)\ntariff_range: No slider: always 30% plus research bonuses  | note: No research for this. It's stable 30%\nextras: Juice: coin bursts on sales, chimney smoke, build-complete bursts; Soft sounds and an ambient bed; Town speech bubbles (\"We don't have any Potato!\")\ntitle: Keep \"Trade Winds\"",
+  "answers": {
+    "rich_exporters": { "pick": null, "note": "I don't understand", "outcome": "Question rewritten in plainer words (rich_towns_take)." },
+    "run_length": { "pick": "4h", "label": "About 4 hours (keep roughly as is)", "outcome": "Pacing kept as is." },
+    "tariff_range": { "pick": "fixed", "label": "No slider: always 30% plus research bonuses", "note": "No research for this. It's stable 30%", "outcome": "Tariff slider and the Tariff Office research removed. The pick mentions research bonuses but the note says no research: follow-up question tariff_bonuses asks whether Tax Ledgers and Grand Bureaucracy go too." },
+    "extras": { "pick": ["juice", "audio", "chatter"], "labels": ["Juice: coin bursts on sales, chimney smoke, build-complete bursts", "Soft sounds and an ambient bed", "Town speech bubbles (\"We don't have any Potato!\")"], "outcome": "All three become plan tasks." },
+    "title": { "pick": "keep", "label": "Keep \"Trade Winds\"", "outcome": "Title is final." }
+  }
+}

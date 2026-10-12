@@ -1,53 +1,21 @@
 [
   { "g": "Balance" },
   {
-    "id": "rich_exporters",
-    "q": "Late in a run, exporting Towns hold 100,000+ gold. Take moves 1,000 gold to the treasury every 2 minutes per Town, so with 7 Towns it can out-earn the Tariff. How should we fix it?",
-    "ctx": "Halving resident Tax only cut purses to about a third and made Victory 15% slower.",
+    "id": "rich_towns_take",
+    "q": "Towns that sell a lot get very rich: late in a run each holds 100,000+ gold. The Crown's Take button moves 1,000 gold from a Town into your treasury, and you may press it every 2 minutes on every Town. With 7 Towns that is up to 3,500 gold a minute, while the Tariff (meant to be your main income) brings about 1,300 a minute at that point. So pressing Take beats letting Towns trade. Should Take be limited?",
+    "ctx": "Today a Take costs the Town only a short mood dip (−30 happiness for 1 minute). The Tariff is 30% of every trade between Towns.",
     "o": [
-      ["tax_since", "Take is limited to the Tax the Town earned since the last Take", true],
-      ["cooldown", "Keep 1,000 gold, but a 5-minute cooldown"],
-      ["lower_tax", "Lower resident Tax across the board"],
-      ["leave", "Leave it: Take is meant to be strong"]
+      ["tax_since", "Yes: Take can only pull the Tax the Town earned since your last Take", true],
+      ["cooldown", "Yes: keep 1,000 gold, but only once every 5 minutes per Town"],
+      ["leave", "No: leave Take as it is"]
     ]
   },
   {
-    "id": "run_length",
-    "q": "The scripted Kingdom reaches Victory in about 3 h 40 min of game time at 1× speed (7 Towns, played efficiently). How long should a full run take for a normal player?",
+    "id": "tariff_bonuses",
+    "q": "Your note says the Tariff is a stable 30% with no research for it. The slider is gone. Two research nodes still raise the Tariff: Tax Ledgers (+3%) and Grand Bureaucracy (+7%). Remove them too, so the Tariff is always exactly 30%?",
     "o": [
-      ["2h", "About 2 hours"],
-      ["4h", "About 4 hours (keep roughly as is)", true],
-      ["6h", "6 hours or more"]
-    ]
-  },
-  {
-    "id": "tariff_range",
-    "q": "After the Tariff Office research, the player sets the Tariff with a slider. What range?",
-    "o": [
-      ["10_40", "10–40% (web version)", true],
-      ["5_50", "5–50%"],
-      ["fixed", "No slider: always 30% plus research bonuses"]
-    ]
-  },
-  { "g": "Presentation" },
-  {
-    "id": "extras",
-    "q": "Which extras from the web version should come back? Pick any.",
-    "multi": true,
-    "o": [
-      ["juice", "Juice: coin bursts on sales, chimney smoke, build-complete bursts", true],
-      ["audio", "Soft sounds and an ambient bed", true],
-      ["chatter", "Town speech bubbles (\"We don't have any Potato!\")"],
-      ["none", "None for now"]
-    ]
-  },
-  {
-    "id": "title",
-    "q": "\"Trade Winds\" is still a working title. Keep it?",
-    "o": [
-      ["keep", "Keep \"Trade Winds\"", true],
-      ["later", "Decide later"],
-      ["new", "Change it (write the name in the note)"]
+      ["remove", "Yes: remove both; the Tariff is always 30%", true],
+      ["keep", "No: keep the two bonuses (30% to 40%)"]
     ]
   }
 ]

@@ -217,7 +217,7 @@ much is stocked):
 - **Base prices** range from 4 (grain, potato) through 10–28 (processed) to 22–240 (luxury); see
   `old-game-files/src/goods.js` for the full table.
 - **Tariff:** 30% of each trade's customs value (max(price, base) × quantity), **minted into the
-  treasury on top** — the seller keeps the full price. Slider 10–40% once researched.
+  treasury on top** — the seller keeps the full price. **Fixed at 30%, no slider** (owner, 2026-10-12).
 - **Money sources:** Tax (into Towns), Tariff (into the treasury), Mission rewards (into the
   treasury). Treasury starts at **10,000**.
 - **Tariff is the Crown's main income** (decided 2026-10-04). Balance so a trading Kingdom funds its
@@ -248,7 +248,7 @@ much is stocked):
 - One active project + a queue; cancel refunds nothing.
 - Tree in five bands — Peasant, Worker, Burgher, Aristocrat (building **unlocks** and **upgrade
   levels**) and Kingdom (**modifiers**): extractor/processor/all output boosts, Paved Roads, Larger
-  Carts, extra Traders, Castle warehouse size, Tariff +3% / +7% and the Tariff slider, housing +15%,
+  Carts, extra Traders, Castle warehouse size, Tariff +3% / +7% (under review: owner wants a stable 30%), housing +15%,
   +1 Town slot, Town cap +3/+3/+2, extra Scouts, Advanced Provisioner.
 
 **Scouts & provisions** — you start with 1 Scout (up to 3 via research). Send it to a flag; it walks
@@ -299,7 +299,8 @@ there, Victory was the Aristocrats Home alone and Missions were separate.)*
 - **Controls:** drag/WASD pan, wheel zoom to cursor, Space pause, 1/2/4 speed, K Kingdom, M mute,
   Esc cancel; one-shot placement (Shift keeps the tool); road tool click-A-click-B or drag.
 - **Juice & audio:** sale coin bursts and Tariff popups, chimney smoke on working buildings, Trader
-  dust, build-complete bursts; soft procedural sounds and an ambient bed. (Carry-over undecided.)
+  dust, build-complete bursts; soft procedural sounds and an ambient bed; Town speech bubbles. (All
+  three come back: owner, 2026-10-12.)
 - **Victory card:** stats, best time per preset, Keep ruling / New realm.
 - **Saves:** one slot, autosave every 30 s and on key actions; versioned (starts at 1). Map
   regenerated from seed + generator version.
@@ -343,7 +344,7 @@ Content grows **one Population Tier at a time**, each balanced before the next.
   levels, Worker tier. **Exit:** a two-tier Kingdom grows unattended without stalling.
 - **M3 — Progression ✅** (scripted benchmark Kingdom reaches Victory in ~220 game-minutes): research + Research Center, Missions, Burgher and Aristocrat tiers, start
   screen, onboarding. **Exit:** a deterministic run completes the Mission chain (Victory).
-- **M4 — 1.0 🔜:** author art, balance pass, juice/audio decision, polish. **Exit:** a stranger reaches
+- **M4 — 1.0 🔜:** author art, balance pass, juice + sound + speech bubbles, polish. **Exit:** a stranger reaches
   Victory without asking questions.
 
 **Parking lot:** Kingdom festival as the final Mission; bandits + guard posts; harbors / water trade;
@@ -351,11 +352,12 @@ seasons; player contracts between Towns; seed of the day.
 
 ## 16. Open questions
 
-1. **Juice, audio, ambient chatter** — carry over?
-2. **Tariff range** 10–40% (assumed). **Title** "Trade Winds" is a working title.
-3. **Rich exporters vs Take** — limit Take (a share of the purse, a longer cooldown), tax exports, or
-   lower Tax? Halving Tax alone only cut purses ~3× and slowed Victory ~15%.
-4. **Pacing** — the benchmark reaches Victory in ~3.7 game-hours with 7 Towns; what length is right?
+Open owner questions live in the Hub's Questions tab (`docs/design/questions.json`); answers are kept in
+`docs/design/owner-picks-<date>.json`. Open now: rich Towns vs Take; whether the two Tariff research bonuses stay.
+
+Resolved 2026-10-12 (owner-picks-2026-10-12.json): **title "Trade Winds" is final**; a full run should take
+**about 4 hours** (current pace kept); **Tariff is a stable 30% with no slider** (Tariff Office removed);
+**juice, soft sounds + ambient bed, and Town speech bubbles all come back**.
 
 Resolved 2026-10-04: "Burgher" on screen too (not "Citizen"); Missions reward gold; Tariff is the
 main income; Porters are real logistics.

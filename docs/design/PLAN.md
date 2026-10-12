@@ -1,15 +1,19 @@
 # Trade Winds: plan
 
-Updated 2026-10-12 12:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
+Updated 2026-10-12 09:42. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**14 of 23 tasks done**, 0 in progress, 0 to do, 6 blocked, 3 waiting.
+**17 of 27 tasks done**, 1 in progress, 2 to do, 4 blocked, 3 waiting.
+
+## Being worked on now
+
+- **M4** Juice: coin bursts, chimney smoke, build bursts: Claude: coin bursts, chimney smoke and build bursts
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 1 / 10 |
+| M4 | 1.0 |  | Blocked | 4 / 14 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -65,10 +69,14 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 |---|---|---|---|
 | Done | Owner Hub | One page for game data, charts, the plan and every open question, rebuilt from the project files. | Claude |
 | Blocked | Final art | Replace the code-drawn placeholder hexes, tokens and icons with real art. | Mariusz |
-| Blocked | Fix rich exporting Towns | Late in the game exporting Towns hold 100k+ gold, so Take out-earns the Tariff. Pick a fix in Questions. | Claude |
-| Blocked | Set the length of a full run | Tune costs and rates so a run to Victory lasts as long as you want. | Claude |
-| Blocked | Tariff slider range | Set how far the player can move the Tariff once the Tariff Office is researched. | Claude |
-| Blocked | Juice, sound and chatter | Coin bursts, chimney smoke, soft sounds and Town speech bubbles from the web version, if you want them back. | Claude |
+| Blocked | Fix rich exporting Towns | Late in a run rich Towns let the Crown's Take out-earn the Tariff. The question was unclear, so it is asked again in plainer words. | Claude |
+| Done | Set the length of a full run | You chose about 4 hours, so the current pace stays: an efficient player wins in about 3 h 40 min. | Claude |
+| Done | Tariff fixed at 30%, no slider | You chose a stable 30% Tariff: the Tariff Office research and the slider are removed from the game. | Claude |
+| Blocked | Tariff research bonuses | Decide whether Tax Ledgers (+3%) and Grand Bureaucracy (+7%) stay, given the stable 30% Tariff. | Claude |
+| In progress | Juice: coin bursts, chimney smoke, build bursts **(NOW)** | A coin burst and a small +Tariff number when Towns trade, smoke from working chimneys, and a burst when a building or upgrade finishes (you picked this, 2026-10-12). | Claude |
+| To do | Soft sounds and an ambient bed | Gentle sounds for placing, trading, finishing buildings and Missions, plus a quiet wind-and-drone background; with a mute switch (you picked this, 2026-10-12). | Claude |
+| To do | Town speech bubbles | Towns say what they lack or dream of ("We don't have any Potato!", "We dream of Fish"), a few seconds at a time (you picked this, 2026-10-12). | Claude |
+| Done | Title stays "Trade Winds" | You confirmed the title. | Mariusz |
 | Waiting | Trader back-haul and sales pressure | Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version. | Claude |
 | Waiting | Content editable in the Inspector | Move Goods, buildings, research and Missions from code into assets you can edit in Unity. | Claude |
 | Blocked | Play-test with a real mouse | Play a full session in Unity and report anything confusing or broken; all checks so far were scripted. | Mariusz |

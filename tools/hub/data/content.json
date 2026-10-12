@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-12 10:44",
+  "generated": "2026-10-12 11:42",
   "goods": [
     {
       "id": "potato",
@@ -2756,28 +2756,6 @@
       "unlocks": []
     },
     {
-      "id": "k_tariff_office",
-      "name": "Tariff Office",
-      "band": "Kingdom",
-      "requires": [
-        "k_tax"
-      ],
-      "materials": [
-        {
-          "good": "clothes",
-          "amount": 15
-        },
-        {
-          "good": "planks",
-          "amount": 20
-        }
-      ],
-      "modifier": "TariffSlider",
-      "value": 1,
-      "description": "Set the Tariff between 10% and 40%.",
-      "unlocks": []
-    },
-    {
       "id": "k_charters",
       "name": "Town Charters",
       "band": "Kingdom",
@@ -2870,7 +2848,7 @@
       "name": "Grand Bureaucracy",
       "band": "Kingdom",
       "requires": [
-        "k_tariff_office"
+        "k_tax"
       ],
       "materials": [
         {

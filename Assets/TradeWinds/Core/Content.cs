@@ -131,7 +131,6 @@ namespace TradeWinds.Core
         TraderCapacity,
         ExtraTraders,
         TariffBonus,
-        TariffSlider,
         TownSlots,
         TownCap,
         HousingBonus,

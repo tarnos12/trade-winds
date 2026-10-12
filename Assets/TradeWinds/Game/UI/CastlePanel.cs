@@ -27,13 +27,6 @@ namespace TradeWinds.Game
 
             Root.Add(Ui.Row(Ui.Heading("The Castle"), Ui.Button("X", game.ClearSelection)));
             Root.Add(Ui.Text($"Treasury {w.Treasury:N0}   ·   Tariff {w.EffectiveTariff * 100:0}% of every trade between Towns", 13));
-            if (w.HasModifier(Modifier.TariffSlider))
-            {
-                Root.Add(Ui.Row(
-                    Ui.Text($"Set Tariff {w.TariffSetting * 100:0}%", 13),
-                    Ui.Button("-5%", () => { w.SetTariff(w.TariffSetting - 0.05); _hud.MarkDirty(); }),
-                    Ui.Button("+5%", () => { w.SetTariff(w.TariffSetting + 0.05); _hud.MarkDirty(); })));
-            }
 
             // Research Center
             Root.Add(Ui.Spacer());

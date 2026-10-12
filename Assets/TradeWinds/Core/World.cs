@@ -32,8 +32,6 @@ namespace TradeWinds.Core
         public double Treasury;
         public double LifetimeTariff;
         public double MissionGoldEarned;
-        /// <summary>Player-set Tariff (the slider, once researched); research bonuses add on top.</summary>
-        public double TariffSetting;
         public readonly List<Town> Towns = new List<Town>();
         public readonly HashSet<Hex> Roads = new HashSet<Hex>();
         public int RoadVersion;
@@ -70,7 +68,6 @@ namespace TradeWinds.Core
             Rng = new Rng(seed);
             Pathing = new Pathing(this);
             Treasury = content.Balance.StartTreasury;
-            TariffSetting = content.Balance.TariffRate;
             Stats.GoodsTraded = new double[content.GoodCount];
             ResearchConsumed = new double[content.GoodCount];
             if (castle.HasValue) CreateCastle(castle.Value);
@@ -206,14 +203,8 @@ namespace TradeWinds.Core
         public bool HasModifier(Modifier m) => ModifierSum(m) > 0;
 
         public double EffectiveTariff =>
-            Math.Max(B.TariffMin, Math.Min(B.TariffMax, TariffSetting + ModifierSum(Modifier.TariffBonus)));
+            Math.Max(B.TariffMin, Math.Min(B.TariffMax, B.TariffRate + ModifierSum(Modifier.TariffBonus)));
 
-        public CommandResult SetTariff(double rate)
-        {
-            if (!HasModifier(Modifier.TariffSlider)) return CommandResult.Fail("Research the Tariff Office first.");
-            TariffSetting = Math.Max(B.TariffMin, Math.Min(B.TariffMax, rate));
-            return CommandResult.Success;
-        }
 
         public int TownCap => B.TownCap + (int)Math.Round(ModifierSum(Modifier.TownCap));
 

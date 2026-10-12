@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 12:00",
+  "updated": "2026-10-12 09:42",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -23,9 +23,27 @@
       "goal": "Prove the heart of the game: Towns that grow when their needs are met and trade with each other on their own, with the Crown earning a Tariff on every trade.",
       "exit": "A potato Town and a timber Town trade Potato and Wood unattended, fill their houses and pay the Crown Tariff; a road between them speeds trade; checked by a test.",
       "tasks": [
-        { "title": "Simulation core with tests", "detail": "The economy runs on its own, outside Unity, so it can be tested and sped up: Towns, Peasants, Porters, prices, Traders and the Tariff.", "status": "done", "size": "L", "owner": "Claude" },
-        { "title": "Hex board on screen", "detail": "A seeded hex map you can pan and zoom, with Towns, buildings, Traders and Porters drawn on it.", "status": "done", "size": "M", "owner": "Claude" },
-        { "title": "Two Towns trade on their own", "detail": "A potato Town and a timber Town fill their houses by trading, and the Crown earns Tariff. Checked by a test.", "status": "done", "size": "S", "owner": "Claude" }
+        {
+          "title": "Simulation core with tests",
+          "detail": "The economy runs on its own, outside Unity, so it can be tested and sped up: Towns, Peasants, Porters, prices, Traders and the Tariff.",
+          "status": "done",
+          "size": "L",
+          "owner": "Claude"
+        },
+        {
+          "title": "Hex board on screen",
+          "detail": "A seeded hex map you can pan and zoom, with Towns, buildings, Traders and Porters drawn on it.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Two Towns trade on their own",
+          "detail": "A potato Town and a timber Town fill their houses by trading, and the Crown earns Tariff. Checked by a test.",
+          "status": "done",
+          "size": "S",
+          "owner": "Claude"
+        }
       ]
     },
     {
@@ -35,11 +53,41 @@
       "goal": "Give the economy a home and a horizon: the Castle with its own market, unexplored land to discover, Towns that level up, and a second class of residents.",
       "exit": "A two-tier Kingdom grows unattended without stalling, and a saved realm continues exactly where it was.",
       "tasks": [
-        { "title": "Castle and royal market", "detail": "The Castle holds the treasury and its own Stock; the King can buy and sell Goods, and royal Traders fetch research materials.", "status": "done", "size": "M", "owner": "Claude" },
-        { "title": "Fog of war and Scouts", "detail": "Only the land around the Castle is known at the start; Scouts reveal more and spend provisions from the Provisioner.", "status": "done", "size": "M", "owner": "Claude" },
-        { "title": "Save and load", "detail": "The realm saves every 30 seconds and when the game closes; Continue on the start screen picks it up exactly where it was.", "status": "done", "size": "S", "owner": "Claude" },
-        { "title": "Town levels, Give and Take, upgrades", "detail": "Towns level up for more slots and Traders; the Crown can move gold in or out; buildings upgrade after research.", "status": "done", "size": "M", "owner": "Claude" },
-        { "title": "Worker tier", "detail": "Cottages, Workers and their chains (fish, coal, clothes, bread, mead).", "status": "done", "size": "M", "owner": "Claude" }
+        {
+          "title": "Castle and royal market",
+          "detail": "The Castle holds the treasury and its own Stock; the King can buy and sell Goods, and royal Traders fetch research materials.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Fog of war and Scouts",
+          "detail": "Only the land around the Castle is known at the start; Scouts reveal more and spend provisions from the Provisioner.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Save and load",
+          "detail": "The realm saves every 30 seconds and when the game closes; Continue on the start screen picks it up exactly where it was.",
+          "status": "done",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Town levels, Give and Take, upgrades",
+          "detail": "Towns level up for more slots and Traders; the Crown can move gold in or out; buildings upgrade after research.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Worker tier",
+          "detail": "Cottages, Workers and their chains (fish, coal, clothes, bread, mead).",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        }
       ]
     },
     {
@@ -49,11 +97,41 @@
       "goal": "Turn the sandbox into a game with a goal: research that opens new chains, the Burgher and Aristocrat classes, and a chain of Missions that teaches the game and ends in Victory.",
       "exit": "A run from the start screen completes every Mission (Victory), shown by a scripted run that wins in about 220 game-minutes.",
       "tasks": [
-        { "title": "Research and Research Center", "detail": "51 research nodes in five bands, paid in Goods from the Castle Stock at the Research Center's speed.", "status": "done", "size": "L", "owner": "Claude" },
-        { "title": "Mission chain and Victory", "detail": "Nine Missions that teach the game and pay gold; finishing the last one (Aristocrats at 100% happiness) wins.", "status": "done", "size": "M", "owner": "Claude" },
-        { "title": "Burgher and Aristocrat tiers", "detail": "Manors, Aristocrats Homes and the luxury chains they need.", "status": "done", "size": "L", "owner": "Claude" },
-        { "title": "Start screen, panels, research tree", "detail": "Seed and map size, Town and Castle panels, the research tree, Event Log and victory card.", "status": "done", "size": "L", "owner": "Claude" },
-        { "title": "Scripted Kingdom reaches Victory", "detail": "A scripted player wins in about 220 game-minutes; the same run powers the balance tool in the editor.", "status": "done", "size": "M", "owner": "Claude" }
+        {
+          "title": "Research and Research Center",
+          "detail": "51 research nodes in five bands, paid in Goods from the Castle Stock at the Research Center's speed.",
+          "status": "done",
+          "size": "L",
+          "owner": "Claude"
+        },
+        {
+          "title": "Mission chain and Victory",
+          "detail": "Nine Missions that teach the game and pay gold; finishing the last one (Aristocrats at 100% happiness) wins.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Burgher and Aristocrat tiers",
+          "detail": "Manors, Aristocrats Homes and the luxury chains they need.",
+          "status": "done",
+          "size": "L",
+          "owner": "Claude"
+        },
+        {
+          "title": "Start screen, panels, research tree",
+          "detail": "Seed and map size, Town and Castle panels, the research tree, Event Log and victory card.",
+          "status": "done",
+          "size": "L",
+          "owner": "Claude"
+        },
+        {
+          "title": "Scripted Kingdom reaches Victory",
+          "detail": "A scripted player wins in about 220 game-minutes; the same run powers the balance tool in the editor.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        }
       ]
     },
     {
@@ -63,16 +141,112 @@
       "goal": "Make it a finished game: real art, the balance answers you choose, the extras you want back, and a play-test by someone who has never seen it.",
       "exit": "Feature-complete and balanced with no known blocking issues, and a stranger reaches Victory without asking questions.",
       "tasks": [
-        { "title": "Owner Hub", "detail": "One page for game data, charts, the plan and every open question, rebuilt from the project files.", "status": "done", "size": "S", "owner": "Claude" },
-        { "title": "Final art", "detail": "Replace the code-drawn placeholder hexes, tokens and icons with real art.", "status": "blocked", "size": "L", "owner": "Mariusz", "blockedBy": "Waiting for art from Mariusz" },
-        { "title": "Fix rich exporting Towns", "detail": "Late in the game exporting Towns hold 100k+ gold, so Take out-earns the Tariff. Pick a fix in Questions.", "status": "blocked", "size": "S", "owner": "Claude", "blockedBy": "Your answer: rich_exporters" },
-        { "title": "Set the length of a full run", "detail": "Tune costs and rates so a run to Victory lasts as long as you want.", "status": "blocked", "size": "M", "owner": "Claude", "blockedBy": "Your answer: run_length" },
-        { "title": "Tariff slider range", "detail": "Set how far the player can move the Tariff once the Tariff Office is researched.", "status": "blocked", "size": "S", "owner": "Claude", "blockedBy": "Your answer: tariff_range" },
-        { "title": "Juice, sound and chatter", "detail": "Coin bursts, chimney smoke, soft sounds and Town speech bubbles from the web version, if you want them back.", "status": "blocked", "size": "M", "owner": "Claude", "blockedBy": "Your answer: extras" },
-        { "title": "Trader back-haul and sales pressure", "detail": "Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version.", "status": "waiting", "size": "M", "owner": "Claude", "blockedBy": "After the balance answers, so tuning happens once" },
-        { "title": "Content editable in the Inspector", "detail": "Move Goods, buildings, research and Missions from code into assets you can edit in Unity.", "status": "waiting", "size": "M", "owner": "Claude", "blockedBy": "When you want to edit content yourself" },
-        { "title": "Play-test with a real mouse", "detail": "Play a full session in Unity and report anything confusing or broken; all checks so far were scripted.", "status": "blocked", "size": "S", "owner": "Mariusz", "blockedBy": "Needs a play session from Mariusz" },
-        { "title": "Stranger reaches Victory without help", "detail": "The 1.0 exit test: someone new plays from the start screen to Victory without asking questions.", "status": "waiting", "size": "M", "owner": "Mariusz", "blockedBy": "After art, balance and your own play-test" }
+        {
+          "title": "Owner Hub",
+          "detail": "One page for game data, charts, the plan and every open question, rebuilt from the project files.",
+          "status": "done",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Final art",
+          "detail": "Replace the code-drawn placeholder hexes, tokens and icons with real art.",
+          "status": "blocked",
+          "size": "L",
+          "owner": "Mariusz",
+          "blockedBy": "Waiting for art from Mariusz"
+        },
+        {
+          "title": "Fix rich exporting Towns",
+          "detail": "Late in a run rich Towns let the Crown's Take out-earn the Tariff. The question was unclear, so it is asked again in plainer words.",
+          "status": "blocked",
+          "size": "S",
+          "owner": "Claude",
+          "blockedBy": "Your answer: rich_towns_take (asked again, 2026-10-12)"
+        },
+        {
+          "title": "Set the length of a full run",
+          "detail": "You chose about 4 hours, so the current pace stays: an efficient player wins in about 3 h 40 min.",
+          "status": "done",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Tariff fixed at 30%, no slider",
+          "detail": "You chose a stable 30% Tariff: the Tariff Office research and the slider are removed from the game.",
+          "status": "done",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Tariff research bonuses",
+          "detail": "Decide whether Tax Ledgers (+3%) and Grand Bureaucracy (+7%) stay, given the stable 30% Tariff.",
+          "status": "blocked",
+          "size": "S",
+          "owner": "Claude",
+          "blockedBy": "Your answer: tariff_bonuses"
+        },
+        {
+          "title": "Juice: coin bursts, chimney smoke, build bursts",
+          "detail": "A coin burst and a small +Tariff number when Towns trade, smoke from working chimneys, and a burst when a building or upgrade finishes (you picked this, 2026-10-12).",
+          "status": "in-progress",
+          "size": "M",
+          "owner": "Claude",
+          "now": "Claude: coin bursts, chimney smoke and build bursts"
+        },
+        {
+          "title": "Soft sounds and an ambient bed",
+          "detail": "Gentle sounds for placing, trading, finishing buildings and Missions, plus a quiet wind-and-drone background; with a mute switch (you picked this, 2026-10-12).",
+          "status": "todo",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Town speech bubbles",
+          "detail": "Towns say what they lack or dream of (\"We don't have any Potato!\", \"We dream of Fish\"), a few seconds at a time (you picked this, 2026-10-12).",
+          "status": "todo",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Title stays \"Trade Winds\"",
+          "detail": "You confirmed the title.",
+          "status": "done",
+          "size": "S",
+          "owner": "Mariusz"
+        },
+        {
+          "title": "Trader back-haul and sales pressure",
+          "detail": "Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version.",
+          "status": "waiting",
+          "size": "M",
+          "owner": "Claude",
+          "blockedBy": "After the balance answers, so tuning happens once"
+        },
+        {
+          "title": "Content editable in the Inspector",
+          "detail": "Move Goods, buildings, research and Missions from code into assets you can edit in Unity.",
+          "status": "waiting",
+          "size": "M",
+          "owner": "Claude",
+          "blockedBy": "When you want to edit content yourself"
+        },
+        {
+          "title": "Play-test with a real mouse",
+          "detail": "Play a full session in Unity and report anything confusing or broken; all checks so far were scripted.",
+          "status": "blocked",
+          "size": "S",
+          "owner": "Mariusz",
+          "blockedBy": "Needs a play session from Mariusz"
+        },
+        {
+          "title": "Stranger reaches Victory without help",
+          "detail": "The 1.0 exit test: someone new plays from the start screen to Victory without asking questions.",
+          "status": "waiting",
+          "size": "M",
+          "owner": "Mariusz",
+          "blockedBy": "After art, balance and your own play-test"
+        }
       ]
     }
   ]

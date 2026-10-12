@@ -73,7 +73,7 @@ namespace TradeWinds.Core
         public int[] terrain;
         public long tick;
         public long rngState;
-        public double treasury, lifetimeTariff, missionGoldEarned, tariffSetting;
+        public double treasury, lifetimeTariff, missionGoldEarned;
         public List<HexDto> roads = new List<HexDto>();
         public bool hasCastle;
         public CastleDto castle;
@@ -119,7 +119,6 @@ namespace TradeWinds.Core
                 treasury = w.Treasury,
                 lifetimeTariff = w.LifetimeTariff,
                 missionGoldEarned = w.MissionGoldEarned,
-                tariffSetting = w.TariffSetting,
                 hasCastle = w.Castle != null,
                 revealed = w.RevealedMask != null ? (bool[])w.RevealedMask.Clone() : null,
                 activeResearch = w.ActiveResearch,
@@ -238,7 +237,6 @@ namespace TradeWinds.Core
             w.Treasury = d.treasury;
             w.LifetimeTariff = d.lifetimeTariff;
             w.MissionGoldEarned = d.missionGoldEarned;
-            w.TariffSetting = d.tariffSetting;
             foreach (var r in d.roads) w.Roads.Add(H(r));
             w.RoadVersion++;
             if (d.revealed != null && d.revealed.Length == board.Count) w.RestoreFog((bool[])d.revealed.Clone());
