@@ -90,20 +90,24 @@ PRs and merges them itself after tests pass.
 
 ## Owner Hub (one page for data, plan and questions)
 
-**Hub:** https://claude.ai/artifact/3oxpq2bAAyppQz5AbYMEvs (pinned; always republish to this same URL).
-Tabs: Data (Buildings, Goods, Research, Missions), Charts, Plan, Questions. Generated, never hand-edited:
+**Hub:** https://claude.ai/artifact/3oxpq2bAAyppQz5AbYMEvs (pinned; always republish to this same URL). Pattern and
+reference: `docs/HUB_PATTERN.md` (from the hub kit). Tabs: Data (Buildings, Goods, Research, Missions), Charts, Plan,
+Questions. Generated, never hand-edited:
 
 - Content: `dotnet run --project tools/ContentExport` → `tools/hub/data/content.json` (rerun when GameContent changes).
-- Plan: `tools/hub/plan.json`; change status with `node tools/hub/set-task.cjs "<title regex>" <status> ["now"|"reason"]`.
-- Questions: `tools/hub/questions.json` (+ `tools/hub/question-images/`).
-- Build: `node tools/hub/build-hub.cjs` → `tools/hub/out/index.html` (syntax-checked) and `docs/PLAN.md`; then publish that file to the Hub URL.
+- Plan: `docs/design/plan.json` (milestones with goal/exit/status; tasks done | in-progress | todo | blocked | waiting).
+  Change a task: `node tools/plan/set-task.cjs "<title regex>" <status|-> ["now text" | "reason" | --not-now]`.
+  `node tools/plan/build-plan.cjs` writes `docs/design/PLAN.md` and a printable page + PDF in `tools/plan/out/`.
+- Questions: `docs/design/questions.json` (+ `docs/design/question-images/`); answers → `docs/design/owner-picks-<date>.json`.
+- Build: `node tools/hub/build-hub.cjs` (runs build-plan, checks plan/questions, syntax-checks the page) →
+  `tools/hub/out/index.html`; then publish that file to the Hub URL.
 
 Rules for every agent:
 - Every owner request becomes a plan task at once; every running agent has its own `in-progress` task with a `now` line;
   `blocked`/`waiting` tasks always say why. Write tasks for a designer, not a programmer.
 - Owner decisions go **only** in the Questions tab (recommended options are marked "my pick", never pre-selected).
-- When answers arrive: save them verbatim to `tools/hub/owner-picks-<date>.json`, remove the answered questions, turn
-  answers into tasks, rebuild and republish. Ambiguous answer → ask a follow-up question in the tab, don't guess.
+- When answers arrive: save them verbatim to `docs/design/owner-picks-<date>.json`, remove the answered questions,
+  turn answers into tasks, rebuild and republish. Ambiguous answer → ask a follow-up question in the tab, don't guess.
   Owner picks are commitments: read the picks files before planning; never drop a pick silently.
 - Rebuild + republish after any data, plan or question change, and **end every message to the owner with the Hub link**.
 
@@ -136,3 +140,4 @@ Rules for every agent:
   (GDD §8). 38 Edit Mode tests green in Unity and headless. **Next (M4):** author art, audio/juice
   decision, balance answers (GDD §16 Q3–Q4), play-testing by a stranger.
 - **2026-10-12** — Owner Hub added (pattern: tools/hub). Unity MCP verified connected. Open owner questions live in the Hub.
+- **2026-10-12** — Hub moved to the hub-kit conventions: plan/questions in `docs/design/`, kit plan schema (goal/exit), `tools/plan/` build-plan (PLAN.md + PDF) and set-task; Plan/Questions tabs behave like the kit.

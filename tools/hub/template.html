@@ -90,26 +90,57 @@ details.tbl summary { cursor: pointer; font-size: .82rem; color: var(--muted); }
 details.tbl table { margin-top: 6px; }
 #tip { position: fixed; pointer-events: none; z-index: 20; background: var(--fg); color: var(--bg); padding: 5px 9px; border-radius: 6px; font-size: .8rem; max-width: 260px; }
 
-.nowbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 18px; display: grid; gap: 6px; }
-.milestone { margin-bottom: 22px; }
-.mhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
-.progress { flex: 1 1 160px; max-width: 260px; height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; align-self: center; }
-.progress i { display: block; height: 100%; background: var(--good); border-radius: 4px; }
-.tasks { display: grid; gap: 8px; }
-.task { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
-.task .t { font-weight: 600; }
-.task .d { grid-column: 2; font-size: .88rem; }
-.task .m { grid-column: 2; font-size: .8rem; color: var(--muted); }
-.pill { font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; border: 1px solid currentColor; white-space: nowrap; align-self: start; }
-.pill.done { color: var(--good); }
-.pill.in-progress { color: var(--info); }
-.pill.blocked { color: var(--bad); }
-.pill.waiting { color: var(--warn); }
-.why { color: var(--fg); }
-.why::before { content: "Why: "; color: var(--muted); }
+.nowbox { background: var(--surface); border: 1px solid var(--warn); border-radius: var(--r); padding: 12px 16px; margin-bottom: 14px; display: grid; gap: 6px; }
+.nowbox ul { margin: 0; padding-left: 18px; }
+.planhead { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-bottom: 12px; }
+.ov { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 14px; display: grid; gap: 10px; }
+.ovhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.ovbig { font-family: var(--font-display); font-size: 2rem; font-weight: 700; line-height: 1; }
+.ovt td { padding: 6px 8px; }
+.ovt a { color: var(--fg); font-weight: 700; }
+.ovt tr { cursor: default; }
+.prog { display: inline-block; width: 110px; height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.prog i { display: block; height: 100%; background: var(--good); border-radius: 4px; }
+.ovbar { width: min(320px, 100%); }
+.pfilters { display: grid; gap: 8px; margin-bottom: 12px; }
+.pfilters .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pfilters .lbl { width: 58px; }
+.pnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pnav a { text-decoration: none; color: var(--fg); font-weight: 700; font-size: .85rem; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.pnav a.pn-done { color: var(--good); }
+.pnav a.pn-in-progress { border-color: var(--info); }
+.pnav a.pn-blocked { border-color: var(--bad); }
+details.ms { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; scroll-margin-top: 110px; }
+details.ms > summary { cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; list-style: none; }
+details.ms > summary::-webkit-details-marker { display: none; }
+details.ms > summary::before { content: "\25B8"; color: var(--muted); }
+details.ms[open] > summary::before { content: "\25BE"; }
+.ms-id { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+.ms-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; }
+.ms-count { margin-left: auto; color: var(--muted); font-size: .82rem; font-family: var(--font-mono); }
+.ms-body { padding: 0 14px 12px; display: grid; gap: 6px; }
+.ms-body p { margin: 0; max-width: 80ch; }
+.ms-body .exit { color: var(--muted); }
+.ms-body .exit b { color: var(--fg); }
+table.tasks td { padding: 8px 6px; }
+table.tasks td.s { width: 96px; }
+table.tasks td.o { width: 100px; color: var(--muted); font-size: .82rem; }
+table.tasks td.t b { display: block; }
+table.tasks td.t small { display: block; color: var(--muted); font-size: .84rem; }
+table.tasks td.t small.why { color: var(--bad); font-weight: 600; }
+table.tasks tr { cursor: default; }
+table.tasks tbody tr:hover { background: none; }
+.nowtag { font-size: .66rem; font-weight: 700; letter-spacing: .06em; color: var(--surface); background: var(--bad); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: middle; }
+.st { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .03em; border-radius: 999px; padding: 1px 9px; border: 1px solid currentColor; white-space: nowrap; }
+.st-done { color: var(--good); }
+.st-in-progress { color: var(--info); }
+.st-todo { color: var(--muted); }
+.st-blocked { color: var(--bad); }
+.st-waiting { color: var(--warn); border-style: dashed; }
 
 .qgroup { margin: 22px 0 10px; }
 .q { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 12px; display: grid; gap: 10px; }
+.q.done { border-color: var(--good); }
 .q .qid { font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
 .q p { margin: 0; max-width: 72ch; }
 .opts { display: grid; gap: 6px; }
@@ -121,7 +152,9 @@ details.tbl table { margin-top: 6px; }
 .imgs a { display: grid; gap: 4px; max-width: 220px; font-size: .8rem; color: var(--muted); text-decoration: none; }
 .imgs img { border-radius: 6px; border: 1px solid var(--line); }
 .q textarea { width: 100%; min-height: 2.4em; resize: vertical; }
-.copybar { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); border-top: 1px solid var(--line); padding: 10px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.copybar { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); border-top: 1px solid var(--line); padding: 10px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; }
+.copybar .num { margin-right: auto; }
+#qOutbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; margin-bottom: 12px; display: grid; gap: 6px; }
 .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: var(--r); padding: 8px 16px; font-weight: 600; cursor: pointer; }
 .btn.ghost { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
 #copied { width: 100%; min-height: 6em; font-family: var(--font-mono); font-size: .82rem; }
@@ -166,15 +199,27 @@ details.tbl table { margin-top: 6px; }
     <div class="charts" id="chartgrid"></div>
   </section>
 
-  <section id="plan" role="tabpanel" aria-labelledby="tab-plan" hidden></section>
+  <section id="plan" role="tabpanel" aria-labelledby="tab-plan" hidden>
+    <div class="planhead"><h2 id="planTitle"></h2><span class="muted" id="planStamp"></span></div>
+    <div class="nowbox" id="planNow"></div>
+    <div class="ov" id="planOverview"></div>
+    <div class="pfilters">
+      <div class="row"><span class="label lbl">Status</span><span class="row" id="planStatus"></span></div>
+      <div class="row"><span class="label lbl">Owner</span><span class="row" id="planOwner"></span></div>
+      <div class="row"><button class="chip" id="planOpen" type="button">Open all</button><button class="chip" id="planClose" type="button">Close all</button><button class="chip" id="planClear" type="button">Clear filters</button><span class="muted num" id="planCount"></span></div>
+    </div>
+    <nav class="pnav" id="planNav" aria-label="Milestones"></nav>
+    <div id="planList"></div>
+  </section>
 
   <section id="questions" role="tabpanel" aria-labelledby="tab-questions" hidden>
+    <div class="planhead"><h2>Open questions</h2><span class="muted" id="qLede">Pick, then press Copy results and paste the text in chat. "my pick" marks what I would choose; nothing is picked for you.</span></div>
     <div id="qlist"></div>
-    <div class="copybar">
-      <button class="btn" id="copy">Copy results</button>
-      <button class="btn ghost" id="clear">Clear my answers</button>
-      <span class="muted" id="copymsg">Pick answers, press Copy results, and paste the text into chat. Answers stay in this browser until then.</span>
-      <textarea id="copied" readonly hidden aria-label="Copied answers"></textarea>
+    <div id="qOutbox" hidden><span class="muted">If Copy did not work here, select this text and copy it:</span><textarea id="copied" readonly aria-label="Your answers as text"></textarea></div>
+    <div class="copybar" id="qBar">
+      <span class="muted num" id="qCount"></span>
+      <button class="btn ghost" id="clear" type="button">Clear</button>
+      <button class="btn" id="copy" type="button">Copy results</button>
     </div>
   </section>
 </main>
@@ -182,8 +227,8 @@ details.tbl table { margin-top: 6px; }
 
 <script>
 const DATA = /*DATA*/null;
-const PLAN = /*PLAN*/null;
-const QUESTIONS = /*QUESTIONS*/[];
+const PLAN = /*PLAN_DATA*/null;
+const QUESTIONS = /*QUESTIONS_DATA*/[];
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -451,85 +496,160 @@ function groupedBars(rows) {
 }
 
 // ---------------------------------------------------------------- plan
+// Plan tab (same behaviour as the hub kit): size-weighted overview, "being worked on now", status/owner filters,
+// collapsible milestones with goal and exit, and a milestone nav. Filters and open milestones stay in this browser.
+const ST_LABEL = { "done": "Done", "in-progress": "In progress", "todo": "To do", "blocked": "Blocked", "waiting": "Waiting" };
+const chipSt = s => `<span class="st st-${esc(s)}">${esc(ST_LABEL[s] || s)}</span>`;
+const prog = pct => `<span class="prog"><i style="width:${pct}%"></i></span>`;
+// A milestone is done when all its tasks are; in progress when an agent works on one now; blocked when everything left is blocked.
+const mstat = m => {
+  const left = m.tasks.filter(t => t.status !== "done");
+  if (!left.length) return "done";
+  if (left.some(t => t.status === "in-progress")) return "in-progress";
+  if (left.every(t => t.status === "blocked")) return "blocked";
+  if (left.every(t => t.status === "blocked" || t.status === "waiting")) return "waiting";
+  return "todo";
+};
+// Completion weighted by task size (S 1, M 3, L 8, XL 20 points; in progress counts half).
+const PTS = { S: 1, M: 3, L: 8, XL: 20 };
+const pts = t => PTS[t.size] || 3;
+const got = t => t.status === "done" ? pts(t) : t.status === "in-progress" ? pts(t) / 2 : 0;
+const pct = ts => { const a = ts.reduce((x, t) => x + pts(t), 0); return a ? Math.round(100 * ts.reduce((x, t) => x + got(t), 0) / a) : 0; };
+const pview = Object.assign({ st: [], own: [], open: null }, store.get("hub.plan", {}));
+if (!Array.isArray(pview.open)) pview.open = PLAN.milestones.filter(m => mstat(m) !== "done").map(m => m.id);
+
 function renderPlan() {
-  const all = PLAN.milestones.flatMap(m => m.tasks.map(t => ({ ...t, m: m.id })));
-  const now = all.filter(t => t.status === "in-progress");
-  const blocked = all.filter(t => t.status === "blocked");
-  let h = `<div class="nowbox"><div class="label">Being worked on now</div>`;
-  h += now.length ? now.map(t => `<div><strong>${esc(t.title)}</strong> <span class="muted">· ${esc(t.now || t.owner)}</span></div>`).join("")
-    : `<div>Nothing is in progress right now. ${blocked.length} task${blocked.length === 1 ? " is" : "s are"} waiting on you: answers in the Questions tab, art, or a play session.</div>`;
-  h += `</div>`;
+  const all = PLAN.milestones.flatMap(m => m.tasks);
+  $("#planTitle").textContent = PLAN.title;
+  $("#planStamp").textContent = "Updated " + PLAN.updated;
+
+  const nowT = PLAN.milestones.flatMap(m => m.tasks.filter(t => t.now).map(t => ({ m, t })));
+  const waitingOnOwner = all.filter(t => t.status === "blocked" && /Mariusz|answer/i.test((t.blockedBy || "") + t.owner)).length;
+  $("#planNow").innerHTML = `<div class="label">Being worked on now</div>` + (nowT.length
+    ? `<ul>${nowT.map(({ m, t }) => `<li><b>${esc(m.id)}</b> ${esc(t.title)} <span class="muted">· ${esc(t.now)}</span></li>`).join("")}</ul>`
+    : `<div>Nothing right now. ${waitingOnOwner} task${waitingOnOwner === 1 ? " waits" : "s wait"} on you: answers in the Questions tab, art, or a play session.</div>`);
+
+  const allPct = pct(all);
+  $("#planOverview").innerHTML = `<div class="ovhead"><h3>Overall</h3><span class="ovbig num">${allPct}%</span><span class="prog ovbar"><i style="width:${allPct}%"></i></span>
+    <span class="muted">${all.filter(t => t.status === "done").length} of ${all.length} tasks done · weighted by size</span></div>
+    <div class="tablebox"><table class="ovt"><tbody>${PLAN.milestones.map(m => `<tr><td><a href="#plan" data-ms="${esc(m.id)}">${esc(m.id)}</a></td><td>${esc(m.name)}</td><td>${chipSt(mstat(m))}</td>
+      <td class="num">${prog(pct(m.tasks))} ${pct(m.tasks)}%</td><td class="n muted">${m.tasks.filter(t => t.status === "done").length}/${m.tasks.length} tasks</td></tr>`).join("")}</tbody></table></div>`;
+
+  const owners = [...new Set(all.map(t => t.owner))];
+  $("#planStatus").innerHTML = Object.keys(ST_LABEL).map(s => `<button class="chip" type="button" data-st="${s}" aria-pressed="${pview.st.includes(s)}">${esc(ST_LABEL[s])} (${all.filter(t => t.status === s).length})</button>`).join("");
+  $("#planOwner").innerHTML = owners.map(o => `<button class="chip" type="button" data-own="${esc(o)}" aria-pressed="${pview.own.includes(o)}" title="${esc((PLAN.owners || {})[o] || "")}">${esc(o)} (${all.filter(t => t.owner === o).length})</button>`).join("");
+  $("#planNav").innerHTML = PLAN.milestones.map(m => `<a href="#plan" class="pn-${mstat(m)}" data-ms="${esc(m.id)}" title="${esc(m.name)}">${esc(m.id)}</a>`).join("");
+
+  const filtering = pview.st.length > 0 || pview.own.length > 0;
+  const keep = t => (!pview.st.length || pview.st.includes(t.status)) && (!pview.own.length || pview.own.includes(t.owner));
+  let shown = 0, h = "";
   for (const m of PLAN.milestones) {
+    const ts = m.tasks.filter(keep);
+    if (filtering && !ts.length) continue;
+    shown += ts.length;
     const done = m.tasks.filter(t => t.status === "done").length;
-    h += `<div class="milestone"><div class="mhead"><h2>${esc(m.id)} · ${esc(m.title)}</h2><span class="muted num">${done}/${m.tasks.length} done</span><div class="progress" aria-hidden="true"><i style="width:${(done / m.tasks.length * 100).toFixed(0)}%"></i></div></div><div class="tasks">`;
-    for (const t of m.tasks) {
-      h += `<div class="task"><span class="pill ${esc(t.status)}">${esc(t.status.replace("-", " "))}</span><span class="t">${esc(t.title)}</span>
-        <span class="d">${esc(t.detail)}</span>
-        ${t.blockedBy ? `<span class="d why">${esc(t.blockedBy)}</span>` : ""}
-        <span class="m">${esc(t.owner)}${t.size ? " · size " + esc(t.size) : ""}${t.now ? " · now: " + esc(t.now) : ""}</span></div>`;
-    }
-    h += `</div></div>`;
+    h += `<details class="ms" id="ms-${esc(m.id)}" data-ms="${esc(m.id)}" ${filtering || pview.open.includes(m.id) ? "open" : ""}>
+      <summary><span class="ms-id">${esc(m.id)}</span><span class="ms-name">${esc(m.name)}</span>${m.gate ? `<span class="st">Gate ${esc(m.gate)}</span>` : ""}${chipSt(mstat(m))}${prog(Math.round(100 * done / m.tasks.length))}<span class="ms-count">${done}/${m.tasks.length} done</span></summary>
+      <div class="ms-body"><p>${esc(m.goal)}</p><p class="exit"><b>Exit:</b> ${esc(m.exit)}</p>
+      <div class="tablebox"><table class="tasks"><tbody>${ts.map(t => `<tr><td class="s">${chipSt(t.status)}</td><td class="t"><b>${esc(t.title)}${t.now ? `<span class="nowtag">NOW</span>` : ""}</b>${t.blockedBy ? `<small class="why">${t.status === "waiting" ? "Waiting" : "Blocked"}: ${esc(t.blockedBy)}</small>` : ""}<small>${esc(t.detail)}</small></td><td class="o">${esc(t.owner)}${t.size ? " · " + esc(t.size) : ""}</td></tr>`).join("")}</tbody></table></div></div></details>`;
   }
-  $("#plan").innerHTML = h;
+  $("#planList").innerHTML = h || `<p class="empty">No task matches these filters.</p>`;
+  $("#planCount").textContent = `${shown} of ${all.length} tasks shown`;
 }
+function openMilestone(id) {
+  if (!pview.open.includes(id)) { pview.open.push(id); store.set("hub.plan", pview); renderPlan(); }
+  document.getElementById("ms-" + id)?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+$("#plan").addEventListener("click", e => {
+  const chip = e.target.closest("[data-st],[data-own]");
+  if (chip) {
+    const [key, v] = chip.dataset.st ? ["st", chip.dataset.st] : ["own", chip.dataset.own];
+    pview[key] = pview[key].includes(v) ? pview[key].filter(x => x !== v) : [...pview[key], v];
+    store.set("hub.plan", pview); renderPlan(); return;
+  }
+  const link = e.target.closest("a[data-ms]");
+  if (link) { e.preventDefault(); openMilestone(link.dataset.ms); }
+});
+$("#plan").addEventListener("toggle", e => {
+  const d = e.target;
+  if (!d.matches?.("details.ms") || pview.st.length || pview.own.length) return;
+  const id = d.dataset.ms;
+  pview.open = d.open ? [...new Set([...pview.open, id])] : pview.open.filter(x => x !== id);
+  store.set("hub.plan", pview);
+}, true);
+$("#planOpen").addEventListener("click", () => { pview.open = PLAN.milestones.map(m => m.id); store.set("hub.plan", pview); renderPlan(); });
+$("#planClose").addEventListener("click", () => { pview.open = []; store.set("hub.plan", pview); renderPlan(); });
+$("#planClear").addEventListener("click", () => { pview.st = []; pview.own = []; store.set("hub.plan", pview); renderPlan(); });
 
 // ---------------------------------------------------------------- questions
-const answers = store.get("hub.answers", {});
-function renderQuestions() {
-  const qs = QUESTIONS.filter(q => q.id);
+// Questions tab (same behaviour as the hub kit): answers stay in this browser until copied to chat;
+// nothing is pre-selected and there is no "use my picks" button.
+let qState = store.get("hub.questions", {}) || {};
+const qSave = () => store.set("hub.questions", qState);
+const qOpen = () => QUESTIONS.filter(d => !d.g);
+const qPicked = (d, s) => d.multi ? (s.pick || []).length > 0 : !!s.pick;
+const qOf = d => qState[d.id] || (qState[d.id] = { pick: d.multi ? [] : "", note: "" });
+function qCount() {
+  const qs = qOpen();
+  const n = qs.filter(d => qPicked(d, qOf(d))).length;
+  $("#qCount").textContent = `${n} of ${qs.length} picked`;
   const badge = $("#qbadge");
-  badge.textContent = qs.length;
-  badge.hidden = qs.length === 0;
-  if (!qs.length) { $("#qlist").innerHTML = `<p class="empty">No open questions. New ones will appear here.</p>`; return; }
+  badge.textContent = qs.length - n;
+  badge.hidden = qs.length - n <= 0;
+}
+function renderQuestions() {
+  if (!qOpen().length) {
+    $("#qLede").textContent = "No open questions right now. Claude adds new ones here.";
+    $("#qlist").innerHTML = "";
+    $("#qBar").hidden = true;
+    $("#qbadge").hidden = true;
+    return;
+  }
   let h = "";
-  for (const q of QUESTIONS) {
-    if (q.g) { h += `<h2 class="qgroup">${esc(q.g)}</h2>`; continue; }
-    const a = answers[q.id] || {};
-    const picked = new Set(a.v || []);
-    h += `<div class="q" data-q="${esc(q.id)}"><span class="qid">${esc(q.id)}</span><p><strong>${esc(q.q)}</strong></p>${q.ctx ? `<p class="muted">${esc(q.ctx)}</p>` : ""}`;
-    if (q.imgs?.length) h += `<div class="imgs">${q.imgs.map(im => `<a href="${esc(im.file)}" target="_blank" rel="noopener"><img src="${esc(im.file)}" alt="${esc(im.cap)}" loading="lazy">${esc(im.cap)}</a>`).join("")}</div>`;
-    h += `<div class="opts">${q.o.map(([v, label, rec], i) => `<label class="opt"><input type="${q.multi ? "checkbox" : "radio"}" name="q-${esc(q.id)}" id="q-${esc(q.id)}-${i}" value="${esc(v)}" ${picked.has(v) ? "checked" : ""}><span>${esc(label)}${rec ? `<span class="mypick">my pick</span>` : ""}</span></label>`).join("")}</div>`;
-    h += `<textarea id="note-${esc(q.id)}" placeholder="Note (optional)" aria-label="Note for ${esc(q.id)}">${esc(a.note || "")}</textarea></div>`;
+  for (const d of QUESTIONS) {
+    if (d.g) { h += `<h2 class="qgroup">${esc(d.g)}</h2>`; continue; }
+    const s = qOf(d);
+    const picks = d.multi ? s.pick : [s.pick];
+    h += `<div class="q${qPicked(d, s) ? " done" : ""}" data-q="${esc(d.id)}"><p><strong>${esc(d.q)}</strong></p>${d.ctx ? `<p class="muted">${esc(d.ctx)}</p>` : ""}`;
+    if (d.imgs?.length) h += `<div class="imgs">${d.imgs.map(im => `<a href="${esc(im.src)}" target="_blank" rel="noopener"><img src="${esc(im.src)}" alt="${esc(im.cap || "")}" loading="lazy">${esc(im.cap || "")}</a>`).join("")}</div>`;
+    h += `<div class="opts">${d.o.map(([v, label, rec], i) => `<label class="opt"><input type="${d.multi ? "checkbox" : "radio"}" name="q-${esc(d.id)}" id="q-${esc(d.id)}-${i}" value="${esc(v)}" ${picks.includes(v) ? "checked" : ""}><span>${esc(label)}${rec ? `<span class="mypick">my pick</span>` : ""}</span></label>`).join("")}</div>`;
+    h += `<textarea id="note-${esc(d.id)}" placeholder="Note (optional)" aria-label="Note for ${esc(d.id)}">${esc(s.note || "")}</textarea><span class="qid">${esc(d.id)}</span></div>`;
   }
   $("#qlist").innerHTML = h;
+  $("#qBar").hidden = false;
+  qCount();
 }
 $("#qlist").addEventListener("input", e => {
   const card = e.target.closest(".q");
   if (!card) return;
-  const id = card.dataset.q;
-  const v = [...card.querySelectorAll("input:checked")].map(i => i.value);
-  const note = card.querySelector("textarea").value;
-  answers[id] = { v, note };
-  store.set("hub.answers", answers);
+  const d = QUESTIONS.find(x => x.id === card.dataset.q);
+  const s = qOf(d);
+  if (e.target.tagName === "TEXTAREA") s.note = e.target.value;
+  else s.pick = d.multi ? [...card.querySelectorAll("input:checked")].map(x => x.value) : e.target.value;
+  card.classList.toggle("done", qPicked(d, s));
+  qSave();
+  qCount();
 });
-function resultsText() {
+function qResults() {
   const lines = ["Answers"];
-  for (const q of QUESTIONS) {
-    if (!q.id) continue;
-    const a = answers[q.id];
-    if (!a || (!a.v?.length && !a.note)) continue;
-    const labels = (a.v || []).map(v => (q.o.find(o => o[0] === v) || [v, v])[1]);
-    lines.push(`${q.id}: ${labels.join(", ") || "(no pick)"}${a.note ? `  | note: ${a.note}` : ""}`);
+  for (const d of qOpen()) {
+    const s = qState[d.id];
+    if (!s || (!qPicked(d, s) && !s.note)) continue;
+    const name = v => (d.o.find(o => o[0] === v) || [v, v])[1];
+    const choice = d.multi ? s.pick.map(name).join("; ") : (s.pick ? name(s.pick) : "(no pick)");
+    lines.push(d.id + ": " + choice + (s.note ? "  | note: " + s.note.replace(/\s+/g, " ").trim() : ""));
   }
-  return lines.length > 1 ? lines.join("\n") : "";
+  return lines.join("\n");
 }
 $("#copy").addEventListener("click", () => {
-  const text = resultsText();
-  const box = $("#copied");
-  if (!text) { $("#copymsg").textContent = "Pick at least one answer first."; return; }
-  box.value = text;
-  box.hidden = false;
-  navigator.clipboard?.writeText(text).then(
-    () => { $("#copymsg").textContent = "Copied. Paste it into chat."; },
-    () => { box.select(); $("#copymsg").textContent = "Copy is blocked here: the text is selected below, press Ctrl+C."; }
-  ) ?? (box.select(), $("#copymsg").textContent = "The text is selected below, press Ctrl+C.");
+  const text = qResults();
+  const btn = $("#copy");
+  const show = () => { $("#copied").value = text; $("#qOutbox").hidden = false; $("#copied").focus(); $("#copied").select(); };
+  try {
+    navigator.clipboard.writeText(text).then(() => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy results", 1600); show(); }, show);
+  } catch (e) { show(); }
 });
-$("#clear").addEventListener("click", () => {
-  for (const k of Object.keys(answers)) delete answers[k];
-  store.set("hub.answers", answers);
-  $("#copied").hidden = true;
-  renderQuestions();
-});
+$("#clear").addEventListener("click", () => { qState = {}; qSave(); $("#qOutbox").hidden = true; renderQuestions(); });
 
 // ---------------------------------------------------------------- boot
 renderData();
