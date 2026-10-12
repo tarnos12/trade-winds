@@ -256,6 +256,74 @@ namespace TradeWinds.Core.Tests
             Assert.That(town.Gold, Is.EqualTo(6000).Within(1e-6), "level 2 purse limit");
         }
 
+        [Test]
+        public void SaveAndLoad_AfterANewTownMidGame_ContinueIdentically()
+        {
+            var w = NewKingdom(out var castle, 21);
+            Assert.That(w.FoundTown(Scenarios.At(12, 8), out var farm).Ok);
+            foreach (var d in new[] { 0, 1 }) Scenarios.Place(w, "potato_farm", farm.Center.Neighbor(d));
+            foreach (var d in new[] { 3, 4, 5 }) Scenarios.Place(w, "hut", farm.Center.Neighbor(d));
+            Assert.That(w.FoundTown(Scenarios.At(26, 9), out var timber).Ok);
+            PlaceOn(w, timber, "lumberjack", Terrain.Forest, 2);
+            w.Run(4 * Minute);
+            // A new Town centre is a road-like hex: routes found before it must not be reused.
+            Assert.That(w.FoundTown(Scenarios.At(19, 11), out _).Ok);
+            w.Run(2 * Minute);
+
+            var copy = SaveGame.Restore(SaveGame.Capture(w), GameContent.Create());
+            Assert.That(Fingerprint(copy), Is.EqualTo(Fingerprint(w)), "restored state matches");
+            w.Run(6 * Minute);
+            copy.Run(6 * Minute);
+            Assert.That(Fingerprint(copy), Is.EqualTo(Fingerprint(w)), "and continues identically");
+        }
+
+        [Test]
+        public void ANewTown_IsUsedByRoutesFoundBeforeIt()
+        {
+            var w = NewKingdom(out _);
+            Scenarios.BuildStraightRoad(w, 9, 11, 3);
+            Scenarios.BuildStraightRoad(w, 13, 15, 3);
+            var from = Scenarios.At(9, 3);
+            var to = Scenarios.At(15, 3);
+            double before = w.Pathing.Find(from, to).Cost;
+            // A Town centre is road-like: a Town in the gap joins the two roads.
+            Assert.That(w.FoundTown(Scenarios.At(12, 3), out var town).Ok);
+            Assert.That(w.Pathing.Find(from, to).Cost, Is.LessThan(before), "cached route refreshed after founding");
+            Assert.That(w.DestroyTown(town, out _).Ok);
+            Assert.That(w.Pathing.Find(from, to).Cost, Is.EqualTo(before).Within(1e-9), "and after abandoning");
+        }
+
+        [Test]
+        public void Restore_DropsResearchTheContentNoLongerHas()
+        {
+            var w = NewKingdom(out _);
+            var data = SaveGame.Capture(w);
+            data.activeResearch = "r_removed";
+            data.researchQueue.Add("r_gone");
+            var copy = SaveGame.Restore(data, GameContent.Create());
+            Assert.That(copy.ActiveResearch, Is.Null);
+            Assert.That(copy.ResearchQueue, Does.Not.Contain("r_gone"));
+        }
+
+        [Test]
+        public void CancelledUpgrade_ReturnsGoodsStillOnTheWay()
+        {
+            var w = NewKingdom(out _);
+            Assert.That(w.FoundTown(Scenarios.At(14, 8), out var town).Ok);
+            Assert.That(w.PlaceBuilding(w.Content.Building("hut"), town.Center.Neighbor(0), out var hut).Ok);
+            w.Run(Minute);
+            w.ResearchDone.Add("r_hut2");
+            int planks = G(w, "planks");
+            town.Stock[planks] = 20;
+            Assert.That(w.StartUpgrade(hut).Ok);
+            for (int i = 0; i < Minute && hut.DeliveringNow[planks] <= 0; i++) w.Step();
+            Assert.That(hut.DeliveringNow[planks], Is.GreaterThan(0), "a Porter is carrying planks");
+            Assert.That(w.CancelUpgrade(hut).Ok);
+            w.Run(Minute);
+            Assert.That(town.Stock[planks], Is.EqualTo(20).Within(1e-6), "no planks lost");
+            Assert.That(hut.Delivered[planks], Is.EqualTo(0));
+        }
+
         internal static string Fingerprint(World w)
         {
             var s = new System.Text.StringBuilder();
@@ -272,6 +340,11 @@ namespace TradeWinds.Core.Tests
                 s.Append(';').Append(t.Gold.ToString("R"));
                 foreach (var x in t.Stock) s.Append(',').Append(x.ToString("R"));
                 foreach (var x in t.Population) s.Append(',').Append(x.ToString("R"));
+                foreach (var x in t.Price) s.Append(',').Append(x.ToString("R"));
+                foreach (var x in t.Inbound) s.Append(',').Append(x.ToString("R"));
+                foreach (var x in t.SalesAdj) s.Append(',').Append(x.ToString("R"));
+                s.Append(',').Append(t.UpkeepPaid.ToString("R")).Append(',').Append(t.PurseOverflow.ToString("R"));
+                foreach (var tr in t.Traders) s.Append(',').Append(tr.State).Append(tr.Good).Append(tr.CarryGood).Append(tr.PhaseEndTick);
                 foreach (var b in t.Buildings) s.Append(',').Append(b.Built).Append(b.OutputStore.ToString("R"));
             }
             return s.ToString();

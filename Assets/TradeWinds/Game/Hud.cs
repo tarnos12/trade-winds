@@ -431,6 +431,7 @@ namespace TradeWinds.Game
         // ------------------------------------------------------------------ refresh
 
         int _lastResearchCount = -1;
+        bool _menuWasOpen;
 
         void Update()
         {
@@ -438,8 +439,13 @@ namespace TradeWinds.Game
             var w = _game.World;
 
             _start.style.display = _game.MenuOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            var cont = _start.Q<VisualElement>("StartButtons")?.ElementAt(1) as Button;
-            if (cont != null) cont.SetEnabled(GameController.HasSave);
+            if (_game.MenuOpen != _menuWasOpen)
+            {
+                // Check the save file only when the menu opens, not every frame.
+                _menuWasOpen = _game.MenuOpen;
+                var cont = _start.Q<VisualElement>("StartButtons")?.ElementAt(1) as Button;
+                if (cont != null && _menuWasOpen) cont.SetEnabled(GameController.HasSave);
+            }
             if (_game.MenuOpen) return;
 
             if (_toast.style.display == DisplayStyle.Flex && Time.unscaledTime > _toastUntil) _toast.style.display = DisplayStyle.None;

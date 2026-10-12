@@ -106,6 +106,12 @@ namespace TradeWinds.Core
         static Hex H(HexDto d) => new Hex(d.q, d.r);
         static double[] Copy(double[] a) => (double[])a.Clone();
 
+        /// <summary>Copy what fits: content may have gained or lost Goods since the save was written.</summary>
+        static void CopyIn<T>(T[] from, T[] to)
+        {
+            if (from != null) Array.Copy(from, to, Math.Min(from.Length, to.Length));
+        }
+
         // ------------------------------------------------------------------ capture
 
         public static SaveData Capture(World w)
@@ -232,7 +238,7 @@ namespace TradeWinds.Core
         public static World Restore(SaveData d, Content content)
         {
             if (d == null) throw new ArgumentNullException(nameof(d));
-            if (d.version != Version) throw new NotSupportedException($"Save version {d.version} is not supported (expected {Version}).");
+            if (d.version < 1 || d.version > Version) throw new NotSupportedException($"Save version {d.version} is not supported (expected {Version}).");
 
             var board = new Board(d.width, d.height);
             for (int i = 0; i < board.Count; i++) board[board.HexAt(i)] = (Terrain)d.terrain[i];
@@ -247,8 +253,10 @@ namespace TradeWinds.Core
             w.RoadVersion++;
             if (d.revealed != null && d.revealed.Length == board.Count) w.RestoreFog((bool[])d.revealed.Clone());
             foreach (var r in d.researchDone) w.ResearchDone.Add(r);
-            w.ResearchQueue.AddRange(d.researchQueue);
-            w.ActiveResearch = string.IsNullOrEmpty(d.activeResearch) ? null : d.activeResearch;
+            // Research removed from the content since the save was written is dropped.
+            foreach (var r in d.researchQueue)
+                if (content.ResearchNode(r) != null) w.ResearchQueue.Add(r);
+            w.ActiveResearch = string.IsNullOrEmpty(d.activeResearch) || content.ResearchNode(d.activeResearch) == null ? null : d.activeResearch;
             if (d.researchConsumed != null) Array.Copy(d.researchConsumed, w.ResearchConsumed, Math.Min(d.researchConsumed.Length, w.ResearchConsumed.Length));
             w.ResearchTimer = d.researchTimer;
             w.MissionIndex = d.missionIndex;
@@ -329,19 +337,21 @@ namespace TradeWinds.Core
             t.Built = d.built;
             t.BuiltTick = d.builtTick;
             t.Gold = d.gold;
-            Array.Copy(d.stock, t.Stock, n);
-            Array.Copy(d.price, t.Price, n);
-            Array.Copy(d.inbound, t.Inbound, n);
+            CopyIn(d.stock, t.Stock);
+            CopyIn(d.price, t.Price);
+            CopyIn(d.inbound, t.Inbound);
             // Older saves have no sales pressure: start neutral.
-            if (d.salesAdj != null && d.salesAdj.Length == n) Array.Copy(d.salesAdj, t.SalesAdj, n);
-            if (d.lastSoldTick != null && d.lastSoldTick.Length == n) Array.Copy(d.lastSoldTick, t.LastSoldTick, n);
+            CopyIn(d.salesAdj, t.SalesAdj);
+            CopyIn(d.lastSoldTick, t.LastSoldTick);
             t.UpkeepPaid = d.upkeepPaid;
             t.PurseOverflow = d.purseOverflow;
             t.GoldSpentByCrown = d.goldSpentByCrown;
             Array.Copy(d.population, t.Population, 4);
             Array.Copy(d.happiness, t.Happiness, 4);
             Array.Copy(d.ticksOverTarget, t.TicksOverTarget, 4);
-            for (int tier = 0; tier < 4; tier++) Array.Copy(d.satisfaction, tier * n, t.Satisfaction[tier], 0, n);
+            int savedGoods = d.satisfaction == null ? 0 : d.satisfaction.Length / 4;
+            for (int tier = 0; tier < 4 && savedGoods > 0; tier++)
+                Array.Copy(d.satisfaction, tier * savedGoods, t.Satisfaction[tier], 0, Math.Min(savedGoods, n));
             t.CrownModifier = d.crownModifier;
             t.CrownModifierUntil = d.crownModifierUntil;
             t.LastCrownTick = d.lastCrownTick;
@@ -363,14 +373,14 @@ namespace TradeWinds.Core
                 b.UpgradingTo = bd.upgradingTo;
                 b.UpgradeStartTick = bd.upgradeStartTick;
                 b.Priority = bd.priority;
-                Array.Copy(bd.delivered, b.Delivered, n);
-                Array.Copy(bd.deliveringNow, b.DeliveringNow, n);
+                CopyIn(bd.delivered, b.Delivered);
+                CopyIn(bd.deliveringNow, b.DeliveringNow);
                 b.Workers = bd.workers;
                 b.Pending = bd.pending;
                 b.OutputStore = bd.outputStore;
                 b.BatchTimer = bd.batchTimer;
-                Array.Copy(bd.buffer, b.Buffer, n);
-                Array.Copy(bd.bufferInbound, b.BufferInbound, n);
+                CopyIn(bd.buffer, b.Buffer);
+                CopyIn(bd.bufferInbound, b.BufferInbound);
                 b.Residents = bd.residents;
                 t.Buildings.Add(b);
                 index[b.Id] = b;

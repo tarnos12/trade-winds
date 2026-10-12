@@ -189,6 +189,7 @@ namespace TradeWinds.Game
         {
             SelectedTown = null;
             SelectedBuilding = null;
+            SelectedScout = null;
             CastleSelected = false;
             Board?.SetSelection(null);
         }
@@ -414,7 +415,8 @@ namespace TradeWinds.Game
                 Hud.Confirm($"Demolish the {building.Def.Name}? Its gold ({building.Def.GoldCost:0}) is refunded; anything cut off from {town.Name}'s centre goes too. Materials are lost.",
                     () =>
                     {
-                        World.DestroyBuilding(building, out int cascaded);
+                        var res = World.DestroyBuilding(building, out int cascaded);
+                        if (!res.Ok) { Hud.Toast(res.Reason); return; }
                         if (SelectedBuilding == building) SelectTown(town);
                         Hud.Toast(cascaded > 0 ? $"Demolished, plus {cascaded} cut-off building(s)." : "Demolished.");
                     });
@@ -424,7 +426,8 @@ namespace TradeWinds.Game
                 Hud.Confirm($"Abandon {town.Name}? Its residents, Stock and purse are lost; founding and building gold come back minus what the Crown has taken.",
                     () =>
                     {
-                        World.DestroyTown(town, out double refund);
+                        var res = World.DestroyTown(town, out double refund);
+                        if (!res.Ok) { Hud.Toast(res.Reason); return; }
                         ClearSelection();
                         Hud.Toast($"{town.Name} abandoned. Refund {refund:0} gold.");
                     });
