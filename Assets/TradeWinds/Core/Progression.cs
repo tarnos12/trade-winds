@@ -95,6 +95,22 @@ namespace TradeWinds.Core
             return CommandResult.Success;
         }
 
+        /// <summary>Start or queue a research, queuing any missing prerequisites first so the plan can't stall.
+        /// Returns the names it queued ahead of it.</summary>
+        public static CommandResult Plan(World world, string id, List<string> queuedFirst)
+        {
+            var node = world.Content.ResearchNode(id);
+            if (node == null) return CommandResult.Fail("Unknown research.");
+            foreach (var r in node.Requires)
+            {
+                if (world.ResearchDone.Contains(r) || world.ActiveResearch == r || world.ResearchQueue.Contains(r)) continue;
+                var sub = Plan(world, r, queuedFirst);
+                if (!sub.Ok) return sub;
+                queuedFirst.Add(world.Content.ResearchNode(r).Name);
+            }
+            return Start(world, id);
+        }
+
         public static void Cancel(World world, string id)
         {
             if (world.ActiveResearch == id)

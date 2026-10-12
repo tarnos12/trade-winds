@@ -81,7 +81,11 @@ namespace TradeWinds.Game
                 if (TownSim.TierCapacity(_world, t, tier) <= 0) continue;
                 foreach (var n in content.Tiers[tier].Basic)
                     if (t.Satisfaction[tier][n.Good] < 0.5 && t.Stock[n.Good] < 1)
-                        return $"We don't have any {content.Goods[n.Good].Name}!";
+                    {
+                        var maker = content.Buildings.FirstOrDefault(d => d.OutputGood == n.Good && d.Kind == BuildingKind.Extractor)
+                            ?? content.Buildings.FirstOrDefault(d => d.OutputGood == n.Good);
+                        return $"We don't have any {content.Goods[n.Good].Name}!" + (maker != null ? $" Build a {maker.Name}." : "");
+                    }
             }
             for (int tier = 0; tier < 4; tier++)
             {
@@ -100,7 +104,9 @@ namespace TradeWinds.Game
             for (int tier = 3; tier >= 0; tier--)
                 if (t.Population[tier] >= 1 && t.EffectiveHappiness(tier, _world.Tick) >= 90)
                     return $"{(Tier)tier}s are very happy and pay more Tax.";
-            return "All is fine here.";
+            bool anyHouse = false;
+            for (int tier = 0; tier < 4; tier++) anyHouse |= TownSim.TierCapacity(_world, t, tier) > 0;
+            return anyHouse ? "All is fine here." : "No one lives here yet. Build Huts!";
         }
 
         Bubble NewBubble()

@@ -34,13 +34,13 @@ namespace TradeWinds.Game
             }
 
             double purseCap = TownSim.PurseCap(w, t);
-            Root.Add(Ui.Text($"Purse {t.Gold:N0}" + (purseCap > 0 ? $"/{purseCap:N0}" : "") + $" gold   ·   Slots {w.SlotsUsed(t)}/{w.SlotCap(t)}   ·   Tax {t.TaxEarned:N0}   ·   Tariff paid {t.TariffGenerated:N0}", 13));
+            Root.Add(Ui.Text($"Purse {t.Gold:N0}" + (purseCap > 0 ? $"/{purseCap:N0}" : "") + $" gold   ·   Slots {w.SlotsUsed(t)}/{w.SlotCap(t)}   ·   Tax {t.TaxEarned:N0}   ·   Tariff earned for the Crown {t.TariffGenerated:N0}", 13));
             if (purseCap > 0 && t.Gold >= purseCap - 0.5) Root.Add(Ui.Text("Purse full: the residents spend anything above the limit. Level the Town up for a bigger purse.", 12, false, Palette.Warn));
 
             var level = w.CanLevelUp(t);
             string levelText = t.Level < bal.SlotsByLevel.Length ? $"Level up ({bal.TownLevelCost[t.Level - 1]:0}g)" : "Max level";
             var lvlBtn = Ui.Button(levelText, () => { _hud.Report(w.LevelUp(t)); _hud.MarkDirty(); }, level.Ok);
-            _hud.Hint(lvlBtn, level.Ok ? "More building slots, Traders and Porters." : level.Reason);
+            _hud.Hint(lvlBtn, level.Ok ? "More building slots, Traders and Porters. Paid from the Town's purse." : level.Reason);
             var give = w.CanGive(t);
             var giveBtn = Ui.Button("Give 1000", () => { _hud.Report(w.Give(t)); _hud.MarkDirty(); }, give.Ok);
             _hud.Hint(giveBtn, give.Ok ? "Treasury > Town: +10 happiness for a minute." : give.Reason);
@@ -52,6 +52,9 @@ namespace TradeWinds.Game
             if (crown != 0) Root.Add(Ui.Text($"Crown effect {crown:+0;-0} happiness for {(t.CrownModifierUntil - w.Tick) / 2}s", 12, false, crown > 0 ? Palette.Good : Palette.Bad));
 
             // People
+            bool anyHouse = false;
+            for (int tier = 0; tier < 4; tier++) anyHouse |= TownSim.TierCapacity(w, t, tier) > 0;
+            if (!anyHouse) Root.Add(Ui.Text("No one lives here yet. Build Huts (Peasant tab).", 13, false, Palette.Warn));
             for (int tier = 0; tier < 4; tier++)
             {
                 double cap = TownSim.TierCapacity(w, t, tier);
@@ -62,8 +65,8 @@ namespace TradeWinds.Game
                 string lux = string.Join(", ", needs.Luxury.Where(n => t.Satisfaction[tier][n.Good] < 0.8).Select(n => content.Goods[n.Good].Name));
                 Root.Add(Ui.Text($"{(Tier)tier}s {t.Population[tier]:0.0}/{cap:0.#}   happiness {h:0}%", 14, true, Palette.ForTier((Tier)tier)));
                 Root.Add(Ui.Bar(h / 100.0, Ui.HappinessColor(h), 340, 6));
-                if (unmet.Length > 0) Root.Add(Ui.Text("Missing needs: " + unmet, 12, false, Palette.Bad));
-                if (lux.Length > 0) Root.Add(Ui.Text("Would enjoy: " + lux, 12, false, Palette.Muted));
+                if (unmet.Length > 0) Root.Add(Ui.Text("Missing Basic Needs: " + unmet, 12, false, Palette.Bad));
+                if (lux.Length > 0) Root.Add(Ui.Text("Luxuries wanted: " + lux, 12, false, Palette.Muted));
             }
 
             if (game.SelectedBuilding != null && t.Buildings.Contains(game.SelectedBuilding))
@@ -123,7 +126,9 @@ namespace TradeWinds.Game
                 {
                     double have = b.Delivered[m.Good];
                     if (have + 1e-6 >= m.Amount) continue;
-                    string why = b.Town.Stock[m.Good] < 1 ? " — none in Stock; Traders will buy it" : " — Porters are carrying it";
+                    string why = b.Town.Stock[m.Good] >= 1 ? " — Porters are carrying it"
+                        : AnyoneSells(w, b.Town, m.Good) ? " — none in Stock; Traders will buy it"
+                        : $" — no Town sells {content.Goods[m.Good].Name} yet: build its producer, or turn on Sell for it in the Castle's royal market";
                     box.Add(Ui.Text($"Needs {content.Goods[m.Good].Name} {have:0}/{m.Amount:0}{why}", 12, false, Palette.Warn));
                 }
             }
@@ -172,6 +177,15 @@ namespace TradeWinds.Game
             row.Add(demolish);
             box.Add(row);
             Root.Add(box);
+        }
+
+        /// <summary>Is the Good made anywhere in the Kingdom (or sold by the Castle)?</summary>
+        static bool AnyoneSells(World w, Town buyer, int good)
+        {
+            foreach (var t in w.Towns)
+                foreach (var bld in t.Buildings)
+                    if (bld.Built && bld.Def.OutputGood == good) return true;
+            return w.Castle != null && w.Castle.Orders[good].Sell && w.Castle.Stock[good] >= 1;
         }
 
         static string HouseFor(Content content, Tier tier)

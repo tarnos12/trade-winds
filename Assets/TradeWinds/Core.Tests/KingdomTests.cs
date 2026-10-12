@@ -72,6 +72,18 @@ namespace TradeWinds.Core.Tests
         }
 
         [Test]
+        public void PlanningResearch_QueuesItsMissingPrerequisitesFirst()
+        {
+            var w = NewKingdom(out var castle);
+            Assert.That(w.PlaceBuilding(w.Content.Building("research_center"), castle.Neighbor(3), out _).Ok);
+            var first = new System.Collections.Generic.List<string>();
+            Assert.That(ResearchSim.Plan(w, "r_charcoal", first).Ok);
+            Assert.That(first, Is.EqualTo(new[] { "Quarry" }));
+            Assert.That(w.ActiveResearch, Is.EqualTo("r_quarry"));
+            Assert.That(w.ResearchQueue, Does.Contain("r_charcoal"));
+        }
+
+        [Test]
         public void CastleBuildings_MustTouchTheCastle()
         {
             var w = NewKingdom(out var castle);

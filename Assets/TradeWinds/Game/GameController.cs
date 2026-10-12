@@ -98,7 +98,7 @@ namespace TradeWinds.Game
             if (!openMenu)
             {
                 SetSpeed(1);
-                Hud?.Toast("A new realm. Found your first Town near the forest and fields around the Castle.");
+                Hud?.Toast("A new realm! Click Town (1000g) in the build bar, then open ground beside a forest.");
                 SaveNow();
             }
         }
@@ -357,7 +357,8 @@ namespace TradeWinds.Game
                     {
                         SelectTown(town);
                         if (!keep) SelectTool(ToolKind.Inspect);
-                        Hud?.Toast($"{town.Name} founded. Add Huts and producers next to it.");
+                        Hud?.ShowTab(1);
+                        Hud?.Toast($"{town.Name} is being built. In the Peasant tab, place Huts (homes) and Lumberjacks on forest next to it.");
                     }
                     else Hud?.Toast(r.Reason);
                     break;
@@ -453,8 +454,15 @@ namespace TradeWinds.Game
             string state = !b.Built ? "under construction"
                 : b.IsUpgrading ? "upgrading"
                 : b.IsHouse ? $"{b.Residents:0.0}/{TownSim.HouseCapacity(World, b):0.#} residents"
-                : b.Workers > 0.01 ? $"{b.Workers:0.0} workers" : "no workers — build houses for its tier";
+                : b.Workers > 0.01 ? $"{b.Workers:0.0} workers" : $"no workers: build more {HouseName(b.Def.Tier)} in {town.Name}";
             return $"{b.Def.Name} of {town.Name}: {state}";
+        }
+
+        string HouseName(Tier tier)
+        {
+            foreach (var def in World.Content.Buildings)
+                if (def.Kind == BuildingKind.House && def.Tier == tier) return def.Name + "s";
+            return "houses";
         }
 
         string BuildableHint(Hex hex)
@@ -471,9 +479,9 @@ namespace TradeWinds.Game
             switch (t)
             {
                 case Core.Terrain.Fish: return "Fish shoal";
-                case Core.Terrain.Stone: return "Stone deposit";
-                case Core.Terrain.Clay: return "Clay deposit";
-                case Core.Terrain.Coal: return "Coal deposit";
+                case Core.Terrain.Stone: return "Stone Deposit";
+                case Core.Terrain.Clay: return "Clay Deposit";
+                case Core.Terrain.Coal: return "Coal Deposit";
                 case Core.Terrain.Iron: return "Iron deposit";
                 case Core.Terrain.Gold: return "Gold deposit";
                 default: return t.ToString();
