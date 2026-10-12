@@ -1,20 +1,15 @@
 # Trade Winds: plan
 
-Updated 2026-10-12 14:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
+Updated 2026-10-12 15:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**21 of 28 tasks done**, 2 in progress, 0 to do, 2 blocked, 3 waiting.
-
-## Being worked on now
-
-- **M4** Adopt the game-dev agent team: Lead (Claude): roster and guides in PROJECT.md
-- **M4** Rebalance: stop Towns hoarding 100k gold: Balance designer (Claude): experiments in a background copy
+**23 of 29 tasks done**, 0 in progress, 0 to do, 3 blocked, 3 waiting.
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 8 / 15 |
+| M4 | 1.0 |  | Blocked | 10 / 16 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -69,9 +64,10 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Status | Task | Detail | Owner |
 |---|---|---|---|
 | Done | Owner Hub | One page for game data, charts, the plan and every open question, rebuilt from the project files. | Claude |
-| In progress | Adopt the game-dev agent team **(NOW)** | Map your agent roster onto Trade Winds: which designers and specialists apply, their guide documents, and the working rules (background copies, test gate, Hub questions). | Claude |
+| Done | Adopt the game-dev agent team | Your roster is mapped onto Trade Winds in docs/guides/README.md: which designers apply (and which are merged or not used), each one's guide, the task specialists, and the working rules. | Claude |
 | Blocked | Final art | Replace the code-drawn placeholder hexes, tokens and icons with real art. | Mariusz |
-| In progress | Rebalance: stop Towns hoarding 100k gold **(NOW)** | Exporting Towns pile up 100,000+ gold, so the Crown's Take out-earns the Tariff. You asked for a rebalance (2026-10-12): find where the extra gold comes from, fix it, and check with simulated playthroughs that runs still last about 4 hours. | Claude |
+| Done | Rebalance: stop Towns hoarding 100k gold | Town purses now stop at 3,000 / 6,000 / 12,000 / 20,000 gold by level; the residents spend the rest. In the simulated run the richest Town holds 20,000 instead of 128,000, and nothing else changes (Victory time, Crown Gives, happiness). Measurements: docs/guides/balance.md. | Claude |
+| Blocked | Limit how often Take can be used | Close the last loophole: pressing Take on every rich Town every 2 minutes still out-earns the Tariff. | Claude |
 | Done | Set the length of a full run | You chose about 4 hours, so the current pace stays: an efficient player wins in about 3 h 40 min. | Claude |
 | Done | Tariff fixed at 30%, no slider | You chose a stable 30% Tariff: the Tariff Office research and the slider are removed from the game. | Claude |
 | Done | Tariff always exactly 30% | You chose a stable Tariff: the two research nodes that raised it (Tax Ledgers, Grand Bureaucracy) are removed. | Claude |

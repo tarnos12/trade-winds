@@ -45,6 +45,8 @@ for one task and hand back a result. Every agent follows the rules at the bottom
 - Owner questions go only to the Hub's Questions tab (`docs/design/questions.json`), with pictures if visual.
 - Work in your own branch or a background copy (`git worktree add ../trade-winds-<task> -b <task>`); never in the
   owner's open project. Engine passes that need Unity use a separate copy, not the owner's open Editor.
-- Run the test gate before pushing: `dotnet test tools/CoreTests` (and Unity Edit Mode tests on engine passes);
-  report results plainly, including failures.
+- Run the test gate before pushing: `dotnet test tools/CoreTests` **and** a Unity compile with zero errors (the
+  headless tests do not compile the Unity view and UI code: refresh via MCP for Unity and read the console, or
+  run Unity in batch mode on the copy), plus Unity Edit Mode tests on engine passes. Report results plainly,
+  including failures.
 - Then: merge to `main`, rebuild + republish the Hub, end the report with the Hub link.
