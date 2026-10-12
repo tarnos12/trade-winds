@@ -1,15 +1,22 @@
 # Trade Winds: plan
 
-Updated 2026-10-12 15:30. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
+Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**24 of 29 tasks done**, 0 in progress, 0 to do, 2 blocked, 3 waiting.
+**24 of 32 tasks done**, 4 in progress, 0 to do, 2 blocked, 2 waiting.
+
+## Being worked on now
+
+- **M4** Trader back-haul and sales pressure: Feature builder (Claude): building it in a background copy
+- **M4** Windows build you can play: Release builder (helper agent): building from a background copy
+- **M4** Code health review: Code health reviewer (helper agent): reading the code
+- **M4** UI and onboarding review: UI/UX + onboarding reviewer (helper agent): reading the screens and texts
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 11 / 16 |
+| M4 | 1.0 |  | Blocked | 11 / 19 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -75,7 +82,10 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Done | Soft sounds and an ambient bed | Gentle sounds for placing, trading, finishing buildings and Missions, plus a quiet wind-and-drone background; with a mute switch (you picked this, 2026-10-12). | Claude |
 | Done | Town speech bubbles | Towns say what they lack or dream of ("We don't have any Potato!", "We dream of Fish"), a few seconds at a time (you picked this, 2026-10-12). | Claude |
 | Done | Title stays "Trade Winds" | You confirmed the title. | Mariusz |
-| Waiting | Trader back-haul and sales pressure | Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version. | Claude |
+| In progress | Trader back-haul and sales pressure **(NOW)** | Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version. | Claude |
 | Waiting | Content editable in the Inspector | Move Goods, buildings, research and Missions from code into assets you can edit in Unity. | Claude |
 | Blocked | Play-test with a real mouse | Play a full session in Unity and report anything confusing or broken; all checks so far were scripted. | Mariusz |
 | Waiting | Stranger reaches Victory without help | The 1.0 exit test: someone new plays from the start screen to Victory without asking questions. | Mariusz |
+| In progress | Windows build you can play **(NOW)** | A standalone Trade Winds.exe you can run outside the Unity Editor, built from a separate copy of the project. | Claude |
+| In progress | Code health review **(NOW)** | A reviewer reads the game code for duplicated logic, fragile spots, missing tests and tech debt, and turns findings into tasks. | Claude |
+| In progress | UI and onboarding review **(NOW)** | A reviewer checks the screens, panels, Mission tips and texts for confusing flows, too many clicks, unclear wording and a rough first hour. | Claude |

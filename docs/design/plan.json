@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 15:30",
+  "updated": "2026-10-12 16:00",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -229,10 +229,10 @@
         {
           "title": "Trader back-haul and sales pressure",
           "detail": "Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version.",
-          "status": "waiting",
+          "status": "in-progress",
           "size": "M",
           "owner": "Claude",
-          "blockedBy": "After the balance answers, so tuning happens once"
+          "now": "Feature builder (Claude): building it in a background copy"
         },
         {
           "title": "Content editable in the Inspector",
@@ -257,6 +257,30 @@
           "size": "M",
           "owner": "Mariusz",
           "blockedBy": "After art, balance and your own play-test"
+        },
+        {
+          "title": "Windows build you can play",
+          "detail": "A standalone Trade Winds.exe you can run outside the Unity Editor, built from a separate copy of the project.",
+          "status": "in-progress",
+          "size": "S",
+          "owner": "Claude",
+          "now": "Release builder (helper agent): building from a background copy"
+        },
+        {
+          "title": "Code health review",
+          "detail": "A reviewer reads the game code for duplicated logic, fragile spots, missing tests and tech debt, and turns findings into tasks.",
+          "status": "in-progress",
+          "size": "S",
+          "owner": "Claude",
+          "now": "Code health reviewer (helper agent): reading the code"
+        },
+        {
+          "title": "UI and onboarding review",
+          "detail": "A reviewer checks the screens, panels, Mission tips and texts for confusing flows, too many clicks, unclear wording and a rough first hour.",
+          "status": "in-progress",
+          "size": "S",
+          "owner": "Claude",
+          "now": "UI/UX + onboarding reviewer (helper agent): reading the screens and texts"
         }
       ]
     }
