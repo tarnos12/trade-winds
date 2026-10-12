@@ -2,21 +2,18 @@
 
 Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**24 of 32 tasks done**, 4 in progress, 0 to do, 2 blocked, 2 waiting.
+**28 of 37 tasks done**, 1 in progress, 4 to do, 2 blocked, 2 waiting.
 
 ## Being worked on now
 
-- **M4** Trader back-haul and sales pressure: Feature builder (Claude): building it in a background copy
-- **M4** Windows build you can play: Release builder (helper agent): building from a background copy
-- **M4** Code health review: Code health reviewer (helper agent): reading the code
-- **M4** UI and onboarding review: UI/UX + onboarding reviewer (helper agent): reading the screens and texts
+- **M4** Fix save and determinism bugs: Feature builder (Claude): fixing in a background copy
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 11 / 19 |
+| M4 | 1.0 |  | Blocked | 15 / 24 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -82,10 +79,15 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Done | Soft sounds and an ambient bed | Gentle sounds for placing, trading, finishing buildings and Missions, plus a quiet wind-and-drone background; with a mute switch (you picked this, 2026-10-12). | Claude |
 | Done | Town speech bubbles | Towns say what they lack or dream of ("We don't have any Potato!", "We dream of Fish"), a few seconds at a time (you picked this, 2026-10-12). | Claude |
 | Done | Title stays "Trade Winds" | You confirmed the title. | Mariusz |
-| In progress | Trader back-haul and sales pressure **(NOW)** | Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version. | Claude |
+| Done | Trader back-haul and sales pressure | Traders heading out to buy also carry their home's surplus and sell it to the Town they visit; each sale lifts the seller's price a little (up to 1.35×) and unsold Goods slowly get cheaper (down to 0.75×). In the simulated run Victory now comes at 163 game-minutes instead of 187. | Claude |
 | Waiting | Content editable in the Inspector | Move Goods, buildings, research and Missions from code into assets you can edit in Unity. | Claude |
 | Blocked | Play-test with a real mouse | Play a full session in Unity and report anything confusing or broken; all checks so far were scripted. | Mariusz |
 | Waiting | Stranger reaches Victory without help | The 1.0 exit test: someone new plays from the start screen to Victory without asking questions. | Mariusz |
-| In progress | Windows build you can play **(NOW)** | A standalone Trade Winds.exe you can run outside the Unity Editor, built from a separate copy of the project. | Claude |
-| In progress | Code health review **(NOW)** | A reviewer reads the game code for duplicated logic, fragile spots, missing tests and tech debt, and turns findings into tasks. | Claude |
-| In progress | UI and onboarding review **(NOW)** | A reviewer checks the screens, panels, Mission tips and texts for confusing flows, too many clicks, unclear wording and a rough first hour. | Claude |
+| Done | Windows build you can play | Built: D:WORKUnity	rade-winds-buildsTradeWinds-latestTrade Winds.exe (about 100 MB). Rebuild any time with the menu Trade Winds → Build Windows Player. | Claude |
+| Done | Code health review | Findings in docs/guides/code-health.md: 9 bugs (mostly save/load), numbers that belong in Balance, duplicated trade code, test gaps. They became the tasks below. | Claude |
+| Done | UI and onboarding review | Findings in docs/guides/onboarding.md: Mission 6 hides its prerequisites, tips point at things the player can't do yet, toasts hidden behind the research panel, wording that breaks the glossary. They became the tasks below. | Claude |
+| In progress | Fix save and determinism bugs **(NOW)** | Route cache after founding a Town, save migration, unknown research ids, Goods lost when an upgrade is cancelled, royal Traders and demolished Towns, out-of-date Balance asset. | Claude |
+| To do | First-hour onboarding fixes | Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages. | Claude |
+| To do | Words and terms pass | Make every player-facing text use the glossary words (Trader, Tariff, Basic Needs, Deposit) and say how to fix a refusal. | Claude |
+| To do | Kingdom Overview and Goods strip | The HUD parts from the design that are still missing: which Town makes and lacks what, at a glance, plus alert icons. | Claude |
+| To do | Code cleanup: numbers into Balance, shared trade code | Move hard-coded numbers into the Balance asset, merge the duplicated trade code, add the missing tests. | Claude |

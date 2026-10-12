@@ -228,11 +228,10 @@
         },
         {
           "title": "Trader back-haul and sales pressure",
-          "detail": "Traders carry their home's surplus on the way back, and a seller's price rises a little with each sale, as in the web version.",
-          "status": "in-progress",
+          "detail": "Traders heading out to buy also carry their home's surplus and sell it to the Town they visit; each sale lifts the seller's price a little (up to 1.35×) and unsold Goods slowly get cheaper (down to 0.75×). In the simulated run Victory now comes at 163 game-minutes instead of 187.",
+          "status": "done",
           "size": "M",
-          "owner": "Claude",
-          "now": "Feature builder (Claude): building it in a background copy"
+          "owner": "Claude"
         },
         {
           "title": "Content editable in the Inspector",
@@ -260,27 +259,60 @@
         },
         {
           "title": "Windows build you can play",
-          "detail": "A standalone Trade Winds.exe you can run outside the Unity Editor, built from a separate copy of the project.",
-          "status": "in-progress",
+          "detail": "Built: D:WORKUnity\trade-winds-buildsTradeWinds-latestTrade Winds.exe (about 100 MB). Rebuild any time with the menu Trade Winds → Build Windows Player.",
+          "status": "done",
           "size": "S",
-          "owner": "Claude",
-          "now": "Release builder (helper agent): building from a background copy"
+          "owner": "Claude"
         },
         {
           "title": "Code health review",
-          "detail": "A reviewer reads the game code for duplicated logic, fragile spots, missing tests and tech debt, and turns findings into tasks.",
-          "status": "in-progress",
+          "detail": "Findings in docs/guides/code-health.md: 9 bugs (mostly save/load), numbers that belong in Balance, duplicated trade code, test gaps. They became the tasks below.",
+          "status": "done",
           "size": "S",
-          "owner": "Claude",
-          "now": "Code health reviewer (helper agent): reading the code"
+          "owner": "Claude"
         },
         {
           "title": "UI and onboarding review",
-          "detail": "A reviewer checks the screens, panels, Mission tips and texts for confusing flows, too many clicks, unclear wording and a rough first hour.",
-          "status": "in-progress",
+          "detail": "Findings in docs/guides/onboarding.md: Mission 6 hides its prerequisites, tips point at things the player can't do yet, toasts hidden behind the research panel, wording that breaks the glossary. They became the tasks below.",
+          "status": "done",
           "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Fix save and determinism bugs",
+          "detail": "Route cache after founding a Town, save migration, unknown research ids, Goods lost when an upgrade is cancelled, royal Traders and demolished Towns, out-of-date Balance asset.",
+          "status": "in-progress",
+          "size": "M",
           "owner": "Claude",
-          "now": "UI/UX + onboarding reviewer (helper agent): reading the screens and texts"
+          "now": "Feature builder (Claude): fixing in a background copy"
+        },
+        {
+          "title": "First-hour onboarding fixes",
+          "detail": "Mission tips that say exactly what to do (Missions 2, 3, 4, 6), toasts above the research panel, a reason when a disabled button is clicked, empty-Town and research-queue messages.",
+          "status": "todo",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Words and terms pass",
+          "detail": "Make every player-facing text use the glossary words (Trader, Tariff, Basic Needs, Deposit) and say how to fix a refusal.",
+          "status": "todo",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Kingdom Overview and Goods strip",
+          "detail": "The HUD parts from the design that are still missing: which Town makes and lacks what, at a glance, plus alert icons.",
+          "status": "todo",
+          "size": "M",
+          "owner": "Claude"
+        },
+        {
+          "title": "Code cleanup: numbers into Balance, shared trade code",
+          "detail": "Move hard-coded numbers into the Balance asset, merge the duplicated trade code, add the missing tests.",
+          "status": "todo",
+          "size": "M",
+          "owner": "Claude"
         }
       ]
     }
