@@ -262,6 +262,7 @@ namespace TradeWinds.Core
             if (Content.HasGood("wood")) town.Stock[Content.GoodIndex("wood")] = 60;
             if (Content.HasGood("potato")) town.Stock[Content.GoodIndex("potato")] = 40;
             Towns.Add(town);
+            RoadVersion++; // Town centres count as road: cached routes must be found again.
             SyncFleets(town);
             Stats.TownsFounded++;
             Log($"{town.Name} founded.");
@@ -534,8 +535,12 @@ namespace TradeWinds.Core
             refund = Math.Max(0, gold - Math.Max(0, town.GoldTaken));
             Treasury += refund;
             Towns.Remove(town);
+            RoadVersion++;
             foreach (var other in Towns)
                 foreach (var t in other.Traders)
+                    if (t.Seller == town) t.Seller = null;
+            if (Castle != null)
+                foreach (var t in Castle.Traders)
                     if (t.Seller == town) t.Seller = null;
             Log($"{town.Name} was abandoned.");
             return CommandResult.Success;

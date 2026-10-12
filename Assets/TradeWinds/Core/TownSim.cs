@@ -403,8 +403,10 @@ namespace TradeWinds.Core
                             p.Target.BufferInbound[p.Good] -= p.Amount;
                             break;
                         case PorterJob.DeliverMaterials:
-                            p.Target.Delivered[p.Good] += p.Amount;
                             p.Target.DeliveringNow[p.Good] -= p.Amount;
+                            // An upgrade cancelled while this was on the way: back into Town Stock.
+                            if (p.Target.NeedsMaterials) p.Target.Delivered[p.Good] += p.Amount;
+                            else town.Stock[p.Good] = Math.Min(b.StockCap, town.Stock[p.Good] + p.Amount);
                             break;
                     }
                 }
