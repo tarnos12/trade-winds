@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-12 11:42",
+  "generated": "2026-10-12 15:29",
   "goods": [
     {
       "id": "potato",
@@ -2650,26 +2650,6 @@
       "unlocks": []
     },
     {
-      "id": "k_tax",
-      "name": "Tax Ledgers",
-      "band": "Kingdom",
-      "requires": [],
-      "materials": [
-        {
-          "good": "potato",
-          "amount": 20
-        },
-        {
-          "good": "wood",
-          "amount": 15
-        }
-      ],
-      "modifier": "TariffBonus",
-      "value": 0.03,
-      "description": "Tariff \u002B3%.",
-      "unlocks": []
-    },
-    {
       "id": "k_scouts",
       "name": "Scouting Party",
       "band": "Kingdom",
@@ -2759,9 +2739,7 @@
       "id": "k_charters",
       "name": "Town Charters",
       "band": "Kingdom",
-      "requires": [
-        "k_tax"
-      ],
+      "requires": [],
       "materials": [
         {
           "good": "planks",
@@ -2781,9 +2759,7 @@
       "id": "k_grants",
       "name": "Township Grants",
       "band": "Kingdom",
-      "requires": [
-        "k_tax"
-      ],
+      "requires": [],
       "materials": [
         {
           "good": "planks",
@@ -2841,28 +2817,6 @@
       "modifier": "TownCap",
       "value": 3,
       "description": "Town limit \u002B3.",
-      "unlocks": []
-    },
-    {
-      "id": "k_bureaucracy",
-      "name": "Grand Bureaucracy",
-      "band": "Kingdom",
-      "requires": [
-        "k_tax"
-      ],
-      "materials": [
-        {
-          "good": "gold_ring",
-          "amount": 15
-        },
-        {
-          "good": "chairs",
-          "amount": 25
-        }
-      ],
-      "modifier": "TariffBonus",
-      "value": 0.07,
-      "description": "Tariff \u002B7%.",
       "unlocks": []
     },
     {

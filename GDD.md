@@ -248,7 +248,7 @@ much is stocked):
 - One active project + a queue; cancel refunds nothing.
 - Tree in five bands — Peasant, Worker, Burgher, Aristocrat (building **unlocks** and **upgrade
   levels**) and Kingdom (**modifiers**): extractor/processor/all output boosts, Paved Roads, Larger
-  Carts, extra Traders, Castle warehouse size, Tariff +3% / +7% (under review: owner wants a stable 30%), housing +15%,
+  Carts, extra Traders, Castle warehouse size,  housing +15%,
   +1 Town slot, Town cap +3/+3/+2, extra Scouts, Advanced Provisioner.
 
 **Scouts & provisions** — you start with 1 Scout (up to 3 via research). Send it to a flag; it walks
@@ -353,11 +353,11 @@ seasons; player contracts between Towns; seed of the day.
 ## 16. Open questions
 
 Open owner questions live in the Hub's Questions tab (`docs/design/questions.json`); answers are kept in
-`docs/design/owner-picks-<date>.json`. Open now: rich Towns vs Take; whether the two Tariff research bonuses stay.
+`docs/design/owner-picks-<date>.json`. Open now: whether to limit the Crown's Take on rich Towns.
 
 Resolved 2026-10-12 (owner-picks-2026-10-12.json): **title "Trade Winds" is final**; a full run should take
 **about 4 hours** (current pace kept); **Tariff is a stable 30% with no slider** (Tariff Office removed);
-**juice, soft sounds + ambient bed, and Town speech bubbles all come back**.
+**juice, soft sounds + ambient bed, and Town speech bubbles all come back**; no research changes the Tariff (Tax Ledgers and Grand Bureaucracy removed): it is **always exactly 30%**.
 
 Resolved 2026-10-04: "Burgher" on screen too (not "Citizen"); Missions reward gold; Tariff is the
 main income; Porters are real logistics.

@@ -44,7 +44,7 @@ namespace TradeWinds.Core
 
             var research = new List<string>
             {
-                "r_fishery", "r_quarry", "r_sheep", "r_farm", "k_tax", "r_hut2", "k_grants", "r_cottage", "r_charcoal",
+                "r_fishery", "r_quarry", "r_sheep", "r_farm", "r_hut2", "k_grants", "r_cottage", "r_charcoal",
                 "r_mill", "r_tailoring", "r_bakery", "r_brewery", "r_clay_pit", "r_brickworks", "r_oil", "r_lamp", "r_pottery",
                 "r_coal_mine", "r_stone_tools", "r_carpentry", "r_iron_mine", "r_manor", "r_forge", "r_armory", "r_distillery",
                 "r_gold_mine", "r_goldsmith", "r_luxury_tailor", "r_aristocrat_home",

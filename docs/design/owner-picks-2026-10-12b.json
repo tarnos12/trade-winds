@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-12",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim), second batch.",
+  "raw": "Answers\nrich_towns_take: (no pick)  | note: Explain it\ntariff_bonuses: Yes: remove both; the Tariff is always 30%",
+  "answers": {
+    "rich_towns_take": { "pick": null, "note": "Explain it", "outcome": "Explained step by step in chat; the question is re-asked in the Hub with the same step-by-step wording (rich_towns_take_v3)." },
+    "tariff_bonuses": { "pick": "remove", "label": "Yes: remove both; the Tariff is always 30%", "outcome": "Tax Ledgers and Grand Bureaucracy removed; the Tariff is always exactly 30%." }
+  }
+}

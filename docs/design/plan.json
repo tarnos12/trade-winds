@@ -1,6 +1,6 @@
 {
   "title": "Trade Winds: plan",
-  "updated": "2026-10-12 09:47",
+  "updated": "2026-10-12 13:30",
   "source": "The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it.",
   "statusMeaning": {
     "task": {
@@ -162,7 +162,7 @@
           "status": "blocked",
           "size": "S",
           "owner": "Claude",
-          "blockedBy": "Your answer: rich_towns_take (asked again, 2026-10-12)"
+          "blockedBy": "Your answer: rich_towns_take_v3 (explained step by step, 2026-10-12)"
         },
         {
           "title": "Set the length of a full run",
@@ -179,12 +179,11 @@
           "owner": "Claude"
         },
         {
-          "title": "Tariff research bonuses",
-          "detail": "Decide whether Tax Ledgers (+3%) and Grand Bureaucracy (+7%) stay, given the stable 30% Tariff.",
-          "status": "blocked",
+          "title": "Tariff always exactly 30%",
+          "detail": "You chose a stable Tariff: the two research nodes that raised it (Tax Ledgers, Grand Bureaucracy) are removed.",
+          "status": "done",
           "size": "S",
-          "owner": "Claude",
-          "blockedBy": "Your answer: tariff_bonuses"
+          "owner": "Claude"
         },
         {
           "title": "Juice: coin bursts, chimney smoke, build bursts",

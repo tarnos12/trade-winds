@@ -243,16 +243,14 @@ namespace TradeWinds.Core
             // Kingdom
             R("k_crop", "Crop Rotation", ResearchBand.Kingdom, L(A("wood", 20), A("potato", 15)), null, Modifier.ExtractorOutput, 1.2, "Extractors produce ×1.2.");
             R("k_paved", "Paved Roads", ResearchBand.Kingdom, L(A("wood", 25), A("planks", 10)), null, Modifier.TraderSpeed, 1.5, "Traders travel ×1.5 faster.");
-            R("k_tax", "Tax Ledgers", ResearchBand.Kingdom, L(A("potato", 20), A("wood", 15)), null, Modifier.TariffBonus, 0.03, "Tariff +3%.");
             R("k_scouts", "Scouting Party", ResearchBand.Kingdom, L(A("potato", 20), A("wood", 20)), null, Modifier.ExtraScouts, 1, "+1 Scout.");
             R("k_guilds", "Guild Halls", ResearchBand.Kingdom, L(A("planks", 20), A("stone", 25)), new[] { "k_crop" }, Modifier.ProcessorOutput, 1.2, "Processors produce ×1.2.");
             R("k_carts", "Larger Carts", ResearchBand.Kingdom, L(A("planks", 25), A("wood", 20)), new[] { "k_paved" }, Modifier.TraderCapacity, 1.5, "Traders carry ×1.5.");
             R("k_caravan", "Extra Caravan", ResearchBand.Kingdom, L(A("planks", 30), A("stone_tools", 10)), new[] { "k_paved" }, Modifier.ExtraTraders, 1, "+1 Trader per Town.");
-            R("k_charters", "Town Charters", ResearchBand.Kingdom, L(A("planks", 20), A("stone_tools", 15)), new[] { "k_tax" }, Modifier.TownSlots, 1, "+1 building slot per Town.");
-            R("k_grants", "Township Grants", ResearchBand.Kingdom, L(A("planks", 30), A("stone", 30)), new[] { "k_tax" }, Modifier.TownCap, 3, "Town limit +3.");
+            R("k_charters", "Town Charters", ResearchBand.Kingdom, L(A("planks", 20), A("stone_tools", 15)), null, Modifier.TownSlots, 1, "+1 building slot per Town.");
+            R("k_grants", "Township Grants", ResearchBand.Kingdom, L(A("planks", 30), A("stone", 30)), null, Modifier.TownCap, 3, "Town limit +3.");
             R("k_census", "Royal Census", ResearchBand.Kingdom, L(A("bread", 20), A("clothes", 20)), new[] { "k_grants" }, Modifier.HousingBonus, 1.15, "Houses hold ×1.15 residents.");
             R("k_province", "Provincial Rule", ResearchBand.Kingdom, L(A("bricks", 30), A("iron_tool", 15)), new[] { "k_grants" }, Modifier.TownCap, 3, "Town limit +3.");
-            R("k_bureaucracy", "Grand Bureaucracy", ResearchBand.Kingdom, L(A("gold_ring", 15), A("chairs", 25)), new[] { "k_tax" }, Modifier.TariffBonus, 0.07, "Tariff +7%.");
             R("r_adv_provisioner", "Advanced Provisioner", ResearchBand.Kingdom, L(A("fish", 15), A("planks", 10)), new[] { "r_fishery" }, desc: "Unlocks the Advanced Provisioner (fish + potato → provisions).");
 
             // ---- Missions (sequential; Victory = completing the last one)

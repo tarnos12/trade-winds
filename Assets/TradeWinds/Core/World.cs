@@ -202,8 +202,8 @@ namespace TradeWinds.Core
 
         public bool HasModifier(Modifier m) => ModifierSum(m) > 0;
 
-        public double EffectiveTariff =>
-            Math.Max(B.TariffMin, Math.Min(B.TariffMax, B.TariffRate + ModifierSum(Modifier.TariffBonus)));
+        /// <summary>The Crown's cut of every trade between Towns: a stable 30% (owner, 2026-10-12).</summary>
+        public double EffectiveTariff => B.TariffRate;
 
 
         public int TownCap => B.TownCap + (int)Math.Round(ModifierSum(Modifier.TownCap));

@@ -1,21 +1,12 @@
 [
   { "g": "Balance" },
   {
-    "id": "rich_towns_take",
-    "q": "Towns that sell a lot get very rich: late in a run each holds 100,000+ gold. The Crown's Take button moves 1,000 gold from a Town into your treasury, and you may press it every 2 minutes on every Town. With 7 Towns that is up to 3,500 gold a minute, while the Tariff (meant to be your main income) brings about 1,300 a minute at that point. So pressing Take beats letting Towns trade. Should Take be limited?",
-    "ctx": "Today a Take costs the Town only a short mood dip (−30 happiness for 1 minute). The Tariff is 30% of every trade between Towns.",
+    "id": "rich_towns_take_v3",
+    "q": "Should the Crown's Take button be limited? (1) Your treasury is the Crown's money: it pays for Towns, buildings and roads, and it is filled by the Tariff (30% of every trade) and Mission rewards. (2) Each Town has its own purse: residents pay Tax into it and the Town spends it buying Goods. (3) Towns that sell a lot earn far more than they spend, so late in a run a busy exporter holds 100,000+ gold. (4) Take moves 1,000 gold from a Town's purse to your treasury, every 2 minutes, on every Town. (5) With 7 rich Towns that is up to 3,500 gold a minute, while the Tariff brings about 1,300. So the best late-game move would be clicking Take on every Town every 2 minutes, which goes against \"Tariff is the main income\" and \"don't micromanage\".",
     "o": [
-      ["tax_since", "Yes: Take can only pull the Tax the Town earned since your last Take", true],
-      ["cooldown", "Yes: keep 1,000 gold, but only once every 5 minutes per Town"],
-      ["leave", "No: leave Take as it is"]
-    ]
-  },
-  {
-    "id": "tariff_bonuses",
-    "q": "Your note says the Tariff is a stable 30% with no research for it. The slider is gone. Two research nodes still raise the Tariff: Tax Ledgers (+3%) and Grand Bureaucracy (+7%). Remove them too, so the Tariff is always exactly 30%?",
-    "o": [
-      ["remove", "Yes: remove both; the Tariff is always 30%", true],
-      ["keep", "No: keep the two bonuses (30% to 40%)"]
+      ["tax_since", "Limit it: Take only moves the Tax the Town earned since your last Take", true],
+      ["cooldown", "Limit it: keep 1,000 gold, but only once every 5 minutes per Town"],
+      ["leave", "Leave it: Take may be strong"]
     ]
   }
 ]

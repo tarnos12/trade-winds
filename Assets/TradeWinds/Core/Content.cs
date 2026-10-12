@@ -130,7 +130,6 @@ namespace TradeWinds.Core
         TraderSpeed,
         TraderCapacity,
         ExtraTraders,
-        TariffBonus,
         TownSlots,
         TownCap,
         HousingBonus,
@@ -191,8 +190,6 @@ namespace TradeWinds.Core
         public double StartTreasury = 10000;
         public double RoadCostPerHex = 5;
         public double TariffRate = 0.30;
-        public double TariffMin = 0.10;
-        public double TariffMax = 0.40;
         public double CrownTransfer = 1000;
         public double CrownCooldownSec = 120;
         public double GiveHappiness = 10;
