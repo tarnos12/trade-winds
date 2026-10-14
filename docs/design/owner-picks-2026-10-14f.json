@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-14",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim): grilling round 4.",
+  "raw": "settle_on_arrival: The seller sets the Goods aside for that Trader when it leaves home, so they are always there on arrival (nobody else can buy them meanwhile)\nseller_choice_rule: That rule\ntax_target: Break even at about 1.25× base price (today's Peasant numbers): profit when buying cheap, loss above 1.25×  | note: Also make resident pay standard tax. They only pay tax if base resources are provided(both wood + potato in peasant case, otherwise peasants leave like they do now right?) Same for luxury, each luxury gives 25% bonus gold for each peasant so 6 gold base + 3 for 1 luxury and 3 for another. That's an example, balance it so it makes sense.\nbridge: A road piece built on a water hex beside land, so Traders and Porters can cross narrow water; costs several times a road (proposal: 5×), Traders cross at road speed  | note: Up to 3x tiles over water(5 tiles total since 2 of them connect on a land tile, but they can be placed on top of a building on land, but not fisherman on water\nshortcuts_final: Change some (say in the note)  | note: F1-F2-F3 for game speed. T for castle, remove M. Right click to cancel currenet action/tool in hand.",
+  "answers": {
+    "settle_on_arrival": {
+      "pick": "reserve",
+      "outcome": "Seller sets the Goods aside when the Trader leaves; the Trader pays on arrival (30% of it to the Crown)."
+    },
+    "seller_choice_rule": {
+      "pick": "proposal",
+      "outcome": "Cost per unit = price + trip time x value of time (higher when starving, rich or short of free Traders); split big needs across sellers when Traders are free."
+    },
+    "tax_target": {
+      "pick": "break_125",
+      "note": "Standard Tax per resident, paid only while all Basic Needs are provided (Peasants: Wood and Potato); each Luxury provided adds a bonus (example: +25% of the base Tax per Luxury). Numbers to balance.",
+      "outcome": "Tune to break even at ~1.25x base. Tax rule details in round 5."
+    },
+    "bridge": {
+      "pick": "water_road",
+      "note": "Up to 3 water hexes (5 hexes with its two land ends). Land ends may be hexes with buildings; never over a Fishery's water hex.",
+      "outcome": "Bridge: up to 3 water hexes between two land hexes, ~5x road cost, road speed; not over a Fishery."
+    },
+    "shortcuts_final": {
+      "pick": "other",
+      "note": "F1/F2/F3 game speed; T opens the Castle; no mute key; right-click cancels the current tool.",
+      "outcome": "Keys: 1-6 build tabs, 1-8 buildings, Space pause, F1/F2/F3 speed, R research, T Castle, Esc close, Shift keeps tool, right-click cancels (pan conflict asked in round 5)."
+    }
+  }
+}

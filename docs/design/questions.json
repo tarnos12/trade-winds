@@ -1,92 +1,49 @@
 [
   {
-    "g": "Grilling round 4 (2026-10-14): paying on arrival, choosing sellers, Tax tuning, bridges, shortcuts"
+    "g": "Grilling round 5 (2026-10-14): the Tax rule and right-click"
   },
   {
-    "id": "settle_on_arrival",
-    "q": "Traders now pay when they arrive. What if the seller no longer has the Goods by then (another Trader got there first)?",
+    "id": "tax_basic_provided",
+    "q": "Residents pay a standard Tax only while their Basic Needs are provided. When does a Basic Need count as provided? (Peasants leave when happiness stays below 70%, as today.)",
     "o": [
       [
-        "reserve",
-        "The seller sets the Goods aside for that Trader when it leaves home, so they are always there on arrival (nobody else can buy them meanwhile)",
+        "all_80",
+        "Each Basic Need at least 80% supplied over the last minute; if any one is below, that house pays no Tax",
         true
       ],
       [
-        "take_what_left",
-        "The Trader buys whatever is left and carries the rest of its gold home"
-      ],
-      [
-        "try_next",
-        "The Trader buys what is left, then drives on to the next seller for the rest"
+        "share",
+        "Tax scales with how much of the Basic Needs is supplied (half supplied = half Tax)"
       ]
     ]
   },
   {
-    "id": "seller_choice_rule",
-    "q": "Choosing a seller, from your note: price against distance, with urgency, wealth and free Traders tipping it. Proposed rule: each seller gets a cost per unit = its price + (trip time × how much the Town values time). Time is worth more when the Town is starving for the Good, when it is rich, and when few of its Traders are free; the cheapest cost wins. If the need is big and Traders are free, it sends Traders to the next sellers too.",
-    "ctx": "Example: Potato costs 6 gold at a Town 3 hexes away and 3 gold at a Town 12 hexes away. With 40 Potatoes in Stock the far Town wins (worth the wait). With 0 Potatoes the near one wins. With 3 of 4 Traders busy, the near one wins too.",
+    "id": "tax_happiness_role",
+    "q": "With Tax = standard amount (when Basic Needs are provided) + a bonus per Luxury provided, does happiness still change the Tax?",
     "o": [
       [
-        "proposal",
-        "That rule",
+        "no",
+        "No: happiness only decides how many people move in or leave; the gold comes from the Goods provided",
         true
       ],
       [
-        "other",
-        "Change it (say how in the note)"
+        "yes",
+        "Yes: happier residents pay a bit more on top"
       ]
     ]
   },
   {
-    "id": "tax_target",
-    "q": "Tax tuning target. Today a Peasant at 70% happiness pays 12 gold a minute and uses 1.3 Potato + 0.9 Wood a minute (9.7 gold at base prices), so supplying them breaks even when the Town pays about 1.24× base. At 100% happiness with Fish and Wool: 19.2 gold a minute against 16.9 gold of Goods at base. Your rule: \"can't always make a profit, but between base price and 1.5× it should even out\". Which target do I tune every tier to (checked in the test runs)?",
+    "id": "right_click",
+    "q": "Right-click cancels the tool in hand, but right-drag also pans the camera today. How do they live together?",
     "o": [
       [
-        "break_125",
-        "Break even at about 1.25× base price (today's Peasant numbers): profit when buying cheap, loss above 1.25×",
+        "click_vs_drag",
+        "A right-click without moving the mouse cancels; holding and dragging still pans (middle-drag and WASD too)",
         true
       ],
       [
-        "break_150",
-        "Break even at 1.5× base: supplying residents almost always pays"
-      ],
-      [
-        "break_100",
-        "Break even at base price: only cheap buys pay"
-      ]
-    ]
-  },
-  {
-    "id": "bridge",
-    "q": "Bridges are new (in your Tools tab). What is a bridge?",
-    "o": [
-      [
-        "water_road",
-        "A road piece built on a water hex beside land, so Traders and Porters can cross narrow water; costs several times a road (proposal: 5×), Traders cross at road speed",
-        true
-      ],
-      [
-        "mountain_pass",
-        "Also a way through mountains (a pass)"
-      ],
-      [
-        "other",
-        "Something else (say in the note)"
-      ]
-    ]
-  },
-  {
-    "id": "shortcuts_final",
-    "q": "The full key list with your tabs. Build bar: 1 Tools (found Town, road, bridge, destroy road, destroy building) · 2 Peasant · 3 Worker · 4 Burgher · 5 Aristocrat · 6 Special (Castle buildings); with a tab open, 1-8 picks a building. Other keys: Space pause · + / - game speed · R research · K Castle · M mute · Esc close the tab or panel · Shift keeps the tool · WASD / right-drag pan · wheel zoom. The Kingdom Overview opens from a button.",
-    "o": [
-      [
-        "ok",
-        "Yes, that list",
-        true
-      ],
-      [
-        "other",
-        "Change some (say in the note)"
+        "middle_pan",
+        "Right-click only cancels; pan with middle-drag and WASD"
       ]
     ]
   }

@@ -53,6 +53,9 @@ Goods a Trader carries on its way out to buy, sold to the Town it is visiting.
 **Sales pressure**:
 The rise in a Town's asking price for a Good as it keeps selling it, and the slow fall when it stops.
 
+**Bridge**:
+A road across up to three water hexes between two land hexes.
+
 **Porter**:
 An agent that moves Goods inside one Town — the only way Goods reach houses, processors and building sites; never trades.
 
