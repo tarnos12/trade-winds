@@ -1,180 +1,109 @@
 [
   {
-    "g": "Grilling round 2 (2026-10-14): Town gold, prices, and the Kingdom Overview"
+    "g": "Grilling round 3 (2026-10-14): how Towns earn and pay, prices, controls"
   },
   {
-    "id": "purse_limit",
-    "q": "Why there is a purse limit, and what to do instead. Towns earn Tax from their residents. Tax is new gold, and Towns had almost nothing to spend it on, so in the 4-hour test run purses kept growing: the richest Town held 128,000 gold (the \"100k Towns\" you asked me to fix on 2026-10-12). The limit (3,000 to 20,000 by Town level, residents spend the rest) was that fix. Which way instead?",
-    "ctx": "Any of these keeps Towns from piling up 100k. Today a Town's gold only goes on buying Goods, level-ups (paid by you) and building.",
+    "id": "tariff_payer",
+    "q": "You said Towns pay the Crown when they buy or sell. Today the Tariff is new gold the Crown receives on top of each sale; no Town pays it. Who should pay the 30% instead?",
+    "ctx": "This matters for balance: if Towns pay the Tariff out of their own gold, it stops being new money, and Tax becomes the only way gold enters the Kingdom.",
     "o": [
       [
-        "spend_more",
-        "No limit: the richer a Town, the more its residents spend each minute (for example 2% of the Purse per minute), so purses settle on their own instead of hitting a wall",
+        "seller",
+        "The selling Town: it keeps 70% of the sale, the Crown gets 30%",
         true
       ],
       [
-        "town_growth",
-        "No limit: Towns spend spare gold on their own growth (they level themselves up and upgrade buildings), so gold turns into a bigger Town"
+        "buyer",
+        "The buying Town: it pays the price plus 30% on top"
       ],
       [
-        "keep_limit",
-        "Keep the limit as it is"
-      ],
-      [
-        "allow_hoard",
-        "No limit and no fix: rich Towns may hold 100k+"
+        "both",
+        "Both: 15% from each"
       ]
     ]
   },
   {
-    "id": "price_range_scope",
-    "q": "Your new price range (0.25× to 5× base): is that the Town's whole asking price, or only the part from Sales pressure? Today the asking price is two parts multiplied: how much the Town has in Stock (0.4× to 1.9×) times Sales pressure (0.75× to 1.35×).",
+    "id": "resident_pay",
+    "q": "Residents pay their Town for the Goods it supplies them. How much per unit used?",
+    "ctx": "Example with the first choice: a Hut's Peasants pay 1.5 × 4 = 6 gold for each Potato they eat. If the Town bought that Potato for 5 gold, it earns 1 gold; if it paid 8, it loses 2.",
     "o": [
       [
-        "whole_price",
-        "The whole asking price stays between 0.25× and 5× base, whatever the reason (Stock or Sales pressure)",
+        "fixed_base",
+        "A fixed amount per Good: 1.5 × its base price for a Basic Need, 2 × for a Luxury. Market swings decide whether the Town makes a profit",
         true
       ],
       [
-        "sales_only",
-        "Only Sales pressure goes from 0.25× to 5×; the Stock part comes on top"
+        "market",
+        "The Good's current Kingdom price × 1.5 (Luxury × 2): Towns almost always profit"
+      ],
+      [
+        "happiness",
+        "Keep today's model: Tax per resident per minute, higher when happier, unrelated to which Goods were used"
       ]
     ]
   },
   {
-    "id": "price_curve_speed",
-    "q": "How fast should prices travel? A suggestion to react to: a Good that keeps selling reaches about 2× base after 5 minutes, about 3× after 30 minutes and about 4× after 2 hours, never 5×. A Good nobody buys falls to 0.5× after 5 minutes and 0.25× after about 1 hour.",
+    "id": "global_price",
+    "q": "\"A Good's price is global, and each Town adjusts its own price on top.\" How does the global price move?",
     "o": [
       [
-        "suggested",
-        "Those numbers",
+        "fixed",
+        "It doesn't: the global price is the Good's base price; only each Town's own adjustment (its Stock and Sales pressure) moves",
         true
       ],
       [
-        "faster",
-        "Twice as fast both ways"
+        "kingdom_supply",
+        "It follows the whole Kingdom's supply and demand (lots of Stock everywhere = cheaper), and each Town adjusts on top"
+      ]
+    ]
+  },
+  {
+    "id": "buyer_choice",
+    "q": "Buyers take whatever is available if they can afford it. When several Towns sell the same Good, which one does the buyer go to?",
+    "o": [
+      [
+        "nearest",
+        "The nearest one that has enough (shortest trip)",
+        true
       ],
       [
-        "slower",
-        "Twice as slow both ways"
+        "cheapest",
+        "The cheapest, even if far"
+      ],
+      [
+        "most_stock",
+        "The one with the most spare Stock (today's rule)"
+      ]
+    ]
+  },
+  {
+    "id": "shortcuts",
+    "q": "Keyboard shortcuts. Today: Space pause · 1 / 2 / 4 game speed · R research · K Castle · M mute · Esc cancel / close · Shift keeps the build tool · WASD or right-drag pan · mouse wheel zoom. Your rule takes 1-4 for the build tabs and 1-8 for buildings. A proposal for everything else:",
+    "ctx": "Proposal: 1 Peasant · 2 Worker · 3 Burgher · 4 Aristocrat tabs; then 1-8 picks a building in the open tab · T found a Town · G road tool · X demolish · C Castle buildings tab · Space pause · + / - game speed (1×, 2×, 4×) · R research · K Castle · M mute · Esc close the tab or panel. The Kingdom Overview has a button only.",
+    "o": [
+      [
+        "proposal",
+        "The proposal as written",
+        true
       ],
       [
         "other",
-        "Other (say in the note)"
+        "Change some (write them in the note)"
       ]
     ]
   },
   {
-    "id": "price_graph_where",
-    "q": "Where does the price graph open? You asked for % change over 1 min / 5 min / 30 min / all time with buttons, and a price graph.",
-    "o": [
-      [
-        "town_row",
-        "In the Town panel: each Good in the Stock list shows its % change for the chosen period; clicking the Good opens its price graph under it. The same buttons and graph also open from the Goods strip for the whole Kingdom's average price",
-        true
-      ],
-      [
-        "town_only",
-        "Only in the Town panel"
-      ],
-      [
-        "strip_only",
-        "Only from the Goods strip (Kingdom average)"
-      ]
-    ]
-  },
-  {
-    "id": "overview_open",
-    "q": "How does the Kingdom Overview open? The design says K, but K opens the Castle today.",
-    "o": [
-      [
-        "k_and_button",
-        "K and a Kingdom button in the top bar open the Overview; the Castle opens with C or by clicking it",
-        true
-      ],
-      [
-        "button_only",
-        "A button only; K stays the Castle"
-      ]
-    ]
-  },
-  {
-    "id": "overview_columns",
-    "q": "The Overview's Town table (one row per Town, sort by any column, click a row to jump to the Town): which columns?",
+    "id": "good_detail",
+    "q": "Clicking a Good in the top-left list opens its details. What's in them? (Your earlier design: storage, net production, who makes and uses it, the price line.)",
     "o": [
       [
         "suggested",
-        "Town, level, people per tier, happiness, Purse, Tax per minute, Tariff per minute it brings the Crown, what it makes most, what it lacks (missing Basic Needs), alerts",
+        "Kingdom Stock and where it sits (per Town), made and used per minute (net), the Towns that make it and the Towns that use it, and the price graph with 1 min / 5 min / 30 min / all time buttons showing % change. Opening it also turns on Resource Flow on the map",
         true
       ],
       [
-        "short",
-        "A shorter set: Town, people, happiness, Purse, Tariff per minute, lacks"
-      ],
-      [
-        "other",
-        "Other (say in the note)"
-      ]
-    ]
-  },
-  {
-    "id": "goods_strip",
-    "q": "The Goods strip: a row along the top of the screen with one chip per Good. What's in it?",
-    "o": [
-      [
-        "present",
-        "Only Goods the Kingdom has or makes; each chip shows the Good, the Kingdom's total Stock, the average price and a rising/falling arrow (over the chosen period)",
-        true
-      ],
-      [
-        "all",
-        "All 26 Goods always, greyed when the Kingdom has none"
-      ]
-    ]
-  },
-  {
-    "id": "resource_flow",
-    "q": "Resource Flow: clicking a Good's chip shows on the map where it comes from and goes. What should it show?",
-    "o": [
-      [
-        "suggested",
-        "Towns that make it (green ring), Towns that use it (orange ring), and lines along the trade routes it travelled in the last 5 minutes (thicker = more)",
-        true
-      ],
-      [
-        "live_only",
-        "Only the Traders carrying it right now, highlighted"
-      ]
-    ]
-  },
-  {
-    "id": "town_alerts",
-    "q": "Alert icons over Towns (one at a time, the most urgent; clicking it opens the Town panel at the cause). Which alerts?",
-    "multi": true,
-    "o": [
-      [
-        "basic_need",
-        "A Basic Need is missing",
-        true
-      ],
-      [
-        "idle",
-        "A workplace is idle (no workers or no inputs)",
-        true
-      ],
-      [
-        "unhappy",
-        "Residents very unhappy (below 30%)",
-        true
-      ],
-      [
-        "blocked_build",
-        "A building can't be finished: no Town sells a material it needs",
-        true
-      ],
-      [
-        "purse_empty",
-        "The Town's Purse is empty"
+        "graph_only",
+        "Only the price graph and the % change"
       ]
     ]
   }
