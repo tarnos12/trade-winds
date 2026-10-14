@@ -1,1 +1,138 @@
-[]
+[
+  {
+    "g": "Grilling round 1 (2026-10-14): what to design next, and glossary words that are wrong or missing"
+  },
+  {
+    "id": "grill_topic",
+    "q": "What should we design (grill) next?",
+    "ctx": "You didn't name a topic. These are the open design areas that don't depend on art.",
+    "o": [
+      [
+        "overview",
+        "Kingdom Overview and Goods strip: the HUD parts the design asks for but the game never built (sortable Town table, kingdom-wide Goods with prices and trends, the Resource Flow overlay, alert icons over Towns; K opens the Castle today, not an overview)",
+        true
+      ],
+      [
+        "pacing",
+        "Balance and run length: back-haul made Victory faster (163 game-minutes in the scripted run; your target is about 4 hours)"
+      ],
+      [
+        "glossary",
+        "Only the glossary questions below, then stop"
+      ]
+    ]
+  },
+  {
+    "id": "term_trader_roads",
+    "q": "The glossary says a Trader travels \"by road\", but roads are optional (off-road is half speed). Change it to \"by road or across open ground\"?",
+    "o": [
+      [
+        "yes",
+        "Yes",
+        true
+      ],
+      [
+        "no",
+        "No (say why in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "term_castle_spot",
+    "q": "The glossary says the Castle is \"at the board's origin\", but the game puts it at a seeded spot, off-centre, at least 2 hexes from the edge. Change it to \"at a seeded spot on the board where every realm starts\"?",
+    "o": [
+      [
+        "yes",
+        "Yes",
+        true
+      ],
+      [
+        "no",
+        "No (say why in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "term_backhaul",
+    "q": "A Trader going out to buy now also carries its home Town's surplus and sells it to the Town it visits. What do we call that? (Players never see the word; it's for the design docs and for talking to me.)",
+    "o": [
+      [
+        "backhaul",
+        "Back-haul (the usual logistics word; the design doc already uses it)",
+        true
+      ],
+      [
+        "outbound",
+        "Outbound cargo"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "term_sales_pressure",
+    "q": "Each sale makes a Town ask a little more for that Good (up to 1.35×); unsold Goods slowly get cheaper (down to 0.75×). What do we call that?",
+    "o": [
+      [
+        "sales_pressure",
+        "Sales pressure",
+        true
+      ],
+      [
+        "demand",
+        "Demand"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "show_sales_pressure",
+    "q": "Should players see it? For example \"Potato asking price +15%\" in the Town panel's Stock list.",
+    "o": [
+      [
+        "show",
+        "Yes, in the Town panel's Stock list, so players see why a Town's prices climb",
+        true
+      ],
+      [
+        "hide",
+        "No, keep it hidden"
+      ]
+    ]
+  },
+  {
+    "id": "term_purse",
+    "q": "A Town's own gold has no glossary word yet. Add Purse: \"a Town's own gold; it has a limit set by the Town's level; anything above the limit is spent by the residents\". Treasury stays the Crown's gold, and Budget is avoided.",
+    "o": [
+      [
+        "yes",
+        "Yes: Purse for a Town, Treasury for the Crown, never mixed",
+        true
+      ],
+      [
+        "no",
+        "No (say why in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "term_royal_give_take",
+    "q": "Three more words used in the game have no glossary entry: Royal Trader (the Castle's own Trader, buying research materials for the Castle Stock), Give and Take (the Crown moving 1,000 gold into or out of a Town's Purse; Take is a safety net, not income). Add all three, and avoid calling Take \"Tax\" or \"Levy\" (Tax already means what residents pay)?",
+    "o": [
+      [
+        "yes",
+        "Yes, add all three; Take: avoid Tax and Levy",
+        true
+      ],
+      [
+        "no",
+        "No (say why in the note)"
+      ]
+    ]
+  }
+]
