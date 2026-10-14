@@ -13,7 +13,8 @@
   },
   "owners": {
     "Claude": "the AI team: builds, tests and reports.",
-    "Mariusz": "the owner: decides, supplies art and play-tests."
+    "Mariusz": "the owner: decides, supplies art and play-tests.",
+    "Art AI": "the art AI (ChatGPT image generation): draws what docs/art/ASSETS_NEEDED.md asks for, via the shared Drive folder."
   },
   "milestones": [
     {
@@ -169,6 +170,29 @@
           "status": "done",
           "size": "M",
           "owner": "Claude"
+        },
+        {
+          "title": "Art pipeline with the art AI",
+          "detail": "The shared Drive folder AI files/Trade Winds now holds the request document (ASSETS_NEEDED.md), a handoff file for the art AI, and reference pictures (your terrain sheet, the exact hex shape, its 76 colours, two screenshots). A checker lists new deliveries; every delivery is logged in docs/art/deliveries.md.",
+          "status": "done",
+          "size": "S",
+          "owner": "Claude"
+        },
+        {
+          "title": "Mountains art (request section 1)",
+          "detail": "Two looks of a mountain hex in the sheet style, darker than every other terrain so it reads as impassable.",
+          "status": "waiting",
+          "size": "S",
+          "owner": "Art AI",
+          "blockedBy": "The art AI: first in its queue"
+        },
+        {
+          "title": "Building sample: Town centre, Lumberjack, Potato Farm (section 2a)",
+          "detail": "Three buildings plus a Town flag the game colours per Town, so you can judge the look before all 34 are drawn.",
+          "status": "waiting",
+          "size": "M",
+          "owner": "Art AI",
+          "blockedBy": "The art AI: second in its queue; then your approval in the Questions tab"
         },
         {
           "title": "Rebalance: stop Towns hoarding 100k gold",
