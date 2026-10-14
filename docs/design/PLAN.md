@@ -2,14 +2,14 @@
 
 Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**33 of 41 tasks done**, 0 in progress, 2 to do, 2 blocked, 4 waiting.
+**33 of 42 tasks done**, 0 in progress, 2 to do, 2 blocked, 5 waiting.
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 20 / 28 |
+| M4 | 1.0 |  | Blocked | 20 / 29 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -65,11 +65,12 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 |---|---|---|---|
 | Done | Owner Hub | One page for game data, charts, the plan and every open question, rebuilt from the project files. | Claude |
 | Done | Adopt the game-dev agent team | Your roster is mapped onto Trade Winds in docs/guides/README.md: which designers apply (and which are merged or not used), each one's guide, the task specialists, and the working rules. | Claude |
-| Blocked | Final art | Replace the code-drawn placeholder hexes, tokens and icons with real art. | Mariusz |
+| Blocked | Final art | Everything the game still draws as placeholders is now asked for in docs/art/ASSETS_NEEDED.md (shared with the art AI): Mountains, 33 buildings, Traders/Porters/Scouts, roads, a building site, Goods and HUD icons. Your terrain sheet, Castle and Hut stay as they are. | Mariusz |
 | Done | Terrain tiles from your sheet | Your terrain sheet is in the game: Barren, Clay, Desert, Fertile, Snow (2 looks) and Forest (3 looks) hexes; water in 3 depths by distance from land, animated, with fish shoals; Gold, Stone (2 looks), Coal and Iron Deposits drawn on the ground; Castle and Hut sprites. Mountains have no art yet (grey hex). | Claude |
 | Done | Art pipeline with the art AI | The shared Drive folder AI files/Trade Winds now holds the request document (ASSETS_NEEDED.md), a handoff file for the art AI, and reference pictures (your terrain sheet, the exact hex shape, its 76 colours, two screenshots). A checker lists new deliveries; every delivery is logged in docs/art/deliveries.md. | Claude |
 | Waiting | Mountains art (request section 1) | Two looks of a mountain hex in the sheet style, darker than every other terrain so it reads as impassable. | Art AI |
 | Waiting | Building sample: Town centre, Lumberjack, Potato Farm (section 2a) | Three buildings plus a Town flag the game colours per Town, so you can judge the look before all 34 are drawn. | Art AI |
+| Waiting | The rest of the art (sections 2b–7) | In this order after the building sample is approved: people and carts, Peasant and Castle buildings, roads, building site, Worker buildings, houses, Burgher buildings, Goods icons, HUD icons. | Art AI |
 | Done | Rebalance: stop Towns hoarding 100k gold | Town purses now stop at 3,000 / 6,000 / 12,000 / 20,000 gold by level; the residents spend the rest. In the simulated run the richest Town holds 20,000 instead of 128,000, and nothing else changes (Victory time, Crown Gives, happiness). Measurements: docs/guides/balance.md. | Claude |
 | Done | Take stays a safety net | You chose to leave Take as it is (2026-10-12): it is there so a player who runs out of gold can keep playing, not as an income. The Tariff stays the main income. | Claude |
 | Done | Set the length of a full run | You chose about 4 hours, so the current pace stays: an efficient player wins in about 3 h 40 min. | Claude |

@@ -158,11 +158,11 @@
         },
         {
           "title": "Final art",
-          "detail": "Replace the code-drawn placeholder hexes, tokens and icons with real art.",
+          "detail": "Everything the game still draws as placeholders is now asked for in docs/art/ASSETS_NEEDED.md (shared with the art AI): Mountains, 33 buildings, Traders/Porters/Scouts, roads, a building site, Goods and HUD icons. Your terrain sheet, Castle and Hut stay as they are.",
           "status": "blocked",
           "size": "L",
           "owner": "Mariusz",
-          "blockedBy": "Waiting for art from Mariusz: Mountains, Towns, buildings other than the Hut, Traders, Porters, Scouts, icons"
+          "blockedBy": "The art AI: sections 1 and 2a first, then the rest after you approve the building sample"
         },
         {
           "title": "Terrain tiles from your sheet",
@@ -193,6 +193,14 @@
           "size": "M",
           "owner": "Art AI",
           "blockedBy": "The art AI: second in its queue; then your approval in the Questions tab"
+        },
+        {
+          "title": "The rest of the art (sections 2b–7)",
+          "detail": "In this order after the building sample is approved: people and carts, Peasant and Castle buildings, roads, building site, Worker buildings, houses, Burgher buildings, Goods icons, HUD icons.",
+          "status": "waiting",
+          "size": "L",
+          "owner": "Art AI",
+          "blockedBy": "Your approval of the building sample (section 2a)"
         },
         {
           "title": "Rebalance: stop Towns hoarding 100k gold",
