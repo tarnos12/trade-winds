@@ -1,44 +1,44 @@
 [
   {
-    "g": "Grilling round 3 (2026-10-14): how Towns earn and pay, prices, controls"
+    "g": "Grilling round 3, updated after your note (2026-10-14): residents create gold by using Goods; Towns pay the Crown on trade"
   },
   {
     "id": "tariff_payer",
-    "q": "You said Towns pay the Crown when they buy or sell. Today the Tariff is new gold the Crown receives on top of each sale; no Town pays it. Who should pay the 30% instead?",
-    "ctx": "This matters for balance: if Towns pay the Tariff out of their own gold, it stops being new money, and Tax becomes the only way gold enters the Kingdom.",
+    "q": "Towns pay the 30% Tariff out of their own Purse (it is no longer new gold). Your note says a self-sufficient Town that only sells brings the Crown 0%, which means the BUYING Town pays. Is that right?",
+    "ctx": "Then a Town earns by selling and by its residents using Goods, and pays the Crown whenever it buys from another Town.",
     "o": [
       [
-        "seller",
-        "The selling Town: it keeps 70% of the sale, the Crown gets 30%",
+        "buyer",
+        "Yes: the buying Town pays the price plus 30% on top; the seller keeps the whole price",
         true
       ],
       [
-        "buyer",
-        "The buying Town: it pays the price plus 30% on top"
+        "seller",
+        "No: the selling Town pays 30% out of the sale"
       ],
       [
         "both",
-        "Both: 15% from each"
+        "Both pay 15%"
       ]
     ]
   },
   {
     "id": "resident_pay",
-    "q": "Residents pay their Town for the Goods it supplies them. How much per unit used?",
+    "q": "Residents create gold for their Town each time they use a Good (Tax is new gold made this way). How much per unit used?",
     "ctx": "Example with the first choice: a Hut's Peasants pay 1.5 × 4 = 6 gold for each Potato they eat. If the Town bought that Potato for 5 gold, it earns 1 gold; if it paid 8, it loses 2.",
     "o": [
       [
         "fixed_base",
-        "A fixed amount per Good: 1.5 × its base price for a Basic Need, 2 × for a Luxury. Market swings decide whether the Town makes a profit",
+        "A fixed amount per Good: 1.5 × its base price for a Basic Need, 2 × for a Luxury. Market prices decide whether buying a Good in to supply residents earns or loses the Town money",
         true
       ],
       [
         "market",
-        "The Good's current Kingdom price × 1.5 (Luxury × 2): Towns almost always profit"
+        "The Good's current global price × 1.5 (Luxury × 2): supplying residents almost always pays"
       ],
       [
-        "happiness",
-        "Keep today's model: Tax per resident per minute, higher when happier, unrelated to which Goods were used"
+        "other",
+        "Other (say in the note)"
       ]
     ]
   },
