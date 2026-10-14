@@ -1,1 +1,732 @@
-[]
+[
+  {
+    "g": "Your terrain sheet: one question per tile. Forest (3 tiles) and the fish shoal animations are clear, so they are not asked."
+  },
+  {
+    "id": "tile_r0c0",
+    "q": "Top-left icon (book): what is it for?",
+    "o": [
+      [
+        "research",
+        "Research (the research tree button)"
+      ],
+      [
+        "log",
+        "Event Log"
+      ],
+      [
+        "missions",
+        "Missions"
+      ],
+      [
+        "castle",
+        "The Castle"
+      ],
+      [
+        "town",
+        "A Town"
+      ],
+      [
+        "provisions",
+        "Provisions (Scouts' supplies)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r0c0.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r0c0.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ],
+    "ctx": "It's smaller than a hex, so I read it as a UI icon."
+  },
+  {
+    "id": "tile_r0c1",
+    "q": "Second small icon (grey-blue with red): what is it?",
+    "o": [
+      [
+        "research",
+        "Research (the research tree button)"
+      ],
+      [
+        "log",
+        "Event Log"
+      ],
+      [
+        "missions",
+        "Missions"
+      ],
+      [
+        "castle",
+        "The Castle"
+      ],
+      [
+        "town",
+        "A Town"
+      ],
+      [
+        "provisions",
+        "Provisions (Scouts' supplies)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r0c1.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r0c1.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r1c0",
+    "q": "First land hex (orange with a woven pattern): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops"
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert"
+      ],
+      [
+        "snow",
+        "Snow"
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c0.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c0.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r1c1",
+    "q": "Second land hex (brown with wood grain): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops"
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert"
+      ],
+      [
+        "snow",
+        "Snow"
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c1.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c1.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r1c2",
+    "q": "Third land hex (pale blue-white, wavy): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops"
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert"
+      ],
+      [
+        "snow",
+        "Snow",
+        true
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c2.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c2.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r1c3",
+    "q": "Fourth land hex (yellow): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops"
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert",
+        true
+      ],
+      [
+        "snow",
+        "Snow"
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c3.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c3.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r1c4",
+    "q": "Fifth land hex (plain green): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops",
+        true
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert"
+      ],
+      [
+        "snow",
+        "Snow"
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c4.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c4.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ],
+    "ctx": "The game's plain buildable ground is called Barren; it's where Towns, houses and workshops go."
+  },
+  {
+    "id": "tile_r1c8",
+    "q": "Last land hex (lavender-white, rough): which terrain?",
+    "o": [
+      [
+        "barren",
+        "Barren: plain ground for Towns, houses and workshops"
+      ],
+      [
+        "fertile",
+        "Fertile: farmland for farms"
+      ],
+      [
+        "desert",
+        "Desert"
+      ],
+      [
+        "snow",
+        "Snow"
+      ],
+      [
+        "mountains",
+        "Mountains: blocks building and travel"
+      ],
+      [
+        "road",
+        "Road"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r1c8.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r1c8.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r2",
+    "q": "Water row 1 (lightest, 3 frames): which water is it? The row below it is its fish shoal version.",
+    "o": [
+      [
+        "shallow",
+        "Shallow water, by the coast",
+        true
+      ],
+      [
+        "water",
+        "Open water"
+      ],
+      [
+        "deep",
+        "Deep water, far from land"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r2.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r2.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ],
+    "ctx": "The game has one Water type. I'd use depth only for looks: shallow next to land, deep far out."
+  },
+  {
+    "id": "tile_r4",
+    "q": "Water row 3 (middle, 3 frames): which water is it?",
+    "o": [
+      [
+        "shallow",
+        "Shallow water, by the coast"
+      ],
+      [
+        "water",
+        "Open water",
+        true
+      ],
+      [
+        "deep",
+        "Deep water, far from land"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r4.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r4.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r6",
+    "q": "Water row 5 (darkest, 3 frames): which water is it?",
+    "o": [
+      [
+        "shallow",
+        "Shallow water, by the coast"
+      ],
+      [
+        "water",
+        "Open water"
+      ],
+      [
+        "deep",
+        "Deep water, far from land",
+        true
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r6.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r6.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r8c0",
+    "q": "Bottom row, first object (cave or arch): what is it?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit"
+      ],
+      [
+        "clay",
+        "Clay Deposit"
+      ],
+      [
+        "coal",
+        "Coal Deposit"
+      ],
+      [
+        "iron",
+        "Iron Deposit"
+      ],
+      [
+        "gold",
+        "Gold Deposit"
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c0.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c0.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ],
+    "ctx": "The bottom-row objects are smaller than a hex, so I'd draw them on top of a ground hex."
+  },
+  {
+    "id": "tile_r8c1",
+    "q": "Bottom row, second object (gold crystals): which Deposit?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit"
+      ],
+      [
+        "clay",
+        "Clay Deposit"
+      ],
+      [
+        "coal",
+        "Coal Deposit"
+      ],
+      [
+        "iron",
+        "Iron Deposit"
+      ],
+      [
+        "gold",
+        "Gold Deposit",
+        true
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c1.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c1.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r8c2",
+    "q": "Bottom row, third object (grey rocks): which Deposit?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit",
+        true
+      ],
+      [
+        "clay",
+        "Clay Deposit"
+      ],
+      [
+        "coal",
+        "Coal Deposit"
+      ],
+      [
+        "iron",
+        "Iron Deposit"
+      ],
+      [
+        "gold",
+        "Gold Deposit"
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c2.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c2.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r8c3",
+    "q": "Bottom row, fourth object (dark rocks): which Deposit?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit"
+      ],
+      [
+        "clay",
+        "Clay Deposit"
+      ],
+      [
+        "coal",
+        "Coal Deposit",
+        true
+      ],
+      [
+        "iron",
+        "Iron Deposit"
+      ],
+      [
+        "gold",
+        "Gold Deposit"
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c3.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c3.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r8c4",
+    "q": "Bottom row, fifth object (tan rocks): which Deposit?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit"
+      ],
+      [
+        "clay",
+        "Clay Deposit",
+        true
+      ],
+      [
+        "coal",
+        "Coal Deposit"
+      ],
+      [
+        "iron",
+        "Iron Deposit"
+      ],
+      [
+        "gold",
+        "Gold Deposit"
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c4.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c4.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  },
+  {
+    "id": "tile_r8c5",
+    "q": "Bottom row, last object (pale blue-grey boulder): which Deposit?",
+    "o": [
+      [
+        "stone",
+        "Stone Deposit"
+      ],
+      [
+        "clay",
+        "Clay Deposit"
+      ],
+      [
+        "coal",
+        "Coal Deposit"
+      ],
+      [
+        "iron",
+        "Iron Deposit",
+        true
+      ],
+      [
+        "gold",
+        "Gold Deposit"
+      ],
+      [
+        "mountains",
+        "Mountains (or a mine entrance on them)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ],
+    "imgs": [
+      {
+        "file": "question-images/tile-r8c5.png",
+        "cap": "The tile, 4× size"
+      },
+      {
+        "file": "question-images/sheet-r8c5.png",
+        "cap": "Where it is on your sheet (red box)"
+      }
+    ]
+  }
+]

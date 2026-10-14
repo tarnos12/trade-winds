@@ -2,14 +2,14 @@
 
 Updated 2026-10-12 16:00. The plan by milestone, kept in docs/design/plan.json; the Hub's Plan tab and docs/design/PLAN.md are built from it. Do not edit PLAN.md by hand: edit plan.json and run `node tools/plan/build-plan.cjs`.
 
-**31 of 37 tasks done**, 0 in progress, 2 to do, 2 blocked, 2 waiting.
+**31 of 38 tasks done**, 0 in progress, 2 to do, 2 blocked, 3 waiting.
 
 | # | Milestone | Gate | Status | Tasks done |
 |---|---|---|---|---|
 | M1 | Economy core |  | Done | 3 / 3 |
 | M2 | The Kingdom |  | Done | 5 / 5 |
 | M3 | Progression |  | Done | 5 / 5 |
-| M4 | 1.0 |  | Blocked | 18 / 24 |
+| M4 | 1.0 |  | Blocked | 18 / 25 |
 
 **Task status:** Done: built and checked. In progress: an agent is working on it now (see Being worked on now). To do: ready to start, nothing stops it. Blocked: cannot start until something arrives (art, an answer, another task). Waiting: could start, but not a good time yet (the reason is shown).
 
@@ -66,6 +66,7 @@ Make it a finished game: real art, the balance answers you choose, the extras yo
 | Done | Owner Hub | One page for game data, charts, the plan and every open question, rebuilt from the project files. | Claude |
 | Done | Adopt the game-dev agent team | Your roster is mapped onto Trade Winds in docs/guides/README.md: which designers apply (and which are merged or not used), each one's guide, the task specialists, and the working rules. | Claude |
 | Blocked | Final art | Replace the code-drawn placeholder hexes, tokens and icons with real art. | Mariusz |
+| Waiting | Terrain tiles from your sheet | Your terrain sheet (art/source/terrain-sheet.png) is cut into tiles. Forest and fish shoals are clear; 17 tiles are asked in the Questions tab. Then they replace the code-drawn hexes, with the 3-frame water animation. | Claude |
 | Done | Rebalance: stop Towns hoarding 100k gold | Town purses now stop at 3,000 / 6,000 / 12,000 / 20,000 gold by level; the residents spend the rest. In the simulated run the richest Town holds 20,000 instead of 128,000, and nothing else changes (Victory time, Crown Gives, happiness). Measurements: docs/guides/balance.md. | Claude |
 | Done | Take stays a safety net | You chose to leave Take as it is (2026-10-12): it is there so a player who runs out of gold can keep playing, not as an income. The Tariff stays the main income. | Claude |
 | Done | Set the length of a full run | You chose about 4 hours, so the current pace stays: an efficient player wins in about 3 h 40 min. | Claude |
