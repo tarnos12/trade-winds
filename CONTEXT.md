@@ -57,7 +57,7 @@ The rise in a Town's asking price for a Good as it keeps selling it, and the slo
 An agent that moves Goods inside one Town — the only way Goods reach houses, processors and building sites; never trades.
 
 **Tariff**:
-The Crown's share of every trade between Towns; the player's main income.
+The Crown's share of every sale between Towns, paid by the selling Town out of the price; the player's main income.
 _Avoid_: Toll, Tax
 
 **Tax**:
@@ -65,7 +65,7 @@ Income paid by a Town's residents according to how well their needs are met.
 _Avoid_: Tariff
 
 **Purse**:
-A Town's own gold, earned when its residents use Goods and when it sells; spent on buying Goods from other Towns and on upgrading its buildings.
+A Town's own gold, earned from its residents' Tax and from its sales; spent on buying Goods from other Towns and on upgrading its buildings.
 _Avoid_: Budget, Treasury
 
 **Treasury**:

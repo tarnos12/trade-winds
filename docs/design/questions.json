@@ -1,124 +1,92 @@
 [
   {
-    "g": "Grilling round 3, updated after your note (2026-10-14): residents create gold by using Goods; Towns pay the Crown on trade"
+    "g": "Grilling round 4 (2026-10-14): paying on arrival, choosing sellers, Tax tuning, bridges, shortcuts"
   },
   {
-    "id": "tariff_payer",
-    "q": "Towns pay the 30% Tariff out of their own Purse (it is no longer new gold). Your note says a self-sufficient Town that only sells brings the Crown 0%, which means the BUYING Town pays. Is that right?",
-    "ctx": "Then a Town earns by selling and by its residents using Goods, and pays the Crown whenever it buys from another Town.",
+    "id": "settle_on_arrival",
+    "q": "Traders now pay when they arrive. What if the seller no longer has the Goods by then (another Trader got there first)?",
     "o": [
       [
-        "buyer",
-        "Yes: the buying Town pays the price plus 30% on top; the seller keeps the whole price",
+        "reserve",
+        "The seller sets the Goods aside for that Trader when it leaves home, so they are always there on arrival (nobody else can buy them meanwhile)",
         true
       ],
       [
-        "seller",
-        "No: the selling Town pays 30% out of the sale"
+        "take_what_left",
+        "The Trader buys whatever is left and carries the rest of its gold home"
       ],
       [
-        "both",
-        "Both pay 15%"
+        "try_next",
+        "The Trader buys what is left, then drives on to the next seller for the rest"
       ]
     ]
   },
   {
-    "id": "resident_pay",
-    "q": "Residents create gold for their Town each time they use a Good (Tax is new gold made this way). How much per unit used?",
-    "ctx": "Example with the first choice: a Hut's Peasants pay 1.5 × 4 = 6 gold for each Potato they eat. If the Town bought that Potato for 5 gold, it earns 1 gold; if it paid 8, it loses 2.",
-    "o": [
-      [
-        "fixed_base",
-        "A fixed amount per Good: 1.5 × its base price for a Basic Need, 2 × for a Luxury. Market prices decide whether buying a Good in to supply residents earns or loses the Town money",
-        true
-      ],
-      [
-        "market",
-        "The Good's current global price × 1.5 (Luxury × 2): supplying residents almost always pays"
-      ],
-      [
-        "other",
-        "Other (say in the note)"
-      ]
-    ]
-  },
-  {
-    "id": "global_price",
-    "q": "\"A Good's price is global, and each Town adjusts its own price on top.\" How does the global price move?",
-    "o": [
-      [
-        "fixed",
-        "It doesn't: the global price is the Good's base price; only each Town's own adjustment (its Stock and Sales pressure) moves",
-        true
-      ],
-      [
-        "kingdom_supply",
-        "It follows the whole Kingdom's supply and demand (lots of Stock everywhere = cheaper), and each Town adjusts on top"
-      ]
-    ]
-  },
-  {
-    "id": "buyer_choice",
-    "q": "Buyers take whatever is available if they can afford it. When several Towns sell the same Good, which one does the buyer go to?",
-    "o": [
-      [
-        "nearest",
-        "The nearest one that has enough (shortest trip)",
-        true
-      ],
-      [
-        "cheapest",
-        "The cheapest, even if far"
-      ],
-      [
-        "most_stock",
-        "The one with the most spare Stock (today's rule)"
-      ]
-    ]
-  },
-  {
-    "id": "shortcuts",
-    "q": "Keyboard shortcuts. Today: Space pause · 1 / 2 / 4 game speed · R research · K Castle · M mute · Esc cancel / close · Shift keeps the build tool · WASD or right-drag pan · mouse wheel zoom. Your rule takes 1-4 for the build tabs and 1-8 for buildings. A proposal for everything else:",
-    "ctx": "Proposal: 1 Peasant · 2 Worker · 3 Burgher · 4 Aristocrat tabs; then 1-8 picks a building in the open tab · T found a Town · G road tool · X demolish · C Castle buildings tab · Space pause · + / - game speed (1×, 2×, 4×) · R research · K Castle · M mute · Esc close the tab or panel. The Kingdom Overview has a button only.",
+    "id": "seller_choice_rule",
+    "q": "Choosing a seller, from your note: price against distance, with urgency, wealth and free Traders tipping it. Proposed rule: each seller gets a cost per unit = its price + (trip time × how much the Town values time). Time is worth more when the Town is starving for the Good, when it is rich, and when few of its Traders are free; the cheapest cost wins. If the need is big and Traders are free, it sends Traders to the next sellers too.",
+    "ctx": "Example: Potato costs 6 gold at a Town 3 hexes away and 3 gold at a Town 12 hexes away. With 40 Potatoes in Stock the far Town wins (worth the wait). With 0 Potatoes the near one wins. With 3 of 4 Traders busy, the near one wins too.",
     "o": [
       [
         "proposal",
-        "The proposal as written",
+        "That rule",
         true
       ],
       [
         "other",
-        "Change some (write them in the note)"
+        "Change it (say how in the note)"
       ]
     ]
   },
   {
-    "id": "good_detail",
-    "q": "Clicking a Good in the top-left list opens its details. What's in them? (Your earlier design: storage, net production, who makes and uses it, the price line.)",
+    "id": "tax_target",
+    "q": "Tax tuning target. Today a Peasant at 70% happiness pays 12 gold a minute and uses 1.3 Potato + 0.9 Wood a minute (9.7 gold at base prices), so supplying them breaks even when the Town pays about 1.24× base. At 100% happiness with Fish and Wool: 19.2 gold a minute against 16.9 gold of Goods at base. Your rule: \"can't always make a profit, but between base price and 1.5× it should even out\". Which target do I tune every tier to (checked in the test runs)?",
     "o": [
       [
-        "suggested",
-        "Kingdom Stock and where it sits (per Town), made and used per minute (net), the Towns that make it and the Towns that use it, and the price graph with 1 min / 5 min / 30 min / all time buttons showing % change. Opening it also turns on Resource Flow on the map",
+        "break_125",
+        "Break even at about 1.25× base price (today's Peasant numbers): profit when buying cheap, loss above 1.25×",
         true
       ],
       [
-        "graph_only",
-        "Only the price graph and the % change"
+        "break_150",
+        "Break even at 1.5× base: supplying residents almost always pays"
+      ],
+      [
+        "break_100",
+        "Break even at base price: only cheap buys pay"
       ]
     ]
   },
   {
-    "id": "levelup_payer",
-    "q": "Who pays for a Town's level-up (more building slots, Traders and Porters)? You said only upgrading buildings uses the Town's own gold; today the level-up is paid from the Town's Purse too.",
+    "id": "bridge",
+    "q": "Bridges are new (in your Tools tab). What is a bridge?",
     "o": [
       [
-        "purse",
-        "The Town's Purse (as today): it is the Town upgrading itself",
+        "water_road",
+        "A road piece built on a water hex beside land, so Traders and Porters can cross narrow water; costs several times a road (proposal: 5×), Traders cross at road speed",
         true
       ],
       [
-        "treasury",
-        "The Treasury: growing the Kingdom is the Crown's job, like founding Towns"
+        "mountain_pass",
+        "Also a way through mountains (a pass)"
+      ],
+      [
+        "other",
+        "Something else (say in the note)"
+      ]
+    ]
+  },
+  {
+    "id": "shortcuts_final",
+    "q": "The full key list with your tabs. Build bar: 1 Tools (found Town, road, bridge, destroy road, destroy building) · 2 Peasant · 3 Worker · 4 Burgher · 5 Aristocrat · 6 Special (Castle buildings); with a tab open, 1-8 picks a building. Other keys: Space pause · + / - game speed · R research · K Castle · M mute · Esc close the tab or panel · Shift keeps the tool · WASD / right-drag pan · wheel zoom. The Kingdom Overview opens from a button.",
+    "o": [
+      [
+        "ok",
+        "Yes, that list",
+        true
+      ],
+      [
+        "other",
+        "Change some (say in the note)"
       ]
     ]
   }
