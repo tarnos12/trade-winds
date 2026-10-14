@@ -161,15 +161,14 @@
           "status": "blocked",
           "size": "L",
           "owner": "Mariusz",
-          "blockedBy": "Waiting for art from Mariusz"
+          "blockedBy": "Waiting for art from Mariusz: Mountains, Towns, buildings other than the Hut, Traders, Porters, Scouts, icons"
         },
         {
           "title": "Terrain tiles from your sheet",
-          "detail": "Your terrain sheet (art/source/terrain-sheet.png) is cut into tiles. Forest and fish shoals are clear; 17 tiles are asked in the Questions tab. Then they replace the code-drawn hexes, with the 3-frame water animation.",
-          "status": "waiting",
+          "detail": "Your terrain sheet is in the game: Barren, Clay, Desert, Fertile, Snow (2 looks) and Forest (3 looks) hexes; water in 3 depths by distance from land, animated, with fish shoals; Gold, Stone (2 looks), Coal and Iron Deposits drawn on the ground; Castle and Hut sprites. Mountains have no art yet (grey hex).",
+          "status": "done",
           "size": "M",
-          "owner": "Claude",
-          "blockedBy": "Your answers in the Questions tab (one per tile)"
+          "owner": "Claude"
         },
         {
           "title": "Rebalance: stop Towns hoarding 100k gold",

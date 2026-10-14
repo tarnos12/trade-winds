@@ -83,6 +83,10 @@ a new chain, found a Town, research the next tier.
 - **The Castle** sits at a seeded, off-centre spot (≥2 hexes from the edge).
 - **Fog of war:** starts revealed around the Castle (radius 6/8/10 by board size). A finished Town or
   building reveals its neighbours; beyond that, only **Scouts** reveal (§11).
+- **Art (owner sheet, 2026-10-14):** 32×32 px pixel-art hexes (`art/source/terrain-sheet.png`, picks in
+  `docs/design/owner-picks-2026-10-14.json`). Forest and Snow have several looks picked by position;
+  water is shaded by distance from land (shallow / open / deep) and animated in 3 frames; Deposits are
+  objects on Barren ground, except Clay, which is its own hex. Mountains have no art yet.
 
 ---
 

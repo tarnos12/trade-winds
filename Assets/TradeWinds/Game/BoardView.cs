@@ -19,6 +19,9 @@ namespace TradeWinds.Game
 
         World _world;
         readonly Dictionary<Terrain, Tile> _terrainTiles = new Dictionary<Terrain, Tile>();
+        readonly Dictionary<Sprite, Tile> _spriteTiles = new Dictionary<Sprite, Tile>();
+        readonly Dictionary<int, AnimatedHexTile> _waterTiles = new Dictionary<int, AnimatedHexTile>();
+        Tilemap _depositMap;
         Tile _roadTile, _fogTile;
         int _drawnRoadVersion = -1, _drawnFogVersion = -1;
         Font _font;
@@ -62,10 +65,19 @@ namespace TradeWinds.Game
             TerrainMap.ClearAllTiles();
             RoadMap.ClearAllTiles();
             if (FogMap != null) FogMap.ClearAllTiles();
+            if (_depositMap == null) _depositMap = NewLayer("Deposits", TerrainOrder() + 1);
+            _depositMap.ClearAllTiles();
             var board = world.Board;
+            var depth = TerrainArt.Available ? WaterDepth(board) : null;
             for (int row = 0; row < board.Height; row++)
             for (int col = 0; col < board.Width; col++)
-                TerrainMap.SetTile(new Vector3Int(col, row, 0), TileFor(board[Core.Board.FromOffset(col, row)]));
+            {
+                var cell = new Vector3Int(col, row, 0);
+                var t = board[Core.Board.FromOffset(col, row)];
+                TerrainMap.SetTile(cell, TileFor(t, col, row, depth));
+                var deposit = TerrainArt.Available ? TerrainArt.Deposit(t) : null;
+                if (deposit != null) _depositMap.SetTile(cell, SpriteTile(deposit[Pick(col, row, deposit.Length)]));
+            }
             _drawnRoadVersion = -1;
             _drawnFogVersion = -1;
 
@@ -73,6 +85,100 @@ namespace TradeWinds.Game
             _hover.transform.localScale = Vector3.one * 0.98f;
             _selection = NewSprite("Selection", SpriteFactory.HexOutline, Palette.Accent, OrderHover - 1);
             _selection.gameObject.SetActive(false);
+        }
+
+        /// <summary>Art tile for a hex: a variant picked by position, animated water by distance from land.
+        /// Falls back to a tinted hex where there is no art (Mountains) or no sheet at all.</summary>
+        TileBase TileFor(Terrain t, int col, int row, int[] depth)
+        {
+            if (!TerrainArt.Available) return TileFor(t);
+            if (t == Terrain.Water || t == Terrain.Fish)
+            {
+                int d = Mathf.Clamp(depth[row * _world.Board.Width + col] - 1, 0, 2);
+                int phase = Pick(col, row, 3);
+                int key = d * 8 + (t == Terrain.Fish ? 4 : 0) + phase;
+                if (!_waterTiles.TryGetValue(key, out var water))
+                {
+                    water = ScriptableObject.CreateInstance<AnimatedHexTile>();
+                    water.Frames = TerrainArt.Water(d, t == Terrain.Fish);
+                    water.FramesPerSecond = 2f;
+                    water.StartTime = phase;
+                    _waterTiles[key] = water;
+                }
+                return water;
+            }
+            var ground = TerrainArt.Ground(t);
+            return ground != null ? SpriteTile(ground[Pick(col, row, ground.Length)]) : TileFor(t);
+        }
+
+        Tile SpriteTile(Sprite s)
+        {
+            if (_spriteTiles.TryGetValue(s, out var tile)) return tile;
+            tile = ScriptableObject.CreateInstance<Tile>();
+            tile.sprite = s;
+            tile.flags = TileFlags.LockColor;
+            _spriteTiles[s] = tile;
+            return tile;
+        }
+
+        /// <summary>Stable pseudo-random variant for a hex (the same map always looks the same).</summary>
+        static int Pick(int col, int row, int count)
+        {
+            if (count <= 1) return 0;
+            uint h = (uint)(col * 73856093) ^ (uint)(row * 19349663);
+            h ^= h >> 13;
+            h *= 0x5bd1e995;
+            h ^= h >> 15;
+            return (int)(h % (uint)count);
+        }
+
+        /// <summary>Steps from each hex to the nearest land (1 = coast); land is 0.</summary>
+        static int[] WaterDepth(Core.Board board)
+        {
+            var dist = new int[board.Width * board.Height];
+            var queue = new Queue<Hex>();
+            for (int row = 0; row < board.Height; row++)
+            for (int col = 0; col < board.Width; col++)
+            {
+                var h = Core.Board.FromOffset(col, row);
+                bool water = board[h] == Terrain.Water || board[h] == Terrain.Fish;
+                dist[row * board.Width + col] = water ? int.MaxValue : 0;
+                if (!water) queue.Enqueue(h);
+            }
+            while (queue.Count > 0)
+            {
+                var h = queue.Dequeue();
+                Core.Board.ToOffset(h, out int c0, out int r0);
+                int d = dist[r0 * board.Width + c0];
+                for (int dir = 0; dir < 6; dir++)
+                {
+                    var n = h.Neighbor(dir);
+                    if (!board.Contains(n)) continue;
+                    Core.Board.ToOffset(n, out int c, out int r);
+                    int i = r * board.Width + c;
+                    if (dist[i] <= d + 1) continue;
+                    dist[i] = d + 1;
+                    queue.Enqueue(n);
+                }
+            }
+            // A board with no land at all: treat every hex as open water.
+            for (int i = 0; i < dist.Length; i++) if (dist[i] == int.MaxValue) dist[i] = 2;
+            return dist;
+        }
+
+        int TerrainOrder()
+        {
+            var r = TerrainMap.GetComponent<TilemapRenderer>();
+            return r != null ? r.sortingOrder : 0;
+        }
+
+        Tilemap NewLayer(string name, int order)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(Grid.transform, false);
+            var map = go.AddComponent<Tilemap>();
+            go.AddComponent<TilemapRenderer>().sortingOrder = order;
+            return map;
         }
 
         Tile TileFor(Terrain t)
@@ -182,7 +288,9 @@ namespace TradeWinds.Game
             if (castle == null) return;
             if (_castle == null)
             {
-                _castle = NewToken("Castle", SpriteFactory.Diamond, Palette.Castle, 0.85f, "K");
+                _castle = TerrainArt.Castle != null
+                    ? NewToken("Castle", TerrainArt.Castle, Color.white, 1.1f, "")
+                    : NewToken("Castle", SpriteFactory.Diamond, Palette.Castle, 0.85f, "K");
                 _castle.Root.transform.position = HexToWorld(castle.Center);
                 _castle.Label.color = Palette.Ink;
                 SetBar(_castle, 1);
@@ -227,15 +335,19 @@ namespace TradeWinds.Game
             {
                 if (!_buildings.TryGetValue(b, out var tok))
                 {
-                    tok = NewToken(b.Def.Name, b.IsHouse ? SpriteFactory.Square : SpriteFactory.Circle,
-                        Palette.ForBuilding(b.Def), 0.5f, Palette.Letter(b.Def));
+                    var art = ArtFor(b.Def);
+                    tok = art != null
+                        ? NewToken(b.Def.Name, art, Color.white, 1.4f, "")
+                        : NewToken(b.Def.Name, b.IsHouse ? SpriteFactory.Square : SpriteFactory.Circle,
+                            Palette.ForBuilding(b.Def), 0.5f, Palette.Letter(b.Def));
                     tok.Root.transform.position = HexToWorld(b.Hex);
                     _buildings[b] = tok;
                 }
-                var c = Palette.ForBuilding(b.Def);
+                bool hasArt = ArtFor(b.Def) != null;
+                var c = hasArt ? Color.white : Palette.ForBuilding(b.Def);
                 bool idle = b.Built && b.IsWorkplace && b.Workers <= 0.01 && !b.IsUpgrading;
                 tok.Body.color = !b.Built ? new Color(c.r, c.g, c.b, 0.4f) : idle ? Color.Lerp(c, Color.gray, 0.6f) : c;
-                tok.Label.text = Palette.Letter(b.Def) + (b.Level > 1 ? b.Level.ToString() : "");
+                tok.Label.text = (hasArt ? "" : Palette.Letter(b.Def)) + (b.Level > 1 ? b.Level.ToString() : "");
                 SetBar(tok, TownSim.ConstructionProgress(_world, b));
                 if (b.Priority)
                 {
@@ -246,6 +358,9 @@ namespace TradeWinds.Game
             for (int i = markers; i < _markerPool.Count; i++) _markerPool[i].gameObject.SetActive(false);
             Sweep(_buildings, b => b.Town != null && _world.Towns.Contains(b.Town) && b.Town.Buildings.Contains(b));
         }
+
+        /// <summary>Owner art for a building, where it exists so far (the Hut).</summary>
+        static Sprite ArtFor(BuildingDef def) => def.Id == "hut" ? TerrainArt.Hut : null;
 
         static void Sweep<T>(Dictionary<T, Token> map, System.Func<T, bool> alive)
         {

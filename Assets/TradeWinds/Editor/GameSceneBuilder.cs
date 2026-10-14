@@ -46,7 +46,8 @@ namespace TradeWinds.EditorTools
             var gridGo = new GameObject("Board");
             var grid = gridGo.AddComponent<Grid>();
             grid.cellLayout = GridLayout.CellLayout.Hexagon;
-            grid.cellSize = new Vector3(0.8660254f, 1f, 1f);
+            // The owner's terrain art: 32×32 px pointy-top hexes at 32 px per unit.
+            grid.cellSize = new Vector3(1f, 1f, 1f);
             var terrain = NewTilemap(gridGo, "Terrain", 0);
             var roads = NewTilemap(gridGo, "Roads", 1);
             var fog = NewTilemap(gridGo, "Fog", 5);

@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-14",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim); sheet: art/source/terrain-sheet.png (32x32 tiles on a 48 px grid, row r / column c from 0).",
+  "raw": "tile_r0c0: The Castle\ntile_r0c1: Something else (say in the note)  | note: Hut\ntile_r1c0: Barren: plain ground for Towns, houses and workshops\ntile_r1c1: Something else (say in the note)  | note: Clay\ntile_r1c2: Snow\ntile_r1c3: Desert\ntile_r1c4: Fertile: farmland for farms\ntile_r1c8: Snow\ntile_r2: Shallow water, by the coast\ntile_r4: Open water\ntile_r6: Deep water, far from land\ntile_r8c0: Something else (say in the note)  | note: We wont use this\ntile_r8c1: Gold Deposit\ntile_r8c2: Stone Deposit\ntile_r8c3: Coal Deposit\ntile_r8c4: Iron Deposit\ntile_r8c5: Stone Deposit",
+  "given_without_asking": {
+    "r1c5-r1c7": "Forest (3 variants)",
+    "r3, r5, r7": "Fish shoal on shallow / open / deep water (3 frames each)"
+  },
+  "answers": {
+    "tile_r0c0": { "pick": "castle", "outcome": "Castle sprite on the board." },
+    "tile_r0c1": { "pick": "other", "note": "Hut", "outcome": "Hut building sprite." },
+    "tile_r1c0": { "pick": "barren", "outcome": "Barren ground; also the ground under Stone, Coal, Iron and Gold Deposits." },
+    "tile_r1c1": { "pick": "other", "note": "Clay", "outcome": "Clay is a ground hex, not an object." },
+    "tile_r1c2": { "pick": "snow", "outcome": "Snow, variant 1." },
+    "tile_r1c3": { "pick": "desert", "outcome": "Desert." },
+    "tile_r1c4": { "pick": "fertile", "outcome": "Fertile (my guess was Barren)." },
+    "tile_r1c8": { "pick": "snow", "outcome": "Snow, variant 2." },
+    "tile_r2": { "pick": "shallow", "outcome": "Water next to land." },
+    "tile_r4": { "pick": "water", "outcome": "Water 2 steps from land." },
+    "tile_r6": { "pick": "deep", "outcome": "Water 3+ steps from land." },
+    "tile_r8c0": { "pick": "other", "note": "We wont use this", "outcome": "Not used." },
+    "tile_r8c1": { "pick": "gold", "outcome": "Gold Deposit object." },
+    "tile_r8c2": { "pick": "stone", "outcome": "Stone Deposit object, variant 1." },
+    "tile_r8c3": { "pick": "coal", "outcome": "Coal Deposit object." },
+    "tile_r8c4": { "pick": "iron", "outcome": "Iron Deposit object (my guess was Clay)." },
+    "tile_r8c5": { "pick": "stone", "outcome": "Stone Deposit object, variant 2 (my guess was Iron)." }
+  },
+  "still_without_art": "Mountains (drawn as a grey hex in the art's shape)."
+}

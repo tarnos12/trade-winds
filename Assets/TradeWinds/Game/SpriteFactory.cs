@@ -11,9 +11,10 @@ namespace TradeWinds.Game
         static Sprite _hex, _hexOutline, _circle, _square, _diamond;
 
         /// <summary>Pointy-top hex exactly one Tilemap cell (0.866 × 1 units) with a soft edge.</summary>
-        public static Sprite Hex => _hex ? _hex : (_hex = MakeHex(false));
+        /// <remarks>With the owner's terrain sheet loaded, the art's own hex shape is used instead.</remarks>
+        public static Sprite Hex => _hex ? _hex : (_hex = TerrainArt.HexMask ?? MakeHex(false));
 
-        public static Sprite HexOutline => _hexOutline ? _hexOutline : (_hexOutline = MakeHex(true));
+        public static Sprite HexOutline => _hexOutline ? _hexOutline : (_hexOutline = TerrainArt.HexOutline ?? MakeHex(true));
         public static Sprite Circle => _circle ? _circle : (_circle = MakeShape(64, (x, y) => x * x + y * y <= 1f, (x, y) => x * x + y * y > 0.78f));
         public static Sprite Square => _square ? _square : (_square = MakeShape(32, (x, y) => Mathf.Abs(x) <= 0.9f && Mathf.Abs(y) <= 0.9f, (x, y) => Mathf.Abs(x) > 0.7f || Mathf.Abs(y) > 0.7f));
         public static Sprite Diamond => _diamond ? _diamond : (_diamond = MakeShape(48, (x, y) => Mathf.Abs(x) + Mathf.Abs(y) <= 1f, (x, y) => Mathf.Abs(x) + Mathf.Abs(y) > 0.8f));
