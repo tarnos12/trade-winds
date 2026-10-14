@@ -65,11 +65,11 @@ Income paid by a Town's residents according to how well their needs are met.
 _Avoid_: Tariff
 
 **Purse**:
-A Town's own gold, earned from Tax and sales and spent on purchases and growth.
+A Town's own gold, earned when its residents use Goods and when it sells; spent on buying Goods from other Towns and on upgrading its buildings.
 _Avoid_: Budget, Treasury
 
 **Treasury**:
-The Crown's gold, held at the Castle.
+The Crown's gold, held at the Castle and filled by the Tariff; it pays for founding Towns, placing their buildings and buying the Goods research needs.
 _Avoid_: Purse
 
 **Give**:

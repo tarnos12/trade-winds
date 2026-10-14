@@ -106,5 +106,20 @@
         "Only the price graph and the % change"
       ]
     ]
+  },
+  {
+    "id": "levelup_payer",
+    "q": "Who pays for a Town's level-up (more building slots, Traders and Porters)? You said only upgrading buildings uses the Town's own gold; today the level-up is paid from the Town's Purse too.",
+    "o": [
+      [
+        "purse",
+        "The Town's Purse (as today): it is the Town upgrading itself",
+        true
+      ],
+      [
+        "treasury",
+        "The Treasury: growing the Kingdom is the Crown's job, like founding Towns"
+      ]
+    ]
   }
 ]
