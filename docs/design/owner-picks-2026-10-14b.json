@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-14",
+  "source": "Owner answers pasted from the Hub's Questions tab (verbatim): grilling round 1.",
+  "raw": "grill_topic: Kingdom Overview and Goods strip: the HUD parts the design asks for but the game never built (sortable Town table, kingdom-wide Goods with prices and trends, the Resource Flow overlay, alert icons over Towns; K opens the Castle today, not an overview)\nterm_trader_roads: Yes\nterm_castle_spot: No (say why in the note)  | note: You dont need to be this specific in the glossary.\nterm_backhaul: Back-haul (the usual logistics word; the design doc already uses it)\nterm_sales_pressure: Sales pressure  | note: The prices should go as low as 0.25x and as high as 5x(growing slower over time, the peak is 2x and it goes up from there slower, it never truly reaches 5x base price. Same for 0.5 being low but 0.25 is the lowest but its a long time to get there.\nshow_sales_pressure: Yes, in the Town panel's Stock list, so players see why a Town's prices climb  | note: This should be the % overtime, not from base price. i.e. % change over the past 1 minute/5minutes/30 minutes/all time(buttons) This should display on graph as the price.\nterm_purse: No (say why in the note)  | note: There should be no limit...why is there a limit?\nterm_royal_give_take: Yes, add all three; Take: avoid Tax and Levy",
+  "answers": {
+    "grill_topic": { "pick": "overview", "outcome": "Next design topic: Kingdom Overview and Goods strip (grilling round 2)." },
+    "term_trader_roads": { "pick": "yes", "outcome": "Glossary: a Trader travels by road or across open ground." },
+    "term_castle_spot": { "pick": "no", "note": "You dont need to be this specific in the glossary.", "outcome": "Glossary: the Castle's location is dropped from its definition." },
+    "term_backhaul": { "pick": "backhaul", "outcome": "Glossary: Back-haul." },
+    "term_sales_pressure": { "pick": "sales_pressure", "note": "Prices from 0.25x to 5x base: about 2x is the usual peak, rising ever more slowly above it and never reaching 5x; 0.5x the usual low, 0.25x the floor, reached only after a long time.", "outcome": "Glossary: Sales pressure. New price range: questions in grilling round 2." },
+    "show_sales_pressure": { "pick": "show", "note": "Show % change over time, not from base price: buttons for the past 1 min / 5 min / 30 min / all time, and a price graph.", "outcome": "Planned with the Goods strip: price history and graph (round 2)." },
+    "term_purse": { "pick": "no", "note": "There should be no limit...why is there a limit?", "outcome": "Purse entry without a limit; the purse limit itself is re-asked in round 2 with the reason it was added." },
+    "term_royal_give_take": { "pick": "yes", "outcome": "Glossary: Royal Trader, Give, Take (avoid Tax, Levy)." }
+  }
+}

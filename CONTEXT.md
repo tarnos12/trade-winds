@@ -7,7 +7,7 @@ A hex-board economy game: autonomous Towns produce, consume and trade with each 
 ### Places
 
 **Castle**:
-The King's hub the player starts with, at the board's origin. Has no population and is never a Town; holds the treasury and the Castle Stock.
+The King's hub the player starts with. Has no population and is never a Town; holds the treasury and the Castle Stock.
 _Avoid_: Keep, Capital
 
 **Town**:
@@ -41,8 +41,17 @@ _Avoid_: Warehouse
 ### Movement and trade
 
 **Trader**:
-An agent that buys Goods in one place and sells them in another, travelling by road.
+An agent that buys Goods in one place and sells them in another, travelling by road or across open ground.
 _Avoid_: Cart, Caravan
+
+**Royal Trader**:
+The Castle's own Trader: it buys Goods for the Castle Stock, such as research materials.
+
+**Back-haul**:
+Goods a Trader carries on its way out to buy, sold to the Town it is visiting.
+
+**Sales pressure**:
+The rise in a Town's asking price for a Good as it keeps selling it, and the slow fall when it stops.
 
 **Porter**:
 An agent that moves Goods inside one Town — the only way Goods reach houses, processors and building sites; never trades.
@@ -54,6 +63,21 @@ _Avoid_: Toll, Tax
 **Tax**:
 Income paid by a Town's residents according to how well their needs are met.
 _Avoid_: Tariff
+
+**Purse**:
+A Town's own gold, earned from Tax and sales and spent on purchases and growth.
+_Avoid_: Budget, Treasury
+
+**Treasury**:
+The Crown's gold, held at the Castle.
+_Avoid_: Purse
+
+**Give**:
+The Crown moving gold from the Treasury into a Town's Purse, which also cheers its residents for a while.
+
+**Take**:
+The Crown moving gold from a Town's Purse into the Treasury, which upsets its residents for a while; a safety net, not an income.
+_Avoid_: Tax, Levy
 
 ### People
 
