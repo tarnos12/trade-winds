@@ -45,7 +45,7 @@ An agent that buys Goods in one place and sells them in another, travelling by r
 _Avoid_: Cart, Caravan
 
 **Royal Trader**:
-The Castle's own Trader: it buys Goods for the Castle Stock, such as research materials.
+The Castle's own Trader: it buys Goods for the Castle Stock, such as research materials, directly from Towns and without a Tariff.
 
 **Back-haul**:
 Goods a Trader carries on its way out to buy, sold to the Town it is visiting.
